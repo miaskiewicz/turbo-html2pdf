@@ -9,7 +9,7 @@
 //! so metric resolution is deferred to the block/inline/flex/table passes. Each
 //! box gets a pre-order [`NodeId`] for round-tripping back to its template node.
 
-use crate::node::{TKind, Tag};
+use crate::node::{Attr, TKind, Tag};
 use crate::style::{ComputedStyle, StyledElement, StyledNode};
 
 use super::fragment::NodeId;
@@ -20,6 +20,9 @@ use super::value::{display_of, Display};
 pub struct LayoutBox {
     pub node_id: NodeId,
     pub style: ComputedStyle,
+    /// Source element attributes (e.g. `colspan`, `href`); empty for anonymous
+    /// boxes. Layout/emit read HTML attributes that are not CSS properties here.
+    pub attrs: Vec<Attr>,
     pub display: Display,
     pub kind: BoxKind,
 }
@@ -170,6 +173,7 @@ fn build_block_box(el: &StyledElement, ids: &mut Ids) -> LayoutBox {
         return LayoutBox {
             node_id,
             style: el.style.clone(),
+            attrs: el.attrs.clone(),
             display: Display::Block,
             kind: BoxKind::Directive(*kind),
         };
@@ -179,6 +183,7 @@ fn build_block_box(el: &StyledElement, ids: &mut Ids) -> LayoutBox {
     LayoutBox {
         node_id,
         style: el.style.clone(),
+        attrs: el.attrs.clone(),
         display,
         kind,
     }
@@ -217,6 +222,7 @@ fn anon_lines_box(
     LayoutBox {
         node_id: ids.alloc(),
         style: parent_style.clone(),
+        attrs: Vec::new(),
         display: Display::Block,
         kind: BoxKind::Lines(items),
     }
@@ -287,6 +293,7 @@ pub fn build_box_tree(styled: &[StyledNode]) -> LayoutBox {
     LayoutBox {
         node_id,
         style,
+        attrs: Vec::new(),
         display: Display::Block,
         kind,
     }

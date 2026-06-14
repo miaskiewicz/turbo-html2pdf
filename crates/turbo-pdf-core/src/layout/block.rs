@@ -235,10 +235,9 @@ fn layout_content(
     ctx: &mut Ctx,
 ) -> (Vec<Fragment>, f32) {
     match &lb.kind {
-        BoxKind::Block(kids) | BoxKind::Table(kids) => {
-            layout_block_flow(kids, cx, cy, cw, bs.font_size, ctx)
-        }
+        BoxKind::Block(kids) => layout_block_flow(kids, cx, cy, cw, bs.font_size, ctx),
         BoxKind::Flex(kids) => super::flex::layout_flex(lb, kids, cx, cy, cw, bs.font_size, ctx),
+        BoxKind::Table(kids) => super::table::layout_table(lb, kids, cx, cy, cw, bs.font_size, ctx),
         BoxKind::Lines(items) => layout_lines(items, bs, cx, cy, cw, ctx),
         BoxKind::Directive(_) => (Vec::new(), 0.0),
     }

@@ -8,4 +8,5 @@ pub mod boxgen;
 pub mod flex;
 pub mod fragment;
 pub mod inline;
+pub mod table;
 pub mod value;
