@@ -1,0 +1,58 @@
+{
+  "name": "@turbo-pdf/napi",
+  "version": "0.0.1",
+  "description": "N-API binding for turbo-pdf: compile a template + data to a PDF Buffer from Node/JS (Phase 10).",
+  "license": "MIT",
+  "main": "index.js",
+  "types": "index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./index.d.ts",
+      "import": "./index.js",
+      "require": "./index.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "index.js",
+    "index.d.ts",
+    "*.node",
+    "assets/fonts/*.ttf",
+    "build.rs",
+    "Cargo.toml",
+    "src/*.rs",
+    "LICENSE",
+    "README.md"
+  ],
+  "napi": {
+    "name": "turbo-pdf-napi",
+    "triples": {
+      "defaults": true,
+      "additional": [
+        "x86_64-unknown-linux-gnu",
+        "x86_64-unknown-linux-musl",
+        "aarch64-unknown-linux-gnu",
+        "aarch64-apple-darwin",
+        "x86_64-pc-windows-msvc"
+      ]
+    }
+  },
+  "scripts": {
+    "build": "napi build --platform --release",
+    "build:debug": "napi build --platform",
+    "build:cargo": "cargo build -p turbo-pdf-napi --release && node scripts/copy-addon.mjs",
+    "test": "node --test __test__/*.test.mjs",
+    "test:rust": "cargo test -p turbo-pdf-napi"
+  },
+  "keywords": ["pdf", "html", "css", "template", "jinja", "napi", "react"],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/fluxpayroll/turbo-pdf.git"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "devDependencies": {
+    "@napi-rs/cli": "^2.18.4"
+  }
+}

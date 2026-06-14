@@ -1,9 +1,16 @@
 # Coverage gate for the shipped crates. Dev tooling (tools/*) and benchmark
 # harnesses (benches/*) are not part of the product surface and are excluded.
-# The WASM binding (crates/turbo-pdf-wasm/*) is a thin cdylib over the core that
-# only links/runs under wasm32; tarpaulin can neither instrument nor execute it
-# on the host, so it is excluded from the line-coverage gate too.
+# The N-API and WASM bindings are thin cdylib shims over the covered core: a
+# Node addon / wasm32 module that tarpaulin cannot line-instrument on the host.
+# Their files are excluded from the coverage surface; the napi crate is also
+# excluded from the tarpaulin build so its native-link step never runs here.
 [default]
 workspace = true
-exclude-files = ["tools/*", "benches/*", "crates/turbo-pdf-wasm/*"]
+exclude = ["turbo-pdf-napi"]
+exclude-files = [
+    "tools/*",
+    "benches/*",
+    "crates/turbo-pdf-napi/*",
+    "crates/turbo-pdf-wasm/*",
+]
 fail-under = 100.0

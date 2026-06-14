@@ -2,6 +2,7 @@
 resolver = "2"
 members = [
     "crates/turbo-pdf-core",
+    "crates/turbo-pdf-napi",
     "crates/turbo-pdf-wasm",
 ]
 
