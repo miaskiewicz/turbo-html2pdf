@@ -4,11 +4,14 @@
 //! template over more data simply yields more pages.
 //!
 //! This phase delivers the structural spine — geometry resolution and the break
-//! walk. Running headers/footers, page masters, page-number late-evaluation
-//! (`{{ page.number }}`, `<t:page/>`), and footnote reservation are layered on in
-//! Phases 7 and 8; the hooks they need (the `header`/`footer`/`footnotes` page
-//! bands and the footnote-area capacity term) are already exposed here.
+//! walk — plus the footnote area: each page reserves the measured height of the
+//! notes its body references, via the body/footnote fixpoint in [`footnotes`]
+//! (§6.4). Running headers/footers and page-number late-evaluation
+//! (`{{ page.number }}`, `<t:page/>`) are layered on by the `render` orchestrator,
+//! which also resolves the footnote *content*; the `header`/`footer`/`footnotes`
+//! page bands it paints into are exposed here. Page masters remain TODO(phase7b).
 
+mod footnotes;
 mod geometry;
 mod walk;
 
@@ -16,6 +19,7 @@ use crate::error::{Diagnostics, RenderError};
 use crate::layout::fragment::Fragment;
 use crate::style::AtRule;
 
+pub use footnotes::{FootnoteBand, Note};
 pub use geometry::{resolve_geometry, PageGeometry};
 
 /// Which master/variant a page resolves to (§3). In this phase the kind is
@@ -73,14 +77,6 @@ fn assemble(geometry: PageGeometry, number: u32, mut body: Vec<Fragment>) -> Pag
     }
 }
 
-/// Drop a single trailing empty page (left by a `break-after:page` on the last
-/// block), keeping at least one page so an empty document still yields a page.
-fn trim_trailing_empty(pages: &mut Vec<Vec<Fragment>>) {
-    if pages.len() > 1 && pages.last().is_some_and(Vec::is_empty) {
-        pages.pop();
-    }
-}
-
 /// Paginate the galley `root` into pages against the geometry resolved from the
 /// stylesheet's at-rules (§6.1–6.2). `diags` collects overflow lints.
 pub fn paginate(
@@ -101,15 +97,67 @@ pub fn paginate_with_geometry(
     geometry: PageGeometry,
     diags: &mut Diagnostics,
 ) -> Vec<Page> {
-    // Footnote reservation (Phase 8) will subtract its measured area here; until
-    // then the whole body height is available to the walk.
-    let footnote_area_height = 0.0;
-    let capacity = geometry.body_height() - footnote_area_height;
-    let mut bodies = walk::walk(root, capacity, diags);
-    trim_trailing_empty(&mut bodies);
-    bodies
+    paginate_with_footnotes(root, geometry, &[], diags)
+}
+
+/// Paginate `root` while reserving each page's referenced footnotes via the
+/// body/footnote fixpoint (§6.4). `notes` are the document's resolved footnotes,
+/// each tagged inline on its marker fragment's `BreakMeta.footnotes`; with an
+/// empty slice this is exactly the footnote-free walk.
+pub fn paginate_with_footnotes(
+    root: &Fragment,
+    geometry: PageGeometry,
+    notes: &[Note],
+    diags: &mut Diagnostics,
+) -> Vec<Page> {
+    let resolved = footnotes::resolve(root, geometry, notes, diags);
+    let footnotes::Resolved { mut pages, bands } = resolved;
+    let trimmed = trim_trailing_pages(&mut pages, bands);
+    trimmed
         .into_iter()
         .enumerate()
-        .map(|(i, body)| assemble(geometry, i as u32 + 1, body))
+        .map(|(i, (body, band))| assemble_page(geometry, i as u32 + 1, body, band))
+        .collect()
+}
+
+/// Drop a single trailing empty page with no footnotes, pairing each surviving
+/// body with its footnote band.
+fn trim_trailing_pages(
+    pages: &mut Vec<Vec<Fragment>>,
+    mut bands: Vec<FootnoteBand>,
+) -> Vec<(Vec<Fragment>, FootnoteBand)> {
+    if pages.len() > 1
+        && pages.last().is_some_and(Vec::is_empty)
+        && bands.last().is_some_and(|b| b.fragments.is_empty())
+    {
+        pages.pop();
+        bands.pop();
+    }
+    std::mem::take(pages).into_iter().zip(bands).collect()
+}
+
+/// Assemble one [`Page`] from a walked body plus its footnote band, shifting both
+/// from local coordinates into absolute page coordinates.
+fn assemble_page(
+    geometry: PageGeometry,
+    number: u32,
+    body: Vec<Fragment>,
+    band: FootnoteBand,
+) -> Page {
+    let mut page = assemble(geometry, number, body);
+    page.footnotes = place_band(geometry, band);
+    page
+}
+
+/// Translate a footnote band's fragments into their page position: the band top
+/// sits just above the bottom margin and the footer band.
+fn place_band(geometry: PageGeometry, band: FootnoteBand) -> Vec<Fragment> {
+    let top = geometry.height - geometry.margin.bottom - geometry.footer_extent - band.height;
+    band.fragments
+        .into_iter()
+        .map(|mut f| {
+            f.translate(geometry.margin.left, top);
+            f
+        })
         .collect()
 }

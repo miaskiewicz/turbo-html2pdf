@@ -251,6 +251,7 @@ fn break_meta_of(bs: &BoxStyle) -> BreakMeta {
         orphans: bs.orphans,
         widows: bs.widows,
         repeatable: None,
+        footnotes: Vec::new(),
     }
 }
 

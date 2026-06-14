@@ -26,10 +26,19 @@ use crate::error::{Diagnostics, LintCode, Span};
 use crate::layout::fragment::{Fragment, FragmentContent, RepeatKind};
 use crate::layout::value::BreakRule;
 
+/// Per-page footnote reservation: the area (px) the page at the given 0-based
+/// index must keep clear for its footnotes, subtracted from the base capacity
+/// (§6.4). The default — used by the footnote-free entry points — reserves zero
+/// on every page.
+pub type Reserve<'a> = dyn Fn(usize) -> f32 + 'a;
+
 /// Accumulates pages while walking the galley.
-struct Walker {
-    /// Usable body height per page (already net of header/footer/footnote bands).
+struct Walker<'a> {
+    /// Base body height per page (net of header/footer bands); the footnote band
+    /// is subtracted per page via `reserve`.
     capacity: f32,
+    /// Footnote area reserved on each page, by 0-based page index.
+    reserve: &'a Reserve<'a>,
     /// Completed and in-progress pages; the last entry is the current page.
     pages: Vec<Vec<Fragment>>,
     /// Next free page-local `y` on the current page.
@@ -39,10 +48,11 @@ struct Walker {
     prev_bottom: Option<f32>,
 }
 
-impl Walker {
-    fn new(capacity: f32) -> Walker {
+impl<'a> Walker<'a> {
+    fn new(capacity: f32, reserve: &'a Reserve<'a>) -> Walker<'a> {
         Walker {
             capacity,
+            reserve,
             pages: vec![Vec::new()],
             cursor: 0.0,
             prev_bottom: None,
@@ -52,6 +62,12 @@ impl Walker {
     /// The current (last) page's fragment list.
     fn current(&mut self) -> &mut Vec<Fragment> {
         self.pages.last_mut().expect("always one page in progress")
+    }
+
+    /// The usable body height on the current page: the base capacity less this
+    /// page's reserved footnote area.
+    fn page_capacity(&self) -> f32 {
+        self.capacity - (self.reserve)(self.pages.len() - 1)
     }
 
     /// The galley gap to honor before `f` (0 at a page top or for overlap).
@@ -82,12 +98,14 @@ impl Walker {
 
     /// True if `f` fits in the remaining capacity of the current page.
     fn fits_now(&self, f: &Fragment) -> bool {
-        self.cursor + self.gap_before(f) + f.height <= self.capacity
+        self.cursor + self.gap_before(f) + f.height <= self.page_capacity()
     }
 
-    /// True if `f` would fit on an otherwise-empty page below `headers`.
+    /// True if `f` would fit on an otherwise-empty page below `headers`. The
+    /// next page's reservation (one past the current index) bounds it.
     fn fits_on_empty(&self, f: &Fragment, headers: &[Fragment]) -> bool {
-        headers_height(headers) + f.height <= self.capacity
+        let next = self.capacity - (self.reserve)(self.pages.len());
+        headers_height(headers) + f.height <= next
     }
 
     /// Place one fragment, honoring forced breaks around it.
@@ -200,12 +218,13 @@ impl Walker {
     /// How many leading lines fit on the current page; at least 1 on an empty
     /// page (forcing progress) with an overflow lint.
     fn lines_that_fit(&self, lines: &[Fragment], empty: bool, diags: &mut Diagnostics) -> usize {
+        let cap = self.page_capacity();
         let mut cursor = self.cursor;
         let mut prev = self.prev_bottom;
         let mut count = 0;
         for line in lines {
             let gap = prev.map_or(0.0, |b| (line.y - b).max(0.0));
-            if cursor + gap + line.height > self.capacity {
+            if cursor + gap + line.height > cap {
                 break;
             }
             cursor += gap + line.height;
@@ -310,10 +329,18 @@ fn headers_height(headers: &[Fragment]) -> f32 {
     headers.iter().map(|h| h.height).sum()
 }
 
-/// Walk the galley `root`'s children into pages of body fragments. `capacity` is
-/// the usable body height per page.
-pub fn walk(root: &Fragment, capacity: f32, diags: &mut Diagnostics) -> Vec<Vec<Fragment>> {
-    let mut w = Walker::new(capacity);
+/// Walk the galley `root`'s children into pages of body fragments against a
+/// per-page footnote `reserve` that shrinks each page's body capacity (§6.4).
+/// `capacity` is the base usable body height per page; the footnote-free walk
+/// passes a reserve that returns 0 everywhere. The fixpoint re-runs this with the
+/// reservation it learns from the previous pass.
+pub fn walk_reserved(
+    root: &Fragment,
+    capacity: f32,
+    reserve: &Reserve,
+    diags: &mut Diagnostics,
+) -> Vec<Vec<Fragment>> {
+    let mut w = Walker::new(capacity, reserve);
     for child in &root.children {
         w.place_one(child, &[], diags);
     }

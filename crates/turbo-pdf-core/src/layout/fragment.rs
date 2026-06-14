@@ -61,6 +61,11 @@ pub struct BreakMeta {
     pub orphans: u8,
     pub widows: u8,
     pub repeatable: Option<RepeatKind>,
+    /// Indices into the document's footnote list owned by this fragment (§6.4):
+    /// the footnote markers it carries, in document order. The fragmenter reads
+    /// this to learn which notes a page references once the fragment lands, so it
+    /// can reserve their measured area. Empty for everything but footnote markers.
+    pub footnotes: Vec<usize>,
 }
 
 impl Default for BreakMeta {
@@ -72,6 +77,7 @@ impl Default for BreakMeta {
             orphans: 2,
             widows: 2,
             repeatable: None,
+            footnotes: Vec::new(),
         }
     }
 }

@@ -1,7 +1,20 @@
-//! Page orchestration (§3.0, §6.5–6.8): the higher layer that drives the body
-//! through render → style → layout → `paginate`, then renders the running
+//! Page orchestration (§3.0, §3.6, §6.4–6.8): the higher layer that drives the
+//! body through render → style → layout → `paginate`, resolves footnote content
+//! into per-page bands via the body/footnote fixpoint, then renders the running
 //! header/footer regions per page with late-evaluated page-number context and
 //! paints them into each page's `header`/`footer` band.
+//!
+//! ## Footnotes (§3.6, §6.4)
+//!
+//! Footnotes are content-driven: a `<t:footnote>` leaves an inline marker in the
+//! body and its note body is flowed *here* (the orchestrator is the one layer
+//! that has the node tree, the cascade, and pagination together). We collect the
+//! note sources in document order, lay each body out into its own small galley
+//! with its mark, tag the body galley's markers with their note index, and hand
+//! the notes to `paginate_with_footnotes`, which runs the fixpoint (§6.4) so each
+//! page reserves the area of the notes it actually references. `page`-reset
+//! numbering, which depends on which page a note lands on, is resolved in a second
+//! relabel pass once placement is known.
 //!
 //! Layering: `crate::paginate` stays free of template/style deps — it only walks
 //! a laid-out galley against geometry. This module is the one place that knows
@@ -36,9 +49,10 @@
 use serde::Serialize;
 
 use crate::error::{Diagnostics, LintCode, RenderError, Span};
-use crate::layout::fragment::Fragment;
+use crate::layout::fragment::{Fragment, FragmentContent};
 use crate::layout::layout;
-use crate::paginate::{paginate_with_geometry, resolve_geometry, Page, PageGeometry};
+use crate::node::{Element, Node, TKind, Tag};
+use crate::paginate::{paginate_with_footnotes, resolve_geometry, Note, Page, PageGeometry};
 use crate::style::{style_tree, AtRule, Cascade};
 use crate::template::{Program, FOOTER, HEADER};
 use crate::text::FontRegistry;
@@ -97,25 +111,243 @@ pub fn render_pages<T: Serialize>(
     inputs: &RenderInputs<T>,
     diags: &mut Diagnostics,
 ) -> Result<Vec<Page>, RenderError> {
-    let body = lay_out_body(inputs, diags)?;
+    let (mut body, sources, reset) = lay_out_body(inputs, diags)?;
     let base = resolve_geometry(inputs.at_rules, PageGeometry::a4())?;
     let geometry = reserve_bands(inputs, base, diags)?;
-    let mut pages = paginate_with_geometry(&body, geometry, diags);
+    let notes = lay_out_notes(inputs, &sources, &geometry, diags);
+    tag_markers(&mut body, notes.len());
+    let mut pages = paginate_with_footnotes(&body, geometry, &notes, diags);
+    relabel_page_reset(inputs, &sources, reset, &geometry, &body, &mut pages, diags);
     fill_regions(inputs, &mut pages, diags)?;
     Ok(pages)
 }
 
-/// Render → style → lay out the body flow into one continuous galley, exactly as
-/// the canonical full-pipeline wiring does.
+/// Render → style → lay out the body flow into one continuous galley, returning
+/// the galley plus the footnote sources collected from the rendered node tree in
+/// document order (their bodies are flowed separately into the footnote area).
 fn lay_out_body<T: Serialize>(
     inputs: &RenderInputs<T>,
     diags: &mut Diagnostics,
-) -> Result<Fragment, RenderError> {
+) -> Result<(Fragment, Vec<FootnoteSrc>, ResetMode), RenderError> {
     let (nodes, rdiags) = inputs.program.render_nodes(inputs.data, inputs.now)?;
     diags.lints.extend(rdiags.lints);
+    let sources = collect_footnotes(&nodes);
+    let reset = reset_mode(&nodes);
     let styled = style_tree(&nodes, inputs.cascade);
     let width = resolve_geometry(inputs.at_rules, PageGeometry::a4())?.content_width();
-    Ok(layout(&styled, width, inputs.fonts, diags))
+    Ok((layout(&styled, width, inputs.fonts, diags), sources, reset))
+}
+
+// --------------------------------------------------------------------------
+// footnotes (§3.6, §6.4)
+// --------------------------------------------------------------------------
+
+/// How footnote numbering resets across the document (§3.6, AC-3.16).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum ResetMode {
+    /// Document-continuous (the default, and `none`).
+    Continuous,
+    /// Restart at 1 on each page.
+    Page,
+}
+
+/// One footnote as found in the rendered node tree, before its body is flowed
+/// into the footnote area.
+struct FootnoteSrc {
+    /// The note body's child nodes (markup + text).
+    children: Vec<Node>,
+    /// A manual mark (`<t:footnote mark="*">`), independent of auto-numbering.
+    manual: Option<String>,
+}
+
+/// Collect every `<t:footnote>` in `nodes` in document (pre-order) order, the
+/// same order the layout assigns the inline marker fragments.
+fn collect_footnotes(nodes: &[Node]) -> Vec<FootnoteSrc> {
+    let mut out = Vec::new();
+    for node in nodes {
+        collect_footnotes_node(node, &mut out);
+    }
+    out
+}
+
+fn collect_footnotes_node(node: &Node, out: &mut Vec<FootnoteSrc>) {
+    let Some(el) = node.as_element() else {
+        return;
+    };
+    if matches!(el.tag, Tag::Directive(TKind::Footnote)) {
+        out.push(FootnoteSrc {
+            children: el.children.clone(),
+            manual: el.attr("mark").map(str::to_string),
+        });
+        return;
+    }
+    for child in &el.children {
+        collect_footnotes_node(child, out);
+    }
+}
+
+/// The document's footnote-reset policy: the first `footnote-reset` attribute
+/// declared on any footnote wins; absent or `none`/`section` is continuous.
+/// TODO(phase15): `section` reset awaits section anchors; treated as continuous.
+fn reset_mode(nodes: &[Node]) -> ResetMode {
+    find_reset(nodes)
+        .filter(|v| v == "page")
+        .map_or(ResetMode::Continuous, |_| ResetMode::Page)
+}
+
+fn find_reset(nodes: &[Node]) -> Option<String> {
+    nodes.iter().find_map(find_reset_node)
+}
+
+fn find_reset_node(node: &Node) -> Option<String> {
+    let el = node.as_element()?;
+    if matches!(el.tag, Tag::Directive(TKind::Footnote)) {
+        if let Some(v) = el.attr("footnote-reset") {
+            return Some(v.to_string());
+        }
+    }
+    el.children.iter().find_map(find_reset_node)
+}
+
+/// Lay out each footnote body into its own galley with a continuous mark prefix
+/// (the placement-driving pass; page-reset relabeling happens afterward).
+fn lay_out_notes<T: Serialize>(
+    inputs: &RenderInputs<T>,
+    sources: &[FootnoteSrc],
+    geometry: &PageGeometry,
+    diags: &mut Diagnostics,
+) -> Vec<Note> {
+    let marks = continuous_marks(sources);
+    flow_notes(inputs, sources, &marks, geometry, diags)
+}
+
+/// Document-continuous marks: manual marks pass through; auto notes take the next
+/// integer in their own sequence (AC-3.20, independent sequences).
+fn continuous_marks(sources: &[FootnoteSrc]) -> Vec<String> {
+    let mut auto = 0u32;
+    sources
+        .iter()
+        .map(|s| match &s.manual {
+            Some(m) => m.clone(),
+            None => {
+                auto += 1;
+                auto.to_string()
+            }
+        })
+        .collect()
+}
+
+/// Flow each note body (mark prefix + children) through style + layout into a
+/// galley fragment, returning the resolved [`Note`] list.
+fn flow_notes<T: Serialize>(
+    inputs: &RenderInputs<T>,
+    sources: &[FootnoteSrc],
+    marks: &[String],
+    geometry: &PageGeometry,
+    diags: &mut Diagnostics,
+) -> Vec<Note> {
+    let width = geometry.content_width();
+    let mut out = Vec::with_capacity(sources.len());
+    for (i, src) in sources.iter().enumerate() {
+        let nodes = note_nodes(&marks[i], &src.children);
+        let styled = style_tree(&nodes, inputs.cascade);
+        let galley = layout(&styled, width, inputs.fonts, diags);
+        out.push(Note::new(i, galley));
+    }
+    out
+}
+
+/// Wrap a note's mark and body into a `<p class="footnote">` node so it flows as
+/// an ordinary small paragraph through the existing layout path.
+fn note_nodes(mark: &str, body: &[Node]) -> Vec<Node> {
+    let mut children = vec![Node::Text(format!("{mark} "))];
+    children.extend(body.iter().cloned());
+    vec![Node::Element(Element {
+        tag: Tag::Html("p".to_string()),
+        attrs: vec![crate::node::Attr {
+            name: "class".to_string(),
+            value: "footnote".to_string(),
+        }],
+        children,
+    })]
+}
+
+/// Tag the body galley's footnote markers, in document order, with their note
+/// index so the fragmenter knows which notes a page references (§6.4).
+fn tag_markers(body: &mut Fragment, count: usize) {
+    let mut next = 0usize;
+    tag_markers_in(body, count, &mut next);
+}
+
+fn tag_markers_in(frag: &mut Fragment, count: usize, next: &mut usize) {
+    if matches!(frag.content, FragmentContent::Directive(TKind::Footnote)) && *next < count {
+        frag.break_meta.footnotes.push(*next);
+        *next += 1;
+    }
+    for child in &mut frag.children {
+        tag_markers_in(child, count, next);
+    }
+}
+
+/// Under `page` reset, renumber each note from its position within the page it
+/// landed on (AC-3.16), re-flow the note galleys with the new marks, and
+/// re-paginate once so the relabeled bands are placed. A no-op for continuous.
+fn relabel_page_reset<T: Serialize>(
+    inputs: &RenderInputs<T>,
+    sources: &[FootnoteSrc],
+    reset: ResetMode,
+    geometry: &PageGeometry,
+    body: &Fragment,
+    pages: &mut Vec<Page>,
+    diags: &mut Diagnostics,
+) {
+    if reset != ResetMode::Page {
+        return;
+    }
+    let marks = page_reset_marks(sources, pages);
+    let notes = flow_notes(inputs, sources, &marks, geometry, diags);
+    *pages = paginate_with_footnotes(body, *geometry, &notes, diags);
+}
+
+/// Per-page marks: each page restarts auto-numbering at 1 in note-index order;
+/// manual marks still pass through unchanged.
+fn page_reset_marks(sources: &[FootnoteSrc], pages: &[Page]) -> Vec<String> {
+    let mut marks = vec![String::new(); sources.len()];
+    for page in pages {
+        number_page(sources, page, &mut marks);
+    }
+    marks
+}
+
+/// Number the notes that landed on one page, restarting auto-numbering at 1.
+fn number_page(sources: &[FootnoteSrc], page: &Page, marks: &mut [String]) {
+    let mut auto = 0u32;
+    for idx in page_note_indices(page) {
+        marks[idx] = match &sources[idx].manual {
+            Some(m) => m.clone(),
+            None => {
+                auto += 1;
+                auto.to_string()
+            }
+        };
+    }
+}
+
+/// The note indices a page references, in document order, read off the marker
+/// fragments' tags.
+fn page_note_indices(page: &Page) -> Vec<usize> {
+    let mut out = Vec::new();
+    for frag in &page.body {
+        collect_marker_indices(frag, &mut out);
+    }
+    out
+}
+
+fn collect_marker_indices(frag: &Fragment, out: &mut Vec<usize>) {
+    out.extend(&frag.break_meta.footnotes);
+    for child in &frag.children {
+        collect_marker_indices(child, out);
+    }
 }
 
 /// Measure each present region once (page-1 context) and reserve its height as
