@@ -1,0 +1,31 @@
+[package]
+name = "turbo-pdf-wasm"
+description = "WASM/wasm-bindgen binding for the turbo-pdf engine: template -> PDF in the browser"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+rust-version.workspace = true
+
+# A cdylib so `wasm-bindgen` / `wasm-pack` can produce the `.wasm` + JS glue.
+# rlib is kept so the crate also type-checks and links on the host (and so the
+# workspace `cargo build` / clippy can see it without the wasm target).
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+turbo-pdf-core = { path = "../turbo-pdf-core" }
+wasm-bindgen = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+serde-wasm-bindgen = "0.6"
+serde_bytes = "0.11"
+js-sys = "0.3"
+
+# wasm-bindgen-rayon multithreading is intentionally OFF by default (§8.3): the
+# default build is single-threaded so it runs in any browser without
+# cross-origin-isolation. The flag is reserved but wires nothing yet.
+[features]
+default = []
+threads = []

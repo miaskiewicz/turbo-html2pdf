@@ -2,6 +2,7 @@
 resolver = "2"
 members = [
     "crates/turbo-pdf-core",
+    "crates/turbo-pdf-wasm",
 ]
 
 [workspace.package]
@@ -18,6 +19,7 @@ serde = { version = "1", features = ["derive"] }
 serde_json = { version = "1", features = ["preserve_order"] }
 chrono = { version = "0.4", default-features = false, features = ["clock", "std"] }
 thiserror = "2"
+wasm-bindgen = "0.2"
 
 [profile.release]
 opt-level = 3

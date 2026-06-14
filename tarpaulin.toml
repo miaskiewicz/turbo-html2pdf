@@ -1,6 +1,9 @@
 # Coverage gate for the shipped crates. Dev tooling (tools/*) and benchmark
 # harnesses (benches/*) are not part of the product surface and are excluded.
+# The WASM binding (crates/turbo-pdf-wasm/*) is a thin cdylib over the core that
+# only links/runs under wasm32; tarpaulin can neither instrument nor execute it
+# on the host, so it is excluded from the line-coverage gate too.
 [default]
 workspace = true
-exclude-files = ["tools/*", "benches/*"]
+exclude-files = ["tools/*", "benches/*", "crates/turbo-pdf-wasm/*"]
 fail-under = 100.0
