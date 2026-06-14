@@ -27,3 +27,12 @@ taffy = "0.8"
 
 [dev-dependencies]
 serde_json = { workspace = true }
+criterion = "0.5"
+
+# Phase 13 groundwork: criterion benchmark harness measuring the pipeline that
+# exists today (compile -> render_nodes -> style cascade -> layout galley).
+# Benches are excluded from the default `cargo test` harness so they don't run
+# as tests; invoke them with `cargo bench`.
+[[bench]]
+name = "render"
+harness = false
