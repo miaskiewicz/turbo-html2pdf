@@ -15,6 +15,7 @@ pub mod layout;
 pub mod node;
 pub mod options;
 pub mod paginate;
+pub mod render;
 pub mod style;
 mod template;
 pub mod text;
@@ -28,7 +29,10 @@ pub use layout::layout;
 pub use layout::value::{BreakRule, Rgba};
 pub use node::{Attr, Element, Node, TKind, Tag};
 pub use options::{CompileOptions, MissingPolicy, DEFAULT_INCLUDE_DEPTH};
-pub use paginate::{paginate, Page, PageGeometry, PageKind};
+pub use paginate::{
+    paginate, paginate_with_geometry, resolve_geometry, Page, PageGeometry, PageKind,
+};
+pub use render::{render_pages, PageContext, RenderInputs};
 pub use style::{build_cascade, style_tree, Cascade, ComputedStyle, StyledElement, StyledNode};
 pub use template::{compile, set_now, Program};
 pub use text::{layout_text, Align, FontFace, FontRegistry, LineBox, TextStyle, WhiteSpace};

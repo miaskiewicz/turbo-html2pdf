@@ -89,16 +89,27 @@ pub fn paginate(
     diags: &mut Diagnostics,
 ) -> Result<Vec<Page>, RenderError> {
     let geometry = resolve_geometry(at_rules, PageGeometry::a4())?;
+    Ok(paginate_with_geometry(root, geometry, diags))
+}
+
+/// Paginate the galley `root` against an already-resolved `geometry` (§6.1–6.2).
+/// The Phase 7 orchestrator reserves the running header/footer bands into the
+/// geometry first, so this entry takes the geometry directly rather than the
+/// at-rules — its `body_height()` already nets out the reserved bands.
+pub fn paginate_with_geometry(
+    root: &Fragment,
+    geometry: PageGeometry,
+    diags: &mut Diagnostics,
+) -> Vec<Page> {
     // Footnote reservation (Phase 8) will subtract its measured area here; until
     // then the whole body height is available to the walk.
     let footnote_area_height = 0.0;
     let capacity = geometry.body_height() - footnote_area_height;
     let mut bodies = walk::walk(root, capacity, diags);
     trim_trailing_empty(&mut bodies);
-    let pages = bodies
+    bodies
         .into_iter()
         .enumerate()
         .map(|(i, body)| assemble(geometry, i as u32 + 1, body))
-        .collect();
-    Ok(pages)
+        .collect()
 }
