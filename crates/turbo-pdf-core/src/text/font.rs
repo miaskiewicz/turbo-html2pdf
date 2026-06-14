@@ -58,6 +58,49 @@ impl FontFace {
         &self.family
     }
 
+    /// The raw font program bytes (the OpenType/TrueType file). The PDF emitter
+    /// (Phase 9, §7) needs these to subset and embed the font program.
+    pub fn data(&self) -> &[u8] {
+        &self.data
+    }
+
+    /// Design units per em, for scaling glyph metrics into PDF text space.
+    pub fn units_per_em(&self) -> u16 {
+        self.units_per_em
+    }
+
+    /// Signed font bounding-box and metrics in design units, for the embedded
+    /// `FontDescriptor` (§7). Returns `(x_min, y_min, x_max, y_max)`.
+    pub fn bbox(&self) -> (i16, i16, i16, i16) {
+        let r = self.ttf().global_bounding_box();
+        (r.x_min, r.y_min, r.x_max, r.y_max)
+    }
+
+    /// The font ascender in design units (for the `FontDescriptor`).
+    pub fn ascent_units(&self) -> i16 {
+        self.ascent
+    }
+
+    /// The font descender in design units (negative; for the `FontDescriptor`).
+    pub fn descent_units(&self) -> i16 {
+        self.descent
+    }
+
+    /// The horizontal advance of a glyph in design units (for the CIDFont `/W`
+    /// array). Falls back to 0 for a glyph the face has no advance for.
+    pub fn glyph_advance(&self, glyph_id: u16) -> u16 {
+        use rustybuzz::ttf_parser::GlyphId;
+        self.ttf().glyph_hor_advance(GlyphId(glyph_id)).unwrap_or(0)
+    }
+
+    /// Whether the font program carries a CFF/CFF2 outline table (an OpenType/CFF
+    /// font), as opposed to TrueType `glyf` outlines. The emitter embeds CFF as a
+    /// `FontFile3` and TrueType as a `FontFile2` (§7).
+    pub fn is_cff(&self) -> bool {
+        let face = self.ttf();
+        face.tables().cff.is_some()
+    }
+
     pub fn weight(&self) -> u16 {
         self.weight
     }

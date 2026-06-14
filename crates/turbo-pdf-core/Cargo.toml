@@ -24,6 +24,8 @@ markup5ever_rcdom = "0.39.0"
 rustybuzz = "0.20.1"
 unicode-linebreak = "0.1.5"
 taffy = "0.8"
+pdf-writer = "0.15.0"
+subsetter = "0.2.6"
 
 [dev-dependencies]
 serde_json = { workspace = true }

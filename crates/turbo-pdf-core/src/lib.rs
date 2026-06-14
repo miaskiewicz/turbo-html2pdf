@@ -9,6 +9,7 @@
 
 #![forbid(unsafe_code)]
 
+pub mod emit;
 pub mod error;
 pub mod layout;
 pub mod node;
@@ -18,6 +19,7 @@ pub mod style;
 mod template;
 pub mod text;
 
+pub use emit::{emit_pdf, EmitOptions, SENTINEL_DATE};
 pub use error::{CompileError, Diagnostics, ErrorCode, Lint, LintCode, RenderError, Span};
 pub use layout::fragment::{
     BreakMeta, Fragment, FragmentContent, NodeId, PositionedGlyph, RepeatKind,
