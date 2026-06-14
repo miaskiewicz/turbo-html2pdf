@@ -1,0 +1,26 @@
+{
+  "name": "@turbo-pdf/template",
+  "version": "0.0.1",
+  "description": "Minimal framework-free template-string authoring frontend for turbo-pdf (proves the core is frontend-agnostic).",
+  "license": "MIT",
+  "type": "module",
+  "files": ["dist"],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "scripts": {
+    "build": "tsup",
+    "test": "vitest run",
+    "typecheck": "tsgo --noEmit"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "tsup": "^8.0.0",
+    "vitest": "^2.0.0"
+  }
+}
