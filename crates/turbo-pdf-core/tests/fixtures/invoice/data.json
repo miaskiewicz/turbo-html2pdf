@@ -1,0 +1,29 @@
+{
+  "seller": {
+    "name": "Turbo Press sp. z o.o.",
+    "address": "ul. Wawelska 12, 30-001 Kraków, Poland",
+    "vat": "PL1234567890"
+  },
+  "customer": {
+    "name": "Northwind Trading Ltd.",
+    "address": "44 Market Street, London EC1A 1BB, United Kingdom"
+  },
+  "invoice": {
+    "number": "INV-2026-0042",
+    "issued": "2026-06-01",
+    "due": "2026-06-15",
+    "currency": "EUR",
+    "subtotal": 4820.0,
+    "tax_rate": 0.23,
+    "tax": 1108.6,
+    "total": 5928.6,
+    "terms": "Net 14. Late payments accrue 0.5% monthly interest."
+  },
+  "items": [
+    { "description": "Typesetting engine license (annual)", "qty": 1, "unit": 2400.0 },
+    { "description": "Custom font integration", "qty": 8, "unit": 120.0 },
+    { "description": "PDF/A conformance audit", "qty": 2, "unit": 460.0 },
+    { "description": "On-site training (days)", "qty": 3, "unit": 180.0 },
+    { "description": "Priority support retainer", "qty": 1, "unit": 600.0 }
+  ]
+}

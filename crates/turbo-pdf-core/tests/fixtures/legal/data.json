@@ -1,0 +1,67 @@
+{
+  "doc": {
+    "title": "Master Services Agreement",
+    "kind": "Master Services Agreement",
+    "effective": "2026-06-14",
+    "party_a": "Turbo Press sp. z o.o.",
+    "party_b": "Northwind Trading Ltd."
+  },
+  "clauses": [
+    {
+      "heading": "Definitions",
+      "body": "Capitalized terms used in this Agreement have the meanings assigned to them where first defined. References to a Section are to a section of this Agreement unless otherwise stated, and the singular includes the plural and vice versa.",
+      "note": "Defined terms are listed in Schedule A and control over any inconsistent usage in the body.",
+      "items": [
+        {
+          "text": "\"Services\" means the typesetting, rendering, and document-generation services described in each Statement of Work.",
+          "sub": [
+            "Core rendering of templates into paginated PDF output.",
+            "Font integration and conformance validation."
+          ]
+        },
+        {
+          "text": "\"Deliverables\" means the documents, files, and reports produced by the Provider under a Statement of Work."
+        }
+      ]
+    },
+    {
+      "heading": "Scope of Services",
+      "body": "The Provider shall perform the Services with reasonable skill and care and in accordance with each mutually executed Statement of Work. The Provider may engage subcontractors provided it remains responsible for their performance.",
+      "note": "Changes to scope require a written change order signed by both parties.",
+      "items": [
+        {
+          "text": "Each Statement of Work specifies deliverables, acceptance criteria, and the applicable fees.",
+          "sub": [
+            "Acceptance is deemed given if the Client raises no written objection within ten business days.",
+            "Rejected deliverables shall be re-performed at no additional charge."
+          ]
+        },
+        {
+          "text": "The Provider retains discretion over the technical means used to deliver the Services."
+        }
+      ]
+    },
+    {
+      "heading": "Fees and Payment",
+      "body": "The Client shall pay the fees set out in each Statement of Work within fourteen days of the invoice date. Amounts not paid when due accrue interest at the statutory rate from the due date until paid in full.",
+      "note": "All fees are exclusive of value-added tax, which the Client shall pay where applicable.",
+      "items": [
+        {
+          "text": "Disputed amounts must be identified in writing before the due date; undisputed amounts remain payable."
+        }
+      ]
+    },
+    {
+      "heading": "Confidentiality",
+      "body": "Each party shall keep confidential all non-public information disclosed by the other and use it solely to perform this Agreement. This obligation survives termination for a period of three years.",
+      "note": "Confidentiality does not apply to information that becomes public through no fault of the receiving party.",
+      "items": []
+    },
+    {
+      "heading": "Limitation of Liability",
+      "body": "To the maximum extent permitted by law, neither party is liable for indirect or consequential loss, and each party's aggregate liability is capped at the fees paid in the twelve months preceding the claim.",
+      "note": "Nothing in this Agreement limits liability for fraud or for death or personal injury caused by negligence.",
+      "items": []
+    }
+  ]
+}

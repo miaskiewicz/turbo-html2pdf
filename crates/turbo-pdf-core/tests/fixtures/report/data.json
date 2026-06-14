@@ -1,0 +1,213 @@
+{
+  "report": {
+    "title": "Global Distribution Review",
+    "period": "Q2 2026",
+    "prepared": "2026-06-14",
+    "summary": "Unit volume grew 8.4% quarter over quarter, led by Western Europe and the DACH region. Revenue tracked volume closely, with currency effects netting near zero against a stable euro. The long tail of emerging markets continued to compound, with 11 regions posting double-digit sequential growth.",
+    "kpis": [
+      {
+        "label": "Total units",
+        "value": 112140,
+        "decimals": 0
+      },
+      {
+        "label": "Active regions",
+        "value": 30,
+        "decimals": 0
+      },
+      {
+        "label": "Avg units / region",
+        "value": 3738.0,
+        "decimals": 1
+      }
+    ],
+    "notes": [
+      "Revenue figures are net of returns and exclude intercompany transfers.",
+      "Share is computed against total reported units for the period.",
+      "Regions are ordered by unit volume, descending.",
+      "Figures are unaudited and subject to quarter-end adjustment."
+    ]
+  },
+  "rows": [
+    {
+      "region": "North America",
+      "units": 12450,
+      "revenue": 97732.5,
+      "share": 0.111
+    },
+    {
+      "region": "Western Europe",
+      "units": 9870,
+      "revenue": 77479.5,
+      "share": 0.088
+    },
+    {
+      "region": "Northern Europe",
+      "units": 7640,
+      "revenue": 59974.0,
+      "share": 0.0681
+    },
+    {
+      "region": "Southern Europe",
+      "units": 6610,
+      "revenue": 51888.5,
+      "share": 0.0589
+    },
+    {
+      "region": "Eastern Europe",
+      "units": 5980,
+      "revenue": 46943.0,
+      "share": 0.0533
+    },
+    {
+      "region": "United Kingdom",
+      "units": 5530,
+      "revenue": 43410.5,
+      "share": 0.0493
+    },
+    {
+      "region": "Nordics",
+      "units": 5120,
+      "revenue": 40192.0,
+      "share": 0.0457
+    },
+    {
+      "region": "Benelux",
+      "units": 4810,
+      "revenue": 37758.5,
+      "share": 0.0429
+    },
+    {
+      "region": "DACH",
+      "units": 4490,
+      "revenue": 35246.5,
+      "share": 0.04
+    },
+    {
+      "region": "Iberia",
+      "units": 4200,
+      "revenue": 32970.0,
+      "share": 0.0375
+    },
+    {
+      "region": "Japan",
+      "units": 3990,
+      "revenue": 31321.5,
+      "share": 0.0356
+    },
+    {
+      "region": "South Korea",
+      "units": 3760,
+      "revenue": 29516.0,
+      "share": 0.0335
+    },
+    {
+      "region": "Greater China",
+      "units": 3540,
+      "revenue": 27789.0,
+      "share": 0.0316
+    },
+    {
+      "region": "Southeast Asia",
+      "units": 3320,
+      "revenue": 26062.0,
+      "share": 0.0296
+    },
+    {
+      "region": "India",
+      "units": 3110,
+      "revenue": 24413.5,
+      "share": 0.0277
+    },
+    {
+      "region": "Australia",
+      "units": 2900,
+      "revenue": 22765.0,
+      "share": 0.0259
+    },
+    {
+      "region": "New Zealand",
+      "units": 2710,
+      "revenue": 21273.5,
+      "share": 0.0242
+    },
+    {
+      "region": "Brazil",
+      "units": 2530,
+      "revenue": 19860.5,
+      "share": 0.0226
+    },
+    {
+      "region": "Mexico",
+      "units": 2360,
+      "revenue": 18526.0,
+      "share": 0.021
+    },
+    {
+      "region": "Argentina",
+      "units": 2200,
+      "revenue": 17270.0,
+      "share": 0.0196
+    },
+    {
+      "region": "Chile",
+      "units": 2050,
+      "revenue": 16092.5,
+      "share": 0.0183
+    },
+    {
+      "region": "Colombia",
+      "units": 1910,
+      "revenue": 14993.5,
+      "share": 0.017
+    },
+    {
+      "region": "South Africa",
+      "units": 1780,
+      "revenue": 13973.0,
+      "share": 0.0159
+    },
+    {
+      "region": "Nigeria",
+      "units": 1650,
+      "revenue": 12952.5,
+      "share": 0.0147
+    },
+    {
+      "region": "Kenya",
+      "units": 1530,
+      "revenue": 12010.5,
+      "share": 0.0136
+    },
+    {
+      "region": "UAE",
+      "units": 1420,
+      "revenue": 11147.0,
+      "share": 0.0127
+    },
+    {
+      "region": "Saudi Arabia",
+      "units": 1310,
+      "revenue": 10283.5,
+      "share": 0.0117
+    },
+    {
+      "region": "Turkey",
+      "units": 1210,
+      "revenue": 9498.5,
+      "share": 0.0108
+    },
+    {
+      "region": "Israel",
+      "units": 1120,
+      "revenue": 8792.0,
+      "share": 0.01
+    },
+    {
+      "region": "Singapore",
+      "units": 1040,
+      "revenue": 8164.0,
+      "share": 0.0093
+    }
+  ]
+}

@@ -1,0 +1,82 @@
+.report {
+  font-family: "Evolventa", "Go";
+  font-size: 10.5pt;
+  color: #1f2933;
+  padding: 28px;
+}
+
+.cover {
+  margin-bottom: 24px;
+  border-bottom: 2px solid #334e68;
+  padding-bottom: 12px;
+}
+
+.cover h1 {
+  font-size: 22pt;
+  color: #102a43;
+}
+
+.subtitle {
+  color: #627d98;
+  font-size: 10pt;
+}
+
+section {
+  margin-bottom: 20px;
+}
+
+h2 {
+  font-size: 14pt;
+  color: #243b53;
+  margin-bottom: 8px;
+}
+
+.kpis {
+  display: flex;
+  flex-direction: row;
+  gap: 16px;
+  margin-top: 10px;
+}
+
+.kpi {
+  flex-grow: 1;
+  padding: 10px;
+  background-color: #f0f4f8;
+  text-align: center;
+}
+
+.kpi-value {
+  font-size: 18pt;
+  font-weight: bold;
+  color: #102a43;
+}
+
+.kpi-label {
+  font-size: 9pt;
+  color: #627d98;
+}
+
+table.data {
+  width: 100%;
+  table-layout: fixed;
+}
+
+table.data th {
+  background-color: #334e68;
+  color: #ffffff;
+  text-align: left;
+  padding: 5px;
+}
+
+table.data td {
+  padding: 5px;
+  border-bottom: 1px solid #e4ebf1;
+}
+
+tr:nth-child(even) td {
+  background-color: #f7f9fb;
+}
+
+.num {
+  text-align: right;
+}

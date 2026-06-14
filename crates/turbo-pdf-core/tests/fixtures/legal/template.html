@@ -1,0 +1,36 @@
+<div class="agreement">
+  <h1>{{ doc.title }}</h1>
+  <p class="recital">This {{ doc.kind }} (the &ldquo;Agreement&rdquo;) is entered into as of
+    {{ date(doc.effective, "YYYY-MM-DD") }} by and between {{ doc.party_a }}
+    (&ldquo;Provider&rdquo;) and {{ doc.party_b }} (&ldquo;Client&rdquo;).</p>
+
+  {% for clause in clauses %}
+  <section class="clause">
+    <h2>{{ loop.index }}. {{ clause.heading }}</h2>
+    <p>{{ clause.body }}<t:footnote>{{ clause.note }}</t:footnote></p>
+    {% if clause.items %}
+    <ol class="sub">
+      {% for item in clause.items %}
+      <li>
+        {{ item.text }}
+        {% if item.sub | default([]) %}
+        <ul class="inner">
+          {% for s in item.sub %}
+          <li>{{ s }}</li>
+          {% endfor %}
+        </ul>
+        {% endif %}
+      </li>
+      {% endfor %}
+    </ol>
+    {% endif %}
+  </section>
+  {% endfor %}
+
+  <section class="signatures">
+    <h2>Execution</h2>
+    <p>Agreed and accepted by the duly authorized representatives of each party.</p>
+    <p class="sig">Provider: ______________________ &nbsp; Date: ____________</p>
+    <p class="sig">Client: ______________________ &nbsp; Date: ____________</p>
+  </section>
+</div>

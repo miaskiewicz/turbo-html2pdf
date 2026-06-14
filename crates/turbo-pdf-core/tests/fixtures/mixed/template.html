@@ -1,0 +1,51 @@
+<div class="dashboard" style="font-family: 'Evolventa', 'Go'; padding: 24px; color: #1f2933;">
+  <div class="topbar" style="display: flex; flex-direction: row; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+    <h1 style="font-size: 20pt; color: #102a43;">{{ board.title }}</h1>
+    <span style="font-size: 10pt; color: #627d98;">as of {{ date(board.as_of, "YYYY-MM-DD") }}</span>
+  </div>
+
+  <div class="cards" style="display: flex; flex-direction: row; gap: 16px; margin-bottom: 24px;">
+    {% for card in cards %}
+    <div class="card" style="flex-grow: 1; padding: 14px; background-color: {{ card.tint }};">
+      <p style="font-size: 9pt; color: #486581;">{{ card.label }}</p>
+      <p style="font-size: 22pt; font-weight: bold; color: #102a43;">{{ card.metric | number(card.decimals) }}</p>
+      <p style="font-size: 9pt; color: {% if card.delta >= 0 %}#0b6e4f{% else %}#a61b29{% endif %};">
+        {{ card.delta | percent(1) }} vs prior
+      </p>
+    </div>
+    {% endfor %}
+  </div>
+
+  <div class="split" style="display: flex; flex-direction: row; gap: 20px;">
+    <div class="left" style="flex-grow: 2;">
+      <h2 style="font-size: 13pt; margin-bottom: 8px; color: #243b53;">Top accounts</h2>
+      <table style="width: 100%; table-layout: fixed;">
+        <thead>
+          <tr style="background-color: #243b53; color: #ffffff;">
+            <th style="text-align: left; padding: 5px;">Account</th>
+            <th style="text-align: right; padding: 5px;">MRR</th>
+            <th style="text-align: right; padding: 5px;">Seats</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for acct in accounts %}
+          <tr>
+            <td style="padding: 5px; border-bottom: 1px solid #e4ebf1;">{{ acct.name }}</td>
+            <td style="padding: 5px; text-align: right; border-bottom: 1px solid #e4ebf1;">{{ acct.mrr | currency("USD") }}</td>
+            <td style="padding: 5px; text-align: right; border-bottom: 1px solid #e4ebf1;">{{ acct.seats | number }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+    <div class="right" style="flex-grow: 1; padding: 14px; background-color: #f0f4f8;">
+      <h2 style="font-size: 13pt; margin-bottom: 8px; color: #243b53;">Highlights</h2>
+      <ul>
+        {% for h in highlights %}
+        <li style="margin-bottom: 6px;">{{ h }}</li>
+        {% endfor %}
+      </ul>
+    </div>
+  </div>
+</div>

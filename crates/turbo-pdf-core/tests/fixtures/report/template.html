@@ -1,0 +1,54 @@
+<div class="report">
+  <header class="cover">
+    <h1>{{ report.title }}</h1>
+    <p class="subtitle">{{ report.period }} &middot; prepared {{ date(report.prepared, "YYYY-MM-DD") }}</p>
+  </header>
+
+  <section class="summary">
+    <h2>Executive summary</h2>
+    <p>{{ report.summary }}</p>
+    <div class="kpis">
+      {% for kpi in report.kpis %}
+      <div class="kpi">
+        <p class="kpi-value">{{ kpi.value | number(kpi.decimals) }}</p>
+        <p class="kpi-label">{{ kpi.label }}</p>
+      </div>
+      {% endfor %}
+    </div>
+  </section>
+
+  <section class="detail">
+    <h2>Regional performance</h2>
+    <table class="data">
+      <thead>
+        <tr>
+          <th class="rank">#</th>
+          <th class="region">Region</th>
+          <th class="num">Units</th>
+          <th class="num">Revenue</th>
+          <th class="num">Share</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in rows %}
+        <tr>
+          <td class="rank">{{ loop.index }}</td>
+          <td class="region">{{ row.region }}</td>
+          <td class="num">{{ row.units | number }}</td>
+          <td class="num">{{ row.revenue | currency("USD") }}</td>
+          <td class="num">{{ row.share | percent(1) }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </section>
+
+  <section class="notes">
+    <h2>Notes</h2>
+    <ol>
+      {% for note in report.notes %}
+      <li>{{ note }}</li>
+      {% endfor %}
+    </ol>
+  </section>
+</div>

@@ -1,0 +1,26 @@
+{
+  "board": {
+    "title": "Revenue Dashboard",
+    "as_of": "2026-06-14"
+  },
+  "cards": [
+    { "label": "MRR", "metric": 184200, "decimals": 0, "delta": 0.062, "tint": "#e3f9e5" },
+    { "label": "Active seats", "metric": 5380, "decimals": 0, "delta": 0.031, "tint": "#e0fcff" },
+    { "label": "Churn", "metric": 1.8, "decimals": 1, "delta": -0.004, "tint": "#ffe3e3" },
+    { "label": "NPS", "metric": 61, "decimals": 0, "delta": 0.09, "tint": "#fff3bf" }
+  ],
+  "accounts": [
+    { "name": "Northwind Trading", "mrr": 12400, "seats": 320 },
+    { "name": "Acme Logistics", "mrr": 9800, "seats": 245 },
+    { "name": "Globex Media", "mrr": 8600, "seats": 198 },
+    { "name": "Initech Systems", "mrr": 7300, "seats": 176 },
+    { "name": "Umbrella Health", "mrr": 6100, "seats": 142 },
+    { "name": "Soylent Foods", "mrr": 5400, "seats": 121 }
+  ],
+  "highlights": [
+    "Net revenue retention reached 114% this quarter.",
+    "Two enterprise accounts upgraded to the priority support tier.",
+    "Churn fell for the third consecutive month.",
+    "EMEA crossed 2,000 active seats for the first time."
+  ]
+}

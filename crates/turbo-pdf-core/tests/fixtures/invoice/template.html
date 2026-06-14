@@ -1,0 +1,57 @@
+<div class="invoice">
+  <div class="header">
+    <div class="brand">
+      <h1>{{ seller.name }}</h1>
+      <p>{{ seller.address }}</p>
+      <p>VAT: {{ seller.vat }}</p>
+    </div>
+    <div class="meta">
+      <p><strong>Invoice</strong> {{ invoice.number }}</p>
+      <p>Issued: {{ date(invoice.issued, "YYYY-MM-DD") }}</p>
+      <p>Due: {{ date(invoice.due, "YYYY-MM-DD") }}</p>
+    </div>
+  </div>
+
+  <div class="bill-to">
+    <h2>Bill to</h2>
+    <p>{{ customer.name }}</p>
+    <p>{{ customer.address }}</p>
+  </div>
+
+  <table class="lines">
+    <thead>
+      <tr>
+        <th class="desc">Description</th>
+        <th class="qty">Qty</th>
+        <th class="unit">Unit</th>
+        <th class="amount">Amount</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for item in items %}
+      <tr>
+        <td class="desc">{{ item.description }}</td>
+        <td class="qty">{{ item.qty | number }}</td>
+        <td class="unit">{{ item.unit | currency(invoice.currency) }}</td>
+        <td class="amount">{{ (item.qty * item.unit) | currency(invoice.currency) }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+    <tfoot>
+      <tr>
+        <td class="label" colspan="3">Subtotal</td>
+        <td class="amount">{{ invoice.subtotal | currency(invoice.currency) }}</td>
+      </tr>
+      <tr>
+        <td class="label" colspan="3">VAT ({{ invoice.tax_rate | percent }})</td>
+        <td class="amount">{{ invoice.tax | currency(invoice.currency) }}</td>
+      </tr>
+      <tr class="grand">
+        <td class="label" colspan="3"><strong>Total due</strong></td>
+        <td class="amount"><strong>{{ invoice.total | currency(invoice.currency) }}</strong></td>
+      </tr>
+    </tfoot>
+  </table>
+
+  <p class="terms">{{ invoice.terms | default("Payment due within 14 days.") }}</p>
+</div>

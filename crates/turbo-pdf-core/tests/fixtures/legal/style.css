@@ -1,0 +1,48 @@
+.agreement {
+  font-family: "Evolventa", "Go";
+  font-size: 11pt;
+  line-height: 1.5;
+  color: #1a1a1a;
+  padding: 32px;
+}
+
+h1 {
+  font-size: 18pt;
+  text-align: center;
+  margin-bottom: 16px;
+}
+
+.recital {
+  margin-bottom: 18px;
+}
+
+.clause {
+  margin-bottom: 14px;
+}
+
+.clause h2 {
+  font-size: 12pt;
+  font-weight: bold;
+  margin-bottom: 6px;
+}
+
+ol.sub {
+  margin-top: 6px;
+  padding-left: 24px;
+}
+
+ul.inner {
+  padding-left: 20px;
+}
+
+li {
+  margin-bottom: 4px;
+}
+
+.signatures {
+  margin-top: 28px;
+}
+
+.sig {
+  margin-top: 16px;
+}
