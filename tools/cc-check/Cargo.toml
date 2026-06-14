@@ -1,0 +1,19 @@
+# Standalone dev tool: own workspace so it is excluded from the published
+# turbo-pdf workspace (and its 100% coverage gate).
+[workspace]
+
+[package]
+name = "cc-check"
+version = "0.0.1"
+edition = "2021"
+license = "MIT"
+publish = false
+
+[[bin]]
+name = "cc-check"
+path = "src/main.rs"
+
+[dependencies]
+syn = { version = "2", features = ["full", "visit", "parsing"] }
+proc-macro2 = { version = "1", features = ["span-locations"] }
+walkdir = "2"

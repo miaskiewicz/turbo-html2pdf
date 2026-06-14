@@ -1,0 +1,6 @@
+# Coverage gate for the shipped crates. Dev tooling (tools/*) and benchmark
+# harnesses (benches/*) are not part of the product surface and are excluded.
+[default]
+workspace = true
+exclude-files = ["tools/*", "benches/*"]
+fail-under = 100.0

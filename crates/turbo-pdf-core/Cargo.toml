@@ -1,0 +1,28 @@
+[package]
+name = "turbo-pdf-core"
+description = "Native HTML/CSS-to-PDF engine with a Jinja-compatible templating DSL (core crate)"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+rust-version.workspace = true
+
+# The cyclomatic-complexity gate (cc < 6) is enforced by `tools/cc-check`, which
+# matches the TS gate in `scripts/cc-check.js`. Clippy's nursery
+# `cognitive_complexity` lint is intentionally not used: it double-counts macro
+# expansions (e.g. `assert_eq!`) and fires false positives on test functions.
+
+[dependencies]
+minijinja = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+chrono = { workspace = true }
+thiserror = { workspace = true }
+html5ever = "0.39.0"
+markup5ever_rcdom = "0.39.0"
+rustybuzz = "0.20.1"
+unicode-linebreak = "0.1.5"
+
+[dev-dependencies]
+serde_json = { workspace = true }

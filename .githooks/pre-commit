@@ -1,0 +1,67 @@
+#!/usr/bin/env bash
+# turbo-pdf pre-commit gate.
+#   JS/TS : oxlint (lint) -> biome (format) -> cc-check.js (cc<6) -> tsgo (typecheck)
+#   Rust  : rustfmt -> clippy -> cc-check (cc<6)
+# Enable once with:  git config core.hooksPath .githooks
+set -uo pipefail
+
+ROOT="$(git rev-parse --show-toplevel)"
+cd "$ROOT" || exit 1
+
+CC_MAX="${CC_MAX:-5}"
+status=0
+fail() { echo "  ✖ $1"; status=1; }
+
+# --- collect staged files (added/copied/modified) ---
+staged="$(git diff --cached --name-only --diff-filter=ACM)"
+ts_files="$(echo "$staged"  | grep -E '\.(ts|tsx)$'           || true)"
+rs_files="$(echo "$staged"  | grep -E '\.rs$'                 || true)"
+fmt_files="$(echo "$staged" | grep -E '\.(ts|tsx|js|jsx|json|jsonc|css)$' || true)"
+
+have() { command -v "$1" >/dev/null 2>&1; }
+runjs() { if have pnpm; then pnpm exec "$@"; elif have npx; then npx --no-install "$@"; else return 127; fi; }
+
+# ============================ JS / TS ============================
+if [ -n "$ts_files" ] || [ -n "$fmt_files" ]; then
+  echo "• JS/TS gates"
+
+  # 1. oxlint
+  if [ -n "$ts_files" ]; then
+    runjs oxlint $ts_files || fail "oxlint reported problems"
+  fi
+
+  # 2. biome format (auto-fix, then re-stage)
+  if [ -n "$fmt_files" ]; then
+    if runjs biome format --write $fmt_files; then
+      echo "$fmt_files" | xargs git add
+    else
+      fail "biome formatting failed"
+    fi
+  fi
+
+  # 3. cyclomatic complexity (cc < 6)
+  if [ -n "$ts_files" ]; then
+    echo "$ts_files" | node scripts/cc-check.js --max "$CC_MAX" || fail "TS complexity gate"
+  fi
+
+  # 4. typecheck with tsgo (Go-native, fast) — falls back to tsc
+  if [ -n "$ts_files" ]; then
+    if ! runjs tsgo --noEmit; then
+      runjs tsc --noEmit || fail "TypeScript typecheck"
+    fi
+  fi
+fi
+
+# ============================== Rust =============================
+if [ -n "$rs_files" ]; then
+  echo "• Rust gates"
+  cargo fmt --all -- --check || fail "rustfmt (run: cargo fmt --all)"
+  cargo clippy --workspace --all-targets -- -D warnings || fail "clippy"
+  cargo run --quiet --manifest-path tools/cc-check/Cargo.toml -- --max "$CC_MAX" $rs_files \
+    || fail "Rust complexity gate"
+fi
+
+if [ "$status" -ne 0 ]; then
+  echo "✖ pre-commit gate failed. Fix the above and re-commit."
+fi
+exit "$status"

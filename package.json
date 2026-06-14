@@ -1,0 +1,23 @@
+{
+  "name": "turbo-pdf-monorepo",
+  "private": true,
+  "version": "0.0.1",
+  "license": "MIT",
+  "packageManager": "pnpm@9.0.0",
+  "workspaces": ["crates/turbo-pdf-napi", "packages/*"],
+  "scripts": {
+    "lint": "oxlint",
+    "lint:fix": "oxlint --fix",
+    "format": "biome format --write .",
+    "format:check": "biome format .",
+    "typecheck": "tsgo --noEmit",
+    "cc": "git ls-files '*.ts' '*.tsx' | node scripts/cc-check.js --max 5",
+    "check": "pnpm lint && pnpm format:check && pnpm typecheck && pnpm cc"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^1.9.0",
+    "@typescript/native-preview": "^7.0.0-dev",
+    "oxlint": "^0.11.0",
+    "typescript": "^5.6.0"
+  }
+}

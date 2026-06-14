@@ -1,0 +1,53 @@
+# ---- Rust ----
+/target
+**/target
+**/*.rs.bk
+*.pdb
+
+# ---- Node / npm ----
+node_modules/
+dist/
+build/
+*.tsbuildinfo
+.pnp.*
+.yarn/*
+!.yarn/patches
+pnpm-debug.log*
+npm-debug.log*
+yarn-error.log*
+
+# ---- N-API / native artifacts ----
+*.node
+artifacts/
+napi/
+
+# ---- WASM ----
+pkg/
+*.wasm
+
+# ---- Coverage / test output ----
+/coverage
+tarpaulin-report.html
+cobertura.xml
+lcov.info
+*.profraw
+test-results/
+playwright-report/
+
+# ---- Benchmark output ----
+/benches/**/results/
+*.bench.json
+
+# ---- Editors / OS ----
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/*
+!.vscode/extensions.json
+*.swp
+*~
+
+# ---- Env / secrets ----
+.env
+.env.local
+.env.*.local
