@@ -59,6 +59,18 @@ fn glyph_coverage() {
 }
 
 #[test]
+fn glyph_index_is_memoized() {
+    // Second queries hit the cache; cover both the Some and None cached paths.
+    let f = evolventa();
+    let covered = f.glyph_index('Z');
+    assert_eq!(f.glyph_index('Z'), covered);
+    assert!(covered.is_some());
+    let missing = f.glyph_index('中');
+    assert_eq!(f.glyph_index('中'), missing);
+    assert!(missing.is_none());
+}
+
+#[test]
 fn measure_scales_with_size_and_letter_spacing() {
     let f = evolventa();
     let w16 = f.measure("Hello", 16.0, 0.0);
