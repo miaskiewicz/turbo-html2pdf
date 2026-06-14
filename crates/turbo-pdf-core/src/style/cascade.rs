@@ -54,6 +54,16 @@ pub enum StyledNode {
     Text(String),
 }
 
+impl StyledNode {
+    /// Borrow the styled element if this node is one.
+    pub fn as_element(&self) -> Option<&StyledElement> {
+        match self {
+            StyledNode::Element(e) => Some(e),
+            StyledNode::Text(_) => None,
+        }
+    }
+}
+
 /// A rule tagged with its cascade level and source order.
 #[derive(Debug, Clone)]
 pub struct LeveledRule {

@@ -397,7 +397,9 @@ fn resolve_font_size(s: &ComputedStyle, parent: f32) -> f32 {
     }
 }
 
-fn display_of(s: &ComputedStyle) -> Display {
+/// The resolved `display` keyword (needed at box-generation time, before widths
+/// are known).
+pub fn display_of(s: &ComputedStyle) -> Display {
     match s.get("display").unwrap_or("block").trim() {
         "inline" => Display::Inline,
         "inline-block" => Display::InlineBlock,
