@@ -3,6 +3,7 @@
 //! fragmenter (Stage 4) paginates. Block and table flow and inline/text layout
 //! are owned here; flex delegates to `taffy` (§5.3 decision).
 
+pub mod block;
 pub mod boxgen;
 pub mod fragment;
 pub mod inline;
