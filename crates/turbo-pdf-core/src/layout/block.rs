@@ -32,13 +32,10 @@ pub(crate) struct Ctx<'a> {
 }
 
 fn resolve(lb: &LayoutBox, cb_width: f32, parent_fs: f32) -> BoxStyle {
-    resolve_box_style(
-        &lb.style,
-        ResolveCtx {
-            parent_font_size: parent_fs,
-            cb_width,
-        },
-    )
+    lb.resolved(ResolveCtx {
+        parent_font_size: parent_fs,
+        cb_width,
+    })
 }
 
 // --------------------------------------------------------------------------

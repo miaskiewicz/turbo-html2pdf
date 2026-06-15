@@ -167,13 +167,10 @@ fn is_fixed(style: &ComputedStyle) -> bool {
 }
 
 fn explicit_width(lb: &LayoutBox) -> Option<f32> {
-    let bs = resolve_box_style(
-        &lb.style,
-        ResolveCtx {
-            parent_font_size: DEFAULT_FONT_SIZE,
-            cb_width: 0.0,
-        },
-    );
+    let bs = lb.resolved(ResolveCtx {
+        parent_font_size: DEFAULT_FONT_SIZE,
+        cb_width: 0.0,
+    });
     match bs.width {
         LengthPct::Px(w) => Some(w + bs.padding.horizontal() + bs.border.widths().horizontal()),
         _ => None,
@@ -284,13 +281,10 @@ struct LaidCell<'a> {
 
 fn layout_one<'a>(p: &'a Placed<'a>, cols: &[f32], fs: f32, ctx: &mut Ctx) -> LaidCell<'a> {
     let w = cell_span_width(cols, p.col, p.colspan);
-    let bs = resolve_box_style(
-        &p.lb.style,
-        ResolveCtx {
-            parent_font_size: fs,
-            cb_width: w,
-        },
-    );
+    let bs = p.lb.resolved(ResolveCtx {
+        parent_font_size: fs,
+        cb_width: w,
+    });
     let frag = block::layout_box_sized(p.lb, &bs, 0.0, 0.0, w, ctx);
     let content_h = frag.height;
     LaidCell {

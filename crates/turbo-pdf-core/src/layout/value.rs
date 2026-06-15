@@ -659,3 +659,19 @@ pub fn resolve_box_style(s: &ComputedStyle, ctx: ResolveCtx) -> BoxStyle {
     let fs = resolve_font_size(s, ctx.parent_font_size);
     resolve_box_metrics(s, fs, ctx)
 }
+
+/// Whether `resolve_box_style(s, ctx)` is the same for every `ctx` — i.e. the box
+/// uses no relative units and has an absolute, present `font-size` (so its font
+/// size, and every `em` derived from it, is fixed rather than inherited from the
+/// context). When true a box may resolve its style once and reuse it across the
+/// measure and placement passes; otherwise it must re-resolve per call.
+pub(crate) fn is_ctx_independent(s: &ComputedStyle) -> bool {
+    s.has_no_relative_units() && font_size_absolute(s)
+}
+
+fn font_size_absolute(s: &ComputedStyle) -> bool {
+    matches!(
+        s.get("font-size").and_then(parse_raw),
+        Some(RawLength::Abs(_))
+    )
+}

@@ -23,9 +23,7 @@ use super::block::{self, Ctx};
 use super::boxgen::{BoxKind, InlineItem, LayoutBox};
 use super::fragment::Fragment;
 use super::inline;
-use super::value::{
-    parse_px, resolve_box_style, BoxStyle, LengthPct, ResolveCtx, DEFAULT_FONT_SIZE,
-};
+use super::value::{parse_px, BoxStyle, LengthPct, ResolveCtx, DEFAULT_FONT_SIZE};
 
 // --------------------------------------------------------------------------
 // CSS -> taffy style mapping
@@ -125,13 +123,10 @@ fn item_margins(bs: &BoxStyle) -> Rect<LengthPercentageAuto> {
 
 fn item_style(item: &LayoutBox, fs: f32) -> Style {
     let s = &item.style;
-    let bs = resolve_box_style(
-        s,
-        ResolveCtx {
-            parent_font_size: fs,
-            cb_width: 0.0,
-        },
-    );
+    let bs = item.resolved(ResolveCtx {
+        parent_font_size: fs,
+        cb_width: 0.0,
+    });
     Style {
         flex_grow: num(s, "flex-grow", 0.0),
         flex_shrink: num(s, "flex-shrink", 1.0),
@@ -159,13 +154,10 @@ fn kids_natural(kids: &[LayoutBox], fonts: &FontRegistry) -> f32 {
 
 pub(crate) fn natural_width(lb: &LayoutBox, fonts: &FontRegistry) -> f32 {
     crate::hot!("layout.natural_width");
-    let bs = resolve_box_style(
-        &lb.style,
-        ResolveCtx {
-            parent_font_size: DEFAULT_FONT_SIZE,
-            cb_width: 0.0,
-        },
-    );
+    let bs = lb.resolved(ResolveCtx {
+        parent_font_size: DEFAULT_FONT_SIZE,
+        cb_width: 0.0,
+    });
     let frame = bs.padding.horizontal() + bs.border.widths().horizontal();
     if let LengthPct::Px(w) = bs.width {
         return w + frame;
@@ -200,13 +192,10 @@ fn measure_item(
     scratch: &mut Diagnostics,
 ) -> Size<f32> {
     let w = measure_width(known.width, avail.width, item, fonts);
-    let bs = resolve_box_style(
-        &item.style,
-        ResolveCtx {
-            parent_font_size: fs,
-            cb_width: w,
-        },
-    );
+    let bs = item.resolved(ResolveCtx {
+        parent_font_size: fs,
+        cb_width: w,
+    });
     let images = super::ImageCtx::none();
     let mut mctx = Ctx {
         fonts,
@@ -263,13 +252,10 @@ fn place_one(
     fs: f32,
     ctx: &mut Ctx,
 ) -> Fragment {
-    let bs = resolve_box_style(
-        &item.style,
-        ResolveCtx {
-            parent_font_size: fs,
-            cb_width: layout.size.width,
-        },
-    );
+    let bs = item.resolved(ResolveCtx {
+        parent_font_size: fs,
+        cb_width: layout.size.width,
+    });
     let mut frag = block::layout_box_sized(item, &bs, 0.0, 0.0, layout.size.width, ctx);
     frag.translate(cx + layout.location.x, cy + layout.location.y);
     frag

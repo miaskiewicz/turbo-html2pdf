@@ -22,6 +22,18 @@ impl ComputedStyle {
         self.map.get(property).map(String::as_str)
     }
 
+    /// Whether no value uses a containing-block-relative (`%`) or font-relative
+    /// (`em`/`rem`) unit. When true, the box's resolved metrics do not depend on
+    /// the layout context, so they can be resolved once and cached (a `font-size`
+    /// is still required to be absolute — see `is_ctx_independent`). Conservative:
+    /// any `%`/`em` substring (even inside a value like `lemonchiffon`) just
+    /// disables the cache, which is always safe.
+    pub fn has_no_relative_units(&self) -> bool {
+        self.map
+            .values()
+            .all(|v| !v.contains('%') && !v.contains("em"))
+    }
+
     /// Build a computed style directly from property/value pairs. Useful for
     /// programmatic node styles and for layout-level testing.
     pub fn from_pairs<I, K, V>(pairs: I) -> ComputedStyle

@@ -9,11 +9,15 @@
 //! so metric resolution is deferred to the block/inline/flex/table passes. Each
 //! box gets a pre-order [`NodeId`] for round-tripping back to its template node.
 
+use std::cell::RefCell;
+
 use crate::node::{Attr, TKind, Tag};
 use crate::style::{ComputedStyle, StyledElement, StyledNode};
 
 use super::fragment::NodeId;
-use super::value::{display_of, Display};
+use super::value::{
+    display_of, is_ctx_independent, resolve_box_style, BoxStyle, Display, ResolveCtx,
+};
 
 /// A box in the layout tree.
 #[derive(Debug, Clone)]
@@ -28,6 +32,49 @@ pub struct LayoutBox {
     /// A raster image this box paints (§7.4): a replaced `<img>` (which also
     /// sizes the box) or a `background-image` (painted behind the box content).
     pub image: Option<ImageSource>,
+    /// Memoized style resolution. Layout resolves each box's `BoxStyle` several
+    /// times (max-content measurement, then placement); when the metrics cannot
+    /// vary with the containing block, the first resolution is reused instead of
+    /// re-parsing the ~25 properties. The (one-time) independence classification
+    /// is also cached so context-*dependent* boxes never re-scan their values.
+    style_cache: RefCell<StyleCache>,
+}
+
+/// Per-box cache of the resolved style and its context-independence verdict.
+#[derive(Debug, Clone)]
+enum StyleCache {
+    /// Not yet classified — resolve and decide on first use.
+    Unknown,
+    /// Style depends on the layout context; always re-resolve (no value cached).
+    Dependent,
+    /// Style is context-independent; this resolution is reused for every `ctx`.
+    /// Boxed to keep the enum small (a `BoxStyle` dwarfs the unit variants).
+    Cached(Box<BoxStyle>),
+}
+
+impl LayoutBox {
+    /// Resolve this box's [`BoxStyle`] for `ctx`, reusing the cached resolution
+    /// when the style is context-independent.
+    pub(crate) fn resolved(&self, ctx: ResolveCtx) -> BoxStyle {
+        match &*self.style_cache.borrow() {
+            StyleCache::Cached(bs) => return bs.as_ref().clone(),
+            StyleCache::Dependent => return resolve_box_style(&self.style, ctx),
+            StyleCache::Unknown => {}
+        }
+        self.resolve_and_classify(ctx)
+    }
+
+    /// First-use path: resolve once, then remember whether the result can be
+    /// reused for any context.
+    fn resolve_and_classify(&self, ctx: ResolveCtx) -> BoxStyle {
+        let bs = resolve_box_style(&self.style, ctx);
+        *self.style_cache.borrow_mut() = if is_ctx_independent(&self.style) {
+            StyleCache::Cached(Box::new(bs.clone()))
+        } else {
+            StyleCache::Dependent
+        };
+        bs
+    }
 }
 
 /// A raster image referenced by a box: the resolver name plus whether it is the
@@ -189,6 +236,7 @@ fn build_block_box(el: &StyledElement, ids: &mut Ids) -> LayoutBox {
             display: Display::Block,
             kind: BoxKind::Directive(*kind),
             image: None,
+            style_cache: RefCell::new(StyleCache::Unknown),
         };
     }
     let display = display_of(&el.style);
@@ -200,6 +248,7 @@ fn build_block_box(el: &StyledElement, ids: &mut Ids) -> LayoutBox {
         display,
         kind,
         image: image_of(el),
+        style_cache: RefCell::new(StyleCache::Unknown),
     }
 }
 
@@ -281,6 +330,7 @@ fn anon_lines_box(
         display: Display::Block,
         kind: BoxKind::Lines(items),
         image: None,
+        style_cache: RefCell::new(StyleCache::Unknown),
     }
 }
 
@@ -353,5 +403,6 @@ pub fn build_box_tree(styled: &[StyledNode]) -> LayoutBox {
         display: Display::Block,
         kind,
         image: None,
+        style_cache: RefCell::new(StyleCache::Unknown),
     }
 }
