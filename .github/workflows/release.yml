@@ -207,6 +207,8 @@ jobs:
         with:
           key: wasm
       - uses: jetli/wasm-pack-action@v0.4.0
+        with:
+          version: "v0.13.1" # pin: avoid the flaky 'latest' GitHub-API lookup (rate-limited '<!DOCTYPE' errors)
       - uses: actions/setup-node@v4
         with:
           node-version: 22
@@ -252,6 +254,8 @@ jobs:
         with:
           key: wasm-fonts
       - uses: jetli/wasm-pack-action@v0.4.0
+        with:
+          version: "v0.13.1" # pin: avoid the flaky 'latest' GitHub-API lookup (rate-limited '<!DOCTYPE' errors)
       - uses: actions/setup-node@v4
         with:
           node-version: 22
