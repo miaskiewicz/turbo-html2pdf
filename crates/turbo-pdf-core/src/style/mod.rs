@@ -48,12 +48,18 @@ fn add_leveled(rules: &mut Vec<LeveledRule>, order: &mut usize, level: u8, sheet
     }
 }
 
+/// The user-agent stylesheet, parsed once. It is a fixed constant, so parsing it
+/// on every `build_cascade` (i.e. every render) is pure waste; cache the parse
+/// and clone its rules into each cascade instead.
+static UA_SHEET: std::sync::LazyLock<Stylesheet> =
+    std::sync::LazyLock::new(|| parse_stylesheet(UA_CSS));
+
 /// Build a [`Cascade`] from author CSS, render-time node-style CSS, and tokens.
 /// The UA stylesheet is layered underneath automatically (§4.2).
 pub fn build_cascade(author_css: &str, node_style_css: &str, tokens: TokenSet) -> Cascade {
     let mut rules = Vec::new();
     let mut order = 0;
-    add_leveled(&mut rules, &mut order, 0, parse_stylesheet(UA_CSS));
+    add_leveled(&mut rules, &mut order, 0, UA_SHEET.clone());
     add_leveled(&mut rules, &mut order, 1, parse_stylesheet(author_css));
     add_leveled(&mut rules, &mut order, 3, parse_stylesheet(node_style_css));
     Cascade { rules, tokens }

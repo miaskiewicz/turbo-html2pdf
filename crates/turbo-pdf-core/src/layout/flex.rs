@@ -158,6 +158,7 @@ fn kids_natural(kids: &[LayoutBox], fonts: &FontRegistry) -> f32 {
 }
 
 pub(crate) fn natural_width(lb: &LayoutBox, fonts: &FontRegistry) -> f32 {
+    crate::hot!("layout.natural_width");
     let bs = resolve_box_style(
         &lb.style,
         ResolveCtx {
