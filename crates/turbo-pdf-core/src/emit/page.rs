@@ -13,6 +13,7 @@ use super::graphics::paint_box;
 use super::image::{paint_image, ImageStore};
 use super::text::paint_text;
 use super::unit::px_to_pt;
+use super::watermark::{self, Watermark};
 
 /// The painter context threaded through a page's fragments: the resource stores
 /// and the page height (points) used for the galley→PDF y-flip.
@@ -22,14 +23,23 @@ struct PaintCtx<'a> {
     page_height_pt: f32,
 }
 
-/// Build the content-stream bytes for one page.
-pub fn content_stream(page: &Page, fonts: &FontStore, images: &ImageStore) -> Vec<u8> {
+/// Build the content-stream bytes for one page. A watermark, when present, is
+/// painted first so the body bands draw on top of it (behind-body ordering).
+pub fn content_stream(
+    page: &Page,
+    fonts: &FontStore,
+    images: &ImageStore,
+    watermark: Option<&Watermark>,
+) -> Vec<u8> {
     let ctx = PaintCtx {
         fonts,
         images,
         page_height_pt: px_to_pt(page.geometry.height),
     };
     let mut content = Content::new();
+    if let Some(mark) = watermark {
+        watermark::paint(&mut content, mark, page, fonts, images);
+    }
     for band in bands(page) {
         for frag in band {
             paint_fragment(&mut content, frag, &ctx);

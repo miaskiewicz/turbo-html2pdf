@@ -27,20 +27,27 @@ mod meta;
 mod page;
 mod text;
 mod unit;
+mod watermark;
 
 use crate::image::{ImageResolver, NoImages};
 use crate::paginate::Page;
 
 pub use fonts::FontStore;
 pub use image::ImageStore;
+pub use watermark::{ImageWatermark, TextWatermark, Watermark};
 
-/// Document metadata plus the determinism knob for the creation date (§7, §14).
+/// Document metadata plus the determinism knob for the creation date (§7, §14)
+/// and an optional page [`Watermark`].
 ///
-/// Every field is optional; an absent field is simply omitted from the PDF info
-/// dictionary. When `creation_date` is `None` the emitter substitutes a fixed
-/// sentinel ([`SENTINEL_DATE`]) so two renders of the same input are
+/// Every metadata field is optional; an absent field is simply omitted from the
+/// PDF info dictionary. When `creation_date` is `None` the emitter substitutes a
+/// fixed sentinel ([`SENTINEL_DATE`]) so two renders of the same input are
 /// byte-identical (AC-7.6).
-#[derive(Debug, Clone, Default, PartialEq, Eq)]
+///
+/// `PartialEq`/`Eq` are intentionally not derived: a [`Watermark::Text`] carries
+/// a [`FontFace`](crate::text::FontFace), which has no meaningful equality.
+/// Nothing in the codebase compares `EmitOptions`.
+#[derive(Debug, Clone, Default)]
 pub struct EmitOptions {
     pub title: Option<String>,
     pub author: Option<String>,
@@ -48,6 +55,9 @@ pub struct EmitOptions {
     pub keywords: Option<String>,
     /// Creation date as a Unix timestamp (seconds). `None` uses [`SENTINEL_DATE`].
     pub creation_date: Option<i64>,
+    /// A faded mark stamped behind the body on every page (§7, Phase 17). `None`
+    /// (the default) emits no watermark, so every existing caller compiles.
+    pub watermark: Option<Watermark>,
 }
 
 /// The fixed creation-date sentinel: `2000-01-01T00:00:00Z`. Used whenever the

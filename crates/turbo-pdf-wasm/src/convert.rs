@@ -83,6 +83,7 @@ impl JsMeta {
             subject: self.subject,
             keywords: self.keywords,
             creation_date: self.creation_date,
+            ..EmitOptions::default()
         }
     }
 }

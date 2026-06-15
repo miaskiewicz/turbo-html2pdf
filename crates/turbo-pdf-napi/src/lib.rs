@@ -226,6 +226,7 @@ fn emit_options(meta: Option<DocMeta>) -> EmitOptions {
             subject: m.subject,
             keywords: m.keywords,
             creation_date: m.creation_date,
+            ..EmitOptions::default()
         },
     }
 }

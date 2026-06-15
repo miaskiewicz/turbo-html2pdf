@@ -22,7 +22,10 @@ pub mod style;
 mod template;
 pub mod text;
 
-pub use emit::{emit_pdf, emit_pdf_with_images, EmitOptions, SENTINEL_DATE};
+pub use emit::{
+    emit_pdf, emit_pdf_with_images, EmitOptions, ImageWatermark, TextWatermark, Watermark,
+    SENTINEL_DATE,
+};
 pub use error::{CompileError, Diagnostics, ErrorCode, Lint, LintCode, RenderError, Span};
 pub use image::{ImageResolver, NoImages};
 pub use layout::fragment::{

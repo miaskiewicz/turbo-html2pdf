@@ -73,6 +73,17 @@ impl FontStore {
         }
     }
 
+    /// Register a face plus a set of original glyph ids that aren't carried by
+    /// any fragment (e.g. a watermark word), so they subset and embed exactly
+    /// like body text. Must be called during the collect pass, before `write`.
+    pub fn record_glyphs(&mut self, face: &FontFace, glyph_ids: &[u16]) {
+        let idx = self.face_index(face);
+        let used = &mut self.fonts[idx];
+        for &gid in glyph_ids {
+            used.glyphs.insert(gid);
+        }
+    }
+
     /// The index of `face` in the store, inserting it if first seen.
     fn face_index(&mut self, face: &FontFace) -> usize {
         if let Some(i) = self.fonts.iter().position(|f| same_face(&f.face, face)) {

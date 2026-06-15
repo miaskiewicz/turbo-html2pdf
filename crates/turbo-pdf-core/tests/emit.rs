@@ -303,6 +303,7 @@ fn full_metadata_round_trips() {
         subject: Some("Finance".to_string()),
         keywords: Some("pdf, report".to_string()),
         creation_date: Some(1_700_000_000),
+        ..EmitOptions::default()
     };
     let pdf = emit_pdf(&[page_with(vec![])], &opts);
     assert!(contains(&pdf, b"/Title"));

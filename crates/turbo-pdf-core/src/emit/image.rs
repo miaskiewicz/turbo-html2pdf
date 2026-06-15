@@ -57,8 +57,9 @@ impl ImageStore {
         }
     }
 
-    /// Decode and store `name` if it resolves, is decodable, and is new.
-    fn record(&mut self, name: &str, resolver: &dyn ImageResolver) {
+    /// Decode and store `name` if it resolves, is decodable, and is new. Public
+    /// so watermark collection can register a raster the same way (§7, Phase 17).
+    pub fn record(&mut self, name: &str, resolver: &dyn ImageResolver) {
         if self.images.iter().any(|u| u.name == name) {
             return;
         }
@@ -82,6 +83,15 @@ impl ImageStore {
     /// The PDF resource name for the `n`th image (`Im0`, `Im1`, …).
     pub fn resource_name(n: usize) -> String {
         format!("Im{n}")
+    }
+
+    /// A resolved image's `(resource index, pixel width, pixel height)`, or
+    /// `None` if the name was never collected. Used to place a watermark raster
+    /// at its decoded size (§7, Phase 17).
+    pub fn placement(&self, name: &str) -> Option<(usize, u32, u32)> {
+        let index = self.index_of(name)?;
+        let image = &self.images[index].image;
+        Some((index, image.width, image.height))
     }
 
     /// The number of distinct embedded images.
