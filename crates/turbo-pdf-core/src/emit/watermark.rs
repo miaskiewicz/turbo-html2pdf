@@ -31,9 +31,10 @@ use super::image::ImageStore;
 use super::unit::px_to_pt;
 
 /// The PDF resource name of the watermark's fade `ExtGState` (`/GSwm`). Distinct
-/// from any name the rest of the emitter uses, so it never collides. Unused
-/// under `pdf-a`, where the transparency-bearing fade is suppressed entirely.
-#[cfg(not(feature = "pdf-a"))]
+/// from any name the rest of the emitter uses, so it never collides. The fade is
+/// suppressed per render when `opts.pdf_a` is set (PDF/A-2b forbids the `/ca`
+/// transparency), so this name and the fade machinery are emitted at runtime
+/// rather than gated out at compile time.
 pub const FADE_GS_NAME: &str = "GSwm";
 
 /// A page watermark: either shaped text or a resolved raster. Painted first in
@@ -94,8 +95,8 @@ pub struct ImageWatermark {
 }
 
 /// The fade opacity a watermark requests, if any. Drives whether the page
-/// resources need the `/GSwm` `ExtGState`. Unused under `pdf-a` (no fade).
-#[cfg(not(feature = "pdf-a"))]
+/// resources need the `/GSwm` `ExtGState`. Unused for a PDF/A render, which
+/// suppresses the fade at runtime (`opts.pdf_a`).
 pub fn opacity(watermark: &Watermark) -> f32 {
     match watermark {
         Watermark::Text(t) => t.opacity,
@@ -138,17 +139,21 @@ pub fn paint(
     page: &Page,
     fonts: &FontStore,
     images: &ImageStore,
+    cmyk: bool,
+    fade: bool,
 ) {
     let page_w = px_to_pt(page.geometry.width);
     let page_h = px_to_pt(page.geometry.height);
     content.save_state();
-    // PDF/A-2b forbids transparency: under `pdf-a` the fade `ExtGState` is not
-    // emitted (see `document::write_resources`), so the `gs` operator that would
-    // reference it is skipped too — the mark prints at full opacity.
-    #[cfg(not(feature = "pdf-a"))]
-    content.set_parameters(Name(FADE_GS_NAME.as_bytes()));
+    // PDF/A-2b forbids transparency: when `fade` is false (a PDF/A render) the
+    // fade `ExtGState` is not emitted (see `document::write_resources`), so the
+    // `gs` operator that would reference it is skipped too — the mark prints at
+    // full opacity.
+    if fade {
+        content.set_parameters(Name(FADE_GS_NAME.as_bytes()));
+    }
     match watermark {
-        Watermark::Text(text) => paint_text(content, text, fonts, page_w, page_h),
+        Watermark::Text(text) => paint_text(content, text, fonts, page_w, page_h, cmyk),
         Watermark::Image(image) => paint_image(content, image, images, page_w, page_h),
     }
     content.restore_state();
@@ -166,6 +171,7 @@ fn paint_text(
     fonts: &FontStore,
     page_w: f32,
     page_h: f32,
+    cmyk: bool,
 ) {
     let glyphs = text.face.shape(&text.text);
     let face_index = fonts.index_of(&text.face);
@@ -181,7 +187,7 @@ fn paint_text(
         Name(FontStore::resource_name(face_index).as_bytes()),
         size_pt,
     );
-    set_fill(content, text.color);
+    set_fill(content, text.color, cmyk);
     let mut pen = -advance / 2.0;
     for glyph in &glyphs {
         content.set_text_matrix([1.0, 0.0, 0.0, 1.0, pen, 0.0]);

@@ -71,11 +71,33 @@ pub struct EmitOptions {
     /// A faded mark stamped behind the body on every page (§7, Phase 17). `None`
     /// (the default) emits no watermark, so every existing caller compiles.
     pub watermark: Option<Watermark>,
+    /// Emit fills in DeviceCMYK instead of DeviceRGB for print workflows
+    /// (AC-7.x print colour). A per-render runtime toggle: `false` (the default)
+    /// keeps the byte-for-byte DeviceRGB output. The CMYK conversion is only
+    /// compiled under the `print-color` feature, so this bool is a no-op (always
+    /// DeviceRGB) in a build without that feature — it stays a plain `bool`, not
+    /// `#[cfg]`-gated, so the napi/wasm/py bindings keep compiling unchanged.
+    pub cmyk: bool,
     /// The document's natural-language tag (RFC 3066, e.g. `en-US`), written as
     /// the catalog `/Lang` for tagged PDF (`pdf-ua`). `None` falls back to a
     /// default so a UA document always carries a language (AC-11.1).
     #[cfg(feature = "pdf-ua")]
     pub lang: Option<String>,
+    /// Emit PDF/A-2b archival conformance objects for *this render* (the `pdf-a`
+    /// feature, AC-11.2): an sRGB ICC `OutputIntent`, an XMP `pdfaid` packet and a
+    /// trailer `/ID`, with the watermark fade suppressed. A per-render runtime
+    /// toggle: `false` (the default) is byte-for-byte the non-PDF/A output. The
+    /// extra objects and their dependencies are only compiled under `pdf-a`.
+    #[cfg(feature = "pdf-a")]
+    pub pdf_a: bool,
+    /// Emit tagged / accessible PDF (PDF/UA-1) machinery for *this render* (the
+    /// `pdf-ua` feature, AC-11.1): a `StructTreeRoot`, `BDC`/`EMC` marked content,
+    /// a per-face `/ToUnicode` CMap, `/MarkInfo`, `/Lang`, an XMP packet and the
+    /// `DisplayDocTitle` viewer preference. A per-render runtime toggle: `false`
+    /// (the default) is byte-for-byte the untagged output, including 4 objects per
+    /// embedded font (the `/ToUnicode` stream is the 5th, emitted only when on).
+    #[cfg(feature = "pdf-ua")]
+    pub pdf_ua: bool,
     /// AES-256 password protection (the `encrypt` feature). `None` (the default)
     /// emits an unencrypted, byte-deterministic PDF. When set, every string and
     /// stream is AES-256-CBC encrypted and an `/Encrypt` dict is written, so a

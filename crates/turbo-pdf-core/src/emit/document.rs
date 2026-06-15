@@ -51,12 +51,40 @@ use super::xref::Xref;
 use super::EmitOptions;
 
 /// The number of PDF objects each embedded face occupies (Type0, CIDFont,
-/// FontDescriptor, font program). Under `pdf-ua` each face also carries a
-/// `/ToUnicode` CMap stream, so it occupies one more object (AC-11.1).
-#[cfg(not(feature = "pdf-ua"))]
-const OBJECTS_PER_FONT: i32 = 4;
+/// FontDescriptor, font program): 4 by default. A `pdf-ua` render adds a
+/// per-face `/ToUnicode` CMap stream, so each face occupies one more object
+/// (AC-11.1) — a *runtime* count, decided per render by `opts.pdf_ua`, so a
+/// flag-off render under the `pdf-ua` build keeps the default 4-object plan.
+fn objects_per_font(pdf_ua: bool) -> i32 {
+    if pdf_ua {
+        5
+    } else {
+        4
+    }
+}
+
+/// Whether this render emits PDF/A-2b objects: `opts.pdf_a` under the `pdf-a`
+/// feature, else a compile-time `false` so the default build folds the branch
+/// away and the gated objects never enter the plan.
+#[cfg(feature = "pdf-a")]
+fn pdf_a_on(opts: &EmitOptions) -> bool {
+    opts.pdf_a
+}
+#[cfg(not(feature = "pdf-a"))]
+fn pdf_a_on(_opts: &EmitOptions) -> bool {
+    false
+}
+
+/// Whether this render emits PDF/UA tagged-PDF objects: `opts.pdf_ua` under the
+/// `pdf-ua` feature, else a compile-time `false`.
 #[cfg(feature = "pdf-ua")]
-const OBJECTS_PER_FONT: i32 = 5;
+fn pdf_ua_on(opts: &EmitOptions) -> bool {
+    opts.pdf_ua
+}
+#[cfg(not(feature = "pdf-ua"))]
+fn pdf_ua_on(_opts: &EmitOptions) -> bool {
+    false
+}
 
 /// Build the whole PDF document from the paginated pages.
 pub fn build(pages: &[Page], opts: &EmitOptions, resolver: &dyn ImageResolver) -> Vec<u8> {
@@ -74,23 +102,25 @@ pub fn build(pages: &[Page], opts: &EmitOptions, resolver: &dyn ImageResolver) -
         pages,
         &fonts,
         &images,
+        opts,
         #[cfg(feature = "xref")]
         &xref,
     );
-    // The `pdf-ua` structure tree's objects start after every object the fixed
-    // plan already allocated (info, plus any `xref`/`pdf-a` objects), so the
-    // three features never claim the same object id.
+    // The `pdf-ua` structure tree's objects start after every object the plan
+    // already allocated (info, plus any `xref`/`pdf-a` objects), so the three
+    // features never claim the same object id. Built only when the render
+    // actually emits tagged PDF (`opts.pdf_ua`); otherwise the plan reserves no
+    // struct-tree ids and the catalog/pages take their untagged path.
     #[cfg(feature = "pdf-ua")]
-    let (ua, _) = ua::UaPlan::build(pages, plan.next_free_id());
+    let ua = pdf_ua_on(opts).then(|| ua::UaPlan::build(pages, plan.next_free_id()).0);
     let mut pdf = Pdf::new();
     pdf.set_version(1, 7);
     write_catalog(
         &mut pdf,
         &plan,
-        #[cfg(feature = "pdf-ua")]
-        &ua,
-        #[cfg(feature = "pdf-ua")]
         opts,
+        #[cfg(feature = "pdf-ua")]
+        ua.as_ref(),
     );
     write_page_tree(&mut pdf, pages, &plan);
     write_pages(
@@ -101,17 +131,21 @@ pub fn build(pages: &[Page], opts: &EmitOptions, resolver: &dyn ImageResolver) -
         &images,
         opts,
         #[cfg(feature = "pdf-ua")]
-        &ua,
+        ua.as_ref(),
     );
-    fonts.write(&mut pdf, &mut plan.font_alloc());
+    fonts.write(&mut pdf, &mut plan.font_alloc(), opts);
     images.write(&mut pdf, &mut plan.image_alloc());
     write_info(&mut pdf, plan.info, opts);
     #[cfg(feature = "xref")]
     write_xref(&mut pdf, &plan, &xref);
     #[cfg(feature = "pdf-a")]
-    write_pdfa_objects(&mut pdf, &plan, opts);
+    if pdf_a_on(opts) {
+        write_pdfa_objects(&mut pdf, &plan, opts);
+    }
     #[cfg(feature = "pdf-ua")]
-    ua.write(&mut pdf, &plan.page_refs, opts);
+    if let Some(ua) = &ua {
+        ua.write(&mut pdf, &plan.page_refs, opts);
+    }
     finish(pdf, opts)
 }
 
@@ -175,12 +209,24 @@ struct Plan {
     page_annot_refs: Vec<Vec<Ref>>,
     /// The embedded sRGB ICC profile stream (`pdf-a` only): the `OutputIntent`'s
     /// `DestOutputProfile`. Laid out after the info dict (and after any `xref`
-    /// objects) so the default object plan is untouched when the feature is off.
+    /// objects) so the default object plan is untouched when the render does not
+    /// emit PDF/A. Only meaningful — and only an allocated object — when
+    /// `pdf_a` is set; otherwise no ICC/XMP ids are reserved at all.
     #[cfg(feature = "pdf-a")]
     icc: Ref,
     /// The XMP `/Metadata` stream (`pdf-a` only), declaring PDF/A-2b.
     #[cfg(feature = "pdf-a")]
     xmp: Ref,
+    /// Whether this render emits PDF/A objects (resolved from `opts.pdf_a`). When
+    /// `false`, `icc`/`xmp` reserve no ids and the catalog skips the OutputIntent.
+    #[cfg(feature = "pdf-a")]
+    pdf_a: bool,
+    /// Whether this render emits PDF/UA tagged-PDF objects (resolved from
+    /// `opts.pdf_ua`). Drives the struct-tree allocation and each page's
+    /// `/StructParents` key, so a flag-off render keeps the default object plan.
+    /// (The font-object count is decided in [`Plan::new`] from the same flag.)
+    #[cfg(feature = "pdf-ua")]
+    pdf_ua: bool,
 }
 
 impl Plan {
@@ -188,13 +234,16 @@ impl Plan {
         pages: &[Page],
         fonts: &FontStore,
         images: &ImageStore,
+        opts: &EmitOptions,
         #[cfg(feature = "xref")] xref: &Xref,
     ) -> Plan {
+        let pdf_ua = pdf_ua_on(opts);
+        let per_font = objects_per_font(pdf_ua);
         let mut next = 3;
         let page_refs = page_ref_pairs(pages.len(), &mut next);
         let fonts_start = next;
-        let font_refs = type0_refs(fonts_start, fonts.len());
-        let images_start = fonts_start + OBJECTS_PER_FONT * fonts.len() as i32;
+        let font_refs = type0_refs(fonts_start, fonts.len(), per_font);
+        let images_start = fonts_start + per_font * fonts.len() as i32;
         let image_refs = images.xobject_refs(images_start);
         let info_id = images_start + images.total_objects();
         let info = Ref::new(info_id);
@@ -207,7 +256,11 @@ impl Plan {
             .map(|i| xref.page_annots(i, &link_refs).to_vec())
             .collect();
         // The optional PDF/A objects (ICC + XMP) go after the info dict and any
-        // `xref` objects, so the two features never claim the same object id.
+        // `xref` objects, so the two never claim the same id. Reserved only when
+        // this render emits PDF/A; otherwise the ids stay free for whatever
+        // follows (the `pdf-ua` struct tree), keeping a flag-off plan unchanged.
+        #[cfg(feature = "pdf-a")]
+        let pdf_a = pdf_a_on(opts);
         #[cfg(all(feature = "pdf-a", feature = "xref"))]
         let pdfa_start = info_id + 1 + xref_object_count(xref);
         #[cfg(all(feature = "pdf-a", not(feature = "xref")))]
@@ -230,11 +283,15 @@ impl Plan {
             #[cfg(feature = "xref")]
             page_annot_refs,
             // The two PDF/A objects (ICC + XMP) follow the info dict (and any
-            // xref objects).
+            // xref objects) — only when this render emits PDF/A.
             #[cfg(feature = "pdf-a")]
             icc: Ref::new(pdfa_start),
             #[cfg(feature = "pdf-a")]
             xmp: Ref::new(pdfa_start + 1),
+            #[cfg(feature = "pdf-a")]
+            pdf_a,
+            #[cfg(feature = "pdf-ua")]
+            pdf_ua,
         }
     }
 
@@ -248,10 +305,12 @@ impl Plan {
         RefAlloc::new(self.images_start)
     }
 
-    /// The first object id not used by the fixed plan — where further feature
-    /// objects (the `pdf-ua` structure tree) begin. Accounts for the optional
-    /// `xref` objects (a `/Dests` dict + one per Link) and `pdf-a` objects (ICC +
-    /// XMP), so the three features never claim the same id when co-enabled.
+    /// The first object id not used by the plan — where the `pdf-ua` structure
+    /// tree begins. Accounts for the optional `xref` objects (a `/Dests` dict +
+    /// one per Link) and the `pdf-a` objects (ICC + XMP), at runtime: the two
+    /// PDF/A ids are counted only when this render emits PDF/A, so the three
+    /// features never claim the same id when co-enabled and a flag-off render
+    /// starts the struct tree exactly where the default plan would.
     #[cfg(feature = "pdf-ua")]
     fn next_free_id(&self) -> i32 {
         // `mut` is only exercised when `xref`/`pdf-a` are also on; with neither,
@@ -263,7 +322,7 @@ impl Plan {
             next += i32::from(self.has_dests) + self.link_refs.len() as i32;
         }
         #[cfg(feature = "pdf-a")]
-        {
+        if self.pdf_a {
             next += 2;
         }
         next
@@ -281,10 +340,11 @@ fn page_ref_pairs(count: usize, next: &mut i32) -> Vec<(Ref, Ref)> {
         .collect()
 }
 
-/// The Type0 font ref of each face: the first of its four contiguous objects.
-fn type0_refs(start: i32, count: usize) -> Vec<Ref> {
+/// The Type0 font ref of each face: the first of its `per_font` contiguous
+/// objects (4 normally, 5 under a `pdf-ua` render).
+fn type0_refs(start: i32, count: usize, per_font: i32) -> Vec<Ref> {
     (0..count as i32)
-        .map(|i| Ref::new(start + OBJECTS_PER_FONT * i))
+        .map(|i| Ref::new(start + per_font * i))
         .collect()
 }
 
@@ -313,52 +373,66 @@ fn xref_object_count(xref: &Xref) -> i32 {
     i32::from(xref.has_dests()) + xref.link_count() as i32
 }
 
-#[cfg(not(feature = "pdf-ua"))]
-fn write_catalog(pdf: &mut Pdf, plan: &Plan) {
-    let mut catalog = pdf.catalog(plan.catalog);
-    catalog.pages(plan.page_tree);
+/// Write the document catalog. The default catalog is byte-for-byte the single
+/// `/Pages` entry; each feature adds its entries *at runtime* so a flag-off
+/// render under a feature build emits exactly the default catalog:
+///
+/// * `xref` (`plan.has_dests`): a `/Dests` name-tree reference.
+/// * `pdf-a` (`plan.pdf_a`): the sRGB `OutputIntent` and the XMP `/Metadata`.
+/// * `pdf-ua` (`ua` present): the `StructTreeRoot`, `/MarkInfo`, the tagged XMP
+///   `/Metadata`, `/Lang` and the `DisplayDocTitle` viewer preference.
+///
+/// Entry order is fixed (pages → dests → pdf-a → pdf-ua) so co-enabling never
+/// reshuffles the bytes a smaller feature set produces.
+fn write_catalog(
+    pdf: &mut Pdf,
+    plan: &Plan,
+    opts: &EmitOptions,
+    #[cfg(feature = "pdf-ua")] ua: Option<&ua::UaPlan>,
+) {
+    let mut cat = pdf.catalog(plan.catalog);
+    cat.pages(plan.page_tree);
     #[cfg(feature = "xref")]
     if plan.has_dests {
-        catalog.destinations(plan.dests);
+        cat.destinations(plan.dests);
     }
-    // PDF/A-2b: attach the OutputIntent (sRGB) and the XMP `/Metadata` stream to
-    // the catalog. Off by default, so the default catalog is byte-for-byte the
-    // single `/Pages` entry.
+    // PDF/A-2b: attach the OutputIntent (sRGB) and the XMP `/Metadata` stream,
+    // only when this render emits PDF/A.
     #[cfg(feature = "pdf-a")]
-    pdfa::write_catalog_entries(&mut catalog, plan.icc, plan.xmp);
-    catalog.finish();
+    if plan.pdf_a {
+        pdfa::write_catalog_entries(&mut cat, plan.icc, plan.xmp);
+    }
+    // PDF/UA: the tagged-PDF wiring, only when this render emits tagged PDF.
+    #[cfg(feature = "pdf-ua")]
+    if let Some(ua) = ua {
+        use pdf_writer::TextStr;
+        cat.pair(Name(b"StructTreeRoot"), ua.root_ref());
+        cat.mark_info().marked(true);
+        // The catalog carries a single `/Metadata`. A PDF/A render already wrote
+        // one above (its XMP packet), so we don't add a second key here; a
+        // pure-UA render writes the tagged XMP packet as the catalog metadata.
+        #[cfg(feature = "pdf-a")]
+        let pdfa_wrote_metadata = plan.pdf_a;
+        #[cfg(not(feature = "pdf-a"))]
+        let pdfa_wrote_metadata = false;
+        if !pdfa_wrote_metadata {
+            cat.metadata(ua.metadata_ref());
+        }
+        let lang = opts.lang.as_deref().unwrap_or("en-US");
+        cat.lang(TextStr(lang));
+        cat.viewer_preferences().display_doc_title(true);
+    }
+    let _ = opts;
+    cat.finish();
 }
 
 /// Write the PDF/A objects (ICC profile + XMP packet) and set the trailer `/ID`
-/// PDF/A requires. Called only under `#[cfg(feature = "pdf-a")]`.
+/// PDF/A requires. Called only when this render emits PDF/A.
 #[cfg(feature = "pdf-a")]
 fn write_pdfa_objects(pdf: &mut Pdf, plan: &Plan, opts: &EmitOptions) {
     pdfa::write_icc_profile(pdf, plan.icc);
     pdfa::write_metadata(pdf, plan.xmp, opts);
     pdf.set_file_id(pdfa::file_id(opts));
-}
-
-/// `pdf-ua` catalog: the page tree plus the tagged-PDF wiring (`StructTreeRoot`,
-/// `MarkInfo`, `/Lang`, the XMP metadata stream and `DisplayDocTitle`).
-#[cfg(feature = "pdf-ua")]
-fn write_catalog(pdf: &mut Pdf, plan: &Plan, ua: &ua::UaPlan, opts: &EmitOptions) {
-    use pdf_writer::TextStr;
-    let mut cat = pdf.catalog(plan.catalog);
-    cat.pages(plan.page_tree);
-    // When co-enabled with `xref`/`pdf-a`, their catalog entries ride along too,
-    // so enabling accessibility never drops links or the archival OutputIntent.
-    #[cfg(feature = "xref")]
-    if plan.has_dests {
-        cat.destinations(plan.dests);
-    }
-    #[cfg(feature = "pdf-a")]
-    pdfa::write_catalog_entries(&mut cat, plan.icc, plan.xmp);
-    cat.pair(Name(b"StructTreeRoot"), ua.root_ref());
-    cat.mark_info().marked(true);
-    cat.metadata(ua.metadata_ref());
-    let lang = opts.lang.as_deref().unwrap_or("en-US");
-    cat.lang(TextStr(lang));
-    cat.viewer_preferences().display_doc_title(true);
 }
 
 fn write_page_tree(pdf: &mut Pdf, pages: &[Page], plan: &Plan) {
@@ -368,8 +442,10 @@ fn write_page_tree(pdf: &mut Pdf, pages: &[Page], plan: &Plan) {
         .count(pages.len() as i32);
 }
 
-/// Write each page object (with resources) and its content stream.
-#[cfg(not(feature = "pdf-ua"))]
+/// Write each page object (with resources) and its content stream. A tagged
+/// render (`ua` present) additionally writes each page's `/StructParents` key and
+/// its content stream's marked-content tags; a flag-off render writes the plain
+/// page object and stream, byte-for-byte the untagged output.
 fn write_pages(
     pdf: &mut Pdf,
     pages: &[Page],
@@ -377,34 +453,23 @@ fn write_pages(
     fonts: &FontStore,
     images: &ImageStore,
     opts: &EmitOptions,
+    #[cfg(feature = "pdf-ua")] ua: Option<&ua::UaPlan>,
 ) {
+    let cmyk = opts.cmyk;
+    let fade = !pdf_a_on(opts);
     for (i, (page, (page_ref, content_ref))) in pages.iter().zip(&plan.page_refs).enumerate() {
         write_page_object(pdf, page, plan, (*page_ref, *content_ref), opts, i);
-        let bytes = content_stream(page, fonts, images, opts.watermark.as_ref());
-        pdf.stream(*content_ref, &bytes);
-    }
-}
-
-/// `pdf-ua` variant: each page also carries its `/StructParents` key and its
-/// content stream's marked-content tags (the page index threads both).
-#[cfg(feature = "pdf-ua")]
-fn write_pages(
-    pdf: &mut Pdf,
-    pages: &[Page],
-    plan: &Plan,
-    fonts: &FontStore,
-    images: &ImageStore,
-    opts: &EmitOptions,
-    ua: &ua::UaPlan,
-) {
-    for (i, (page, (page_ref, content_ref))) in pages.iter().zip(&plan.page_refs).enumerate() {
-        write_page_object(pdf, page, plan, (*page_ref, *content_ref), opts, i);
+        #[cfg(feature = "pdf-ua")]
+        let tags = ua.map(|ua| ua.page_tags(i));
         let bytes = content_stream(
             page,
             fonts,
             images,
             opts.watermark.as_ref(),
-            &ua.page_tags(i),
+            cmyk,
+            fade,
+            #[cfg(feature = "pdf-ua")]
+            tags.as_ref(),
         );
         pdf.stream(*content_ref, &bytes);
     }
@@ -433,8 +498,12 @@ fn write_page_object(
     obj.parent(plan.page_tree);
     obj.media_box(media_box(page));
     obj.contents(content_ref);
+    // A tagged render declares each page's `/StructParents` key; a flag-off
+    // render omits it, so the default page object is byte-for-byte unchanged.
     #[cfg(feature = "pdf-ua")]
-    obj.struct_parents(page_idx as i32);
+    if plan.pdf_ua {
+        obj.struct_parents(page_idx as i32);
+    }
     write_resources(&mut obj, plan, opts);
     write_page_annots(&mut obj, plan, page_idx);
     obj.finish();
@@ -461,20 +530,19 @@ fn write_resources(obj: &mut pdf_writer::writers::Page, plan: &Plan, opts: &Emit
     let mut resources = obj.resources();
     write_font_dict(&mut resources, &plan.font_refs);
     write_image_dict(&mut resources, &plan.image_refs);
-    // PDF/A-2b forbids transparency, so the watermark's `/ca` fade `ExtGState`
-    // is not emitted under `pdf-a` (the mark prints at full opacity instead).
-    #[cfg(not(feature = "pdf-a"))]
-    if let Some(mark) = &opts.watermark {
-        write_fade_gs(&mut resources, watermark::opacity(mark));
+    // PDF/A-2b forbids transparency, so a PDF/A render omits the watermark's
+    // `/ca` fade `ExtGState` (the mark prints at full opacity instead). A
+    // non-PDF/A render emits it exactly as before.
+    if !pdf_a_on(opts) {
+        if let Some(mark) = &opts.watermark {
+            write_fade_gs(&mut resources, watermark::opacity(mark));
+        }
     }
-    #[cfg(feature = "pdf-a")]
-    let _ = opts;
 }
 
 /// Write the watermark's `/GSwm` fade `ExtGState` inline (a simple `/ca` dict
 /// needs no indirect object), referenced by the content stream's `gs` operator.
-/// Not compiled under `pdf-a`, which forbids the `/ca` transparency entirely.
-#[cfg(not(feature = "pdf-a"))]
+/// Skipped for a PDF/A render, which forbids the `/ca` transparency entirely.
 fn write_fade_gs(resources: &mut pdf_writer::writers::Resources, opacity: f32) {
     let mut states = resources.ext_g_states();
     states

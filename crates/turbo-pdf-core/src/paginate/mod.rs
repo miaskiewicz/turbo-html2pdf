@@ -52,7 +52,7 @@ pub struct Page {
 fn page_kind(number: u32) -> PageKind {
     if number == 1 {
         PageKind::First
-    } else if number % 2 == 0 {
+    } else if number.is_multiple_of(2) {
         PageKind::Left
     } else {
         PageKind::Right

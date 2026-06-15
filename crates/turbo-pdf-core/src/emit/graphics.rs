@@ -19,23 +19,25 @@ struct PdfRect {
     h: f32,
 }
 
-/// Paint one `Box` fragment's background then borders into `content`.
+/// Paint one `Box` fragment's background then borders into `content`. `cmyk`
+/// selects the device colour space (see [`set_fill`]).
 pub fn paint_box(
     content: &mut Content,
     frag: &Fragment,
     background: Option<Rgba>,
     border: &BorderEdges,
     page_height_pt: f32,
+    cmyk: bool,
 ) {
     if let Some(bg) = background {
-        fill_rect(content, &box_rect(frag, page_height_pt), bg);
+        fill_rect(content, &box_rect(frag, page_height_pt), bg, cmyk);
     }
-    paint_borders(content, frag, border, page_height_pt);
+    paint_borders(content, frag, border, page_height_pt, cmyk);
 }
 
 /// Fill one rectangle with a solid color.
-fn fill_rect(content: &mut Content, r: &PdfRect, color: Rgba) {
-    set_fill(content, color);
+fn fill_rect(content: &mut Content, r: &PdfRect, color: Rgba, cmyk: bool) {
+    set_fill(content, color, cmyk);
     content.rect(r.x, r.y, r.w, r.h);
     content.fill_nonzero();
 }
@@ -56,6 +58,7 @@ fn paint_borders(
     frag: &Fragment,
     border: &BorderEdges,
     page_height_pt: f32,
+    cmyk: bool,
 ) {
     let outer = box_rect(frag, page_height_pt);
     let sides = [
@@ -75,7 +78,7 @@ fn paint_borders(
     ];
     for (spec, rect) in sides {
         if spec.width > 0 {
-            fill_rect(content, &rect, spec.color.unwrap_or(Rgba::BLACK));
+            fill_rect(content, &rect, spec.color.unwrap_or(Rgba::BLACK), cmyk);
         }
     }
 }

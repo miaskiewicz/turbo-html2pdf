@@ -72,9 +72,20 @@ fn full_options() -> EmitOptions {
         keywords: Some("archive, pdfa, sRGB".to_string()),
         creation_date: None,
         watermark: None,
+        // The per-render PDF/A toggle: this whole suite drives the archival path.
+        pdf_a: true,
         // Spread the rest so feature-gated fields (e.g. `lang` under `pdf-ua`)
         // are filled when this test is compiled alongside other features.
         ..EmitOptions::default()
+    }
+}
+
+/// `full_options` but with the per-render PDF/A toggle OFF, for the
+/// byte-identity check below.
+fn pdf_a_off_options() -> EmitOptions {
+    EmitOptions {
+        pdf_a: false,
+        ..full_options()
     }
 }
 
@@ -135,7 +146,13 @@ fn xmp_mirrors_info_dict() {
 #[test]
 fn empty_metadata_omits_optional_xmp_properties() {
     let pages = paginate_fixture("invoice");
-    let pdf = emit_pdf(&pages, &EmitOptions::default());
+    let pdf = emit_pdf(
+        &pages,
+        &EmitOptions {
+            pdf_a: true,
+            ..EmitOptions::default()
+        },
+    );
     // No title/author/subject/keywords supplied → those XMP properties are
     // absent (so nothing can disagree with the info dict), but the packet still
     // carries the producer and the PDF/A id.
@@ -173,6 +190,43 @@ fn output_is_byte_deterministic() {
     let a = emit_pdf(&pages, &full_options());
     let b = emit_pdf(&pages, &full_options());
     assert_eq!(a, b, "identical inputs must produce identical bytes");
+}
+
+#[test]
+fn pdf_a_false_emits_no_pdfa_objects_under_pdf_a_build() {
+    // The per-render toggle is OFF: even compiled with `pdf-a`, the output must
+    // carry NONE of the archival machinery — no OutputIntent, no XMP `pdfaid`
+    // packet, no trailer `/ID`. This is the byte-identical-default guarantee:
+    // turning the feature on at compile time must not change a flag-off render.
+    let pages = paginate_fixture("invoice");
+    let pdf = emit_pdf(&pages, &pdf_a_off_options());
+    assert!(
+        !contains(&pdf, b"/OutputIntents"),
+        "no OutputIntent without pdf_a"
+    );
+    assert!(!contains(&pdf, b"GTS_PDFA"), "no GTS_PDFA without pdf_a");
+    assert!(
+        !contains(&pdf, b"<pdfaid:part>"),
+        "no pdfaid XMP without pdf_a"
+    );
+    assert!(!contains(&pdf, b"/Type /Metadata"), "no XMP without pdf_a");
+    assert!(!contains(&pdf, b"/ID ["), "no trailer /ID without pdf_a");
+    // The watermark fade is NOT suppressed when pdf_a is off (it would be under
+    // a real PDF/A render): a flag-off render keeps the normal fade path.
+    let mut opts = pdf_a_off_options();
+    opts.watermark = Some(Watermark::Text(Box::new(TextWatermark {
+        text: "DRAFT".to_string(),
+        face: common::evolventa(),
+        font_size: 64.0,
+        color: Rgba::new(128, 128, 128, 255),
+        opacity: 0.25,
+        angle_deg: 45.0,
+    })));
+    let faded = emit_pdf(&pages, &opts);
+    assert!(
+        contains(&faded, b"/GSwm"),
+        "fade ExtGState present when pdf_a off"
+    );
 }
 
 // --- tool-gated validation ----------------------------------------------------

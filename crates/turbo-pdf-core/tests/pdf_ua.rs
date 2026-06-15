@@ -48,12 +48,14 @@ fn opts() -> EmitOptions {
     EmitOptions {
         title: Some("Accessible Report".to_string()),
         lang: Some("en-US".to_string()),
+        // The per-render PDF/UA toggle: this whole suite drives the tagged path.
+        pdf_ua: true,
         ..EmitOptions::default()
     }
 }
 
-/// Run the sample template through the pipeline and emit a tagged PDF.
-fn build_pdf() -> Vec<u8> {
+/// Render the sample pages once, reused across the per-toggle emits below.
+fn sample_pages() -> Vec<turbo_pdf_core::paginate::Page> {
     let (program, _) =
         compile(TEMPLATE, &CompileOptions::default()).expect("compile sample template");
     let cascade = build_cascade(CSS, "", TokenSet::default());
@@ -68,8 +70,12 @@ fn build_pdf() -> Vec<u8> {
         now: Some(0),
     };
     let mut diags = Diagnostics::default();
-    let pages = render_pages(&inputs, &mut diags).expect("render pages");
-    emit_pdf(&pages, &opts())
+    render_pages(&inputs, &mut diags).expect("render pages")
+}
+
+/// Run the sample template through the pipeline and emit a tagged PDF.
+fn build_pdf() -> Vec<u8> {
+    emit_pdf(&sample_pages(), &opts())
 }
 
 fn contains(haystack: &[u8], needle: &[u8]) -> bool {
@@ -147,6 +153,51 @@ fn carries_the_pdfua_xmp_identifier() {
         contains(&pdf, b"pdfuaid:part"),
         "the XMP packet identifies the document as PDF/UA"
     );
+}
+
+#[test]
+fn pdf_ua_false_emits_no_tagged_machinery_under_pdf_ua_build() {
+    // The per-render toggle is OFF: even compiled with `pdf-ua`, the output must
+    // carry NONE of the tagged-PDF machinery — no StructTreeRoot, no marked
+    // content, no /ToUnicode, no /MarkInfo / /Lang / DisplayDocTitle. This is the
+    // byte-identical-default guarantee.
+    let pages = sample_pages();
+    let pdf = emit_pdf(
+        &pages,
+        &EmitOptions {
+            title: Some("Accessible Report".to_string()),
+            pdf_ua: false,
+            ..EmitOptions::default()
+        },
+    );
+    for marker in [
+        &b"/StructTreeRoot"[..],
+        b"/MarkInfo",
+        b"/Marked true",
+        b"/ParentTree",
+        b"/MCID",
+        b"/StructParents",
+        b"/ToUnicode",
+        b"/DisplayDocTitle",
+        b"BDC",
+        b"/Artifact",
+    ] {
+        assert!(
+            !contains(&pdf, marker),
+            "flag-off render must not emit {:?}",
+            std::str::from_utf8(marker).unwrap()
+        );
+    }
+    // A flag-off render still produces a valid, deterministic PDF.
+    let again = emit_pdf(
+        &pages,
+        &EmitOptions {
+            title: Some("Accessible Report".to_string()),
+            pdf_ua: false,
+            ..EmitOptions::default()
+        },
+    );
+    assert_eq!(pdf, again, "flag-off render is byte-deterministic");
 }
 
 /// Write `pdf` to a temp file and return its path.

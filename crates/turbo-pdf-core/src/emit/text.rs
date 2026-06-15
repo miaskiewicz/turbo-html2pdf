@@ -16,8 +16,15 @@ use super::fonts::FontStore;
 use super::unit::{flip_y, px_to_pt};
 
 /// Paint a `TextLine` fragment as a PDF text object. No-op for any other
-/// fragment content (boxes/directives are handled elsewhere).
-pub fn paint_text(content: &mut Content, frag: &Fragment, fonts: &FontStore, page_height_pt: f32) {
+/// fragment content (boxes/directives are handled elsewhere). `cmyk` selects the
+/// device colour space for the fill (see [`set_fill`]).
+pub fn paint_text(
+    content: &mut Content,
+    frag: &Fragment,
+    fonts: &FontStore,
+    page_height_pt: f32,
+    cmyk: bool,
+) {
     if let FragmentContent::TextLine {
         glyphs,
         face,
@@ -32,7 +39,7 @@ pub fn paint_text(content: &mut Content, frag: &Fragment, fonts: &FontStore, pag
             font_size: *font_size,
             color: *color,
         };
-        show_line(content, &line, fonts, page_height_pt);
+        show_line(content, &line, fonts, page_height_pt, cmyk);
     }
 }
 
@@ -45,12 +52,18 @@ struct Line<'a> {
     color: Rgba,
 }
 
-fn show_line(content: &mut Content, line: &Line, fonts: &FontStore, page_height_pt: f32) {
+fn show_line(
+    content: &mut Content,
+    line: &Line,
+    fonts: &FontStore,
+    page_height_pt: f32,
+    cmyk: bool,
+) {
     let face_index = fonts.index_of(line.face);
     let resource = FontStore::resource_name(face_index);
     content.begin_text();
     content.set_font(Name(resource.as_bytes()), px_to_pt(line.font_size));
-    set_fill(content, line.color);
+    set_fill(content, line.color, cmyk);
     for glyph in line.glyphs {
         show_glyph(content, line, glyph, fonts, face_index, page_height_pt);
     }
