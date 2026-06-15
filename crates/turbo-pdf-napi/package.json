@@ -1,5 +1,5 @@
 {
-  "name": "@turbo-html2pdf/napi",
+  "name": "turbo-html2pdf",
   "version": "0.1.0",
   "description": "N-API binding for turbo-pdf: compile a template + data to a PDF Buffer from Node/JS (Phase 10).",
   "license": "MIT",

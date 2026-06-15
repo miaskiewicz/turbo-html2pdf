@@ -1,5 +1,5 @@
 {
-  "name": "@turbo-html2pdf/react",
+  "name": "turbo-html2pdf-react",
   "version": "0.1.0",
   "description": "React authoring frontend for turbo-pdf: components that compile once to a Jinja + t: template source string.",
   "license": "MIT",

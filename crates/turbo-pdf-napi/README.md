@@ -1,4 +1,4 @@
-# @turbo-html2pdf/napi
+# turbo-html2pdf
 
 N-API binding that exposes the turbo-pdf template → PDF pipeline to Node/JS. This
 is the "usable in a React project" entry point: compile a template once, render
@@ -7,7 +7,7 @@ it against data to a PDF `Buffer`.
 ## API
 
 ```js
-const { compile, render, TurboPdfError } = require('@turbo-html2pdf/napi')
+const { compile, render, TurboPdfError } = require('turbo-html2pdf')
 const fs = require('node:fs')
 
 const font = fs.readFileSync('Go-Regular.ttf')

@@ -1,4 +1,4 @@
-// turbo-html2pdf adapter — drives the native N-API binding (@turbo-html2pdf/napi).
+// turbo-html2pdf adapter — drives the native N-API binding (turbo-html2pdf).
 //
 // Cold render = compile the (static) HTML body + render, fonts parsed per call
 // (a fresh registry) — the true one-shot cost, no browser to spin up. Warm render

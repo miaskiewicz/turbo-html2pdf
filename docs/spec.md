@@ -513,7 +513,7 @@ The core consumes template HTML + `t:` DSL and **nothing else**. How that HTML i
 
 **The frontend contract** (what any frontend must emit): well-formed, parseable HTML containing the required structural fields, with DSL expressed as `t:` elements and `{{ }}`/attribute expressions as **strings** (frontends do not evaluate the expression language — that happens in Rust at render). Any tool meeting this contract is supported: hand-authored HTML, template-string builders, Vue, Svelte, Astro, JSX, etc.
 
-**React frontend** (`@turbo-html2pdf/react`) — the *first* frontend we ship, not a privileged one:
+**React frontend** (`turbo-html2pdf-react`) — the *first* frontend we ship, not a privileged one:
 - Components rendering to the DSL via `renderToStaticMarkup`: `<If cond>`, `<ElseIf>`, `<Else>`, `<Switch on>`, `<Case value>`, `<Each of as index>`, `<Include src with>`, `<RunningHeader>`, `<RunningFooter>`, `<PageMaster>`, `<Region slot>`, `<Footnote>`, `<Page/>`, `<Pages/>`, `<Running name>`, `<Counter/>`.
 - Each emits the corresponding `t:` element with attributes carrying **expression strings** (not evaluated JS) — e.g. `<Each of="invoice.lines" as="line">`. The React layer is a typed authoring convenience; expressions are still the DSL, resolved in Rust. (AC-8.7: a React template and its hand-written `t:` equivalent compile to byte-identical Programs.)
 - Boundary: React runs once to produce the template; it is **not** in the render hot path and has no access to render data.

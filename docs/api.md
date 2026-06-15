@@ -2,11 +2,11 @@
 
 turbo-html2pdf ships four JS-facing surfaces:
 
-- **`@turbo-html2pdf/napi`** — the Node native binding (`compile`/`render` → PDF
+- **`turbo-html2pdf`** — the Node native binding (`compile`/`render` → PDF
   `Buffer`).
-- **`@turbo-html2pdf/wasm`** — the WebAssembly binding (same pipeline in the browser).
-- **`@turbo-html2pdf/react`** — author templates as React components.
-- **`@turbo-html2pdf/template`** — author templates with plain functions (no React).
+- **`turbo-html2pdf-wasm`** — the WebAssembly binding (same pipeline in the browser).
+- **`turbo-html2pdf-react`** — author templates as React components.
+- **`turbo-html2pdf-template`** — author templates with plain functions (no React).
 
 The model is the same everywhere: a **template** (markup + Jinja +
 [`t:` directives](paged-media.md)) is compiled once into a `Program`, then
@@ -23,13 +23,13 @@ bindings *run it*.
 
 ---
 
-## 1. `@turbo-html2pdf/napi` (Node)
+## 1. `turbo-html2pdf` (Node)
 
 ```js
-const { compile, render, TurboPdfError } = require('@turbo-html2pdf/napi')
+const { compile, render, TurboPdfError } = require('turbo-html2pdf')
 const fs = require('node:fs')
 
-const { Fonts } = require('@turbo-html2pdf/napi')
+const { Fonts } = require('turbo-html2pdf')
 const font = fs.readFileSync('Go-Regular.ttf')
 
 // Warm both handles ONCE at startup, reuse them per request.
@@ -104,7 +104,7 @@ class TurboPdfError extends Error {
 
 ---
 
-## 2. `@turbo-html2pdf/wasm` (browser)
+## 2. `turbo-html2pdf-wasm` (browser)
 
 Same pipeline, async-initialized. The JS API is `wasm-bindgen`-generated from the
 Rust `#[wasm_bindgen]` exports (`crates/turbo-pdf-wasm/src/`):
@@ -176,7 +176,7 @@ repeatedly.
 
 ---
 
-## 3. `@turbo-html2pdf/react`
+## 3. `turbo-html2pdf-react`
 
 Author the template as React components. The components render **once at
 authoring time** (via `renderToStaticMarkup`) into a turbo-html2pdf template *source
@@ -185,10 +185,10 @@ attribute values are **expression strings** resolved later in Rust, not evaluate
 JS.
 
 ```ts
-import { compileTemplate } from '@turbo-html2pdf/react'
+import { compileTemplate } from 'turbo-html2pdf-react'
 
 const source = compileTemplate(<InvoiceDoc />)   // string: HTML + Jinja + t: directives
-// → hand `source` to @turbo-html2pdf/napi or /wasm `compile(...)`
+// → hand `source` to turbo-html2pdf or /wasm `compile(...)`
 ```
 
 `compileTemplate(element, { trim?: boolean })` renders the element and trims by
@@ -238,7 +238,7 @@ anything at render time. `Footnote`, `RunningHeader`/`RunningFooter`, and
 
 ---
 
-## 4. `@turbo-html2pdf/template`
+## 4. `turbo-html2pdf-template`
 
 A framework-free authoring frontend that emits the **same** template source
 string as the React frontend (byte-identical to `renderToStaticMarkup` output),

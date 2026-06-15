@@ -5,8 +5,10 @@ with no headless browser.** A from-scratch document engine: templating → HTML/
 layout → automatic pagination → PDF, shipped as a tiny native addon for Node and
 WebAssembly. No Chromium download, no 200 ms browser spin-up, deterministic output.
 
-> The npm packages are `@turbo-html2pdf/*`. The name says exactly what it does —
-> HTML → PDF — and avoids clashing with the unrelated "TurboPDF".
+> npm: `turbo-html2pdf` (Node) · `turbo-html2pdf-wasm` (browser) ·
+> `turbo-html2pdf-react` / `turbo-html2pdf-template` (authoring). The name says
+> exactly what it does — HTML → PDF — and avoids clashing with the unrelated
+> "TurboPDF".
 
 ---
 
@@ -111,11 +113,11 @@ all native; `taffy` powers flexbox. The engine embeds no fonts and does no netwo
 or filesystem I/O — fonts and images are supplied by the caller.
 
 **Frontends & bindings** (`packages/`, `crates/`):
-- `@turbo-html2pdf/napi` — Node native addon (`compile`/`render` → `Buffer`).
-- `@turbo-html2pdf/wasm` — the same engine in the browser (WebAssembly).
-- `@turbo-html2pdf/react` — author templates as React components (compiled to the
+- `turbo-html2pdf` — Node native addon (`compile`/`render` → `Buffer`).
+- `turbo-html2pdf-wasm` — the same engine in the browser (WebAssembly).
+- `turbo-html2pdf-react` — author templates as React components (compiled to the
   template string at build time, never on the render path).
-- `@turbo-html2pdf/template` — author templates with plain functions (no React).
+- `turbo-html2pdf-template` — author templates with plain functions (no React).
 
 The engine is `Send + Sync`: one compiled `Program` renders concurrently across
 threads.
@@ -144,7 +146,7 @@ Full reference in [`docs/`](docs/): [`dsl.md`](docs/dsl.md),
     when a table spans pages.
 
 ```js
-const { compile, Fonts } = require('@turbo-html2pdf/napi')
+const { compile, Fonts } = require('turbo-html2pdf')
 const fs = require('node:fs')
 
 // Warm at startup, reuse per request — the fast path.

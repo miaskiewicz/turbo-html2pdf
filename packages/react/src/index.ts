@@ -1,4 +1,4 @@
-// `@turbo-html2pdf/react` — the first authoring frontend for turbo-pdf.
+// `turbo-html2pdf-react` — the first authoring frontend for turbo-pdf.
 //
 // React components that render *once at authoring time* to a turbo-pdf template
 // source string (Jinja control flow + `t:` paged-media directives + plain HTML).
