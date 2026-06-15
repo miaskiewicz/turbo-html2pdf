@@ -26,7 +26,6 @@ exclude-files = [
     # carry real default coverage, so it cannot be file-excluded; its gated lines
     # simply are not compiled by default and so never enter the report.)
     "crates/turbo-pdf-core/src/endnotes.rs",
-<<<<<<< HEAD
     # Opt-in `append` feature: off in normal builds — not compiled under default
     # features (its `lopdf` dep is `optional`), so its lines never enter the
     # default coverage surface, the same way `endnotes.rs` above does not.
@@ -50,5 +49,16 @@ exclude-files = [
     # with real default coverage, so it cannot be file-excluded; its gated lines
     # simply are not compiled by default and never enter the report.
     "crates/turbo-pdf-core/src/emit/xref.rs",
+    # Opt-in `pdf-a` feature (Phase 15b, AC-11.2: PDF/A-2b archival conformance);
+    # off in normal builds — the whole module is behind `#[cfg(feature =
+    # "pdf-a")]`, so it is not compiled under default features and never enters
+    # the default coverage surface (same as endnotes.rs / perf.rs). Covered by
+    # the `--features pdf-a` tests in tests/pdf_a.rs, which validate the output
+    # with veraPDF `--flavour 2b`. Listed here defensively. (The small gated
+    # branches the feature adds in emit/document.rs, emit/meta.rs and
+    # emit/watermark.rs live in files that carry real default coverage; those
+    # `#[cfg]` lines simply are not compiled by default, so they never appear in
+    # the report.)
+    "crates/turbo-pdf-core/src/emit/pdfa.rs",
 ]
 fail-under = 100.0

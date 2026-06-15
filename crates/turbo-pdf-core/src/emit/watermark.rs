@@ -31,7 +31,9 @@ use super::image::ImageStore;
 use super::unit::px_to_pt;
 
 /// The PDF resource name of the watermark's fade `ExtGState` (`/GSwm`). Distinct
-/// from any name the rest of the emitter uses, so it never collides.
+/// from any name the rest of the emitter uses, so it never collides. Unused
+/// under `pdf-a`, where the transparency-bearing fade is suppressed entirely.
+#[cfg(not(feature = "pdf-a"))]
 pub const FADE_GS_NAME: &str = "GSwm";
 
 /// A page watermark: either shaped text or a resolved raster. Painted first in
@@ -92,7 +94,8 @@ pub struct ImageWatermark {
 }
 
 /// The fade opacity a watermark requests, if any. Drives whether the page
-/// resources need the `/GSwm` `ExtGState`.
+/// resources need the `/GSwm` `ExtGState`. Unused under `pdf-a` (no fade).
+#[cfg(not(feature = "pdf-a"))]
 pub fn opacity(watermark: &Watermark) -> f32 {
     match watermark {
         Watermark::Text(t) => t.opacity,
@@ -139,6 +142,10 @@ pub fn paint(
     let page_w = px_to_pt(page.geometry.width);
     let page_h = px_to_pt(page.geometry.height);
     content.save_state();
+    // PDF/A-2b forbids transparency: under `pdf-a` the fade `ExtGState` is not
+    // emitted (see `document::write_resources`), so the `gs` operator that would
+    // reference it is skipped too — the mark prints at full opacity.
+    #[cfg(not(feature = "pdf-a"))]
     content.set_parameters(Name(FADE_GS_NAME.as_bytes()));
     match watermark {
         Watermark::Text(text) => paint_text(content, text, fonts, page_w, page_h),

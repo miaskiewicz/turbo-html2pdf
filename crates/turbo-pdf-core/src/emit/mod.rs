@@ -25,6 +25,8 @@ mod graphics;
 mod image;
 mod meta;
 mod page;
+#[cfg(feature = "pdf-a")]
+mod pdfa;
 mod text;
 mod unit;
 mod watermark;

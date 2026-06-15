@@ -1,6 +1,15 @@
 # TODO: `pdf-a` feature — PDF/A-2b archival conformance (AC-11.2)
 
-**Status:** deferred in Phase 15. Feature flag not yet declared.
+**Status:** DONE (Phase 15b). The `pdf-a` Cargo feature is declared and
+implemented in `crates/turbo-pdf-core/src/emit/pdfa.rs` (+ gated hooks in
+`emit/document.rs`, `emit/meta.rs`, `emit/watermark.rs`). A vendored sRGB ICC
+profile (`assets/icc/sRGB-IEC61966-2.1.icc`) is written as an `OutputIntent`
+(`GTS_PDFA`, conformance B); an XMP packet declares `pdfaid:part=2`,
+`conformance=B` consistent with the info dict; the watermark `/ca` fade is
+suppressed (no transparency); a deterministic trailer `/ID` is set. veraPDF was
+installed (`brew install verapdf`, 1.30.0) and a `--features pdf-a` document
+**passes `verapdf --flavour 2b`** (144 rules, 7813 checks, 0 failures) — see
+`tests/pdf_a.rs`. Default build is byte-for-byte unchanged.
 
 ## What it is (plain)
 The **"keep-forever" PDF**. PDF/A bakes *everything* in (fonts, color definitions)

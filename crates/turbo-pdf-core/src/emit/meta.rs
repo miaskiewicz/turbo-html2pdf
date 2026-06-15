@@ -9,8 +9,9 @@ use pdf_writer::{Date, Pdf, Ref, TextStr};
 use super::{EmitOptions, SENTINEL_DATE};
 
 /// The fixed `/Producer` string. Constant (no version interpolation) so output
-/// stays byte-stable across builds.
-const PRODUCER: &str = "turbo-pdf";
+/// stays byte-stable across builds. Shared with the `pdf-a` XMP packet so the
+/// metadata stream and the info dict agree on the producer.
+pub const PRODUCER: &str = "turbo-pdf";
 
 /// Write the document info dictionary at `id`.
 pub fn write_info(pdf: &mut Pdf, id: Ref, opts: &EmitOptions) {
@@ -41,6 +42,16 @@ fn pdf_date(timestamp: i64) -> Date {
 /// The sentinel as a concrete `DateTime` (infallible: the constant is in range).
 fn sentinel_datetime() -> DateTime<Utc> {
     DateTime::<Utc>::from_timestamp(SENTINEL_DATE, 0).expect("sentinel timestamp is in range")
+}
+
+/// An ISO-8601 UTC timestamp (`YYYY-MM-DDThh:mm:ssZ`) for the same Unix stamp
+/// the info dict's creation date uses, clamping out-of-range stamps to the
+/// sentinel exactly like [`pdf_date`]. Used by the `pdf-a` XMP packet so the
+/// `xmp:CreateDate`/`ModifyDate` agree with the info dict's `/CreationDate`.
+#[cfg(feature = "pdf-a")]
+pub fn xmp_timestamp(timestamp: i64) -> String {
+    let dt = DateTime::<Utc>::from_timestamp(timestamp, 0).unwrap_or_else(sentinel_datetime);
+    dt.format("%Y-%m-%dT%H:%M:%SZ").to_string()
 }
 
 /// Convert a chrono `DateTime` into a fully-specified UTC PDF date.

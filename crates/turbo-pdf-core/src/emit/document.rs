@@ -8,9 +8,13 @@
 //! across runs. The font and image object ids are known from the layout up
 //! front, so each page object is written exactly once with its resources.
 //!
-//! Phase 15 features that would extend this object plan are DEFERRED. The two
-//! delivered Phase 15 features (`endnotes` and `print-color`) needed no change to
-//! the object plan, so they ship without touching this file. The deferred three:
+//! Phase 15 features and this object plan: `endnotes` and `print-color` needed
+//! no change to the plan, so they ship without touching this file. The `pdf-a`
+//! feature (AC-11.2) DOES extend it — under `#[cfg(feature = "pdf-a")]` two
+//! objects (an sRGB ICC profile stream and an XMP `/Metadata` stream) follow the
+//! info dict, an `OutputIntent` is attached to the catalog, and a trailer `/ID`
+//! is set; all in [`super::pdfa`]. It is off by default, so the default object
+//! plan and bytes are unchanged. The remaining two stay deferred:
 //!
 //! TODO(phase15b, feature `xref`, AC-3.25): named GoTo destinations for
 //! `<t:anchor name>` plus internal-link annotations for `<a href="#name">`. A
@@ -20,12 +24,6 @@
 //! pagination, so the annotation rect is unavailable at emit time; wiring that
 //! through fragment.rs/boxgen.rs to 100% coverage is a larger change than this
 //! slice could land cleanly.
-//!
-//! TODO(phase15b, feature `pdf-a`, AC-11.2): PDF/A-2b conformance — an XMP
-//! metadata packet plus an sRGB OutputIntent on the catalog, forced font
-//! embedding (already done) and no transparency. DEFERRED: needs a vendored sRGB
-//! ICC profile and a veraPDF validation step, and veraPDF is not on PATH in this
-//! environment, so it would ship unvalidated.
 //!
 //! TODO(phase15b, feature `pdf-ua`, AC-11.1): a tagged StructTreeRoot built from
 //! semantic HTML (headings/lists/tables), Alt text from `<img alt>`, and reading
@@ -42,6 +40,8 @@ use super::fonts::{FontStore, RefAlloc};
 use super::image::ImageStore;
 use super::meta::write_info;
 use super::page::content_stream;
+#[cfg(feature = "pdf-a")]
+use super::pdfa;
 use super::unit::px_to_pt;
 use super::watermark;
 #[cfg(feature = "xref")]
@@ -81,6 +81,8 @@ pub fn build(pages: &[Page], opts: &EmitOptions, resolver: &dyn ImageResolver) -
     write_info(&mut pdf, plan.info, opts);
     #[cfg(feature = "xref")]
     write_xref(&mut pdf, &plan, &xref);
+    #[cfg(feature = "pdf-a")]
+    write_pdfa_objects(&mut pdf, &plan, opts);
     pdf.finish()
 }
 
@@ -123,6 +125,14 @@ struct Plan {
     /// the pages, so each page object can write its `/Annots` array by index.
     #[cfg(feature = "xref")]
     page_annot_refs: Vec<Vec<Ref>>,
+    /// The embedded sRGB ICC profile stream (`pdf-a` only): the `OutputIntent`'s
+    /// `DestOutputProfile`. Laid out after the info dict (and after any `xref`
+    /// objects) so the default object plan is untouched when the feature is off.
+    #[cfg(feature = "pdf-a")]
+    icc: Ref,
+    /// The XMP `/Metadata` stream (`pdf-a` only), declaring PDF/A-2b.
+    #[cfg(feature = "pdf-a")]
+    xmp: Ref,
 }
 
 impl Plan {
@@ -138,15 +148,22 @@ impl Plan {
         let font_refs = type0_refs(fonts_start, fonts.len());
         let images_start = fonts_start + OBJECTS_PER_FONT * fonts.len() as i32;
         let image_refs = images.xobject_refs(images_start);
-        let info = Ref::new(images_start + images.total_objects());
+        let info_id = images_start + images.total_objects();
+        let info = Ref::new(info_id);
         // Cross-reference objects follow the info dict: an optional `/Dests`
         // dictionary, then one object per Link annotation.
         #[cfg(feature = "xref")]
-        let (dests, link_refs) = xref_refs(info.get() + 1, xref);
+        let (dests, link_refs) = xref_refs(info_id + 1, xref);
         #[cfg(feature = "xref")]
         let page_annot_refs = (0..pages.len())
             .map(|i| xref.page_annots(i, &link_refs).to_vec())
             .collect();
+        // The optional PDF/A objects (ICC + XMP) go after the info dict and any
+        // `xref` objects, so the two features never claim the same object id.
+        #[cfg(all(feature = "pdf-a", feature = "xref"))]
+        let pdfa_start = info_id + 1 + xref_object_count(xref);
+        #[cfg(all(feature = "pdf-a", not(feature = "xref")))]
+        let pdfa_start = info_id + 1;
         Plan {
             catalog: Ref::new(1),
             page_tree: Ref::new(2),
@@ -164,6 +181,12 @@ impl Plan {
             link_refs,
             #[cfg(feature = "xref")]
             page_annot_refs,
+            // The two PDF/A objects (ICC + XMP) follow the info dict (and any
+            // xref objects).
+            #[cfg(feature = "pdf-a")]
+            icc: Ref::new(pdfa_start),
+            #[cfg(feature = "pdf-a")]
+            xmp: Ref::new(pdfa_start + 1),
         }
     }
 
@@ -213,6 +236,14 @@ fn xref_refs(start: i32, xref: &Xref) -> (Ref, Vec<Ref>) {
     (dests, link_refs)
 }
 
+/// The number of object ids the `xref` feature consumes after the info dict: an
+/// optional `/Dests` dictionary plus one object per Link annotation. Used to
+/// offset the `pdf-a` objects so the two features never collide when both are on.
+#[cfg(all(feature = "xref", feature = "pdf-a"))]
+fn xref_object_count(xref: &Xref) -> i32 {
+    i32::from(xref.has_dests()) + xref.link_count() as i32
+}
+
 fn write_catalog(pdf: &mut Pdf, plan: &Plan) {
     let mut catalog = pdf.catalog(plan.catalog);
     catalog.pages(plan.page_tree);
@@ -220,7 +251,21 @@ fn write_catalog(pdf: &mut Pdf, plan: &Plan) {
     if plan.has_dests {
         catalog.destinations(plan.dests);
     }
+    // PDF/A-2b: attach the OutputIntent (sRGB) and the XMP `/Metadata` stream to
+    // the catalog. Off by default, so the default catalog is byte-for-byte the
+    // single `/Pages` entry.
+    #[cfg(feature = "pdf-a")]
+    pdfa::write_catalog_entries(&mut catalog, plan.icc, plan.xmp);
     catalog.finish();
+}
+
+/// Write the PDF/A objects (ICC profile + XMP packet) and set the trailer `/ID`
+/// PDF/A requires. Called only under `#[cfg(feature = "pdf-a")]`.
+#[cfg(feature = "pdf-a")]
+fn write_pdfa_objects(pdf: &mut Pdf, plan: &Plan, opts: &EmitOptions) {
+    pdfa::write_icc_profile(pdf, plan.icc);
+    pdfa::write_metadata(pdf, plan.xmp, opts);
+    pdf.set_file_id(pdfa::file_id(opts));
 }
 
 fn write_page_tree(pdf: &mut Pdf, pages: &[Page], plan: &Plan) {
@@ -295,13 +340,20 @@ fn write_resources(obj: &mut pdf_writer::writers::Page, plan: &Plan, opts: &Emit
     let mut resources = obj.resources();
     write_font_dict(&mut resources, &plan.font_refs);
     write_image_dict(&mut resources, &plan.image_refs);
+    // PDF/A-2b forbids transparency, so the watermark's `/ca` fade `ExtGState`
+    // is not emitted under `pdf-a` (the mark prints at full opacity instead).
+    #[cfg(not(feature = "pdf-a"))]
     if let Some(mark) = &opts.watermark {
         write_fade_gs(&mut resources, watermark::opacity(mark));
     }
+    #[cfg(feature = "pdf-a")]
+    let _ = opts;
 }
 
 /// Write the watermark's `/GSwm` fade `ExtGState` inline (a simple `/ca` dict
 /// needs no indirect object), referenced by the content stream's `gs` operator.
+/// Not compiled under `pdf-a`, which forbids the `/ca` transparency entirely.
+#[cfg(not(feature = "pdf-a"))]
 fn write_fade_gs(resources: &mut pdf_writer::writers::Resources, opacity: f32) {
     let mut states = resources.ext_g_states();
     states

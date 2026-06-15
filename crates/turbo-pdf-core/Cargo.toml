@@ -52,6 +52,13 @@ svg = ["dep:resvg"]
 # default: the default path carries `None` xref data at near-zero cost.
 xref = []
 
+# PDF/A-2b archival ("keep-forever") conformance (AC-11.2): embeds a vendored
+# sRGB ICC profile as an OutputIntent, writes an XMP metadata packet declaring
+# pdfaid part 2 / conformance B, adds a deterministic trailer /ID, and disables
+# the watermark's `/ca` fade (PDF/A forbids transparency). Fonts are already
+# embedded. Validated with veraPDF (`--flavour 2b`) in tests/pdf_a.rs.
+pdf-a = []
+
 [dependencies]
 minijinja = { workspace = true }
 serde = { workspace = true }

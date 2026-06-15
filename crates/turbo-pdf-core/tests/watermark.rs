@@ -151,6 +151,12 @@ fn default_emit_has_no_watermark_state() {
 // text watermark: DRAFT default, faded
 // --------------------------------------------------------------------------
 
+// These four assert the `/ca` fade `ExtGState` (`/GSwm`). PDF/A-2b forbids
+// transparency, so the `pdf-a` feature suppresses that fade entirely (the mark
+// prints at full opacity); under that feature these assertions would not hold,
+// so the cases are compiled out. The suppression itself is asserted in
+// `tests/pdf_a.rs::watermark_fade_transparency_is_suppressed`.
+#[cfg(not(feature = "pdf-a"))]
 #[test]
 fn draft_text_watermark_is_present_and_faded() {
     let pages = vec![page_with(vec![body_text(common::evolventa())])];
@@ -178,6 +184,7 @@ fn draft_text_watermark_is_present_and_faded() {
 // text watermark: custom word / color / angle / opacity
 // --------------------------------------------------------------------------
 
+#[cfg(not(feature = "pdf-a"))]
 #[test]
 fn custom_text_watermark_word_color_angle_opacity() {
     let pages = vec![page_with(vec![body_text(common::evolventa())])];
@@ -232,6 +239,7 @@ fn custom_angle_changes_the_rotation_matrix() {
 // image watermark: centered + tiled, via the shared resolver
 // --------------------------------------------------------------------------
 
+#[cfg(not(feature = "pdf-a"))]
 #[test]
 fn image_watermark_centered_via_shared_resolver() {
     let resolver = MapResolver::new(vec![("wm.png", png_red_4x4())]);
@@ -304,6 +312,7 @@ fn unresolved_image_watermark_paints_nothing() {
 // behind-body ordering
 // --------------------------------------------------------------------------
 
+#[cfg(not(feature = "pdf-a"))]
 #[test]
 fn text_watermark_paints_behind_body() {
     let pages = vec![page_with(vec![body_text(common::evolventa())])];
