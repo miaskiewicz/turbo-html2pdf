@@ -15,7 +15,13 @@ rust-version.workspace = true
 crate-type = ["cdylib", "rlib"]
 
 [dependencies]
-turbo-pdf-core = { path = "../turbo-pdf-core" }
+# `default-features = false` keeps the browser `.wasm` LEAN: the core's default
+# `bundled-fonts` feature embeds ~6 MB of OFL faces, which is right for the Node
+# addon but unacceptable over the wire on page load. Browser callers supply font
+# bytes at runtime via the existing `fonts` API. The batteries-included variant
+# ships as a SEPARATE package (`turbo-html2pdf-wasm-fonts`) built with the
+# `bundled-fonts` feature below.
+turbo-pdf-core = { path = "../turbo-pdf-core", default-features = false }
 wasm-bindgen = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
@@ -29,3 +35,9 @@ js-sys = "0.3"
 [features]
 default = []
 threads = []
+
+# Opt-in: embed the core's default OFL font set into the `.wasm` so the browser
+# build renders with no caller fonts. OFF by default to keep the shipped
+# `turbo-html2pdf-wasm` lean; the `turbo-html2pdf-wasm-fonts` package is built
+# with `wasm-pack build --features bundled-fonts` to turn this on.
+bundled-fonts = ["turbo-pdf-core/bundled-fonts"]

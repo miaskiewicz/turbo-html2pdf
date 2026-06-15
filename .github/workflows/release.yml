@@ -226,3 +226,44 @@ jobs:
         working-directory: crates/turbo-pdf-wasm/pkg
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+  # ---------------------------------------------------------------------------
+  # 6. Publish turbo-html2pdf-wasm-fonts — the batteries-included browser package.
+  #    Identical to publish-wasm but built with `--features bundled-fonts`, so the
+  #    ~6 MB OFL font set is embedded in the `.wasm` and the browser renders with
+  #    no caller fonts. Shipped as a SEPARATE package so the default
+  #    turbo-html2pdf-wasm stays lean; callers opt into the heavier variant.
+  # ---------------------------------------------------------------------------
+  publish-wasm-fonts:
+    name: publish turbo-html2pdf-wasm-fonts
+    needs: [gate]
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: wasm-fonts
+      - uses: jetli/wasm-pack-action@v0.4.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          registry-url: https://registry.npmjs.org
+
+      - name: Build the batteries-included browser package
+        run: wasm-pack build crates/turbo-pdf-wasm --target web --out-dir pkg-fonts --release -- --features bundled-fonts
+
+      - name: Stamp package name + version from the tag
+        working-directory: crates/turbo-pdf-wasm/pkg-fonts
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          node -e "const fs=require('fs');const p=JSON.parse(fs.readFileSync('package.json'));p.name='turbo-html2pdf-wasm-fonts';p.version='$VERSION';p.repository={type:'git',url:'git+https://github.com/miaskiewicz/turbo-html2pdf.git'};fs.writeFileSync('package.json',JSON.stringify(p,null,2));console.log('publishing',p.name,p.version)"
+
+      - name: Publish turbo-html2pdf-wasm-fonts
+        run: npm publish --access public
+        working-directory: crates/turbo-pdf-wasm/pkg-fonts
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
