@@ -1,4 +1,4 @@
-// `@turbo-pdf/template` — a deliberately tiny *second* authoring frontend.
+// `@turbo-html2pdf/template` — a deliberately tiny *second* authoring frontend.
 //
 // It exists to prove the core is frontend-agnostic (AC-8.9): a different tool, with
 // no shared code, emits the *same* turbo-pdf template source string (Jinja control

@@ -1,6 +1,6 @@
 # Paged media: directives, headers/footers, footnotes, pagination
 
-turbo-pdf paginates automatically: **page count is an output, never an input**.
+turbo-html2pdf paginates automatically: **page count is an output, never an input**.
 You write a continuous body, declare optional running headers/footers and
 footnotes with `t:` directives, set the page geometry with `@page`, and the
 fragmenter fills one page at a time.

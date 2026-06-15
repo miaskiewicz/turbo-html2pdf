@@ -146,7 +146,7 @@ WeasyPrint or Puppeteer render is the more honest fidelity baseline.
 - **`cargo xtask bench-competitive`** (AC-10.8) — a thin Rust wrapper that shells into
   this harness (`pnpm bench:full`) and copies the artifact into CI. Deferred: there is
   no `xtask` crate yet and Phase 14's brief is to **not** touch the root workspace
-  `Cargo.toml`. Equivalent today: `pnpm --filter @turbo-pdf/bench-competitive bench`.
+  `Cargo.toml`. Equivalent today: `pnpm --filter @turbo-html2pdf/bench-competitive bench`.
 - **CI artifact + fixed-runner regeneration** (AC-10.12) — add once the xtask exists.
 
 ## Claim-gating (AC-10.13)

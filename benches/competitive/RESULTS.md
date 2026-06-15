@@ -17,7 +17,7 @@
 
 | Engine | Kind | Available | Version | Ships browser | Footprint notes |
 |---|---|---|---|---|---|
-| turbo-pdf | wip | no (pending Phase 10 napi (@turbo-pdf/core not built yet)) | — | no | native N-API addon (~few MB), no browser — measured after Phase 10 |
+| turbo-pdf | wip | no (pending Phase 10 napi (@turbo-html2pdf/core not built yet)) | — | no | native N-API addon (~few MB), no browser — measured after Phase 10 |
 | puppeteer | browser | yes | Chrome/131.0.6778.204 | yes | downloads a full Chromium (~150-300MB) on install |
 | playwright | browser | yes | 1.60.0 | yes | installs Chromium via `playwright install` (~150-300MB) |
 | gotenberg | browser | no (no Gotenberg at http://localhost:3000 (run: docker run --rm -p 3000:3000 gotenberg/gotenberg:8)) | — | yes | docker image bundling Chromium + LibreOffice (~1GB); HTTP service |
@@ -32,11 +32,11 @@
 
 | Engine | Workload | Warm p50/p95 ms | Cold p50/p95 ms | Init p50/p95 ms | Tput /s | Peak RSS KiB | PDF KiB | PNG sim |
 |---|---|---|---|---|---|---|---|---|
-| turbo-pdf | invoice | — | — | — | — | — | — | — | pending Phase 10 napi (@turbo-pdf/core not built yet) |
-| turbo-pdf | report-100 | — | — | — | — | — | — | — | pending Phase 10 napi (@turbo-pdf/core not built yet) |
-| turbo-pdf | report-1k | — | — | — | — | — | — | — | pending Phase 10 napi (@turbo-pdf/core not built yet) |
-| turbo-pdf | legal | — | — | — | — | — | — | — | pending Phase 10 napi (@turbo-pdf/core not built yet) |
-| turbo-pdf | mixed | — | — | — | — | — | — | — | pending Phase 10 napi (@turbo-pdf/core not built yet) |
+| turbo-pdf | invoice | — | — | — | — | — | — | — | pending Phase 10 napi (@turbo-html2pdf/core not built yet) |
+| turbo-pdf | report-100 | — | — | — | — | — | — | — | pending Phase 10 napi (@turbo-html2pdf/core not built yet) |
+| turbo-pdf | report-1k | — | — | — | — | — | — | — | pending Phase 10 napi (@turbo-html2pdf/core not built yet) |
+| turbo-pdf | legal | — | — | — | — | — | — | — | pending Phase 10 napi (@turbo-html2pdf/core not built yet) |
+| turbo-pdf | mixed | — | — | — | — | — | — | — | pending Phase 10 napi (@turbo-html2pdf/core not built yet) |
 | puppeteer | invoice | 202.67/241.88 | 352.75/417.87 | 557.22/985.64 | 9.0 | 150960.0 | 43.9 | 0.980 |
 | puppeteer | report-100 | 284.65/388.58 | 468.08/678.32 | 651.81/775.62 | 10.0 | 158656.0 | 190.8 | 0.933 |
 | puppeteer | report-1k | 995.39/996.28 | 911.87/984.06 | 499.26/590.52 | 2.3 | 319440.0 | 1733.8 | 0.932 |

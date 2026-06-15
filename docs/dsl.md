@@ -1,6 +1,6 @@
-# turbo-pdf templating DSL
+# turbo-html2pdf templating DSL
 
-turbo-pdf renders a PDF from a **template** (HTML markup with embedded
+turbo-html2pdf renders a PDF from a **template** (HTML markup with embedded
 [MiniJinja](https://github.com/mitsuhiko/minijinja) template logic and `t:`
 paged-media directives), some **data**, and optional **CSS**. This document
 describes the templating layer: the Jinja base, the `{% switch %}` extension,
@@ -106,7 +106,7 @@ Inside a **running header/footer region**, the data is nested under `data`
 
 ## 2. The `{% switch %}` extension
 
-turbo-pdf adds a `{% switch %}` / `{% case %}` / `{% default %}` block on top of
+turbo-html2pdf adds a `{% switch %}` / `{% case %}` / `{% default %}` block on top of
 MiniJinja (`crates/turbo-pdf-core/src/template/switch.rs`). It is a compile-time
 desugaring into `{% if %}` / `{% elif %}` / `{% else %}`, so it has standard
 Jinja semantics underneath.

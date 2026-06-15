@@ -9,10 +9,10 @@
 # which is intentionally excluded (slow, unwanted).
 #
 # Publishes, in order, on a `v*` tag (first release: v0.1.0):
-#   1. @turbo-pdf/napi      — single bundled package; every platform *.node ships
+#   1. @turbo-html2pdf/napi      — single bundled package; every platform *.node ships
 #                             inside it and index.js loads the matching local one.
-#   2. @turbo-pdf/react     — pure-TS frontend (tsup build, no native step).
-#   3. @turbo-pdf/template  — pure-TS frontend (tsup build, no native step).
+#   2. @turbo-html2pdf/react     — pure-TS frontend (tsup build, no native step).
+#   3. @turbo-html2pdf/template  — pure-TS frontend (tsup build, no native step).
 #
 # Requires repository secret NPM_TOKEN (a Classic Automation token allowed to
 # publish under the @turbo-pdf scope). Already configured in GitHub.
@@ -33,7 +33,7 @@ jobs:
   #    Matrix = turbo-dom/.github/workflows/ci.yml `build` MINUS x86_64-apple-darwin.
   # ---------------------------------------------------------------------------
   build-napi:
-    name: build @turbo-pdf/napi ${{ matrix.target }}
+    name: build @turbo-html2pdf/napi ${{ matrix.target }}
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -82,7 +82,7 @@ jobs:
       # `napi build --platform` emits `turbo-pdf-napi.<platform>.node` into the
       # napi package dir (its package.json carries the `napi` config). Run from
       # there so the suffixed file lands next to index.js.
-      - name: Build native addon (@turbo-pdf/napi)
+      - name: Build native addon (@turbo-html2pdf/napi)
         working-directory: crates/turbo-pdf-napi
         run: pnpm exec napi build --platform --release --target ${{ matrix.target }}
 
@@ -117,12 +117,12 @@ jobs:
         run: cargo test --workspace
 
   # ---------------------------------------------------------------------------
-  # 3. Publish @turbo-pdf/napi — single bundled package.
+  # 3. Publish @turbo-html2pdf/napi — single bundled package.
   #    All platform *.node binaries ship inside the one package; index.js selects
   #    the matching local binary at runtime (turbo-dom `publish` job pattern).
   # ---------------------------------------------------------------------------
   publish-napi:
-    name: publish @turbo-pdf/napi
+    name: publish @turbo-html2pdf/napi
     needs: [build-napi, gate]
     if: startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
@@ -139,14 +139,14 @@ jobs:
           pattern: napi-bindings-*
           path: artifacts
 
-      - name: Bundle binaries into the @turbo-pdf/napi package root
+      - name: Bundle binaries into the @turbo-html2pdf/napi package root
         run: |
           # Drop every *.node next to the package's index.js loader.
           DEST=crates/turbo-pdf-napi
           find artifacts -name '*.node' -exec cp {} "$DEST"/ \;
           ls -1 "$DEST"/*.node
 
-      - name: Publish @turbo-pdf/napi
+      - name: Publish @turbo-html2pdf/napi
         run: npm publish --access public --ignore-scripts
         working-directory: crates/turbo-pdf-napi
         # --ignore-scripts: binaries are already built; skip any prepublish rebuild.
@@ -159,7 +159,7 @@ jobs:
   #    packages/template already build with tsup -> dist/.)
   # ---------------------------------------------------------------------------
   publish-frontends:
-    name: publish @turbo-pdf/react + @turbo-pdf/template
+    name: publish @turbo-html2pdf/react + @turbo-html2pdf/template
     needs: [publish-napi]
     if: startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
@@ -180,11 +180,11 @@ jobs:
       - run: pnpm install --frozen-lockfile
 
       - name: Build ${{ matrix.pkg }}
-        run: pnpm --filter @turbo-pdf/${{ matrix.pkg }} build
+        run: pnpm --filter @turbo-html2pdf/${{ matrix.pkg }} build
 
-      - name: Publish @turbo-pdf/${{ matrix.pkg }}
-        run: pnpm --filter @turbo-pdf/${{ matrix.pkg }} publish --access public --no-git-checks
-        # pnpm publish rewrites any `workspace:` dep on @turbo-pdf/napi to the
+      - name: Publish @turbo-html2pdf/${{ matrix.pkg }}
+        run: pnpm --filter @turbo-html2pdf/${{ matrix.pkg }} publish --access public --no-git-checks
+        # pnpm publish rewrites any `workspace:` dep on @turbo-html2pdf/napi to the
         # real version. --no-git-checks: tag-driven; tree matches tagged commit.
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

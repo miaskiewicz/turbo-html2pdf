@@ -1,6 +1,6 @@
-# turbo-pdf user guide
+# turbo-html2pdf user guide
 
-turbo-pdf turns a **template** + **data** (+ optional CSS and fonts) into a PDF.
+turbo-html2pdf turns a **template** + **data** (+ optional CSS and fonts) into a PDF.
 The template is HTML markup with embedded [MiniJinja](https://github.com/mitsuhiko/minijinja)
 logic and `t:` paged-media directives. Pagination is automatic — **page count is
 an output, never an input.**
@@ -22,8 +22,8 @@ explicitly.
   headers).
 - **[CSS support](css-support.md)** — the supported selector / property / unit /
   color subset and the UA default stylesheet.
-- **[JS / React / WASM API](api.md)** — `@turbo-pdf/napi`, `@turbo-pdf/wasm`,
-  `@turbo-pdf/react`, `@turbo-pdf/template`, and the **compile-once / render-many**
+- **[JS / React / WASM API](api.md)** — `@turbo-html2pdf/napi`, `@turbo-html2pdf/wasm`,
+  `@turbo-html2pdf/react`, `@turbo-html2pdf/template`, and the **compile-once / render-many**
   `Program` warm-start pattern.
 
 ## A minimal example
@@ -38,10 +38,10 @@ Template:
 {% endfor %}
 ```
 
-Render it (Node, `@turbo-pdf/napi`):
+Render it (Node, `@turbo-html2pdf/napi`):
 
 ```js
-const { compile } = require('@turbo-pdf/napi')
+const { compile } = require('@turbo-html2pdf/napi')
 const fs = require('node:fs')
 
 const program = compile(templateSource)   // compile once

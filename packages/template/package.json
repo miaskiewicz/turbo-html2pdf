@@ -1,5 +1,5 @@
 {
-  "name": "@turbo-pdf/template",
+  "name": "@turbo-html2pdf/template",
   "version": "0.1.0",
   "description": "Minimal framework-free template-string authoring frontend for turbo-pdf (proves the core is frontend-agnostic).",
   "license": "MIT",

@@ -9,14 +9,14 @@
 
 import type { Availability, EngineAdapter, Footprint, RenderResult, Workload } from "../types.ts";
 
-const PENDING = "pending Phase 10 napi (@turbo-pdf/core not built yet)";
+const PENDING = "pending Phase 10 napi (@turbo-html2pdf/core not built yet)";
 
 export class TurboPdfAdapter implements EngineAdapter {
   readonly id = "turbo-pdf";
   readonly kind = "wip" as const;
 
   detect(): Promise<Availability> {
-    // TODO(phase14): replace with a real `import('@turbo-pdf/core')` probe.
+    // TODO(phase14): replace with a real `import('@turbo-html2pdf/core')` probe.
     return Promise.resolve({ available: false, version: null, reason: PENDING });
   }
 

@@ -1,4 +1,4 @@
-# Deploy plan — publishing `@turbo-pdf/*` to npm
+# Deploy plan — publishing `@turbo-html2pdf/*` to npm
 
 > **Status: ACTIVE (Phase 16).** The release workflow now runs in CI. The napi
 > crate it builds (`crates/turbo-pdf-napi`) **exists** (landed Phase 10), so the
@@ -10,17 +10,17 @@
 
 | npm package           | Source                       | Kind                    | Depends on        |
 | --------------------- | ---------------------------- | ----------------------- | ----------------- |
-| `@turbo-pdf/napi`     | `crates/turbo-pdf-napi`      | native (napi prebuilds) | —                 |
-| `@turbo-pdf/react`    | `packages/react`             | pure TS (tsup → dist)   | `@turbo-pdf/napi` |
-| `@turbo-pdf/template` | `packages/template`          | pure TS (tsup → dist)   | `@turbo-pdf/napi` |
+| `@turbo-html2pdf/napi`     | `crates/turbo-pdf-napi`      | native (napi prebuilds) | —                 |
+| `@turbo-html2pdf/react`    | `packages/react`             | pure TS (tsup → dist)   | `@turbo-html2pdf/napi` |
+| `@turbo-html2pdf/template` | `packages/template`          | pure TS (tsup → dist)   | `@turbo-html2pdf/napi` |
 
-`@turbo-pdf/napi` is the only package with a native component: it is the napi-rs
+`@turbo-html2pdf/napi` is the only package with a native component: it is the napi-rs
 front-end crate wrapping `turbo-pdf-core`, and the npm package *is* that crate
 directory (its `package.json` carries the `napi` config; `index.js` is the
 runtime loader). `react` and `template` are the existing pnpm workspace packages
 under `packages/*`; they already build with `tsup` and emit `dist/` (see their
 `package.json` `files: ["dist"]` + `build: "tsup"`). They consume the engine
-through `@turbo-pdf/napi`.
+through `@turbo-html2pdf/napi`.
 
 ## 2. The proven sibling pattern (what we copied)
 
@@ -30,7 +30,7 @@ lift the same job shape into a standalone `release.yml` (so we never touch the
 live `ci.yml`). The two reference files:
 
 - `/Users/grzegorzmiaskiewicz/github-flux/turbo-dom/.github/workflows/ci.yml`
-  — **the napi analog and the model for `@turbo-pdf/napi`.**
+  — **the napi analog and the model for `@turbo-html2pdf/napi`.**
 - `/Users/grzegorzmiaskiewicz/github-flux/turbo-test/.github/workflows/ci.yml`
   — a native-**binary** (CLI) variant; same shape, but ships a compiled `bin`
   rather than `*.node` addons. Corroborates the tag-gate + artifact + assemble +
@@ -48,8 +48,8 @@ the package root and runs a single `npm publish`. From
 > `turbo-dom` (index.js loads the matching local binary). One package to
 > publish — no per-platform sub-packages to create."
 
-We adopt the **single bundled package** strategy for `@turbo-pdf/napi`. It
-avoids minting and authenticating five separate `@turbo-pdf/napi-<platform>`
+We adopt the **single bundled package** strategy for `@turbo-html2pdf/napi`. It
+avoids minting and authenticating five separate `@turbo-html2pdf/napi-<platform>`
 packages. Our `index.js` loader resolves
 `turbo-pdf-napi.<platform>.node` (the suffix `napi build --platform` emits,
 e.g. `turbo-pdf-napi.darwin-arm64.node`, `turbo-pdf-napi.linux-x64-gnu.node`,
@@ -108,8 +108,8 @@ through `pnpm` instead of turbo-dom's `npm`):
   `--ignore-scripts` because the binaries are already built.
 
 `publish-frontends` (after `publish-napi`, also tag-gated): a `pkg:
-[react, template]` matrix, `pnpm install`, `pnpm --filter @turbo-pdf/<pkg>
-build`, `pnpm --filter @turbo-pdf/<pkg> publish --access public --no-git-checks`.
+[react, template]` matrix, `pnpm install`, `pnpm --filter @turbo-html2pdf/<pkg>
+build`, `pnpm --filter @turbo-html2pdf/<pkg> publish --access public --no-git-checks`.
 
 ### 2.4 NPM_TOKEN
 
@@ -119,7 +119,7 @@ Both siblings document the same requirement, e.g. turbo-test's `publish` job:
 > publish the package)."
 
 We need one repo secret `NPM_TOKEN`, a Classic **Automation** token on the npm
-account that owns the `@turbo-pdf` scope, with publish rights to the scope
+account that owns the `@turbo-html2pdf` scope, with publish rights to the scope
 (**already configured in GitHub**). `registry-url` on `setup-node` wires it
 through `NODE_AUTH_TOKEN`.
 
@@ -155,13 +155,13 @@ side already has `crate-type = ["cdylib", "rlib"]` and napi deps in
 1. ✅ **`crates/turbo-pdf-napi` exists** (Phase 10). napi-rs front-end crate
    wrapping `turbo-pdf-core`, `crate-type = ["cdylib", "rlib"]`. `cargo build -p
    turbo-pdf-napi` succeeds.
-2. ✅ **`@turbo-pdf/napi` package manifest** — the crate dir doubles as the npm
+2. ✅ **`@turbo-html2pdf/napi` package manifest** — the crate dir doubles as the npm
    package (turbo-dom layout). Carries the `napi` config from §2.5,
-   `"name": "@turbo-pdf/napi"`, `"version": "0.1.0"`, `publishConfig`.
+   `"name": "@turbo-html2pdf/napi"`, `"version": "0.1.0"`, `publishConfig`.
    Root `package.json` `workspaces` already lists `"crates/turbo-pdf-napi"`.
 3. ⚙️ **`NPM_TOKEN` repo secret** — configured in GitHub (§2.4).
-4. ⚙️ **`@turbo-pdf` scope** on npm, owned by the token's account.
-5. ✅ **`@turbo-pdf/react` / `@turbo-pdf/template`** publish via `pnpm publish`,
+4. ⚙️ **`@turbo-html2pdf` scope** on npm, owned by the token's account.
+5. ✅ **`@turbo-html2pdf/react` / `@turbo-html2pdf/template`** publish via `pnpm publish`,
    which rewrites any `workspace:` protocol dependency to a real version range.
 
 ## 4. Version strategy

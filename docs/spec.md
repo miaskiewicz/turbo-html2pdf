@@ -1,4 +1,4 @@
-# turbo-pdf — Implementation Specification
+# turbo-html2pdf — Implementation Specification
 
 A native (Rust) HTML/CSS-to-PDF engine with a templating DSL, fronted by a thin TS/N-API layer. The engine's only input contract is **parseable template HTML/CSS that contains the required fields** — it is framework-agnostic and has no knowledge of React, Vue, Svelte, or any other tool. A template is compiled once to a reusable Program, then executed against data to emit PDF bytes. No browser, no DOM at the hot path, threadable concurrency.
 
@@ -147,7 +147,7 @@ Semantics, precisely:
 - Cases may use complex value expressions, not just literals: `{% case lo, hi %}` compares the subject against the *values* of `lo`/`hi`. (AC-2.9h: a `case` with variable values matches by evaluated value.)
 - Whitespace control markers work as elsewhere: `{%- switch -%}`, `{%- case -%}`, `{%- endswitch -%}`. (AC-2.9i.)
 
-Decision: provide `{% switch %}` as a registered extension while keeping the rest of the language stock Jinja. It costs one custom statement (implemented against MiniJinja's extension/`add_*` API or a thin pre-parse, whichever the crate version supports cleanly) and buys real readability for tier/status/type dispatch, which is common in documents. Templates that avoid it remain 100% portable to any Jinja engine; templates that use it require turbo-pdf (documented as the one non-portable construct in the data/control-flow layer). Implementation note for the agent: if MiniJinja's public API in the pinned version doesn't allow a true custom block statement, implement `switch` as a source-level desugaring to `{% if/elif/else %}` performed before handing the template to MiniJinja, preserving spans for error reporting. (AC-2.9j: a `switch` template and its hand-written `{% if/elif/else %}` equivalent produce identical node trees.)
+Decision: provide `{% switch %}` as a registered extension while keeping the rest of the language stock Jinja. It costs one custom statement (implemented against MiniJinja's extension/`add_*` API or a thin pre-parse, whichever the crate version supports cleanly) and buys real readability for tier/status/type dispatch, which is common in documents. Templates that avoid it remain 100% portable to any Jinja engine; templates that use it require turbo-html2pdf (documented as the one non-portable construct in the data/control-flow layer). Implementation note for the agent: if MiniJinja's public API in the pinned version doesn't allow a true custom block statement, implement `switch` as a source-level desugaring to `{% if/elif/else %}` performed before handing the template to MiniJinja, preserving spans for error reporting. (AC-2.9j: a `switch` template and its hand-written `{% if/elif/else %}` equivalent produce identical node trees.)
 
 ### 2.7 Iteration
 Native Jinja `for` with the built-in `loop` object:
@@ -492,7 +492,7 @@ impl Program {
 
 ### 8.2 N-API (Node) binding
 ```ts
-import { compile } from "turbo-pdf";
+import { compile } from "turbo-html2pdf";
 const program = compile(templateHtml, {
   partials, tokens, missingPolicy: "strict"
 });                                  // returns a Program handle (native)
@@ -513,7 +513,7 @@ The core consumes template HTML + `t:` DSL and **nothing else**. How that HTML i
 
 **The frontend contract** (what any frontend must emit): well-formed, parseable HTML containing the required structural fields, with DSL expressed as `t:` elements and `{{ }}`/attribute expressions as **strings** (frontends do not evaluate the expression language — that happens in Rust at render). Any tool meeting this contract is supported: hand-authored HTML, template-string builders, Vue, Svelte, Astro, JSX, etc.
 
-**React frontend** (`@turbo-pdf/react`) — the *first* frontend we ship, not a privileged one:
+**React frontend** (`@turbo-html2pdf/react`) — the *first* frontend we ship, not a privileged one:
 - Components rendering to the DSL via `renderToStaticMarkup`: `<If cond>`, `<ElseIf>`, `<Else>`, `<Switch on>`, `<Case value>`, `<Each of as index>`, `<Include src with>`, `<RunningHeader>`, `<RunningFooter>`, `<PageMaster>`, `<Region slot>`, `<Footnote>`, `<Page/>`, `<Pages/>`, `<Running name>`, `<Counter/>`.
 - Each emits the corresponding `t:` element with attributes carrying **expression strings** (not evaluated JS) — e.g. `<Each of="invoice.lines" as="line">`. The React layer is a typed authoring convenience; expressions are still the DSL, resolved in Rust. (AC-8.7: a React template and its hand-written `t:` equivalent compile to byte-identical Programs.)
 - Boundary: React runs once to produce the template; it is **not** in the render hot path and has no access to render data.
@@ -544,7 +544,7 @@ The core consumes template HTML + `t:` DSL and **nothing else**. How that HTML i
 - Zero-intermediate-HTML invariant from §1 enforced by an allocation-audit test. (AC-10.7 = AC-1.1.)
 
 ### 10.2 Competitive benchmarks (vs existing libraries)
-A committed, reproducible benchmark suite comparing turbo-pdf against the incumbents, because "super fast" is only meaningful relative to what people use today. This is a deliverable, not a one-off.
+A committed, reproducible benchmark suite comparing turbo-html2pdf against the incumbents, because "super fast" is only meaningful relative to what people use today. This is a deliverable, not a one-off.
 
 **Contenders** (grouped by approach):
 - *Headless-browser (HTML/CSS → PDF):* Puppeteer (`page.pdf()`), Playwright, Gotenberg (Chromium via HTTP). These are the fidelity baseline and the main thing we claim to beat on speed/footprint.
@@ -576,7 +576,7 @@ A committed, reproducible benchmark suite comparing turbo-pdf against the incumb
 
 **Claim gating:** any public performance claim ("Nx faster than Puppeteer") must cite a specific workload + machine from this harness and link the reproducing command. No freestanding multipliers. (AC-10.13: README perf claims map 1:1 to a harness workload id.)
 
-**Expected shape of results** (hypotheses to verify, not promises): turbo-pdf should win decisively on cold start and memory/footprint (no Chromium), win on throughput for high-volume simple docs, and win on the `legal` workload's *capability* (native footnotes/running headers) regardless of raw speed. Headless browsers may remain ahead on exotic CSS fidelity — that's the honest tradeoff and gets documented, not hidden.
+**Expected shape of results** (hypotheses to verify, not promises): turbo-html2pdf should win decisively on cold start and memory/footprint (no Chromium), win on throughput for high-volume simple docs, and win on the `legal` workload's *capability* (native footnotes/running headers) regardless of raw speed. Headless browsers may remain ahead on exotic CSS fidelity — that's the honest tradeoff and gets documented, not hidden.
 
 ---
 

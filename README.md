@@ -1,4 +1,4 @@
-# turbo-pdf
+# turbo-html2pdf
 
 A native (Rust) HTML/CSS-to-PDF engine with a Jinja-compatible templating DSL,
 fronted by a thin TS/N-API layer. A template is compiled once to a reusable
@@ -28,7 +28,7 @@ PDF emit), then N-API, React frontend, WASM, and the competitive benchmark suite
 ```
 crates/turbo-pdf-core   # the engine (templating, layout, pagination, PDF emit)
 crates/turbo-pdf-napi   # Node N-API binding              (later phase)
-packages/react          # @turbo-pdf/react authoring frontend (later phase)
+packages/react          # @turbo-html2pdf/react authoring frontend (later phase)
 tools/cc-check          # Rust cyclomatic-complexity gate (cc < 6)
 scripts/cc-check.js     # TS/JS cyclomatic-complexity gate (cc < 6)
 benches/                # criterion + competitive benchmark harness (later phase)

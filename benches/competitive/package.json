@@ -1,5 +1,5 @@
 {
-  "name": "@turbo-pdf/bench-competitive",
+  "name": "@turbo-html2pdf/bench-competitive",
   "private": true,
   "version": "0.0.1",
   "type": "module",
