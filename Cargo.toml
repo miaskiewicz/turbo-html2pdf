@@ -10,7 +10,7 @@ members = [
 version = "0.0.1"
 edition = "2021"
 license = "MIT"
-repository = "https://github.com/fluxpayroll/turbo-pdf"
+repository = "https://github.com/miaskiewicz/turbo-html2pdf"
 authors = ["turbo-pdf contributors"]
 rust-version = "1.82"
 
