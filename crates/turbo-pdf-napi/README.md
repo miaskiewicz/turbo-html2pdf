@@ -201,7 +201,7 @@ fs.writeFileSync('out.pdf', pdf)   // %PDF-1.7
 
 ## Status
 
-`v0.1.2`. The core engine is complete and heavily tested (the `turbo-pdf-core`
+`v0.1.3`. The core engine is complete and heavily tested (the `turbo-pdf-core`
 crate holds 100% line coverage with a cyclomatic-complexity ≤ 5 gate). Bindings:
 Node (napi) and WebAssembly. See [`docs/`](https://github.com/miaskiewicz/turbo-html2pdf/blob/main/docs/) for the full guide and
 [`benches/competitive/`](https://github.com/miaskiewicz/turbo-html2pdf/blob/main/benches/competitive/) for the benchmark harness.
