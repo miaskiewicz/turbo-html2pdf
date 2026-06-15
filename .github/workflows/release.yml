@@ -1,16 +1,21 @@
 # =============================================================================
-# DRAFT release workflow — DO NOT ACTIVATE YET.
+# Release workflow — tag-gated npm publish for the turbo-pdf packages.
 #
-# The `.draft` filename suffix means GitHub does NOT pick this file up. Rename
-# to `release.yml` ONLY after Phase 10 lands `crates/turbo-pdf-napi` and the
-# `@turbo-pdf/core` npm package manifest (see docs/deploy-plan.md §3).
-#
-# Modeled faithfully on:
-#   turbo-dom/.github/workflows/ci.yml   (napi build matrix + bundled publish)
+# Modeled faithfully on the proven turbo-dom setup:
+#   turbo-dom/.github/workflows/ci.yml   (napi build matrix + single bundled publish)
 #   turbo-test/.github/workflows/ci.yml  (tag-gate + assemble + npm publish)
 #
-# Every step that requires the not-yet-existing napi crate is marked
-#   # TODO(phase10): requires crates/turbo-pdf-napi
+# Platform matrix = turbo-dom's matrix MINUS x86_64-apple-darwin (mac-intel),
+# which is intentionally excluded (slow, unwanted).
+#
+# Publishes, in order, on a `v*` tag (first release: v0.1.0):
+#   1. @turbo-pdf/napi      — single bundled package; every platform *.node ships
+#                             inside it and index.js loads the matching local one.
+#   2. @turbo-pdf/react     — pure-TS frontend (tsup build, no native step).
+#   3. @turbo-pdf/template  — pure-TS frontend (tsup build, no native step).
+#
+# Requires repository secret NPM_TOKEN (a Classic Automation token allowed to
+# publish under the @turbo-pdf scope). Already configured in GitHub.
 # =============================================================================
 
 name: Release
@@ -25,10 +30,10 @@ permissions:
 jobs:
   # ---------------------------------------------------------------------------
   # 1. Build napi prebuilt binaries across platforms.
-  #    Matrix copied verbatim from turbo-dom/.github/workflows/ci.yml `build`.
+  #    Matrix = turbo-dom/.github/workflows/ci.yml `build` MINUS x86_64-apple-darwin.
   # ---------------------------------------------------------------------------
-  build-core:
-    name: build @turbo-pdf/core ${{ matrix.target }}
+  build-napi:
+    name: build @turbo-pdf/napi ${{ matrix.target }}
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -74,19 +79,18 @@ jobs:
       - name: Install JS deps (no postinstall build)
         run: pnpm install --frozen-lockfile --ignore-scripts
 
-      # TODO(phase10): requires crates/turbo-pdf-napi
-      # `napi build` needs the @turbo-pdf/core package manifest (napi config +
-      # @napi-rs/cli in devDependencies). Run from the napi package dir.
-      - name: Build native addon (@turbo-pdf/core)
+      # `napi build --platform` emits `turbo-pdf-napi.<platform>.node` into the
+      # napi package dir (its package.json carries the `napi` config). Run from
+      # there so the suffixed file lands next to index.js.
+      - name: Build native addon (@turbo-pdf/napi)
+        working-directory: crates/turbo-pdf-napi
         run: pnpm exec napi build --platform --release --target ${{ matrix.target }}
-        # working-directory: crates/turbo-pdf-napi   # set to the napi package dir
 
-      # TODO(phase10): requires crates/turbo-pdf-napi
       - name: Upload prebuilt binary
         uses: actions/upload-artifact@v4
         with:
-          name: core-bindings-${{ matrix.target }}
-          path: '**/*.node'
+          name: napi-bindings-${{ matrix.target }}
+          path: crates/turbo-pdf-napi/*.node
           if-no-files-found: error
 
   # ---------------------------------------------------------------------------
@@ -111,19 +115,15 @@ jobs:
         run: cargo clippy --workspace --all-targets -- -D warnings
       - name: Test
         run: cargo test --workspace
-      # TODO(phase10): requires crates/turbo-pdf-napi
-      # Once the napi crate is a workspace member, also smoke-load the addon:
-      #   - run: node -e "require('@turbo-pdf/core')"
 
   # ---------------------------------------------------------------------------
-  # 3. Publish @turbo-pdf/core — single bundled package.
-  #    All platform *.node binaries ship inside the one package; the NAPI-RS
-  #    index.js loader selects the matching local binary at runtime.
-  #    (turbo-dom/.github/workflows/ci.yml `publish` job.)
+  # 3. Publish @turbo-pdf/napi — single bundled package.
+  #    All platform *.node binaries ship inside the one package; index.js selects
+  #    the matching local binary at runtime (turbo-dom `publish` job pattern).
   # ---------------------------------------------------------------------------
-  publish-core:
-    name: publish @turbo-pdf/core
-    needs: [build-core, gate]
+  publish-napi:
+    name: publish @turbo-pdf/napi
+    needs: [build-napi, gate]
     if: startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
     steps:
@@ -133,38 +133,34 @@ jobs:
           node-version: 22
           registry-url: https://registry.npmjs.org
 
-      # TODO(phase10): requires crates/turbo-pdf-napi
       - name: Download all prebuilt binaries
         uses: actions/download-artifact@v4
         with:
-          pattern: core-bindings-*
+          pattern: napi-bindings-*
           path: artifacts
 
-      # TODO(phase10): requires crates/turbo-pdf-napi
-      - name: Bundle binaries into the @turbo-pdf/core package root
+      - name: Bundle binaries into the @turbo-pdf/napi package root
         run: |
-          # Drop every *.node next to the package's generated index.js loader.
-          # Set DEST to the napi package directory once it exists.
+          # Drop every *.node next to the package's index.js loader.
           DEST=crates/turbo-pdf-napi
           find artifacts -name '*.node' -exec cp {} "$DEST"/ \;
           ls -1 "$DEST"/*.node
 
-      # TODO(phase10): requires crates/turbo-pdf-napi
-      - name: Publish @turbo-pdf/core
+      - name: Publish @turbo-pdf/napi
         run: npm publish --access public --ignore-scripts
         working-directory: crates/turbo-pdf-napi
-        # --ignore-scripts: binaries are already built; skip prepublishOnly rebuild.
+        # --ignore-scripts: binaries are already built; skip any prepublish rebuild.
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
   # ---------------------------------------------------------------------------
-  # 4. Publish the pure-TS frontends AFTER core is on the registry.
-  #    No native step — just tsup build + npm publish. (packages/react,
-  #    packages/template already build with tsup → dist/.)
+  # 4. Publish the pure-TS frontends AFTER napi is on the registry.
+  #    No native step — just a tsup build + npm publish. (packages/react,
+  #    packages/template already build with tsup -> dist/.)
   # ---------------------------------------------------------------------------
   publish-frontends:
     name: publish @turbo-pdf/react + @turbo-pdf/template
-    needs: [publish-core]
+    needs: [publish-napi]
     if: startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
     strategy:
@@ -188,7 +184,7 @@ jobs:
 
       - name: Publish @turbo-pdf/${{ matrix.pkg }}
         run: pnpm --filter @turbo-pdf/${{ matrix.pkg }} publish --access public --no-git-checks
-        # pnpm publish rewrites any `workspace:` dep on @turbo-pdf/core to the
+        # pnpm publish rewrites any `workspace:` dep on @turbo-pdf/napi to the
         # real version. --no-git-checks: tag-driven; tree matches tagged commit.
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

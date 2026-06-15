@@ -12,14 +12,47 @@ const { existsSync } = require('node:fs')
 const { join } = require('node:path')
 
 // --- locate the native addon -------------------------------------------------
-// In a published package the prebuilt `.node` sits next to this file. In local
-// dev (no `napi build`) the cdylib lands in target/{release,debug}; we accept a
-// copied/symlinked `turbo-pdf-napi.node` here, or fall back to the cargo output.
+// In a published package, EVERY platform's prebuilt `.node` sits next to this
+// file, each named `turbo-pdf-napi.<platform>.node` (the suffix that
+// `napi build --platform` emits — e.g. `turbo-pdf-napi.darwin-arm64.node`,
+// `turbo-pdf-napi.linux-x64-gnu.node`). We pick the one matching this host, the
+// same way turbo-dom's bundled package does. Local-dev fallbacks: an unsuffixed
+// `turbo-pdf-napi.node` (single-target `napi build`), or the raw cargo cdylib in
+// target/{release,debug} (plain `cargo build -p turbo-pdf-napi`).
 const CANDIDATES = [
+  join(__dirname, `turbo-pdf-napi.${napiPlatform()}.node`),
   join(__dirname, 'turbo-pdf-napi.node'),
   join(__dirname, '..', '..', 'target', 'release', addonName()),
   join(__dirname, '..', '..', 'target', 'debug', addonName()),
 ]
+
+function isMusl() {
+  // glibc builds report a glibc runtime version; musl builds do not.
+  if (!process.report || typeof process.report.getReport !== 'function') {
+    try {
+      const ldd = require('node:child_process').execSync('which ldd').toString().trim()
+      return require('node:fs').readFileSync(ldd, 'utf8').includes('musl')
+    } catch {
+      return true
+    }
+  }
+  const { glibcVersionRuntime } = process.report.getReport().header
+  return !glibcVersionRuntime
+}
+
+// The platform suffix used by @napi-rs/cli for the bundled `.node` filenames.
+// Mirrors the naming in NAPI-RS's generated loader, for the matrix this repo
+// ships: linux x64 gnu/musl, linux arm64, darwin arm64, win32 x64 msvc.
+function napiPlatform() {
+  const { platform, arch } = process
+  if (platform === 'darwin') return `darwin-${arch}` // arm64 -> darwin-arm64
+  if (platform === 'win32') return `win32-${arch}-msvc` // x64 -> win32-x64-msvc
+  if (platform === 'linux') {
+    const abi = isMusl() ? 'musl' : 'gnu'
+    return `linux-${arch}-${abi}` // x64 -> linux-x64-gnu | linux-x64-musl; arm64 -> linux-arm64-gnu
+  }
+  return `${platform}-${arch}`
+}
 
 function addonName() {
   // napi-rs emits a platform cdylib; Node loads it regardless of extension.

@@ -1,9 +1,12 @@
 {
   "name": "@turbo-pdf/react",
-  "version": "0.0.1",
+  "version": "0.1.0",
   "description": "React authoring frontend for turbo-pdf: components that compile once to a Jinja + t: template source string.",
   "license": "MIT",
   "type": "module",
+  "publishConfig": {
+    "access": "public"
+  },
   "files": ["dist"],
   "exports": {
     ".": {

@@ -1,10 +1,13 @@
 {
   "name": "@turbo-pdf/napi",
-  "version": "0.0.1",
+  "version": "0.1.0",
   "description": "N-API binding for turbo-pdf: compile a template + data to a PDF Buffer from Node/JS (Phase 10).",
   "license": "MIT",
   "main": "index.js",
   "types": "index.d.ts",
+  "publishConfig": {
+    "access": "public"
+  },
   "exports": {
     ".": {
       "types": "./index.d.ts",
@@ -27,7 +30,7 @@
   "napi": {
     "name": "turbo-pdf-napi",
     "triples": {
-      "defaults": true,
+      "defaults": false,
       "additional": [
         "x86_64-unknown-linux-gnu",
         "x86_64-unknown-linux-musl",
