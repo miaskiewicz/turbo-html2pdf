@@ -19,6 +19,19 @@ rust-version.workspace = true
 # perf`, `cargo bench --features perf`).
 perf = []
 
+# --- Phase 15 capability gates -------------------------------------------------
+# Each is off by default: the default build is byte-for-byte unchanged and the
+# gated code is not compiled (so it stays out of the default coverage gate, like
+# `perf`). Every feature builds and tests independently; `--all-features` builds.
+
+# `<t:endnote>` collects a note; `<t:endnotes/>` renders the collected list at its
+# position. Builds on the footnote numbering infra (§3, AC: endnotes).
+endnotes = []
+
+# Accept `cmyk(...)` colours and emit DeviceCMYK instead of DeviceRGB for print
+# workflows (AC-7.x print colour).
+print-color = []
+
 [dependencies]
 minijinja = { workspace = true }
 serde = { workspace = true }

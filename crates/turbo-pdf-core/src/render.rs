@@ -126,6 +126,21 @@ pub fn render_pages<T: Serialize>(
     Ok(pages)
 }
 
+/// Expand `<t:endnote>`/`<t:endnotes/>` when the `endnotes` feature is on; an
+/// identity otherwise. Wrapping the gate in a function keeps the default body
+/// free of any conditionally-compiled statement line.
+#[cfg(not(feature = "endnotes"))]
+fn expand_endnotes(nodes: Vec<Node>) -> Vec<Node> {
+    nodes
+}
+
+/// Expand `<t:endnote>`/`<t:endnotes/>` into inline markers plus the rendered
+/// note list (`endnotes` feature, §3).
+#[cfg(feature = "endnotes")]
+fn expand_endnotes(nodes: Vec<Node>) -> Vec<Node> {
+    crate::endnotes::expand(nodes)
+}
+
 /// Render → style → lay out the body flow into one continuous galley, returning
 /// the galley plus the footnote sources collected from the rendered node tree in
 /// document order (their bodies are flowed separately into the footnote area).
@@ -135,6 +150,7 @@ fn lay_out_body<T: Serialize>(
 ) -> Result<(Fragment, Vec<FootnoteSrc>, ResetMode), RenderError> {
     let (nodes, rdiags) = inputs.program.render_nodes(inputs.data, inputs.now)?;
     diags.lints.extend(rdiags.lints);
+    let nodes = expand_endnotes(nodes);
     let sources = collect_footnotes(&nodes);
     let reset = reset_mode(&nodes);
     let styled = style_tree(&nodes, inputs.cascade);

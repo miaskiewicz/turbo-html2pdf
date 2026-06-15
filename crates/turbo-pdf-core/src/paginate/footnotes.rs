@@ -15,8 +15,10 @@
 //! whole area continues onto the next page's area (§3.18, AC-3.18) so content is
 //! never lost.
 //!
-//! Endnotes (`<t:endnote>`/`<t:endnotes/>`) are a separate, feature-gated flow —
-//! TODO(phase15): they collect to a document-end section rather than per page.
+//! Endnotes (`<t:endnote>`/`<t:endnotes/>`) are a separate, feature-gated flow:
+//! the `endnotes` feature (Phase 15) rewrites them to inline markers plus a
+//! document-anchored list before this stage runs (see `crate::endnotes`), so they
+//! never enter the per-page footnote fixpoint.
 
 use crate::error::{Diagnostics, LintCode, Span};
 use crate::layout::fragment::{Fragment, FragmentContent, NodeId};

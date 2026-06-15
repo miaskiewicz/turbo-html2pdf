@@ -339,7 +339,49 @@ pub fn parse_color(s: &str) -> Option<Rgba> {
     if let Some(inner) = rgb_inner(t) {
         return parse_rgb_fn(inner);
     }
+    #[cfg(feature = "print-color")]
+    if let Some(cmyk) = parse_cmyk(t) {
+        return Some(cmyk);
+    }
     named_color(&t.to_ascii_lowercase())
+}
+
+/// Parse a `cmyk(c, m, y, k)` functional colour into the nearest [`Rgba`]
+/// (`print-color`, AC-7.x). The four components are percentages or 0..=1
+/// fractions. Layout is RGB-internal, so we store the device-equivalent RGB; the
+/// emitter (`emit::color::set_fill`) converts it back to DeviceCMYK so the page
+/// stream carries CMYK ink. Round-trips exactly for the achromatic and primary
+/// inks print stylesheets use.
+#[cfg(feature = "print-color")]
+fn parse_cmyk(s: &str) -> Option<Rgba> {
+    let inner = paren_inner(s.strip_prefix("cmyk")?)?;
+    let [c, m, y, k] = cmyk_components(inner)?;
+    let to_byte = |ink: f32| ((1.0 - ink) * (1.0 - k) * 255.0).round() as u8;
+    Some(Rgba::new(to_byte(c), to_byte(m), to_byte(y), 255))
+}
+
+/// Parse the four CMYK components from the `(...)` inner text, or `None` unless
+/// exactly four valid components are present.
+#[cfg(feature = "print-color")]
+fn cmyk_components(inner: &str) -> Option<[f32; 4]> {
+    let mut out = [0.0_f32; 4];
+    let mut seen = 0;
+    for token in inner.split([',', '/']) {
+        let slot = out.get_mut(seen)?;
+        *slot = cmyk_component(token.trim())?;
+        seen += 1;
+    }
+    (seen == 4).then_some(out)
+}
+
+/// One CMYK component: a `NN%` percentage or a bare `0..=1` fraction, clamped.
+#[cfg(feature = "print-color")]
+fn cmyk_component(token: &str) -> Option<f32> {
+    let value = match token.strip_suffix('%') {
+        Some(pct) => pct.trim().parse::<f32>().ok()? / 100.0,
+        None => token.parse::<f32>().ok()?,
+    };
+    Some(value.clamp(0.0, 1.0))
 }
 
 // --------------------------------------------------------------------------

@@ -15,5 +15,14 @@ exclude-files = [
     # Opt-in hot-path instrumentation (the `perf` feature); off in normal builds
     # and covered functionally by the `--features perf` tests in tests/perf.rs.
     "crates/turbo-pdf-core/src/perf.rs",
+    # Opt-in `endnotes` feature (Phase 15); off in normal builds — not compiled
+    # under default features, so it is not in the default coverage surface (the
+    # same way perf.rs is). Covered by the `--features endnotes` tests in
+    # tests/endnotes.rs. Listed here defensively so a stray tarpaulin cfg quirk
+    # cannot flag the gated-out module. (The other Phase 15 gated code —
+    # `print-color` in emit/color.rs and layout/value.rs — lives in files that
+    # carry real default coverage, so it cannot be file-excluded; its gated lines
+    # simply are not compiled by default and so never enter the report.)
+    "crates/turbo-pdf-core/src/endnotes.rs",
 ]
 fail-under = 100.0

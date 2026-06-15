@@ -10,6 +10,8 @@
 #![forbid(unsafe_code)]
 
 pub mod emit;
+#[cfg(feature = "endnotes")]
+pub mod endnotes;
 pub mod error;
 pub mod image;
 pub mod layout;

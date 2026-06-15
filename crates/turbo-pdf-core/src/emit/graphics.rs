@@ -8,7 +8,7 @@ use pdf_writer::Content;
 use crate::layout::fragment::Fragment;
 use crate::layout::value::{BorderEdges, Rgba};
 
-use super::color::device_rgb;
+use super::color::set_fill;
 use super::unit::{flip_y, px_to_pt};
 
 /// An axis-aligned rectangle already in PDF user space (points, y-up).
@@ -35,8 +35,7 @@ pub fn paint_box(
 
 /// Fill one rectangle with a solid color.
 fn fill_rect(content: &mut Content, r: &PdfRect, color: Rgba) {
-    let rgb = device_rgb(color);
-    content.set_fill_rgb(rgb.r, rgb.g, rgb.b);
+    set_fill(content, color);
     content.rect(r.x, r.y, r.w, r.h);
     content.fill_nonzero();
 }

@@ -25,7 +25,7 @@ use crate::layout::value::Rgba;
 use crate::paginate::Page;
 use crate::text::FontFace;
 
-use super::color::device_rgb;
+use super::color::set_fill;
 use super::fonts::FontStore;
 use super::image::ImageStore;
 use super::unit::px_to_pt;
@@ -165,7 +165,6 @@ fn paint_text(
     let size_pt = px_to_pt(text.font_size);
     let scale = size_pt / f32::from(text.face.units_per_em());
     let advance: f32 = glyphs.iter().map(|g| advance_pt(g.x_advance, scale)).sum();
-    let rgb = device_rgb(text.color);
 
     // Rotate about the page center: translate to center, rotate, then place the
     // word's baseline so its advance is centered on the origin.
@@ -175,7 +174,7 @@ fn paint_text(
         Name(FontStore::resource_name(face_index).as_bytes()),
         size_pt,
     );
-    content.set_fill_rgb(rgb.r, rgb.g, rgb.b);
+    set_fill(content, text.color);
     let mut pen = -advance / 2.0;
     for glyph in &glyphs {
         content.set_text_matrix([1.0, 0.0, 0.0, 1.0, pen, 0.0]);

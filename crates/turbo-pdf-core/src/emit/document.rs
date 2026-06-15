@@ -7,6 +7,31 @@
 //! last. `pdf-writer` serializes objects in id order, so this layout is stable
 //! across runs. The font and image object ids are known from the layout up
 //! front, so each page object is written exactly once with its resources.
+//!
+//! Phase 15 features that would extend this object plan are DEFERRED. The two
+//! delivered Phase 15 features (`endnotes` and `print-color`) needed no change to
+//! the object plan, so they ship without touching this file. The deferred three:
+//!
+//! TODO(phase15b, feature `xref`, AC-3.25): named GoTo destinations for
+//! `<t:anchor name>` plus internal-link annotations for `<a href="#name">`. A
+//! two-pass emit (collect each anchor's positioned fragment, then write a Dests
+//! name tree and per-page Annots link arrays). DEFERRED because positioned
+//! fragments do not yet carry the anchor name / link href through layout and
+//! pagination, so the annotation rect is unavailable at emit time; wiring that
+//! through fragment.rs/boxgen.rs to 100% coverage is a larger change than this
+//! slice could land cleanly.
+//!
+//! TODO(phase15b, feature `pdf-a`, AC-11.2): PDF/A-2b conformance — an XMP
+//! metadata packet plus an sRGB OutputIntent on the catalog, forced font
+//! embedding (already done) and no transparency. DEFERRED: needs a vendored sRGB
+//! ICC profile and a veraPDF validation step, and veraPDF is not on PATH in this
+//! environment, so it would ship unvalidated.
+//!
+//! TODO(phase15b, feature `pdf-ua`, AC-11.1): a tagged StructTreeRoot built from
+//! semantic HTML (headings/lists/tables), Alt text from `<img alt>`, and reading
+//! order. The heaviest item; DEFERRED because the marked-content plumbing (BDC and
+//! EMC around every painted run, plus the structure-element tree) reaches into the
+//! per-page painter and would not reach 100% coverage in this slice.
 
 use pdf_writer::{Finish, Name, Pdf, Rect, Ref};
 

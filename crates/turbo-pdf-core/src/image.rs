@@ -14,8 +14,15 @@
 //! RGB(A) (alpha split off as an SMask); JPEG is passed through verbatim as
 //! `DCTDecode` (§7.4: "JPEG passed through where possible").
 //!
-//! SVG is out of scope here. // TODO(phase15): a `feature = "svg"` arm rasterizes
-//! `image/svg+xml` via `resvg` and slots a [`RasterImage`] in alongside these.
+//! SVG is out of scope here. TODO(phase15b, `feature = "svg"`): a gated arm would
+//! rasterize `image/svg+xml` via `resvg`/`usvg` into an RGBA buffer and slot a
+//! [`RasterImage`] in alongside these (the XObject path already accepts RGBA via
+//! the alpha SMask). DEFERRED in Phase 15: `resvg` pulls a large transitive tree
+//! (font-kit, tiny-skia, kurbo, …) that needs an MSRV-1.82 audit and a vendored
+//! determinism check before it can ride behind a default-off gate; doing it
+//! half-way (unpinned, unaudited) would risk the build/coverage gates this phase
+//! must keep green. The decode hook (`decode`/`probe` here) is the single
+//! integration point when it lands.
 
 use std::io::Cursor;
 

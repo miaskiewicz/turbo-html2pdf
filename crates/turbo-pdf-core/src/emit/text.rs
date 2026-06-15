@@ -11,7 +11,7 @@ use crate::layout::fragment::{Fragment, FragmentContent, PositionedGlyph};
 use crate::layout::value::Rgba;
 use crate::text::FontFace;
 
-use super::color::device_rgb;
+use super::color::set_fill;
 use super::fonts::FontStore;
 use super::unit::{flip_y, px_to_pt};
 
@@ -48,10 +48,9 @@ struct Line<'a> {
 fn show_line(content: &mut Content, line: &Line, fonts: &FontStore, page_height_pt: f32) {
     let face_index = fonts.index_of(line.face);
     let resource = FontStore::resource_name(face_index);
-    let rgb = device_rgb(line.color);
     content.begin_text();
     content.set_font(Name(resource.as_bytes()), px_to_pt(line.font_size));
-    content.set_fill_rgb(rgb.r, rgb.g, rgb.b);
+    set_fill(content, line.color);
     for glyph in line.glyphs {
         show_glyph(content, line, glyph, fonts, face_index, page_height_pt);
     }
