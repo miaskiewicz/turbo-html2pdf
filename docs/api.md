@@ -14,11 +14,12 @@ rendered against **data** + **CSS** + **fonts** to a PDF. The two frontends
 (`react`, `template`) only *produce the template source string*; the `napi`/`wasm`
 bindings *run it*.
 
-> **Warm-start note.** The reusable handle is `Program` — **compile once, render
-> many**. There is currently **no separate `Fonts` warm-start handle** in either
-> binding (the spec mentions one, but it is not in the code). Fonts are passed
-> per render; the font registry is rebuilt each call. So the warm-start pattern
-> is: build a `Program` at startup and reuse it across renders.
+> **Warm-start note.** Two reusable handles: `Program` (**compile once, render
+> many**) and `Fonts` (**parse fonts once, reuse across renders**). Build both at
+> server startup and reuse them per request — fonts are then never re-parsed.
+> `Fonts.load(buffers)` returns the handle; pass it as the second argument to
+> `program.render(opts, fonts)` (NAPI) or to `program.renderWithFonts(args, fonts)`
+> (WASM). Omit it to fall back to per-call `RenderOptions.fonts`.
 
 ---
 
@@ -28,18 +29,19 @@ bindings *run it*.
 const { compile, render, TurboPdfError } = require('@turbo-pdf/napi')
 const fs = require('node:fs')
 
+const { Fonts } = require('@turbo-pdf/napi')
 const font = fs.readFileSync('Go-Regular.ttf')
 
-// Compile once at startup, render many times — the warm-start path.
+// Warm both handles ONCE at startup, reuse them per request.
 const program = compile('<h1>{{ title }}</h1><p>{{ body }}</p>')
+const fonts = Fonts.load([font])   // parse fonts once
 
 const { pdf, diagnostics, pageCount } = program.render({
   data: { title: 'Hello', body: 'World' },
   css: '@page { size: A4; margin: 20px } h1 { font-size: 24px }',
-  fonts: [font],          // raw OpenType/TrueType bytes, one Buffer per face
   meta: { title: 'My Doc', author: 'Me' },
   now: 0,                 // pin the now() clock for reproducible output
-})
+}, fonts)                 // <- reuse the prebuilt font handle
 
 fs.writeFileSync('out.pdf', pdf)   // pdf starts with %PDF-1.7
 ```
@@ -48,10 +50,14 @@ fs.writeFileSync('out.pdf', pdf)   // pdf starts with %PDF-1.7
 
 ```ts
 function compile(templateHtml: string, opts?: unknown): Program  // opts reserved, currently ignored
-function render(templateHtml: string, opts?: RenderOptions): RenderResult  // one-shot compile+render
+function render(templateHtml: string, opts?: RenderOptions, fonts?: Fonts): RenderResult  // one-shot
+
+class Fonts {
+  static load(fonts: Buffer[]): Fonts   // parse fonts once; reuse across renders
+}
 
 interface Program {
-  render(opts?: RenderOptions): RenderResult   // throws TurboPdfError on a fatal fault
+  render(opts?: RenderOptions, fonts?: Fonts): RenderResult   // throws TurboPdfError on a fatal fault
   hasHeader(): boolean   // source declared <t:running-header>
   hasFooter(): boolean   // source declared <t:running-footer>
 }
@@ -107,8 +113,13 @@ Rust `#[wasm_bindgen]` exports (`crates/turbo-pdf-wasm/src/`):
 function init(): void          // optional async initializer (installs the panic hook seam)
 function compile(templateHtml: string, opts?: JsCompileOptions): Program
 
+class Fonts {
+  static load(fonts: JsFont[]): Fonts   // parse fonts once; reuse across renders
+}
+
 interface Program {
-  render(args?: JsRenderArgs): RenderOutcome
+  render(args?: JsRenderArgs): RenderOutcome                    // inline fonts from args
+  renderWithFonts(args: JsRenderArgs, fonts: Fonts): RenderOutcome  // reuse a prebuilt handle
   hasHeader(): boolean
   hasFooter(): boolean
 }
@@ -146,6 +157,9 @@ interface RenderOutcome {
 
 - **Fonts:** WASM fonts are objects `{ data, family, weight?, italic? }`; NAPI
   fonts are bare `Buffer[]` with no metadata.
+- **Warm-start handle:** both expose a `Fonts` handle (`Fonts.load(...)`), but
+  NAPI threads it as the 2nd arg to `render(opts, fonts)` while WASM uses a
+  dedicated `program.renderWithFonts(args, fonts)`.
 - **Bytes:** WASM uses `Uint8Array`; NAPI uses `Buffer`.
 - **Compile options:** WASM `compile` honors `partials` / `missingPolicy` /
   `includeMaxDepth`; NAPI `compile` opts are reserved/ignored.
