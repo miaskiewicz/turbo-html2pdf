@@ -53,7 +53,9 @@ table.lines td {
   border-bottom: 1px solid #d9e2ec;
 }
 
-.qty, .unit, .amount {
+.qty,
+.unit,
+.amount {
   text-align: right;
 }
 

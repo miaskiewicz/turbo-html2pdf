@@ -17,109 +17,124 @@
 // The test is skipped (not failed) when the native addon is not built, so a
 // missing Rust toolchain or un-built addon never red-bars an unrelated CI lane.
 
-import assert from 'node:assert/strict'
-import { execFileSync } from 'node:child_process'
-import { readFileSync, writeFileSync, existsSync } from 'node:fs'
-import { tmpdir } from 'node:os'
-import { dirname, join } from 'node:path'
-import { test } from 'node:test'
-import { fileURLToPath } from 'node:url'
-import { createRequire } from 'node:module'
+import assert from "node:assert/strict";
+import { execFileSync } from "node:child_process";
+import { readFileSync, writeFileSync, existsSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { dirname, join } from "node:path";
+import { test } from "node:test";
+import { fileURLToPath } from "node:url";
+import { createRequire } from "node:module";
 
-const require = createRequire(import.meta.url)
-const here = dirname(fileURLToPath(import.meta.url))
-const root = join(here, '..')
+const require = createRequire(import.meta.url);
+const here = dirname(fileURLToPath(import.meta.url));
+const root = join(here, "..");
 
 function tryLoad() {
   try {
-    return require(join(root, 'index.js'))
+    return require(join(root, "index.js"));
   } catch {
-    return null
+    return null;
   }
 }
 
-const lib = tryLoad()
-const FONT = join(root, 'assets', 'fonts', 'Go-Regular.ttf')
+const lib = tryLoad();
+const FONT = join(root, "assets", "fonts", "Go-Regular.ttf");
 
-const CSS = '@page { size: 320px 240px; margin: 24px } p { font-size: 13px }'
+const CSS = "@page { size: 320px 240px; margin: 24px } p { font-size: 13px }";
 const TEMPLATE =
-  '<h1>{{ title }}</h1>' +
-  '{% for row in rows %}<p>{{ row.label }}: {{ row.value }}</p>{% endfor %}'
+  "<h1>{{ title }}</h1>" +
+  "{% for row in rows %}<p>{{ row.label }}: {{ row.value }}</p>{% endfor %}";
 const DATA = {
-  title: 'Quarterly Report',
+  title: "Quarterly Report",
   rows: [
-    { label: 'Revenue', value: '120000' },
-    { label: 'Costs', value: '80000' },
-    { label: 'Profit', value: '40000' },
+    { label: "Revenue", value: "120000" },
+    { label: "Costs", value: "80000" },
+    { label: "Profit", value: "40000" },
   ],
-}
+};
 
 function qpdfAvailable() {
   try {
-    execFileSync('qpdf', ['--version'], { stdio: 'ignore' })
-    return true
+    execFileSync("qpdf", ["--version"], { stdio: "ignore" });
+    return true;
   } catch {
-    return false
+    return false;
   }
 }
 
-test('addon is built (otherwise the suite is skipped)', (t) => {
+test("addon is built (otherwise the suite is skipped)", (t) => {
   if (!lib) {
-    t.skip('native addon not built — see HOW TO RUN at the top of this file')
-    return
+    t.skip("native addon not built — see HOW TO RUN at the top of this file");
+    return;
   }
-  assert.equal(typeof lib.compile, 'function')
-  assert.equal(typeof lib.render, 'function')
-})
+  assert.equal(typeof lib.compile, "function");
+  assert.equal(typeof lib.render, "function");
+});
 
-test('compile + render produces a valid multi-line PDF', { skip: !lib }, () => {
-  const font = readFileSync(FONT)
-  const program = lib.compile(TEMPLATE)
-  const result = program.render({ data: DATA, css: CSS, fonts: [{ data: font, family: 'Go' }], now: 0 })
+test("compile + render produces a valid multi-line PDF", { skip: !lib }, () => {
+  const font = readFileSync(FONT);
+  const program = lib.compile(TEMPLATE);
+  const result = program.render({
+    data: DATA,
+    css: CSS,
+    fonts: [{ data: font, family: "Go" }],
+    now: 0,
+  });
 
-  assert.ok(Buffer.isBuffer(result.pdf), 'pdf is a Buffer')
-  assert.equal(result.pdf.subarray(0, 5).toString('latin1'), '%PDF-', 'PDF magic')
-  assert.ok(result.pageCount >= 1, 'at least one page')
-  assert.ok(Array.isArray(result.diagnostics), 'diagnostics is an array')
+  assert.ok(Buffer.isBuffer(result.pdf), "pdf is a Buffer");
+  assert.equal(result.pdf.subarray(0, 5).toString("latin1"), "%PDF-", "PDF magic");
+  assert.ok(result.pageCount >= 1, "at least one page");
+  assert.ok(Array.isArray(result.diagnostics), "diagnostics is an array");
 
   if (qpdfAvailable()) {
-    const path = join(tmpdir(), 'turbo-pdf-napi-e2e.pdf')
-    writeFileSync(path, result.pdf)
+    const path = join(tmpdir(), "turbo-pdf-napi-e2e.pdf");
+    writeFileSync(path, result.pdf);
     // Throws on a non-zero exit (i.e. qpdf found structural problems).
-    execFileSync('qpdf', ['--check', path], { stdio: 'ignore' })
+    execFileSync("qpdf", ["--check", path], { stdio: "ignore" });
   }
-})
+});
 
-test('one-shot render matches and is byte-deterministic', { skip: !lib }, () => {
-  const font = readFileSync(FONT)
-  const a = lib.render(TEMPLATE, { data: DATA, css: CSS, fonts: [{ data: font, family: 'Go' }], now: 0 })
-  const b = lib.render(TEMPLATE, { data: DATA, css: CSS, fonts: [{ data: font, family: 'Go' }], now: 0 })
-  assert.ok(a.pdf.equals(b.pdf), 'identical inputs -> identical bytes')
-  assert.equal(a.pdf.subarray(0, 5).toString('latin1'), '%PDF-')
-})
+test("one-shot render matches and is byte-deterministic", { skip: !lib }, () => {
+  const font = readFileSync(FONT);
+  const a = lib.render(TEMPLATE, {
+    data: DATA,
+    css: CSS,
+    fonts: [{ data: font, family: "Go" }],
+    now: 0,
+  });
+  const b = lib.render(TEMPLATE, {
+    data: DATA,
+    css: CSS,
+    fonts: [{ data: font, family: "Go" }],
+    now: 0,
+  });
+  assert.ok(a.pdf.equals(b.pdf), "identical inputs -> identical bytes");
+  assert.equal(a.pdf.subarray(0, 5).toString("latin1"), "%PDF-");
+});
 
-test('fatal faults throw a typed TurboPdfError with code + span', { skip: !lib }, () => {
+test("fatal faults throw a typed TurboPdfError with code + span", { skip: !lib }, () => {
   assert.throws(
-    () => lib.compile('{{ broken '),
+    () => lib.compile("{{ broken "),
     (err) => {
-      assert.equal(err.name, 'TurboPdfError')
-      assert.equal(err.code, 'TemplateSyntax')
-      assert.equal(typeof err.span.line, 'number')
-      return true
+      assert.equal(err.name, "TurboPdfError");
+      assert.equal(err.code, "TemplateSyntax");
+      assert.equal(typeof err.span.line, "number");
+      return true;
     },
-  )
-})
+  );
+});
 
-test('lints are returned, not thrown', { skip: !lib }, () => {
-  const font = readFileSync(FONT)
+test("lints are returned, not thrown", { skip: !lib }, () => {
+  const font = readFileSync(FONT);
   // Glyphs absent from every supplied face emit a NotdefGlyph lint; the render
   // must still succeed and return the diagnostic rather than throw.
-  const result = lib.render('<p>你好世界</p>', {
+  const result = lib.render("<p>你好世界</p>", {
     data: {},
     css: CSS,
-    fonts: [{ data: font, family: 'Go' }],
+    fonts: [{ data: font, family: "Go" }],
     now: 0,
-  })
-  assert.ok(result.pageCount >= 1)
-  assert.ok(result.diagnostics.some((d) => d.code === 'NotdefGlyph'))
-})
+  });
+  assert.ok(result.pageCount >= 1);
+  assert.ok(result.diagnostics.some((d) => d.code === "NotdefGlyph"));
+});

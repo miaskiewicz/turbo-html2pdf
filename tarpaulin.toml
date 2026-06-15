@@ -8,6 +8,14 @@
 [default]
 workspace = true
 exclude = ["turbo-pdf-napi", "turbo-pdf-py"]
+# Pin the LLVM source-based engine on EVERY platform. tarpaulin's `Auto` engine
+# picks `Llvm` on macOS but `Ptrace` on Linux, and the two disagree about both
+# line attribution and whether the integration `tests/*.rs` files belong in the
+# denominator — so a tree that is 100% under `Llvm` (the engine this gate was
+# authored against) reports ~95% under `Ptrace` in CI. Forcing `Llvm` makes the
+# host and the Linux runner produce the same numbers. Needs `llvm-tools-preview`
+# (added to the toolchain in .github/workflows/ci.yml's coverage job).
+engine = "Llvm"
 exclude-files = [
     "tools/*",
     "benches/*",
