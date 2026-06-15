@@ -207,8 +207,10 @@ fn measure_item(
             cb_width: w,
         },
     );
+    let images = super::ImageCtx::none();
     let mut mctx = Ctx {
         fonts,
+        images: &images,
         diags: scratch,
     };
     let frag = block::layout_box_sized(item, &bs, 0.0, 0.0, w, &mut mctx);

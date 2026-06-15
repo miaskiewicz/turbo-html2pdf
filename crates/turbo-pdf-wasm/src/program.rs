@@ -108,6 +108,9 @@ impl Program {
             cascade: &cascade,
             at_rules: &at_rules,
             fonts: registry,
+            // The boundary accepts image bytes (see `note_images`) but a
+            // name-keyed resolver is not wired through yet; no images embedded.
+            images: &turbo_pdf_core::NoImages,
             now,
         };
         let pages = render_pages(&inputs, &mut diags)

@@ -32,6 +32,7 @@ fn pages(template: &str, css: &str, data: serde_json::Value) -> (Vec<Page>, Diag
         cascade: &cascade,
         at_rules: &rules,
         fonts: &fonts,
+        images: &turbo_pdf_core::NoImages,
         now: Some(0),
     };
     let mut diags = Diagnostics::default();

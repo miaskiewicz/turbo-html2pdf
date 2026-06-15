@@ -33,6 +33,8 @@ unicode-linebreak = "0.1.5"
 taffy = "0.8"
 pdf-writer = "0.15.0"
 subsetter = "0.2.6"
+png = "0.18.1"
+jpeg-decoder = { version = "0.3.2", default-features = false }
 
 [dev-dependencies]
 serde_json = { workspace = true }

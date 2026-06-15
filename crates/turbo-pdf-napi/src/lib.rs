@@ -189,6 +189,9 @@ fn run_pipeline(
         cascade: &cascade,
         at_rules: &at_rules,
         fonts: registry,
+        // Image embedding (§7.4) is not yet surfaced through the Node binding; a
+        // future option will supply a resolver here. No images for now.
+        images: &turbo_pdf_core::NoImages,
         now: opts.now,
     };
 

@@ -3,15 +3,18 @@
 //!
 //! Object layout (1-based ids): `1` catalog, `2` page tree, then for each page a
 //! page object and its content stream, then all font objects (4 per face), then
-//! the info dict last. `pdf-writer` serializes objects in id order, so this
-//! layout is stable across runs. The font object ids are known from the layout
-//! up front, so each page object is written exactly once with its resources.
+//! all image objects (1 per image, +1 for each alpha SMask), then the info dict
+//! last. `pdf-writer` serializes objects in id order, so this layout is stable
+//! across runs. The font and image object ids are known from the layout up
+//! front, so each page object is written exactly once with its resources.
 
 use pdf_writer::{Finish, Name, Pdf, Rect, Ref};
 
+use crate::image::ImageResolver;
 use crate::paginate::Page;
 
 use super::fonts::{FontStore, RefAlloc};
+use super::image::ImageStore;
 use super::meta::write_info;
 use super::page::content_stream;
 use super::unit::px_to_pt;
@@ -22,15 +25,17 @@ use super::EmitOptions;
 const OBJECTS_PER_FONT: i32 = 4;
 
 /// Build the whole PDF document from the paginated pages.
-pub fn build(pages: &[Page], opts: &EmitOptions) -> Vec<u8> {
+pub fn build(pages: &[Page], opts: &EmitOptions, resolver: &dyn ImageResolver) -> Vec<u8> {
     let fonts = FontStore::collect(pages);
-    let plan = Plan::new(pages, &fonts);
+    let images = ImageStore::collect(pages, resolver);
+    let plan = Plan::new(pages, &fonts, &images);
     let mut pdf = Pdf::new();
     pdf.set_version(1, 7);
     write_catalog(&mut pdf, &plan);
     write_page_tree(&mut pdf, pages, &plan);
-    write_pages(&mut pdf, pages, &plan, &fonts);
+    write_pages(&mut pdf, pages, &plan, &fonts, &images);
     fonts.write(&mut pdf, &mut plan.font_alloc());
+    images.write(&mut pdf, &mut plan.image_alloc());
     write_info(&mut pdf, plan.info, opts);
     pdf.finish()
 }
@@ -45,22 +50,30 @@ struct Plan {
     fonts_start: i32,
     /// The Type0 font object for each face, in resource order.
     font_refs: Vec<Ref>,
+    /// The first image object id (images follow the fonts contiguously).
+    images_start: i32,
+    /// The main XObject ref of each image, in resource order.
+    image_refs: Vec<Ref>,
     info: Ref,
 }
 
 impl Plan {
-    fn new(pages: &[Page], fonts: &FontStore) -> Plan {
+    fn new(pages: &[Page], fonts: &FontStore, images: &ImageStore) -> Plan {
         let mut next = 3;
         let page_refs = page_ref_pairs(pages.len(), &mut next);
         let fonts_start = next;
         let font_refs = type0_refs(fonts_start, fonts.len());
-        let info = Ref::new(fonts_start + OBJECTS_PER_FONT * fonts.len() as i32);
+        let images_start = fonts_start + OBJECTS_PER_FONT * fonts.len() as i32;
+        let image_refs = images.xobject_refs(images_start);
+        let info = Ref::new(images_start + images.total_objects());
         Plan {
             catalog: Ref::new(1),
             page_tree: Ref::new(2),
             page_refs,
             fonts_start,
             font_refs,
+            images_start,
+            image_refs,
             info,
         }
     }
@@ -68,6 +81,11 @@ impl Plan {
     /// A fresh allocator positioned at the first font object.
     fn font_alloc(&self) -> RefAlloc {
         RefAlloc::new(self.fonts_start)
+    }
+
+    /// A fresh allocator positioned at the first image object.
+    fn image_alloc(&self) -> RefAlloc {
+        RefAlloc::new(self.images_start)
     }
 }
 
@@ -101,10 +119,10 @@ fn write_page_tree(pdf: &mut Pdf, pages: &[Page], plan: &Plan) {
 }
 
 /// Write each page object (with resources) and its content stream.
-fn write_pages(pdf: &mut Pdf, pages: &[Page], plan: &Plan, fonts: &FontStore) {
+fn write_pages(pdf: &mut Pdf, pages: &[Page], plan: &Plan, fonts: &FontStore, images: &ImageStore) {
     for (page, (page_ref, content_ref)) in pages.iter().zip(&plan.page_refs) {
         write_page_object(pdf, page, plan, *page_ref, *content_ref);
-        let bytes = content_stream(page, fonts);
+        let bytes = content_stream(page, fonts, images);
         pdf.stream(*content_ref, &bytes);
     }
 }
@@ -124,16 +142,34 @@ fn write_page_object(pdf: &mut Pdf, page: &Page, plan: &Plan, page_ref: Ref, con
     obj.parent(plan.page_tree);
     obj.media_box(media_box(page));
     obj.contents(content_ref);
-    write_font_resources(&mut obj, &plan.font_refs);
+    write_resources(&mut obj, plan);
     obj.finish();
 }
 
-/// Map each font resource name (`F0`, …) to its Type0 font object.
-fn write_font_resources(obj: &mut pdf_writer::writers::Page, font_refs: &[Ref]) {
+/// Write the page's resource dictionary: fonts then image XObjects. Both
+/// dictionaries are written even when empty, which conformant viewers accept.
+fn write_resources(obj: &mut pdf_writer::writers::Page, plan: &Plan) {
     let mut resources = obj.resources();
+    write_font_dict(&mut resources, &plan.font_refs);
+    write_image_dict(&mut resources, &plan.image_refs);
+}
+
+/// Map each font resource name (`F0`, …) to its Type0 font object.
+fn write_font_dict(resources: &mut pdf_writer::writers::Resources, font_refs: &[Ref]) {
     let mut dict = resources.fonts();
     for (i, font_ref) in font_refs.iter().enumerate() {
         let name = FontStore::resource_name(i);
         dict.pair(Name(name.as_bytes()), *font_ref);
     }
+    dict.finish();
+}
+
+/// Map each image resource name (`Im0`, …) to its main XObject.
+fn write_image_dict(resources: &mut pdf_writer::writers::Resources, image_refs: &[Ref]) {
+    let mut dict = resources.x_objects();
+    for (i, image_ref) in image_refs.iter().enumerate() {
+        let name = ImageStore::resource_name(i);
+        dict.pair(Name(name.as_bytes()), *image_ref);
+    }
+    dict.finish();
 }

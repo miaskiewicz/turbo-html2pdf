@@ -4,9 +4,8 @@
 //! (AC-5.11), its painted [`FragmentContent`], and [`BreakMeta`] the fragmenter
 //! (Stage 4) reads to decide page breaks.
 //!
-//! Deferred to later phases (added when first populated): an `Image` content
-//! variant (Phase 9b) and the footnote/running-element payloads on `BreakMeta`
-//! (Phases 7/8).
+//! Deferred to later phases (added when first populated): the footnote/running-
+//! element payloads on `BreakMeta` (Phases 7/8).
 
 use crate::node::TKind;
 use crate::text::FontFace;
@@ -50,6 +49,29 @@ pub enum FragmentContent {
     },
     /// A paged-media directive kept opaque for the fragmenter/emitter.
     Directive(TKind),
+    /// A raster image (`<img>` or `background-image`, §7.4). The fragment's
+    /// `width`/`height` are the painted size (already overflow-capped at layout);
+    /// the variant carries only what the emitter needs beyond geometry: the
+    /// resolver `name` to fetch the bytes again at emit time, the source's
+    /// intrinsic pixel size (diagnostic / round-trip), and whether it carries an
+    /// alpha channel (so an SMask is emitted).
+    Image(ImagePlacement),
+}
+
+/// A placed raster image: the resolver key plus its intrinsic pixel size and
+/// alpha flag (§7.4). The pixels themselves are re-resolved at emit time so the
+/// galley stays small and the same bytes feed both layout sizing and embedding.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ImagePlacement {
+    /// The image name passed to the caller's `ImageResolver` (the `<img>` `src`
+    /// or the `background-image` `url(...)`).
+    pub name: String,
+    /// Intrinsic width in source pixels.
+    pub intrinsic_w: u32,
+    /// Intrinsic height in source pixels.
+    pub intrinsic_h: u32,
+    /// Whether the source had transparency (drives SMask emission).
+    pub has_alpha: bool,
 }
 
 /// Break hints attached to a fragment, consumed by the fragmenter.

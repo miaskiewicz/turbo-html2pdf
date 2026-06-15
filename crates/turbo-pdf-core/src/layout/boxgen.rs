@@ -25,6 +25,18 @@ pub struct LayoutBox {
     pub attrs: Vec<Attr>,
     pub display: Display,
     pub kind: BoxKind,
+    /// A raster image this box paints (§7.4): a replaced `<img>` (which also
+    /// sizes the box) or a `background-image` (painted behind the box content).
+    pub image: Option<ImageSource>,
+}
+
+/// A raster image referenced by a box: the resolver name plus whether it is the
+/// box's *replaced content* (an `<img>`, which drives the box size) or a
+/// `background-image` (sized by the box, painted behind it).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ImageSource {
+    pub name: String,
+    pub replaced: bool,
 }
 
 /// What a box contains, by formatting context.
@@ -176,6 +188,7 @@ fn build_block_box(el: &StyledElement, ids: &mut Ids) -> LayoutBox {
             attrs: el.attrs.clone(),
             display: Display::Block,
             kind: BoxKind::Directive(*kind),
+            image: None,
         };
     }
     let display = display_of(&el.style);
@@ -186,7 +199,49 @@ fn build_block_box(el: &StyledElement, ids: &mut Ids) -> LayoutBox {
         attrs: el.attrs.clone(),
         display,
         kind,
+        image: image_of(el),
     }
+}
+
+/// The raster image a styled element references: an `<img src>` is replaced
+/// content; a `background-image: url(...)` paints behind the box. The `<img>`
+/// source wins when both are present.
+fn image_of(el: &StyledElement) -> Option<ImageSource> {
+    if let Some(src) = img_src(el) {
+        return Some(ImageSource {
+            name: src.to_string(),
+            replaced: true,
+        });
+    }
+    background_image(&el.style).map(|name| ImageSource {
+        name,
+        replaced: false,
+    })
+}
+
+/// The `src` of an `<img>` element, or `None` for any other tag.
+fn img_src(el: &StyledElement) -> Option<&str> {
+    match &el.tag {
+        Tag::Html(name) if name == "img" => attr_value(&el.attrs, "src"),
+        _ => None,
+    }
+}
+
+/// The value of the named attribute in `attrs`, if present.
+fn attr_value<'a>(attrs: &'a [Attr], name: &str) -> Option<&'a str> {
+    attrs
+        .iter()
+        .find(|a| a.name == name)
+        .map(|a| a.value.as_str())
+}
+
+/// The url of a `background-image: url(...)` declaration, or `None`. A
+/// `background-image: none` (or unparsable value) yields `None`.
+fn background_image(style: &ComputedStyle) -> Option<String> {
+    let value = style.get("background-image")?.trim();
+    let inner = value.strip_prefix("url(")?.strip_suffix(')')?;
+    let name = inner.trim().trim_matches(['"', '\'']).trim();
+    (!name.is_empty()).then(|| name.to_string())
 }
 
 /// Build a flex/table container's children as block-level boxes (raw text and
@@ -225,6 +280,7 @@ fn anon_lines_box(
         attrs: Vec::new(),
         display: Display::Block,
         kind: BoxKind::Lines(items),
+        image: None,
     }
 }
 
@@ -296,5 +352,6 @@ pub fn build_box_tree(styled: &[StyledNode]) -> LayoutBox {
         attrs: Vec::new(),
         display: Display::Block,
         kind,
+        image: None,
     }
 }

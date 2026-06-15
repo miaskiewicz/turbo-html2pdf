@@ -49,8 +49,9 @@
 use serde::Serialize;
 
 use crate::error::{Diagnostics, LintCode, RenderError, Span};
+use crate::image::ImageResolver;
 use crate::layout::fragment::{Fragment, FragmentContent};
-use crate::layout::layout;
+use crate::layout::{layout, layout_with_images, ImageCtx};
 use crate::node::{Element, Node, TKind, Tag};
 use crate::paginate::{paginate_with_footnotes, resolve_geometry, Note, Page, PageGeometry};
 use crate::style::{style_tree, AtRule, Cascade};
@@ -99,6 +100,9 @@ pub struct RenderInputs<'a, T: Serialize> {
     pub cascade: &'a Cascade,
     pub at_rules: &'a [AtRule],
     pub fonts: &'a FontRegistry,
+    /// Caller-supplied image source (§7.4). Defaults to a no-op resolver via
+    /// [`crate::NoImages`]; supply one to embed `<img>`/`background-image`.
+    pub images: &'a dyn ImageResolver,
     pub now: Option<i64>,
 }
 
@@ -134,8 +138,22 @@ fn lay_out_body<T: Serialize>(
     let sources = collect_footnotes(&nodes);
     let reset = reset_mode(&nodes);
     let styled = style_tree(&nodes, inputs.cascade);
-    let width = resolve_geometry(inputs.at_rules, PageGeometry::a4())?.content_width();
-    Ok((layout(&styled, width, inputs.fonts, diags), sources, reset))
+    // Size images against the base geometry's body height (the 60% cap basis).
+    // Bands reserved later only shrink it slightly, so the base height is a
+    // stable approximation and keeps body layout single-pass.
+    let geo = resolve_geometry(inputs.at_rules, PageGeometry::a4())?;
+    let image_ctx = ImageCtx {
+        resolver: inputs.images,
+        body_height: Some(geo.body_height()),
+    };
+    let galley = layout_with_images(
+        &styled,
+        geo.content_width(),
+        inputs.fonts,
+        &image_ctx,
+        diags,
+    );
+    Ok((galley, sources, reset))
 }
 
 // --------------------------------------------------------------------------

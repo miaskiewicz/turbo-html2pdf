@@ -22,14 +22,17 @@ mod color;
 mod document;
 mod fonts;
 mod graphics;
+mod image;
 mod meta;
 mod page;
 mod text;
 mod unit;
 
+use crate::image::{ImageResolver, NoImages};
 use crate::paginate::Page;
 
 pub use fonts::FontStore;
+pub use image::ImageStore;
 
 /// Document metadata plus the determinism knob for the creation date (§7, §14).
 ///
@@ -58,6 +61,21 @@ pub const SENTINEL_DATE: i64 = 946_684_800;
 /// (backgrounds + borders) and text lines, with fonts subset and embedded once
 /// across the whole document. The result opens without a repair prompt in
 /// conformant viewers (AC-7.1).
+///
+/// This convenience entry embeds no images; use [`emit_pdf_with_images`] to
+/// supply a resolver for `<img>`/`background-image` content (§7.4).
 pub fn emit_pdf(pages: &[Page], opts: &EmitOptions) -> Vec<u8> {
-    document::build(pages, opts)
+    emit_pdf_with_images(pages, opts, &NoImages)
+}
+
+/// Emit a paginated document, embedding every `Image` fragment whose name the
+/// `resolver` supplies as a PDF image XObject (§7.4, Phase 9b). PNG decodes to
+/// raw RGB(A) (alpha becomes an `SMask`); JPEG passes through as `DCTDecode`.
+/// Images the resolver can't supply or decode are simply skipped.
+pub fn emit_pdf_with_images(
+    pages: &[Page],
+    opts: &EmitOptions,
+    resolver: &dyn ImageResolver,
+) -> Vec<u8> {
+    document::build(pages, opts, resolver)
 }

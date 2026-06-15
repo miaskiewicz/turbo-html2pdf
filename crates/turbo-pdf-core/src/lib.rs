@@ -11,6 +11,7 @@
 
 pub mod emit;
 pub mod error;
+pub mod image;
 pub mod layout;
 pub mod node;
 pub mod options;
@@ -21,13 +22,14 @@ pub mod style;
 mod template;
 pub mod text;
 
-pub use emit::{emit_pdf, EmitOptions, SENTINEL_DATE};
+pub use emit::{emit_pdf, emit_pdf_with_images, EmitOptions, SENTINEL_DATE};
 pub use error::{CompileError, Diagnostics, ErrorCode, Lint, LintCode, RenderError, Span};
+pub use image::{ImageResolver, NoImages};
 pub use layout::fragment::{
-    BreakMeta, Fragment, FragmentContent, NodeId, PositionedGlyph, RepeatKind,
+    BreakMeta, Fragment, FragmentContent, ImagePlacement, NodeId, PositionedGlyph, RepeatKind,
 };
-pub use layout::layout;
 pub use layout::value::{BreakRule, Rgba};
+pub use layout::{layout, layout_with_images, ImageCtx};
 pub use node::{Attr, Element, Node, TKind, Tag};
 pub use options::{CompileOptions, MissingPolicy, DEFAULT_INCLUDE_DEPTH};
 pub use paginate::{

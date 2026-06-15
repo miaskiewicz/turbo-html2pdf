@@ -11,19 +11,23 @@
 //! `inline-block` is stacked below its line rather than placed within it).
 
 use crate::error::Diagnostics;
+use crate::image::probe;
 use crate::node::TKind;
 use crate::text::FontRegistry;
 
-use super::boxgen::{BoxKind, InlineItem, LayoutBox};
-use super::fragment::{BreakMeta, Fragment, FragmentContent, NodeId};
+use super::boxgen::{BoxKind, ImageSource, InlineItem, LayoutBox};
+use super::fragment::{BreakMeta, Fragment, FragmentContent, ImagePlacement, NodeId};
+use super::imgsize::{size_replaced, SizeCtx, SizedImage};
 use super::inline::{self, InlineRun};
 use super::value::{
     resolve_box_style, BoxSizing, BoxStyle, LengthPct, ResolveCtx, DEFAULT_FONT_SIZE,
 };
+use super::ImageCtx;
 
 /// Shared layout inputs threaded through the recursion. Shared with `flex.rs`.
 pub(crate) struct Ctx<'a> {
     pub(crate) fonts: &'a FontRegistry,
+    pub(crate) images: &'a ImageCtx<'a>,
     pub(crate) diags: &'a mut Diagnostics,
 }
 
@@ -279,8 +283,17 @@ pub(crate) fn layout_box_sized(
     let content_x = bx + bw.left + bs.padding.left;
     let content_y = by + bw.top + bs.padding.top;
     let content_w = (bbw - bs.padding.horizontal() - bw.horizontal()).max(0.0);
-    let (children, content_h) = layout_content(lb, bs, content_x, content_y, content_w, ctx);
+    let (mut children, content_h) = layout_content(lb, bs, content_x, content_y, content_w, ctx);
     let bbh = content_box_height(bs, content_h) + bs.padding.vertical() + bw.vertical();
+    prepend_background_image(
+        lb,
+        content_x,
+        content_y,
+        content_w,
+        content_h,
+        &*ctx,
+        &mut children,
+    );
     Fragment {
         node_id: lb.node_id,
         x: bx,
@@ -293,8 +306,43 @@ pub(crate) fn layout_box_sized(
     }
 }
 
+/// If the box carries a resolvable `background-image`, insert an `Image`
+/// fragment filling its content box *behind* the box's children (index 0, so it
+/// paints first). A `background-image` does not resize the box.
+fn prepend_background_image(
+    lb: &LayoutBox,
+    cx: f32,
+    cy: f32,
+    cw: f32,
+    ch: f32,
+    ctx: &Ctx,
+    children: &mut Vec<Fragment>,
+) {
+    let Some(placement) = background_placement(lb, ctx) else {
+        return;
+    };
+    let frag = Fragment::new(
+        lb.node_id,
+        cx,
+        cy,
+        cw,
+        ch,
+        FragmentContent::Image(placement),
+    );
+    children.insert(0, frag);
+}
+
+/// The placement for a box's `background-image`, if it has one the resolver can
+/// supply and decode (probe succeeds).
+fn background_placement(lb: &LayoutBox, ctx: &Ctx) -> Option<ImagePlacement> {
+    let src = lb.image.as_ref().filter(|s| !s.replaced)?;
+    let intrinsic = probe_source(src, ctx)?;
+    Some(super::imgsize::placement_of(src.name.clone(), intrinsic))
+}
+
 /// Lay out one block-level box with its border-box top-left at `(bx, by)`,
-/// resolving its width against the containing block.
+/// resolving its width against the containing block. A replaced `<img>` is sized
+/// from its intrinsic dimensions and the overflow caps instead of flowing.
 fn layout_box(
     lb: &LayoutBox,
     bx: f32,
@@ -304,18 +352,93 @@ fn layout_box(
     ctx: &mut Ctx,
 ) -> Fragment {
     let bs = resolve(lb, cb_width, parent_fs);
+    if let Some(frag) = replaced_image_box(lb, &bs, bx, by, cb_width, ctx) {
+        return frag;
+    }
     let bbw = border_box_width(&bs, cb_width);
     layout_box_sized(lb, &bs, bx, by, bbw, ctx)
 }
 
+/// Build the fragment for a replaced `<img>` box, or `None` when the box is not
+/// a (resolvable) replaced image. The box size is the capped image size; the
+/// image is the fragment's own content (no children flow inside an `<img>`).
+fn replaced_image_box(
+    lb: &LayoutBox,
+    bs: &BoxStyle,
+    bx: f32,
+    by: f32,
+    cb_width: f32,
+    ctx: &Ctx,
+) -> Option<Fragment> {
+    let src = lb.image.as_ref().filter(|s| s.replaced)?;
+    let intrinsic = probe_source(src, ctx)?;
+    let sized = size_replaced(src.name.clone(), intrinsic, &size_ctx(bs, cb_width, ctx));
+    Some(image_fragment(lb.node_id, bx, by, &sized, bs))
+}
+
+/// Assemble the [`SizeCtx`] for the image sizer from a box's style and the
+/// layout image context (containing-block width + optional page body height).
+fn size_ctx<'a>(bs: &'a BoxStyle, cb_width: f32, ctx: &Ctx) -> SizeCtx<'a> {
+    SizeCtx {
+        style: bs,
+        cb_width,
+        body_height: ctx.images.body_height,
+    }
+}
+
+/// Build a positioned `Image` fragment from a sized image, carrying the box's
+/// break metadata so a tall image still obeys break hints.
+fn image_fragment(
+    node_id: NodeId,
+    bx: f32,
+    by: f32,
+    sized: &SizedImage,
+    bs: &BoxStyle,
+) -> Fragment {
+    Fragment {
+        node_id,
+        x: bx,
+        y: by,
+        width: sized.width,
+        height: sized.height,
+        content: FragmentContent::Image(sized.placement.clone()),
+        break_meta: break_meta_of(bs),
+        children: Vec::new(),
+    }
+}
+
+/// Probe an image source for its intrinsic size + alpha flag via the resolver,
+/// or `None` if it does not resolve or decode.
+fn probe_source(src: &ImageSource, ctx: &Ctx) -> Option<crate::image::Intrinsic> {
+    let bytes = ctx.images.resolver.resolve(&src.name)?;
+    probe(bytes)
+}
+
 /// Lay out a box tree (root from `boxgen::build_box_tree`) into a galley fragment
-/// rooted at `(0, 0)` with the given containing-block width.
+/// rooted at `(0, 0)` with the given containing-block width. Embeds no images;
+/// use [`layout_tree_with_images`] to size `<img>`/`background-image` boxes.
 pub fn layout_tree(
     root: &LayoutBox,
     cb_width: f32,
     fonts: &FontRegistry,
     diags: &mut Diagnostics,
 ) -> Fragment {
-    let mut ctx = Ctx { fonts, diags };
+    layout_tree_with_images(root, cb_width, fonts, &ImageCtx::none(), diags)
+}
+
+/// Lay out a box tree, sizing raster images against `images` (its resolver +
+/// page-height basis). See [`layout_tree`] for the image-free entry.
+pub fn layout_tree_with_images(
+    root: &LayoutBox,
+    cb_width: f32,
+    fonts: &FontRegistry,
+    images: &ImageCtx,
+    diags: &mut Diagnostics,
+) -> Fragment {
+    let mut ctx = Ctx {
+        fonts,
+        images,
+        diags,
+    };
     layout_box(root, 0.0, 0.0, cb_width, DEFAULT_FONT_SIZE, &mut ctx)
 }
