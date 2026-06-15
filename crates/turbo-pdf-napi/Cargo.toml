@@ -29,5 +29,12 @@ serde_json = { workspace = true }
 napi = { version = "2", default-features = false, features = ["napi6", "serde-json"] }
 napi-derive = "2"
 
+[features]
+# Passthrough for the core `svg` feature (vector `<img>` via resvg). OFF by
+# default: the standard `turbo-html2pdf` package ships without it. The separate
+# `turbo-html2pdf-svg` package is built with `napi build --features svg` (see the
+# `build-napi-svg`/`publish-svg` jobs in .github/workflows/release.yml).
+svg = ["turbo-pdf-core/svg"]
+
 [build-dependencies]
 napi-build = "2"

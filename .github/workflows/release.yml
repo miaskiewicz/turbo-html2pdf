@@ -273,3 +273,96 @@ jobs:
         working-directory: crates/turbo-pdf-wasm/pkg-fonts
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+  # ---------------------------------------------------------------------------
+  # 7. Build the napi addon WITH the `svg` feature (vector <img> via resvg) for
+  #    the separate turbo-html2pdf-svg package. Identical matrix to build-napi
+  #    but `--features svg`; artifacts get a distinct name so publish-svg picks
+  #    the right (svg-enabled) binaries.
+  # ---------------------------------------------------------------------------
+  build-napi-svg:
+    name: build turbo-html2pdf-svg ${{ matrix.target }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: ubuntu-latest,  target: x86_64-unknown-linux-gnu }
+          - { os: ubuntu-latest,  target: x86_64-unknown-linux-musl }
+          - { os: ubuntu-latest,  target: aarch64-unknown-linux-gnu }
+          - { os: macos-latest,   target: aarch64-apple-darwin }
+          - { os: windows-latest, target: x86_64-pc-windows-msvc }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+      - name: Linux musl deps
+        if: matrix.target == 'x86_64-unknown-linux-musl'
+        run: sudo apt-get update && sudo apt-get install -y musl-tools
+      - name: Linux aarch64 cross toolchain
+        if: matrix.target == 'aarch64-unknown-linux-gnu'
+        run: |
+          sudo apt-get update && sudo apt-get install -y gcc-aarch64-linux-gnu
+          echo "CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER=aarch64-linux-gnu-gcc" >> "$GITHUB_ENV"
+          echo "CC_aarch64_unknown_linux_gnu=aarch64-linux-gnu-gcc" >> "$GITHUB_ENV"
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: ${{ matrix.target }}-svg
+      - name: Install JS deps (no postinstall build)
+        run: pnpm install --frozen-lockfile --ignore-scripts
+      # `--features svg` forwards to cargo, turning on the napi crate's svg
+      # passthrough (= turbo-pdf-core/svg). Same suffixed *.node filename.
+      - name: Build native addon (turbo-html2pdf-svg)
+        working-directory: crates/turbo-pdf-napi
+        run: pnpm exec napi build --platform --release --target ${{ matrix.target }} --features svg
+      - name: Upload prebuilt binary
+        uses: actions/upload-artifact@v4
+        with:
+          name: napi-svg-bindings-${{ matrix.target }}
+          path: crates/turbo-pdf-napi/*.node
+          if-no-files-found: error
+
+  # ---------------------------------------------------------------------------
+  # 8. Publish turbo-html2pdf-svg — the svg-enabled napi package. Mirrors
+  #    publish-napi, but bundles the svg-built binaries and renames the package
+  #    to turbo-html2pdf-svg before publishing (same version from package.json).
+  # ---------------------------------------------------------------------------
+  publish-svg:
+    name: publish turbo-html2pdf-svg
+    needs: [build-napi-svg, gate]
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          registry-url: https://registry.npmjs.org
+
+      - name: Download all svg-enabled prebuilt binaries
+        uses: actions/download-artifact@v4
+        with:
+          pattern: napi-svg-bindings-*
+          path: artifacts
+
+      - name: Bundle binaries + rename package to turbo-html2pdf-svg
+        run: |
+          DEST=crates/turbo-pdf-napi
+          find artifacts -name '*.node' -exec cp {} "$DEST"/ \;
+          ls -1 "$DEST"/*.node
+          # Same version (from package.json); only the package name changes so the
+          # svg build ships under its own npm name alongside turbo-html2pdf.
+          node -e "const fs=require('fs');const p='$DEST/package.json';const j=JSON.parse(fs.readFileSync(p));j.name='turbo-html2pdf-svg';fs.writeFileSync(p,JSON.stringify(j,null,2));console.log('publishing',j.name,j.version)"
+
+      - name: Publish turbo-html2pdf-svg
+        run: npm publish --access public --ignore-scripts
+        working-directory: crates/turbo-pdf-napi
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
