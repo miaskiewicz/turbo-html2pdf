@@ -197,19 +197,41 @@ fs.writeFileSync('out.pdf', pdf)   // %PDF-1.7
   configurable) and background-image watermarks.
 - Deterministic output; `Send + Sync`; no network / no system fonts.
 
-### Optional capabilities (Cargo feature gates)
+### Built-in capabilities (on by default)
 
-Off by default — the base build stays small and the default path is unchanged.
-Enable per build (`--features <name>`), or via `features = [...]` on the crate.
+These are compiled into the **published packages** — no special build, no rebuild.
+They cost nothing until used (a doc that has no `<t:endnote>` pays nothing for
+endnotes, etc.).
 
-| Feature | What it adds |
+| Capability | How to use it |
 |---|---|
-| `xref` | **Internal links & cross-references** — `<t:anchor name>` named destinations + clickable `<a href="#name">` GoTo links inside the PDF. |
-| `svg` | **Vector images** — `<img>`/`background-image` SVG, rasterized via `resvg` into the image pipeline (sharp at any zoom). |
-| `pdf-a` | **PDF/A-2b** archival conformance — embedded sRGB ICC OutputIntent, XMP packet, no transparency. Validates green under **veraPDF** `--flavour 2b`. |
-| `pdf-ua` | **Tagged / accessible PDF** — a `StructTreeRoot` with marked content (BDC/EMC), reading order, `<img alt>` text, artifacts — for screen readers. |
-| `endnotes` | `<t:endnote>` collects a note; `<t:endnotes/>` renders the collected list. |
-| `print-color` | **CMYK** color (`cmyk(...)`) and DeviceCMYK output for real-press workflows (vs. screen RGB). |
+| **Internal links & cross-references** | Mark a spot with `<t:anchor name="ch2"/>`; link to it with `<a href="#ch2">see Chapter 2</a>` → clickable, jumps there in the PDF. |
+| **Endnotes** | `<t:endnote>…note body…</t:endnote>` drops a numbered marker and collects the note; `<t:endnotes/>` renders the collected list at its position. |
+| **PDF/A-2b (archival)** | Request it on the render options (`pdfA: true`) → the document is emitted PDF/A-2b conformant (embedded sRGB ICC, XMP, no transparency). Validates green under veraPDF `--flavour 2b`. |
+| **PDF/UA (accessible / tagged)** | Request it on the render options (`pdfUa: true`) → adds the tagged structure tree (headings/lists/tables, `<img alt>`, reading order) for screen readers. |
+| **CMYK print color** | Enabled via the `print-color` build feature; then `cmyk(…)` colors emit DeviceCMYK for real-press output. |
+
+> PDF/A and PDF/UA are **modes you opt into per render** (they change the output and
+> add a little per-page work); they're *available* by default but only *active* when
+> you ask. Endnotes and links just work from the markup.
+
+### Opt-in: SVG images (build flag)
+
+SVG vector images (`<img>`/`background-image`) are **off by default to keep the
+download small.** SVG pulls in the [`resvg`](https://crates.io/crates/resvg)
+rasterizer — a few MB — which matters most for the **~3 MB browser/wasm bundle**.
+Everything else (PNG/JPEG, all layout) works without it. To include SVG:
+
+```toml
+# Rust: enable the feature on the core crate
+turbo-pdf-core = { version = "*", features = ["svg"] }
+```
+
+```bash
+# or for a build/binding:  cargo build -p turbo-pdf-core --features svg
+# the napi / wasm bindings can be rebuilt from source with the feature to emit an
+# SVG-enabled package (the default prebuilt packages omit resvg on purpose).
+```
 
 ## Status
 
