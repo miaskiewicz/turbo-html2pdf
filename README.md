@@ -5,10 +5,29 @@ with no headless browser.** A from-scratch document engine: templating → HTML/
 layout → automatic pagination → PDF, shipped as a tiny native addon for Node and
 WebAssembly. No Chromium download, no 200 ms browser spin-up, deterministic output.
 
-> npm: `turbo-html2pdf` (Node) · `turbo-html2pdf-wasm` (browser) ·
-> `turbo-html2pdf-react` / `turbo-html2pdf-template` (authoring) · `turbo-html2pdf`
-> on PyPI (Python). The name says exactly what it does — HTML → PDF — and avoids
-> clashing with the unrelated "TurboPDF".
+> The name says exactly what it does — HTML → PDF — and avoids clashing with the
+> unrelated "TurboPDF".
+
+## Packages
+
+One engine, shipped to every ecosystem. Pick the one for your runtime:
+
+| Package | Registry | What it is | Install |
+|---|---|---|---|
+| **`turbo-html2pdf`** | npm | **Node** native addon — `compile`/`render` → PDF `Buffer`. The default. | `npm i turbo-html2pdf` |
+| **`turbo-html2pdf-svg`** | npm | Same as above **+ SVG images** (bundles `resvg`). Use only if you embed SVG. | `npm i turbo-html2pdf-svg` |
+| **`turbo-html2pdf-wasm`** | npm | **Browser / WASM** — the full engine client-side, no server. | `npm i turbo-html2pdf-wasm` |
+| **`turbo-html2pdf-react`** | npm | Author templates as **React** components → template string. | `npm i turbo-html2pdf-react` |
+| **`turbo-html2pdf-template`** | npm | Author templates with **plain functions** (no React). | `npm i turbo-html2pdf-template` |
+| **`turbo-html2pdf`** | PyPI | **Python** binding (PyO3) — `compile`/`render` → `bytes`. | `pip install turbo-html2pdf` |
+
+The two authoring packages (`-react`, `-template`) only *produce the template
+string*; they pair with `turbo-html2pdf` (Node), `turbo-html2pdf-wasm` (browser),
+or the Python package to actually render. The Rust engine lives in
+[`crates/turbo-pdf-core`](https://github.com/miaskiewicz/turbo-html2pdf/tree/main/crates/turbo-pdf-core).
+
+> Status: `turbo-html2pdf`, `-react`, `-template` are live on npm at `0.1.0`;
+> `-svg`, `-wasm`, and the PyPI package ship with `v0.1.1`.
 
 ## 🌐 It generates PDFs entirely in the browser
 
