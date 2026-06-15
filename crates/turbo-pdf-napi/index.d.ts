@@ -95,6 +95,33 @@ export interface CompileOptions {
   includeMaxDepth?: number
 }
 
+/** AES-256 password-encryption settings. `userPassword` is required to open the
+ *  document; `ownerPassword` (when set) grants full permissions. Permission bits
+ *  default to all-granted; set one to `false` to clear it for a user-password
+ *  open. Encrypted output is intentionally non-deterministic. */
+export interface Encryption {
+  /** Password required to open the document. */
+  userPassword: string
+  /** Owner password granting full permissions. Defaults to the user password. */
+  ownerPassword?: string
+  /** Allow printing. Defaults to `true`. */
+  print?: boolean
+  /** Allow modifying contents. Defaults to `true`. */
+  modify?: boolean
+  /** Allow copying/extracting text and graphics. Defaults to `true`. */
+  copy?: boolean
+  /** Allow adding/modifying annotations. Defaults to `true`. */
+  annotate?: boolean
+  /** Allow filling existing form fields. Defaults to `true`. */
+  fillForms?: boolean
+  /** Allow accessibility text extraction. Defaults to `true`. */
+  accessibility?: boolean
+  /** Allow document assembly (insert/rotate/delete pages). Defaults to `true`. */
+  assemble?: boolean
+  /** Allow full-resolution printing. Defaults to `true`. */
+  highQualityPrint?: boolean
+}
+
 /** Options for a single render pass. All fields optional. */
 export interface RenderOptions {
   /** Data object interpolated into the template (`{{ data.* }}`). */
@@ -111,6 +138,23 @@ export interface RenderOptions {
   watermark?: Watermark
   /** Pins the `now()` clock (Unix seconds) for deterministic output. */
   now?: number
+  /** Emit PDF/A-2b archival conformance (sRGB `/OutputIntents`, XMP `pdfaid`,
+   *  trailer `/ID`). Defaults to `false`. */
+  pdfA?: boolean
+  /** Emit tagged / accessible PDF/UA-1 machinery (`/StructTreeRoot`, `/MarkInfo`,
+   *  per-face `/ToUnicode`, `/Lang`). Defaults to `false`. */
+  pdfUa?: boolean
+  /** Natural-language tag (RFC 3066, e.g. `en-US`) written as the catalog
+   *  `/Lang`. Only meaningful with `pdfUa`. */
+  lang?: string
+  /** Emit fills in DeviceCMYK instead of DeviceRGB. Defaults to `false`. */
+  cmyk?: boolean
+  /** AES-256 password protection. Omit for an unencrypted, byte-deterministic
+   *  PDF. */
+  encryption?: Encryption
+  /** Foreign PDF documents glued (page by page) AFTER the rendered pages, in
+   *  order. Each entry is a complete PDF. */
+  appendPdfs?: Buffer[]
 }
 
 /** The result of a render. */
@@ -150,3 +194,8 @@ export function compile(templateHtml: string, opts?: CompileOptions): Program
 /** One-shot convenience: compile + render in a single call. Pass a prebuilt
  *  {@link Fonts} handle to reuse parsed fonts. */
 export function render(templateHtml: string, opts?: RenderOptions, fonts?: Fonts): RenderResult
+
+/** Glue one or more foreign PDF documents after `base`, page by page, returning
+ *  the merged PDF. Equivalent to `RenderOptions.appendPdfs` but usable on
+ *  already-emitted bytes. Throws `TurboPdfError` if any input fails to parse. */
+export function appendPdf(base: Buffer, extras: Buffer[]): Buffer

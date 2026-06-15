@@ -125,5 +125,8 @@ const compile = guard((templateHtml, opts) => {
 
 const render = guard((templateHtml, opts, fonts) => native.render(templateHtml, opts, fonts))
 
-module.exports = { compile, render, Fonts: native.Fonts, TurboPdfError }
+// Glue foreign PDFs after `base`; parse faults surface as a typed TurboPdfError.
+const appendPdf = guard((base, extras) => native.appendPdf(base, extras))
+
+module.exports = { compile, render, appendPdf, Fonts: native.Fonts, TurboPdfError }
 module.exports.default = module.exports

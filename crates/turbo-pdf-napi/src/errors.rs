@@ -7,7 +7,7 @@
 //! JS wrapper (`index.js`) detects the prefix and rethrows a typed
 //! `TurboPdfError` whose `.code` and `.span` mirror this payload.
 
-use turbo_pdf_core::{CompileError, ErrorCode, RenderError, Span};
+use turbo_pdf_core::{AppendError, CompileError, ErrorCode, RenderError, Span};
 
 /// Sentinel that marks a `reason` string as a structured turbo-pdf error. The JS
 /// wrapper splits on this to recover the JSON payload.
@@ -48,4 +48,10 @@ pub fn from_compile(e: CompileError) -> napi::Error {
 /// Map a fatal render error to a typed N-API error.
 pub fn from_render(e: RenderError) -> napi::Error {
     encode(e.code, &e.message, e.span)
+}
+
+/// Map a PDF append/merge failure to a typed N-API error. Append errors carry no
+/// source span, so a zeroed span is used under the generic `Render` code.
+pub fn from_append(e: AppendError) -> napi::Error {
+    encode(ErrorCode::Render, &e.to_string(), Span::default())
 }

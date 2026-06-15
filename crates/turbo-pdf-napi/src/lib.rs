@@ -33,9 +33,10 @@ use std::collections::HashMap;
 
 use turbo_pdf_core::style::TokenSet;
 use turbo_pdf_core::{
-    build_cascade, compile as core_compile, emit_pdf_with_images, render_pages,
-    style::parse_stylesheet, CompileOptions, Diagnostics, EmitOptions, FontRegistry,
-    ImageWatermark, MissingPolicy, NoImages, RenderInputs, Rgba, TextWatermark, Watermark,
+    append_pdfs, build_cascade, compile as core_compile, emit_pdf_with_images, render_pages,
+    style::parse_stylesheet, CompileOptions, Diagnostics, EmitOptions, Encryption, FontRegistry,
+    ImageWatermark, MissingPolicy, NoImages, Permissions, RenderInputs, Rgba, TextWatermark,
+    Watermark,
 };
 
 use convert::{build_registry, diagnostics_to_js, JsDiagnostic, JsFont, JsImage, MapResolver};
@@ -63,6 +64,91 @@ pub struct RenderOptions {
     pub watermark: Option<JsWatermark>,
     /// Pins the `now()` clock (Unix seconds) for deterministic output.
     pub now: Option<i64>,
+    /// Emit PDF/A-2b archival conformance for this render (sRGB `/OutputIntents`,
+    /// an XMP `pdfaid` packet, a trailer `/ID`). Defaults to `false`.
+    pub pdf_a: Option<bool>,
+    /// Emit tagged / accessible PDF/UA-1 machinery for this render
+    /// (`/StructTreeRoot`, `/MarkInfo`, per-face `/ToUnicode`, `/Lang`).
+    /// Defaults to `false`.
+    pub pdf_ua: Option<bool>,
+    /// The document's natural-language tag (RFC 3066, e.g. `en-US`), written as
+    /// the catalog `/Lang` for tagged PDF. Only meaningful with `pdfUa`.
+    pub lang: Option<String>,
+    /// Emit fills in DeviceCMYK instead of DeviceRGB for print workflows.
+    /// Defaults to `false`.
+    pub cmyk: Option<bool>,
+    /// AES-256 password protection. Set `userPassword` (required to open) and
+    /// optionally `ownerPassword`. Encrypted output is intentionally
+    /// non-deterministic. Omit for an unencrypted, byte-deterministic PDF.
+    pub encryption: Option<JsEncryption>,
+    /// Foreign PDF blobs glued (page by page) AFTER the rendered pages, in order.
+    /// Each entry is a complete PDF document. Omit to append nothing.
+    pub append_pdfs: Option<Vec<Buffer>>,
+}
+
+/// AES-256 password-encryption settings. `userPassword` is required to open the
+/// document; `ownerPassword` (when set) grants full permissions. Permission bits
+/// default to all-granted; set a field to `false` to clear it for a user-password
+/// open.
+#[napi(object)]
+pub struct JsEncryption {
+    /// Password required to open the document (required).
+    pub user_password: String,
+    /// Owner password granting full permissions. Defaults to the user password.
+    pub owner_password: Option<String>,
+    /// Allow printing. Defaults to `true`.
+    pub print: Option<bool>,
+    /// Allow modifying contents. Defaults to `true`.
+    pub modify: Option<bool>,
+    /// Allow copying/extracting text and graphics. Defaults to `true`.
+    pub copy: Option<bool>,
+    /// Allow adding/modifying annotations. Defaults to `true`.
+    pub annotate: Option<bool>,
+    /// Allow filling existing form fields. Defaults to `true`.
+    pub fill_forms: Option<bool>,
+    /// Allow accessibility text extraction. Defaults to `true`.
+    pub accessibility: Option<bool>,
+    /// Allow document assembly (insert/rotate/delete pages). Defaults to `true`.
+    pub assemble: Option<bool>,
+    /// Allow full-resolution printing. Defaults to `true`.
+    pub high_quality_print: Option<bool>,
+}
+
+impl JsEncryption {
+    /// Lower into the core [`Encryption`], applying permission overrides onto the
+    /// all-granted default.
+    fn into_core(self) -> Encryption {
+        let mut perms = Permissions::all();
+        if let Some(v) = self.print {
+            perms.print = v;
+        }
+        if let Some(v) = self.modify {
+            perms.modify = v;
+        }
+        if let Some(v) = self.copy {
+            perms.copy = v;
+        }
+        if let Some(v) = self.annotate {
+            perms.annotate = v;
+        }
+        if let Some(v) = self.fill_forms {
+            perms.fill_forms = v;
+        }
+        if let Some(v) = self.accessibility {
+            perms.accessibility = v;
+        }
+        if let Some(v) = self.assemble {
+            perms.assemble = v;
+        }
+        if let Some(v) = self.high_quality_print {
+            perms.high_quality_print = v;
+        }
+        Encryption {
+            user_password: self.user_password,
+            owner_password: self.owner_password,
+            permissions: perms,
+        }
+    }
 }
 
 /// A page watermark. Set `text` for a shaped-word mark (defaulting to `DRAFT`
@@ -222,6 +308,17 @@ pub fn render_oneshot(
     run_pipeline(&program, opts.unwrap_or_default(), fonts)
 }
 
+/// Glue one or more foreign PDF documents after `base`, page by page, returning
+/// the merged PDF. Equivalent to `RenderOptions.appendPdfs` but usable on
+/// already-emitted bytes. Throws `TurboPdfError` if any input fails to parse or
+/// the inputs together contain no pages.
+#[napi]
+pub fn append_pdf(base: Buffer, extras: Vec<Buffer>) -> napi::Result<Buffer> {
+    let refs: Vec<&[u8]> = extras.iter().map(|b| b.as_ref()).collect();
+    let merged = append_pdfs(base.as_ref(), &refs).map_err(errors::from_append)?;
+    Ok(merged.into())
+}
+
 /// The shared render pipeline: cascade + geometry + fonts -> `render_pages` ->
 /// `emit_pdf`. Diagnostics flow into the result; only fatal faults throw.
 fn run_pipeline(
@@ -249,7 +346,15 @@ fn run_pipeline(
     let resolver = MapResolver::new(opts.images.unwrap_or_default());
 
     let mut diags = Diagnostics::default();
-    let emit = emit_options(opts.meta, opts.watermark, registry);
+    let conformance = Conformance {
+        pdf_a: opts.pdf_a.unwrap_or(false),
+        pdf_ua: opts.pdf_ua.unwrap_or(false),
+        lang: opts.lang,
+        cmyk: opts.cmyk.unwrap_or(false),
+        encryption: opts.encryption.map(JsEncryption::into_core),
+    };
+    let append = opts.append_pdfs.unwrap_or_default();
+    let emit = emit_options(opts.meta, opts.watermark, registry, conformance);
 
     let pages = {
         let inputs = RenderInputs {
@@ -263,13 +368,36 @@ fn run_pipeline(
         };
         render_pages(&inputs, &mut diags).map_err(errors::from_render)?
     };
+    let page_count = pages.len() as u32;
     let pdf = emit_pdf_with_images(&pages, &emit, image_source(&resolver));
+    let pdf = apply_append(pdf, &append)?;
 
     Ok(RenderResult {
         pdf: pdf.into(),
         diagnostics: diagnostics_to_js(&diags),
-        page_count: pages.len() as u32,
+        page_count,
     })
+}
+
+/// The per-render conformance / encryption toggles lowered to core types,
+/// extracted from [`RenderOptions`] before it is partly consumed.
+struct Conformance {
+    pdf_a: bool,
+    pdf_ua: bool,
+    lang: Option<String>,
+    cmyk: bool,
+    encryption: Option<Encryption>,
+}
+
+/// Glue each foreign PDF blob after the rendered `pdf`, page by page. A parse
+/// failure on any input becomes a fatal `TurboPdfError`. With no extras the input
+/// passes through unchanged.
+fn apply_append(pdf: Vec<u8>, extras: &[Buffer]) -> napi::Result<Vec<u8>> {
+    if extras.is_empty() {
+        return Ok(pdf);
+    }
+    let refs: Vec<&[u8]> = extras.iter().map(|b| b.as_ref()).collect();
+    append_pdfs(&pdf, &refs).map_err(errors::from_append)
 }
 
 /// The image source for layout/emit: the caller's resolver when it carries
@@ -289,6 +417,7 @@ fn emit_options(
     meta: Option<DocMeta>,
     watermark: Option<JsWatermark>,
     registry: &FontRegistry,
+    conformance: Conformance,
 ) -> EmitOptions {
     let mut opts = EmitOptions::default();
     if let Some(m) = meta {
@@ -299,6 +428,11 @@ fn emit_options(
         opts.creation_date = m.creation_date;
     }
     opts.watermark = watermark.and_then(|w| build_watermark(w, registry));
+    opts.cmyk = conformance.cmyk;
+    opts.pdf_a = conformance.pdf_a;
+    opts.pdf_ua = conformance.pdf_ua;
+    opts.lang = conformance.lang;
+    opts.encryption = conformance.encryption;
     opts
 }
 
