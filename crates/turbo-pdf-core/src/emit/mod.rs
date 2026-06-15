@@ -20,6 +20,8 @@
 
 mod color;
 mod document;
+#[cfg(feature = "encrypt")]
+mod encrypt;
 mod fonts;
 mod graphics;
 mod image;
@@ -43,6 +45,9 @@ use crate::paginate::Page;
 pub use fonts::FontStore;
 pub use image::ImageStore;
 pub use watermark::{ImageWatermark, TextWatermark, Watermark};
+
+#[cfg(feature = "encrypt")]
+pub use encrypt::{Encryption, Permissions};
 
 /// Document metadata plus the determinism knob for the creation date (§7, §14)
 /// and an optional page [`Watermark`].
@@ -71,6 +76,14 @@ pub struct EmitOptions {
     /// default so a UA document always carries a language (AC-11.1).
     #[cfg(feature = "pdf-ua")]
     pub lang: Option<String>,
+    /// AES-256 password protection (the `encrypt` feature). `None` (the default)
+    /// emits an unencrypted, byte-deterministic PDF. When set, every string and
+    /// stream is AES-256-CBC encrypted and an `/Encrypt` dict is written, so a
+    /// reader requires the password — and the output is intentionally
+    /// non-deterministic (random salts/IVs). Gated so the default build pulls in
+    /// no crypto crates and stays byte-for-byte unchanged.
+    #[cfg(feature = "encrypt")]
+    pub encryption: Option<Encryption>,
 }
 
 /// The fixed creation-date sentinel: `2000-01-01T00:00:00Z`. Used whenever the

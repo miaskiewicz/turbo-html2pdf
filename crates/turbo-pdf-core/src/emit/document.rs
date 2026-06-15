@@ -112,6 +112,25 @@ pub fn build(pages: &[Page], opts: &EmitOptions, resolver: &dyn ImageResolver) -
     write_pdfa_objects(&mut pdf, &plan, opts);
     #[cfg(feature = "pdf-ua")]
     ua.write(&mut pdf, &plan.page_refs, opts);
+    finish(pdf, opts)
+}
+
+/// Serialise the finished `pdf`, applying AES-256 password encryption when the
+/// caller set [`EmitOptions::encryption`] (the `encrypt` feature). Without the
+/// feature — or with `encryption: None` — this is exactly `pdf.finish()`, so the
+/// default path is byte-for-byte unchanged.
+#[cfg(feature = "encrypt")]
+fn finish(pdf: pdf_writer::Pdf, opts: &EmitOptions) -> Vec<u8> {
+    let bytes = pdf.finish();
+    match &opts.encryption {
+        Some(enc) => super::encrypt::encrypt_pdf(&bytes, enc),
+        None => bytes,
+    }
+}
+
+/// Without the `encrypt` feature, finishing is just `pdf.finish()`.
+#[cfg(not(feature = "encrypt"))]
+fn finish(pdf: pdf_writer::Pdf, _opts: &EmitOptions) -> Vec<u8> {
     pdf.finish()
 }
 

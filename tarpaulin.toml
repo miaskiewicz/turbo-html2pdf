@@ -71,5 +71,14 @@ exclude-files = [
     # report.)
     "crates/turbo-pdf-core/src/emit/ua.rs",
     "crates/turbo-pdf-core/src/emit/tounicode.rs",
+    # Opt-in `encrypt` feature (Phase 15b): AES-256 PDF password protection. Off
+    # in normal builds — the module and its crypto deps are not compiled under
+    # default features (same as perf.rs / endnotes.rs), so it is not in the
+    # default coverage surface. Covered by the `--features encrypt` tests in
+    # tests/encrypt.rs (a real qpdf round-trip when qpdf is on PATH). Listed
+    # defensively so a stray tarpaulin cfg quirk cannot flag the gated-out module.
+    "crates/turbo-pdf-core/src/emit/encrypt.rs",
+    "crates/turbo-pdf-core/src/emit/encrypt/parse.rs",
+    "crates/turbo-pdf-core/src/emit/encrypt/serialize.rs",
 ]
 fail-under = 100.0

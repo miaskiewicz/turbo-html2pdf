@@ -66,6 +66,15 @@ pdf-a = []
 # `DisplayDocTitle` viewer preference. Validated with veraPDF `--flavour ua1`.
 pdf-ua = []
 
+# AES-256 password protection (PDF 2.0 Standard Security Handler, V=5/R=6,
+# AESV3). Off by default: the default build is byte-for-byte unchanged and pulls
+# in NO crypto crates. This is the ONE place the engine's "no randomness" rule is
+# waived — encryption legitimately needs entropy for salts/IVs — and ONLY under
+# this feature, via `getrandom`. Output with a password set is intentionally
+# non-deterministic (random salts/IV); with `encryption: None` (even feature-on)
+# the output stays byte-deterministic.
+encrypt = ["dep:aes", "dep:cbc", "dep:sha2", "dep:getrandom"]
+
 [dependencies]
 minijinja = { workspace = true }
 serde = { workspace = true }
@@ -96,6 +105,16 @@ lopdf = { version = "0.36.0", default-features = false, optional = true }
 # shape/gradient/clip rendering stays fully deterministic. resvg re-exports `usvg`
 # and `tiny-skia`, so they need no separate dependency line. See src/svg.rs.
 resvg = { version = "=0.45.1", default-features = false, optional = true }
+
+# --- `encrypt` feature crypto deps (optional; only compiled with `--features
+# encrypt`). Pinned to the RustCrypto 0.8/0.10-era + getrandom 0.2, which build
+# on the repo's MSRV (1.82). `aes` = AES-256 block cipher, `cbc` = CBC mode (with
+# IV), `sha2` = the SHA-256/384/512 used by the Algorithm 2.B hardened hash,
+# `getrandom` = the OS CSPRNG for salts/IVs.
+aes = { version = "0.8", optional = true }
+cbc = { version = "0.1", optional = true }
+sha2 = { version = "0.10", optional = true }
+getrandom = { version = "0.2", optional = true }
 
 [dev-dependencies]
 serde_json = { workspace = true }

@@ -34,6 +34,8 @@ pub use emit::{
     emit_pdf, emit_pdf_with_images, EmitOptions, ImageWatermark, TextWatermark, Watermark,
     SENTINEL_DATE,
 };
+#[cfg(feature = "encrypt")]
+pub use emit::{Encryption, Permissions};
 pub use error::{CompileError, Diagnostics, ErrorCode, Lint, LintCode, RenderError, Span};
 pub use image::{ImageResolver, NoImages};
 pub use layout::fragment::{
