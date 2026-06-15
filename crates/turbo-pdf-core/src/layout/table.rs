@@ -29,6 +29,10 @@ struct RowRef<'a> {
     node_id: NodeId,
     cells: Vec<&'a LayoutBox>,
     repeat: Option<RepeatKind>,
+    /// The row's PDF/UA structure role (`pdf-ua`), so the synthetic row fragment
+    /// can carry `TableRow` for the tagged-PDF struct tree (AC-11.1).
+    #[cfg(feature = "pdf-ua")]
+    ua_role: Option<crate::layout::fragment::UaRole>,
 }
 
 fn cells_of(row: &LayoutBox) -> Vec<&LayoutBox> {
@@ -58,6 +62,8 @@ fn row_ref<'a>(row: &'a LayoutBox, repeat: Option<RepeatKind>) -> RowRef<'a> {
         node_id: row.node_id,
         cells: cells_of(row),
         repeat,
+        #[cfg(feature = "pdf-ua")]
+        ua_role: row.ua_role,
     }
 }
 
@@ -386,6 +392,10 @@ fn make_row_frag(row: &RowRef, r: usize, geom: &Geom, cx: f32, cy: f32) -> Fragm
         content,
     );
     f.break_meta.repeatable = row.repeat;
+    #[cfg(feature = "pdf-ua")]
+    {
+        f.role = row.ua_role;
+    }
     f
 }
 

@@ -38,6 +38,14 @@ pub struct LayoutBox {
     /// re-parsing the ~25 properties. The (one-time) independence classification
     /// is also cached so context-*dependent* boxes never re-scan their values.
     style_cache: RefCell<StyleCache>,
+    /// The PDF/UA structure role derived from this box's HTML tag (`pdf-ua`),
+    /// carried down to the fragment so the emitter can tag it (AC-11.1).
+    #[cfg(feature = "pdf-ua")]
+    pub ua_role: Option<crate::layout::fragment::UaRole>,
+    /// Alternate text for an `<img>` (`alt` attribute), written as `/Alt` on the
+    /// figure's struct element (`pdf-ua`).
+    #[cfg(feature = "pdf-ua")]
+    pub ua_alt: Option<String>,
 }
 
 /// Per-box cache of the resolved style and its context-independence verdict.
@@ -279,6 +287,10 @@ fn build_block_box(el: &StyledElement, ids: &mut Ids) -> LayoutBox {
             kind: BoxKind::Directive(*kind),
             image: None,
             style_cache: RefCell::new(StyleCache::Unknown),
+            #[cfg(feature = "pdf-ua")]
+            ua_role: None,
+            #[cfg(feature = "pdf-ua")]
+            ua_alt: None,
         };
     }
     let display = display_of(&el.style);
@@ -291,6 +303,10 @@ fn build_block_box(el: &StyledElement, ids: &mut Ids) -> LayoutBox {
         kind,
         image: image_of(el),
         style_cache: RefCell::new(StyleCache::Unknown),
+        #[cfg(feature = "pdf-ua")]
+        ua_role: ua::role_of(el),
+        #[cfg(feature = "pdf-ua")]
+        ua_alt: ua::alt_of(el),
     }
 }
 
@@ -373,6 +389,11 @@ fn anon_lines_box(
         kind: BoxKind::Lines(items),
         image: None,
         style_cache: RefCell::new(StyleCache::Unknown),
+        // An anonymous block wrapping an inline run reads as a paragraph of text.
+        #[cfg(feature = "pdf-ua")]
+        ua_role: Some(crate::layout::fragment::UaRole::Paragraph),
+        #[cfg(feature = "pdf-ua")]
+        ua_alt: None,
     }
 }
 
@@ -446,5 +467,72 @@ pub fn build_box_tree(styled: &[StyledNode]) -> LayoutBox {
         kind,
         image: None,
         style_cache: RefCell::new(StyleCache::Unknown),
+        // The synthetic document root maps to the `Document` structure element.
+        #[cfg(feature = "pdf-ua")]
+        ua_role: Some(crate::layout::fragment::UaRole::Group),
+        #[cfg(feature = "pdf-ua")]
+        ua_alt: None,
+    }
+}
+
+/// PDF/UA role derivation from the semantic HTML tag (`pdf-ua` feature, AC-11.1).
+#[cfg(feature = "pdf-ua")]
+mod ua {
+    use crate::layout::fragment::UaRole;
+    use crate::node::Tag;
+    use crate::style::StyledElement;
+
+    /// The structure role for a styled element's HTML tag, or `None` for tags
+    /// that are transparent to tagging (their content attaches to an ancestor).
+    pub(super) fn role_of(el: &StyledElement) -> Option<UaRole> {
+        let Tag::Html(name) = &el.tag else {
+            return None;
+        };
+        role_for_tag(name)
+    }
+
+    /// Map a lowercase HTML tag name to its structure role.
+    fn role_for_tag(name: &str) -> Option<UaRole> {
+        if let Some(level) = heading_level(name) {
+            return Some(UaRole::Heading(level));
+        }
+        Some(match name {
+            "p" => UaRole::Paragraph,
+            "ul" | "ol" => UaRole::List,
+            "li" => UaRole::ListItem,
+            "table" => UaRole::Table,
+            "tr" => UaRole::TableRow,
+            "th" => UaRole::TableHeader,
+            "td" => UaRole::TableData,
+            "img" => UaRole::Figure,
+            "span" | "a" | "em" | "strong" | "b" | "i" => UaRole::Span,
+            "div" | "section" | "article" | "header" | "footer" | "main" | "nav" | "aside" => {
+                UaRole::Group
+            }
+            _ => return None,
+        })
+    }
+
+    /// The 1-based heading level of `h1`..`h6`, or `None`.
+    fn heading_level(name: &str) -> Option<u8> {
+        let level = name.strip_prefix('h')?.parse::<u8>().ok()?;
+        (1..=6).contains(&level).then_some(level)
+    }
+
+    /// The `alt` text of an `<img>` (empty allowed: an empty `/Alt` is valid and
+    /// marks the figure as decorative-with-no-description for readers).
+    pub(super) fn alt_of(el: &StyledElement) -> Option<String> {
+        match &el.tag {
+            Tag::Html(name) if name == "img" => Some(alt_attr(el).unwrap_or("").to_string()),
+            _ => None,
+        }
+    }
+
+    /// The `alt` attribute value of a styled element, if present.
+    fn alt_attr(el: &StyledElement) -> Option<&str> {
+        el.attrs
+            .iter()
+            .find(|a| a.name == "alt")
+            .map(|a| a.value.as_str())
     }
 }

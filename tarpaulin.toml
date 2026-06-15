@@ -60,5 +60,16 @@ exclude-files = [
     # `#[cfg]` lines simply are not compiled by default, so they never appear in
     # the report.)
     "crates/turbo-pdf-core/src/emit/pdfa.rs",
+    # Opt-in `pdf-ua` feature (Phase 15b, AC-11.1): the tagged-PDF emitter and its
+    # `/ToUnicode` CMap builder are gated-only files, not compiled under default
+    # features (like endnotes.rs). Covered by the `--features pdf-ua` tests in
+    # tests/pdf_ua.rs (which include a veraPDF `--flavour ua1` compliance check).
+    # Listed defensively. (The cross-cutting gated lines elsewhere — fragment.rs,
+    # boxgen.rs, block.rs, table.rs, value.rs, text/font.rs and emit/{document,
+    # page,fonts}.rs — live in files with real default coverage, so they cannot be
+    # file-excluded; they are simply not compiled by default and never enter the
+    # report.)
+    "crates/turbo-pdf-core/src/emit/ua.rs",
+    "crates/turbo-pdf-core/src/emit/tounicode.rs",
 ]
 fail-under = 100.0

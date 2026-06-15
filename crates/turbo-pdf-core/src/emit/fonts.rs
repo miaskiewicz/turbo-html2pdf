@@ -174,7 +174,25 @@ fn write_font(font: &UsedFont, chunk: &mut Chunk, alloc: &mut RefAlloc) -> Ref {
     write_cid_font(chunk, &refs, font, &remapper);
     write_descriptor(chunk, &refs, &font.face);
     embed_program(chunk, &refs, &font.face, &subset);
+    #[cfg(feature = "pdf-ua")]
+    write_to_unicode(chunk, &refs, font, &remapper);
     refs.type0
+}
+
+/// Write the `/ToUnicode` CMap stream mapping each shown 2-byte glyph code (the
+/// subset-local gid) to its Unicode scalar, so a tagged PDF's text is
+/// extractable by assistive tech (`pdf-ua`, ISO 14289-1 §7.21.7).
+#[cfg(feature = "pdf-ua")]
+fn write_to_unicode(chunk: &mut Chunk, refs: &FontRefs, font: &UsedFont, remapper: &GlyphRemapper) {
+    let used: Vec<u16> = font.glyphs.iter().copied().collect();
+    let pairs: Vec<(u16, u32)> = font
+        .face
+        .glyph_to_unicode(&used)
+        .into_iter()
+        .filter_map(|(old, cp)| remapper.get(old).map(|new| (new, cp)))
+        .collect();
+    let cmap = super::tounicode::build(&pairs);
+    chunk.stream(refs.to_unicode, cmap.as_bytes()).finish();
 }
 
 /// Run the subsetter, falling back to the original bytes if it declines the
@@ -186,12 +204,15 @@ fn subset_bytes(face: &FontFace, remapper: &GlyphRemapper) -> Vec<u8> {
     }
 }
 
-/// The four object refs a single embedded font occupies.
+/// The object refs a single embedded font occupies (one extra `/ToUnicode`
+/// stream under `pdf-ua`).
 struct FontRefs {
     type0: Ref,
     cid: Ref,
     descriptor: Ref,
     program: Ref,
+    #[cfg(feature = "pdf-ua")]
+    to_unicode: Ref,
 }
 
 impl FontRefs {
@@ -201,6 +222,8 @@ impl FontRefs {
             cid: alloc.bump(),
             descriptor: alloc.bump(),
             program: alloc.bump(),
+            #[cfg(feature = "pdf-ua")]
+            to_unicode: alloc.bump(),
         }
     }
 }
@@ -235,6 +258,8 @@ fn write_type0(chunk: &mut Chunk, refs: &FontRefs, font: &UsedFont) {
     type0.base_font(Name(name.as_bytes()));
     type0.encoding_predefined(Name(b"Identity-H"));
     type0.descendant_font(refs.cid);
+    #[cfg(feature = "pdf-ua")]
+    type0.to_unicode(refs.to_unicode);
     type0.finish();
 }
 

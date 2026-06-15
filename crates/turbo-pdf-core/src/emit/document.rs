@@ -42,6 +42,8 @@ use super::meta::write_info;
 use super::page::content_stream;
 #[cfg(feature = "pdf-a")]
 use super::pdfa;
+#[cfg(feature = "pdf-ua")]
+use super::ua;
 use super::unit::px_to_pt;
 use super::watermark;
 #[cfg(feature = "xref")]
@@ -49,8 +51,12 @@ use super::xref::Xref;
 use super::EmitOptions;
 
 /// The number of PDF objects each embedded face occupies (Type0, CIDFont,
-/// FontDescriptor, font program).
+/// FontDescriptor, font program). Under `pdf-ua` each face also carries a
+/// `/ToUnicode` CMap stream, so it occupies one more object (AC-11.1).
+#[cfg(not(feature = "pdf-ua"))]
 const OBJECTS_PER_FONT: i32 = 4;
+#[cfg(feature = "pdf-ua")]
+const OBJECTS_PER_FONT: i32 = 5;
 
 /// Build the whole PDF document from the paginated pages.
 pub fn build(pages: &[Page], opts: &EmitOptions, resolver: &dyn ImageResolver) -> Vec<u8> {
@@ -71,11 +77,32 @@ pub fn build(pages: &[Page], opts: &EmitOptions, resolver: &dyn ImageResolver) -
         #[cfg(feature = "xref")]
         &xref,
     );
+    // The `pdf-ua` structure tree's objects start after every object the fixed
+    // plan already allocated (info, plus any `xref`/`pdf-a` objects), so the
+    // three features never claim the same object id.
+    #[cfg(feature = "pdf-ua")]
+    let (ua, _) = ua::UaPlan::build(pages, plan.next_free_id());
     let mut pdf = Pdf::new();
     pdf.set_version(1, 7);
-    write_catalog(&mut pdf, &plan);
+    write_catalog(
+        &mut pdf,
+        &plan,
+        #[cfg(feature = "pdf-ua")]
+        &ua,
+        #[cfg(feature = "pdf-ua")]
+        opts,
+    );
     write_page_tree(&mut pdf, pages, &plan);
-    write_pages(&mut pdf, pages, &plan, &fonts, &images, opts);
+    write_pages(
+        &mut pdf,
+        pages,
+        &plan,
+        &fonts,
+        &images,
+        opts,
+        #[cfg(feature = "pdf-ua")]
+        &ua,
+    );
     fonts.write(&mut pdf, &mut plan.font_alloc());
     images.write(&mut pdf, &mut plan.image_alloc());
     write_info(&mut pdf, plan.info, opts);
@@ -83,6 +110,8 @@ pub fn build(pages: &[Page], opts: &EmitOptions, resolver: &dyn ImageResolver) -
     write_xref(&mut pdf, &plan, &xref);
     #[cfg(feature = "pdf-a")]
     write_pdfa_objects(&mut pdf, &plan, opts);
+    #[cfg(feature = "pdf-ua")]
+    ua.write(&mut pdf, &plan.page_refs, opts);
     pdf.finish()
 }
 
@@ -199,6 +228,27 @@ impl Plan {
     fn image_alloc(&self) -> RefAlloc {
         RefAlloc::new(self.images_start)
     }
+
+    /// The first object id not used by the fixed plan — where further feature
+    /// objects (the `pdf-ua` structure tree) begin. Accounts for the optional
+    /// `xref` objects (a `/Dests` dict + one per Link) and `pdf-a` objects (ICC +
+    /// XMP), so the three features never claim the same id when co-enabled.
+    #[cfg(feature = "pdf-ua")]
+    fn next_free_id(&self) -> i32 {
+        // `mut` is only exercised when `xref`/`pdf-a` are also on; with neither,
+        // the blocks below are cfg'd out and the binding is never reassigned.
+        #[allow(unused_mut)]
+        let mut next = self.info.get() + 1;
+        #[cfg(feature = "xref")]
+        {
+            next += i32::from(self.has_dests) + self.link_refs.len() as i32;
+        }
+        #[cfg(feature = "pdf-a")]
+        {
+            next += 2;
+        }
+        next
+    }
 }
 
 /// Allocate the `(page, content)` ref pair for each page, advancing `next`.
@@ -244,6 +294,7 @@ fn xref_object_count(xref: &Xref) -> i32 {
     i32::from(xref.has_dests()) + xref.link_count() as i32
 }
 
+#[cfg(not(feature = "pdf-ua"))]
 fn write_catalog(pdf: &mut Pdf, plan: &Plan) {
     let mut catalog = pdf.catalog(plan.catalog);
     catalog.pages(plan.page_tree);
@@ -268,6 +319,29 @@ fn write_pdfa_objects(pdf: &mut Pdf, plan: &Plan, opts: &EmitOptions) {
     pdf.set_file_id(pdfa::file_id(opts));
 }
 
+/// `pdf-ua` catalog: the page tree plus the tagged-PDF wiring (`StructTreeRoot`,
+/// `MarkInfo`, `/Lang`, the XMP metadata stream and `DisplayDocTitle`).
+#[cfg(feature = "pdf-ua")]
+fn write_catalog(pdf: &mut Pdf, plan: &Plan, ua: &ua::UaPlan, opts: &EmitOptions) {
+    use pdf_writer::TextStr;
+    let mut cat = pdf.catalog(plan.catalog);
+    cat.pages(plan.page_tree);
+    // When co-enabled with `xref`/`pdf-a`, their catalog entries ride along too,
+    // so enabling accessibility never drops links or the archival OutputIntent.
+    #[cfg(feature = "xref")]
+    if plan.has_dests {
+        cat.destinations(plan.dests);
+    }
+    #[cfg(feature = "pdf-a")]
+    pdfa::write_catalog_entries(&mut cat, plan.icc, plan.xmp);
+    cat.pair(Name(b"StructTreeRoot"), ua.root_ref());
+    cat.mark_info().marked(true);
+    cat.metadata(ua.metadata_ref());
+    let lang = opts.lang.as_deref().unwrap_or("en-US");
+    cat.lang(TextStr(lang));
+    cat.viewer_preferences().display_doc_title(true);
+}
+
 fn write_page_tree(pdf: &mut Pdf, pages: &[Page], plan: &Plan) {
     let kids = plan.page_refs.iter().map(|(p, _)| *p);
     pdf.pages(plan.page_tree)
@@ -276,6 +350,7 @@ fn write_page_tree(pdf: &mut Pdf, pages: &[Page], plan: &Plan) {
 }
 
 /// Write each page object (with resources) and its content stream.
+#[cfg(not(feature = "pdf-ua"))]
 fn write_pages(
     pdf: &mut Pdf,
     pages: &[Page],
@@ -287,6 +362,31 @@ fn write_pages(
     for (i, (page, (page_ref, content_ref))) in pages.iter().zip(&plan.page_refs).enumerate() {
         write_page_object(pdf, page, plan, (*page_ref, *content_ref), opts, i);
         let bytes = content_stream(page, fonts, images, opts.watermark.as_ref());
+        pdf.stream(*content_ref, &bytes);
+    }
+}
+
+/// `pdf-ua` variant: each page also carries its `/StructParents` key and its
+/// content stream's marked-content tags (the page index threads both).
+#[cfg(feature = "pdf-ua")]
+fn write_pages(
+    pdf: &mut Pdf,
+    pages: &[Page],
+    plan: &Plan,
+    fonts: &FontStore,
+    images: &ImageStore,
+    opts: &EmitOptions,
+    ua: &ua::UaPlan,
+) {
+    for (i, (page, (page_ref, content_ref))) in pages.iter().zip(&plan.page_refs).enumerate() {
+        write_page_object(pdf, page, plan, (*page_ref, *content_ref), opts, i);
+        let bytes = content_stream(
+            page,
+            fonts,
+            images,
+            opts.watermark.as_ref(),
+            &ua.page_tags(i),
+        );
         pdf.stream(*content_ref, &bytes);
     }
 }
@@ -314,6 +414,8 @@ fn write_page_object(
     obj.parent(plan.page_tree);
     obj.media_box(media_box(page));
     obj.contents(content_ref);
+    #[cfg(feature = "pdf-ua")]
+    obj.struct_parents(page_idx as i32);
     write_resources(&mut obj, plan, opts);
     write_page_annots(&mut obj, plan, page_idx);
     obj.finish();

@@ -326,6 +326,10 @@ pub(crate) fn layout_box_sized(
         children,
         #[cfg(feature = "xref")]
         xref: box_xref(lb),
+        #[cfg(feature = "pdf-ua")]
+        role: lb.ua_role,
+        #[cfg(feature = "pdf-ua")]
+        alt: None,
     }
 }
 
@@ -414,7 +418,7 @@ fn replaced_image_box(
     let src = lb.image.as_ref().filter(|s| s.replaced)?;
     let intrinsic = probe_source(src, ctx)?;
     let sized = size_replaced(src.name.clone(), intrinsic, &size_ctx(bs, cb_width, ctx));
-    Some(image_fragment(lb.node_id, bx, by, &sized, bs))
+    Some(image_fragment(lb, bx, by, &sized, bs))
 }
 
 /// Assemble the [`SizeCtx`] for the image sizer from a box's style and the
@@ -429,15 +433,9 @@ fn size_ctx<'a>(bs: &'a BoxStyle, cb_width: f32, ctx: &Ctx) -> SizeCtx<'a> {
 
 /// Build a positioned `Image` fragment from a sized image, carrying the box's
 /// break metadata so a tall image still obeys break hints.
-fn image_fragment(
-    node_id: NodeId,
-    bx: f32,
-    by: f32,
-    sized: &SizedImage,
-    bs: &BoxStyle,
-) -> Fragment {
+fn image_fragment(lb: &LayoutBox, bx: f32, by: f32, sized: &SizedImage, bs: &BoxStyle) -> Fragment {
     Fragment {
-        node_id,
+        node_id: lb.node_id,
         x: bx,
         y: by,
         width: sized.width,
@@ -447,6 +445,10 @@ fn image_fragment(
         children: Vec::new(),
         #[cfg(feature = "xref")]
         xref: super::fragment::XrefMeta::default(),
+        #[cfg(feature = "pdf-ua")]
+        role: lb.ua_role,
+        #[cfg(feature = "pdf-ua")]
+        alt: lb.ua_alt.clone(),
     }
 }
 

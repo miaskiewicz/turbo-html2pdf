@@ -28,6 +28,10 @@ mod page;
 #[cfg(feature = "pdf-a")]
 mod pdfa;
 mod text;
+#[cfg(feature = "pdf-ua")]
+mod tounicode;
+#[cfg(feature = "pdf-ua")]
+mod ua;
 mod unit;
 mod watermark;
 #[cfg(feature = "xref")]
@@ -62,6 +66,11 @@ pub struct EmitOptions {
     /// A faded mark stamped behind the body on every page (§7, Phase 17). `None`
     /// (the default) emits no watermark, so every existing caller compiles.
     pub watermark: Option<Watermark>,
+    /// The document's natural-language tag (RFC 3066, e.g. `en-US`), written as
+    /// the catalog `/Lang` for tagged PDF (`pdf-ua`). `None` falls back to a
+    /// default so a UA document always carries a language (AC-11.1).
+    #[cfg(feature = "pdf-ua")]
+    pub lang: Option<String>,
 }
 
 /// The fixed creation-date sentinel: `2000-01-01T00:00:00Z`. Used whenever the

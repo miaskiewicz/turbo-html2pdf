@@ -149,6 +149,38 @@ impl FontFace {
         self.ttf().glyph_hor_advance(GlyphId(glyph_id)).unwrap_or(0)
     }
 
+    /// Reverse the font's Unicode `cmap` into a glyph-id → codepoint map for the
+    /// given used glyphs, for the `/ToUnicode` CMap a tagged PDF needs so screen
+    /// readers can extract text (`pdf-ua`, ISO 14289-1 §7.21.7). The first
+    /// codepoint mapping to a glyph wins (deterministic: subtables and codepoints
+    /// are iterated in table order). Glyphs with no Unicode mapping are omitted.
+    #[cfg(feature = "pdf-ua")]
+    pub fn glyph_to_unicode(&self, glyphs: &[u16]) -> Vec<(u16, u32)> {
+        use std::collections::BTreeMap;
+        let mut map: BTreeMap<u16, u32> = BTreeMap::new();
+        self.fill_cmap_reverse(&mut map);
+        glyphs
+            .iter()
+            .filter_map(|&g| map.get(&g).map(|&cp| (g, cp)))
+            .collect()
+    }
+
+    /// Populate `out` with glyph-id → codepoint by walking every Unicode cmap
+    /// subtable. Keeps the lowest codepoint per glyph (insert-if-absent in the
+    /// ascending `codepoints` walk).
+    #[cfg(feature = "pdf-ua")]
+    fn fill_cmap_reverse(&self, out: &mut std::collections::BTreeMap<u16, u32>) {
+        let face = self.ttf();
+        let Some(cmap) = face.tables().cmap else {
+            return;
+        };
+        for sub in cmap.subtables {
+            if sub.is_unicode() {
+                sub.codepoints(|cp| record_codepoint(&sub, cp, out));
+            }
+        }
+    }
+
     /// Whether the font program carries a CFF/CFF2 outline table (an OpenType/CFF
     /// font), as opposed to TrueType `glyf` outlines. The emitter embeds CFF as a
     /// `FontFile3` and TrueType as a `FontFile2` (§7).
@@ -242,6 +274,19 @@ impl FontFace {
         let glyphs = self.shape(text);
         let advance: i64 = glyphs.iter().map(|g| i64::from(g.x_advance)).sum();
         advance as f32 * self.scale(font_size) + letter_spacing * glyphs.len() as f32
+    }
+}
+
+/// Record `cp → glyph` reversed into `out`, keeping the first (lowest) codepoint
+/// seen for each glyph so the `/ToUnicode` mapping is deterministic (`pdf-ua`).
+#[cfg(feature = "pdf-ua")]
+fn record_codepoint(
+    sub: &rustybuzz::ttf_parser::cmap::Subtable,
+    cp: u32,
+    out: &mut std::collections::BTreeMap<u16, u32>,
+) {
+    if let Some(gid) = sub.glyph_index(cp) {
+        out.entry(gid.0).or_insert(cp);
     }
 }
 

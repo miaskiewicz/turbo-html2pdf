@@ -16,6 +16,45 @@ use super::value::{BorderEdges, BreakRule, Rgba};
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
 pub struct NodeId(pub u32);
 
+/// A PDF/UA structure role carried from the semantic HTML tag down to the
+/// fragment so the tagged-PDF emitter (`pdf-ua` feature) can build a
+/// `StructTreeRoot`. Mirrors the subset of ISO 32000 standard structure types
+/// this engine maps to; the emitter translates it to a `pdf_writer::StructRole`.
+///
+/// Gated to the `pdf-ua` feature so the default build carries no extra field on
+/// every fragment (zero cost when the feature is off, AC-11.1).
+#[cfg(feature = "pdf-ua")]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum UaRole {
+    /// A structural container with no own marked content (`<div>`, `<section>`).
+    Group,
+    /// `<h1>`..`<h6>`, by 1-based level.
+    Heading(u8),
+    /// A paragraph (`<p>` and block text).
+    Paragraph,
+    /// A list (`<ul>`/`<ol>`).
+    List,
+    /// A list item (`<li>`).
+    ListItem,
+    /// A list item's body (the content of an `<li>`).
+    ListBody,
+    /// A table (`<table>`).
+    Table,
+    /// A table row (`<tr>`).
+    TableRow,
+    /// A table header cell (`<th>`).
+    TableHeader,
+    /// A table data cell (`<td>`).
+    TableData,
+    /// A figure (`<img>`); carries `/Alt` from the `alt` attribute.
+    Figure,
+    /// A run of inline text (`<span>`, `<a>`, anonymous inline boxes).
+    Span,
+    /// Page decoration to be skipped by assistive tech (`/Artifact`): running
+    /// header/footer chrome and watermarks. Not a structure element.
+    Artifact,
+}
+
 /// One shaped glyph, positioned relative to its `TextLine` fragment's origin so
 /// shifting the fragment (e.g. during pagination) never rewrites glyph offsets.
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -121,6 +160,15 @@ pub struct Fragment {
     /// default build does not carry these fields, so its galley is unchanged.
     #[cfg(feature = "xref")]
     pub xref: XrefMeta,
+    /// The PDF/UA structure role this fragment carries (`pdf-ua` feature). `None`
+    /// means the fragment is transparent to tagging — its marked content attaches
+    /// to the nearest ancestor that has a role. Cfg'd out by default so the
+    /// fragment is unchanged in the default build (AC-11.1).
+    #[cfg(feature = "pdf-ua")]
+    pub role: Option<UaRole>,
+    /// Alternate text for a [`UaRole::Figure`] (`<img alt>`), written as `/Alt`.
+    #[cfg(feature = "pdf-ua")]
+    pub alt: Option<String>,
 }
 
 /// Cross-reference data a fragment carries when the `xref` feature is on: an
@@ -156,6 +204,10 @@ impl Fragment {
             children: Vec::new(),
             #[cfg(feature = "xref")]
             xref: XrefMeta::default(),
+            #[cfg(feature = "pdf-ua")]
+            role: None,
+            #[cfg(feature = "pdf-ua")]
+            alt: None,
         }
     }
 

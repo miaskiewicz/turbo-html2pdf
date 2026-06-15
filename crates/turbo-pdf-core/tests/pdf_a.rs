@@ -72,6 +72,9 @@ fn full_options() -> EmitOptions {
         keywords: Some("archive, pdfa, sRGB".to_string()),
         creation_date: None,
         watermark: None,
+        // Spread the rest so feature-gated fields (e.g. `lang` under `pdf-ua`)
+        // are filled when this test is compiled alongside other features.
+        ..EmitOptions::default()
     }
 }
 

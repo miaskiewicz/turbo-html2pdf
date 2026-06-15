@@ -59,6 +59,13 @@ xref = []
 # embedded. Validated with veraPDF (`--flavour 2b`) in tests/pdf_a.rs.
 pdf-a = []
 
+# Tagged / accessible PDF (PDF/UA-1, AC-11.1): carries a structure role + alt
+# text from the semantic HTML down to each fragment, wraps painted content in
+# marked-content (`BDC`/`EMC`) with per-page MCIDs, and builds a `StructTreeRoot`
+# + `ParentTree` in the catalog, with `/MarkInfo`, `/Lang`, an XMP packet and the
+# `DisplayDocTitle` viewer preference. Validated with veraPDF `--flavour ua1`.
+pdf-ua = []
+
 [dependencies]
 minijinja = { workspace = true }
 serde = { workspace = true }

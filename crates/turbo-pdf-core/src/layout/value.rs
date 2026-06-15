@@ -147,6 +147,14 @@ pub struct BorderEdges {
 }
 
 impl BorderEdges {
+    /// Whether any side has a non-zero width, i.e. the border paints something
+    /// (used by the `pdf-ua` emitter to decide if a box is decoration). Gated so
+    /// it adds nothing to the default build's coverage surface (AC-11.1).
+    #[cfg(feature = "pdf-ua")]
+    pub fn any_visible(&self) -> bool {
+        self.top.width > 0 || self.right.width > 0 || self.bottom.width > 0 || self.left.width > 0
+    }
+
     /// Border widths as plain px [`Edges`].
     pub fn widths(&self) -> Edges {
         Edges {
