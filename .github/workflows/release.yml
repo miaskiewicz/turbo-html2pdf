@@ -213,6 +213,10 @@ jobs:
           registry-url: https://registry.npmjs.org
 
       - name: Build the browser package
+        # encrypt/append pull getrandom 0.3, which needs an explicit wasm RNG
+        # backend opt-in (routes salts/IVs to the Web Crypto API).
+        env:
+          RUSTFLAGS: '--cfg getrandom_backend="wasm_js"'
         run: wasm-pack build crates/turbo-pdf-wasm --target web --out-dir pkg --release
 
       - name: Stamp package name + version from the tag
@@ -254,6 +258,8 @@ jobs:
           registry-url: https://registry.npmjs.org
 
       - name: Build the batteries-included browser package
+        env:
+          RUSTFLAGS: '--cfg getrandom_backend="wasm_js"'
         run: wasm-pack build crates/turbo-pdf-wasm --target web --out-dir pkg-fonts --release -- --features bundled-fonts
 
       - name: Stamp package name + version from the tag
