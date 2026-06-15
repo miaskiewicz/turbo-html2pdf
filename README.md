@@ -2,10 +2,28 @@
 
 **Turn HTML + CSS (with a Jinja templating layer) into a PDF — natively, in Rust,
 with no headless browser.** A from-scratch document engine: templating → HTML/CSS
-layout → automatic pagination → PDF, shipped as a tiny native addon for Node, a
-WebAssembly build for the browser, and a Python wheel. No Chromium download, no
-200 ms browser spin-up, deterministic output — and it renders with **zero caller
-fonts**, because the default sans/serif/mono fonts ship in the build.
+layout → automatic pagination → PDF.
+
+The incumbent way to make a PDF from HTML is to drive headless Chrome
+(Puppeteer/Playwright/Gotenberg) — ship ~200 MB of Chromium, spin up a process per
+render, host a service. **turbo-html2pdf is just a binary.** It *is* the layout +
+PDF engine, so generating a PDF is a single library call — no Chromium to download,
+no service to run, no 200 ms spin-up, deterministic output, and **tens to hundreds
+of times faster** ([benchmarks](#why-its-fast)). It renders with **zero caller
+fonts** too, because the default sans/serif/mono fonts ship in the build.
+
+**Then the kicker: the same engine also runs *inside* a web browser.** Because it
+compiles to WebAssembly (~3 MB), you can generate PDFs 100% client-side — no
+server, no backend ([details](#-bonus-the-same-engine-runs-inside-a-web-browser)).
+
+> ⚠️ "Browser" means two different things here, and that's the whole trick:
+> turbo-html2pdf needs **no headless *Chromium*** to *generate* a PDF (it does the
+> layout itself), *and* it can run **inside a *web browser*** as a WASM module.
+> Different senses of the word — the first is what we replace, the second is where
+> we also run.
+
+Ships as a tiny native addon for **Node**, a **WASM** build for the **browser**,
+and a **Python** wheel — one engine, every runtime.
 
 > The name says exactly what it does — HTML → PDF — and avoids clashing with the
 > unrelated "TurboPDF".
@@ -32,11 +50,16 @@ PDF. The Rust engine lives in
 
 > Status: the npm and PyPI packages ship at **`v0.1.4`**.
 
-## 🌐 It generates PDFs entirely in the browser
+## 🌐 Bonus: the same engine runs *inside* a web browser
 
-Because the engine is pure Rust → WebAssembly, it runs **100% client-side** — no
-server, no backend, no Chromium. A user pastes HTML/CSS and gets PDF bytes, all in
-the browser tab.
+Everything above is the server/CLI story — a binary that makes PDFs with no
+Chromium. Here's the kicker: because that engine is pure Rust → WebAssembly
+(~3 MB), the **identical** code also runs **100% client-side in a web-browser tab**
+— no server, no backend, no Chromium. A user pastes HTML/CSS and gets PDF bytes
+without anything leaving the page.
+
+> Note the two senses of "browser": the server path needs **no headless Chromium**
+> to *render*; this WASM path *runs in* a **web browser**. Same engine, both worlds.
 
 As far as we know, **no other library does HTML/CSS → PDF in the browser**: the
 HTML→PDF tools that match its fidelity (Puppeteer, Playwright, Gotenberg, WeasyPrint,
@@ -78,11 +101,10 @@ const { pdf } = program.render({ data: { t: 'Hi' },
 
 ## Why it's fast
 
-It does **HTML/CSS → PDF without a browser**. The incumbent way to turn HTML into a
-PDF is to drive headless Chrome (Puppeteer/Playwright/Gotenberg) — which means
-shipping ~200 MB of Chromium, paying a per-process spin-up, and a big memory
-footprint. turbo-html2pdf is a native layout + PDF engine instead, so the common
-"render one document" path is **tens to hundreds of times faster**.
+No headless Chromium means no ~200 MB browser to ship, no per-process spin-up, and
+a small memory footprint. turbo-html2pdf is a native layout + PDF engine — a library
+call, not an IPC round-trip to Chrome — so the common "render one document" path is
+**tens to hundreds of times faster**. The numbers:
 
 ### Benchmarks (this machine: Apple M3, 8 cores; `benches/competitive`)
 
