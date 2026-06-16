@@ -1729,7 +1729,7 @@ dependencies = [
 
 [[package]]
 name = "turbo-pdf-core"
-version = "0.1.5"
+version = "0.1.6"
 dependencies = [
  "aes",
  "cbc",
@@ -1757,7 +1757,7 @@ dependencies = [
 
 [[package]]
 name = "turbo-pdf-napi"
-version = "0.1.5"
+version = "0.1.6"
 dependencies = [
  "napi",
  "napi-build",
@@ -1769,7 +1769,7 @@ dependencies = [
 
 [[package]]
 name = "turbo-pdf-py"
-version = "0.1.5"
+version = "0.1.6"
 dependencies = [
  "pyo3",
  "pythonize",
@@ -1779,7 +1779,7 @@ dependencies = [
 
 [[package]]
 name = "turbo-pdf-wasm"
-version = "0.1.5"
+version = "0.1.6"
 dependencies = [
  "getrandom 0.2.17",
  "getrandom 0.3.4",
