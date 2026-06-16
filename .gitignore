@@ -20,6 +20,9 @@ yarn-error.log*
 *.node
 artifacts/
 napi/
+# `napi build` codegen sinks — keep off the hand-maintained index.d.ts/index.js
+index.generated.d.ts
+index.generated.js
 
 # ---- WASM ----
 pkg/

@@ -4,6 +4,11 @@
  * surface so that fatal faults surface as a typed `TurboPdfError` (carrying
  * `.code` and `.span`) instead of a bare Error. Non-fatal lints are returned in
  * `result.diagnostics` by the native layer and are passed through untouched.
+ *
+ * Do NOT let `napi build` overwrite this file — its plain loader has no
+ * `TurboPdfError` wrapper. The build scripts redirect codegen to
+ * `index.generated.js` (git-ignored) via `--js`; pass that flag if running
+ * `napi build` by hand.
  */
 
 "use strict";

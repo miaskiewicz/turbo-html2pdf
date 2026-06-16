@@ -1,8 +1,12 @@
 /* turbo-pdf N-API binding — TypeScript surface (Phase 10).
  *
- * Hand-maintained to mirror the `#[napi]` exports in `src/lib.rs`. When the repo
- * gains a `napi build` step in CI this can be regenerated; the shapes below are
- * the contract callers depend on. */
+ * Hand-maintained to mirror the `#[napi]` exports in `src/lib.rs`. The shapes
+ * below are the contract callers depend on — richer than napi's auto-codegen
+ * (`Span`, `TurboPdfError`, `CompileOptions`, `unknown` over `any`).
+ *
+ * Do NOT let `napi build` overwrite this file. The `build`/`build:debug` scripts
+ * redirect codegen to `index.generated.d.ts` (git-ignored) via `--dts`. If you
+ * run `napi build` by hand, pass `--dts index.generated.d.ts` too. */
 
 /** A source location: 1-based line/column (0 when unknown) and byte offset. */
 export interface Span {

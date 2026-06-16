@@ -41,8 +41,8 @@
     }
   },
   "scripts": {
-    "build": "napi build --platform --release",
-    "build:debug": "napi build --platform",
+    "build": "napi build --platform --release --dts index.generated.d.ts --js index.generated.js",
+    "build:debug": "napi build --platform --dts index.generated.d.ts --js index.generated.js",
     "build:cargo": "cargo build -p turbo-pdf-napi --release && node scripts/copy-addon.mjs",
     "test": "node --test __test__/*.test.mjs",
     "test:rust": "cargo test -p turbo-pdf-napi"
