@@ -108,10 +108,11 @@ jobs:
       - name: Trust the workspace (container runs as root)
         run: git config --global --add safe.directory '*'
       - name: Install pnpm
-        # The Alpine image's bundled Node 18 corepack has stale signing keys and
-        # dies with "Cannot find matching keyid" when it fetches pnpm. Install the
-        # pinned pnpm straight from npm instead — no corepack signature check.
-        run: npm install -g pnpm@9.0.0
+        # The Alpine image ships a corepack `pnpm` shim at /usr/local/bin/pnpm,
+        # but invoking it triggers corepack, whose bundled Node 18 signing keys
+        # are stale ("Cannot find matching keyid"). Overwrite the shim with a real
+        # pnpm from npm (--force, since the shim file already exists) — no corepack.
+        run: npm install -g pnpm@9.0.0 --force
       - name: Install JS deps (no postinstall build)
         run: pnpm install --frozen-lockfile --ignore-scripts
       - name: Build native addon (musl)
@@ -395,10 +396,11 @@ jobs:
       - name: Trust the workspace (container runs as root)
         run: git config --global --add safe.directory '*'
       - name: Install pnpm
-        # The Alpine image's bundled Node 18 corepack has stale signing keys and
-        # dies with "Cannot find matching keyid" when it fetches pnpm. Install the
-        # pinned pnpm straight from npm instead — no corepack signature check.
-        run: npm install -g pnpm@9.0.0
+        # The Alpine image ships a corepack `pnpm` shim at /usr/local/bin/pnpm,
+        # but invoking it triggers corepack, whose bundled Node 18 signing keys
+        # are stale ("Cannot find matching keyid"). Overwrite the shim with a real
+        # pnpm from npm (--force, since the shim file already exists) — no corepack.
+        run: npm install -g pnpm@9.0.0 --force
       - name: Install JS deps (no postinstall build)
         run: pnpm install --frozen-lockfile --ignore-scripts
       - name: Build native addon (musl, svg)
