@@ -17,7 +17,7 @@
 
 | Engine | Kind | Available | Version | Ships browser | Footprint notes |
 |---|---|---|---|---|---|
-| turbo-html2pdf | typesetting | yes | 0.2.0 | no | native N-API addon (~few MB), no browser/Chromium download |
+| turbo-html2pdf | typesetting | yes | 0.2.1 | no | native N-API addon (~few MB), no browser/Chromium download |
 | puppeteer | browser | yes | Chrome/131.0.6778.204 | yes | downloads a full Chromium (~150-300MB) on install |
 | playwright | browser | yes | 1.60.0 | yes | installs Chromium via `playwright install` (~150-300MB) |
 | gotenberg | browser | yes | http://localhost:3000 | yes | docker image bundling Chromium + LibreOffice (~1GB); HTTP service |

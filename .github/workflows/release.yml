@@ -13,6 +13,9 @@
 #                             inside it and index.js loads the matching local one.
 #   2. turbo-html2pdf-react     — pure-TS frontend (tsup build, no native step).
 #   3. turbo-html2pdf-template  — pure-TS frontend (tsup build, no native step).
+#   …plus turbo-html2pdf-wasm / -wasm-fonts / -svg (separate npm packages), and
+#   turbo-html2pdf-mcp — the native MCP server BINARY, attached as per-platform
+#   archives to the GitHub Release for the tag (not a registry package).
 #
 # Requires repository secret NPM_TOKEN (a Classic Automation token allowed to
 # publish under public npm (unscoped names)). Already configured in GitHub.
@@ -465,3 +468,137 @@ jobs:
         working-directory: crates/turbo-pdf-napi
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+  # ---------------------------------------------------------------------------
+  # 9. Build the turbo-html2pdf-mcp server binary across platforms.
+  #    The MCP server is a native Rust BINARY (stdio JSON-RPC), not a registry
+  #    package — so instead of npm/PyPI we ship prebuilt archives attached to the
+  #    GitHub Release for the tag. Same glibc matrix as build-napi (musl below).
+  #    A plain `cargo build` — no node/napi step.
+  # ---------------------------------------------------------------------------
+  build-mcp:
+    name: build mcp ${{ matrix.target }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: ubuntu-latest,  target: x86_64-unknown-linux-gnu,  ext: "" }
+          - { os: ubuntu-latest,  target: aarch64-unknown-linux-gnu, ext: "" }
+          - { os: macos-latest,   target: aarch64-apple-darwin,      ext: "" }
+          - { os: windows-latest, target: x86_64-pc-windows-msvc,    ext: ".exe" }
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+      - name: Linux aarch64 cross toolchain
+        if: matrix.target == 'aarch64-unknown-linux-gnu'
+        run: |
+          sudo apt-get update && sudo apt-get install -y gcc-aarch64-linux-gnu
+          echo "CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER=aarch64-linux-gnu-gcc" >> "$GITHUB_ENV"
+          echo "CC_aarch64_unknown_linux_gnu=aarch64-linux-gnu-gcc" >> "$GITHUB_ENV"
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: mcp-${{ matrix.target }}
+      - name: Build the MCP server
+        run: cargo build --release -p turbo-html2pdf-mcp --target ${{ matrix.target }}
+      - name: Package the binary
+        shell: bash
+        run: |
+          BIN=turbo-html2pdf-mcp${{ matrix.ext }}
+          STAGE=turbo-html2pdf-mcp-${{ matrix.target }}
+          mkdir "$STAGE"
+          cp "target/${{ matrix.target }}/release/$BIN" "$STAGE"/
+          cp crates/turbo-html2pdf-mcp/README.md "$STAGE"/ 2>/dev/null || true
+          [ -f LICENSE ] && cp LICENSE "$STAGE"/ || true
+          tar -czf "$STAGE.tar.gz" "$STAGE"
+          ls -l "$STAGE.tar.gz"
+      - name: Upload archive
+        uses: actions/upload-artifact@v4
+        with:
+          name: mcp-${{ matrix.target }}
+          path: turbo-html2pdf-mcp-${{ matrix.target }}.tar.gz
+          if-no-files-found: error
+
+  # ---------------------------------------------------------------------------
+  # 9b. Build the statically-linked musl MCP binary in a real Alpine container,
+  #     gated by a load+render smoke test over stdio (the same anti-fake-musl
+  #     guard the napi jobs use, applied to the JSON-RPC surface).
+  # ---------------------------------------------------------------------------
+  build-mcp-musl:
+    name: build mcp x86_64-unknown-linux-musl
+    runs-on: ubuntu-latest
+    container: ghcr.io/napi-rs/napi-rs/nodejs-rust:lts-alpine
+    steps:
+      - uses: actions/checkout@v4
+      - name: Trust the workspace (container runs as root)
+        run: git config --global --add safe.directory '*'
+      - name: Build the MCP server (musl host)
+        run: cargo build --release -p turbo-html2pdf-mcp
+      - name: Smoke gate — the binary must initialize AND render over stdio
+        run: |
+          out=$(printf '%s\n' \
+            '{"jsonrpc":"2.0","id":1,"method":"initialize"}' \
+            '{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"render","arguments":{"templateHtml":"<p>musl mcp smoke</p>","now":0}}}' \
+            | ./target/release/turbo-html2pdf-mcp)
+          echo "$out"
+          echo "$out" | grep -q 'turbo-html2pdf-mcp' || { echo "no serverInfo"; exit 1; }
+          # pageCount lives inside the JSON-escaped MCP text block, so match the
+          # bareword (it appears as \"pageCount\" on the wire).
+          echo "$out" | grep -q 'pageCount' || { echo "render did not produce a PDF"; exit 1; }
+          echo "musl MCP init+render OK"
+      - name: Package the binary
+        run: |
+          STAGE=turbo-html2pdf-mcp-x86_64-unknown-linux-musl
+          mkdir "$STAGE"
+          cp target/release/turbo-html2pdf-mcp "$STAGE"/
+          cp crates/turbo-html2pdf-mcp/README.md "$STAGE"/ 2>/dev/null || true
+          [ -f LICENSE ] && cp LICENSE "$STAGE"/ || true
+          tar -czf "$STAGE.tar.gz" "$STAGE"
+          ls -l "$STAGE.tar.gz"
+      - name: Upload archive
+        uses: actions/upload-artifact@v4
+        with:
+          name: mcp-x86_64-unknown-linux-musl
+          path: turbo-html2pdf-mcp-x86_64-unknown-linux-musl.tar.gz
+          if-no-files-found: error
+
+  # ---------------------------------------------------------------------------
+  # 10. Attach the MCP server archives to the GitHub Release for the tag.
+  #     Creates the release if it does not exist yet; uploads one .tar.gz per
+  #     platform. `contents: write` is scoped to THIS job (top-level is read).
+  # ---------------------------------------------------------------------------
+  publish-mcp:
+    name: publish turbo-html2pdf-mcp binaries
+    needs: [build-mcp, build-mcp-musl, gate]
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Download all MCP archives
+        uses: actions/download-artifact@v4
+        with:
+          pattern: mcp-*
+          path: artifacts
+      - name: List archives
+        run: find artifacts -name '*.tar.gz' -print
+      - name: Attach archives to the GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: artifacts/**/*.tar.gz
+          fail_on_unmatched_files: true
+          body: |
+            Native MCP server (stdio JSON-RPC 2.0) for turbo-html2pdf.
+
+            Download the archive for your platform, extract, and register the
+            `turbo-html2pdf-mcp` binary with any MCP client, e.g.:
+
+            ```sh
+            claude mcp add turbo-html2pdf -- /absolute/path/to/turbo-html2pdf-mcp
+            ```
+
+            Tools: `render`, `append_pdf`, `check_template`. See the npm/PyPI
+            packages of the same version for the library bindings.

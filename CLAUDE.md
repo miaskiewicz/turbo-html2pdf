@@ -9,7 +9,7 @@ Releases are **tag-driven**. Two independent tag prefixes:
 
 | Tag      | Workflow             | Publishes to                                                                 |
 | -------- | -------------------- | ---------------------------------------------------------------------------- |
-| `vX.Y.Z`  | `.github/workflows/release.yml`    | **npm**: `turbo-html2pdf`, `-react`, `-template`, `-wasm`, `-wasm-fonts` |
+| `vX.Y.Z`  | `.github/workflows/release.yml`    | **npm**: `turbo-html2pdf`, `-react`, `-template`, `-wasm`, `-wasm-fonts`, `-svg`; **GitHub Release**: `turbo-html2pdf-mcp` per-platform binary archives (`publish-mcp`) |
 | `pyvX.Y.Z`| `.github/workflows/release-py.yml` | **PyPI**: `turbo-html2pdf` (maturin abi3 wheels + sdist)                  |
 
 Required GitHub repo secrets: **`NPM_TOKEN`** (npm automation token, public
@@ -20,7 +20,8 @@ PyPI publish step self-skips (builds wheels, uploads nothing).
 
 Set the same `X.Y.Z` in all of these before tagging:
 
-- `Cargo.toml` → `[workspace.package] version` (crate metadata for all 4 crates)
+- `Cargo.toml` → `[workspace.package] version` (crate metadata for all 5 crates,
+  incl. `turbo-html2pdf-mcp`, which inherits the workspace version)
 - `crates/turbo-pdf-napi/package.json` → `version`
 - `packages/react/package.json` → `version`
 - `packages/template/package.json` → `version`
