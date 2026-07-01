@@ -13,7 +13,7 @@ import turbo_html2pdf as t
 
 # crates/turbo-pdf-py/tests/ -> repo root is three parents up.
 REPO_ROOT = Path(__file__).resolve().parents[3]
-FONTS_DIR = REPO_ROOT / "crates" / "turbo-pdf-core" / "assets" / "fonts"
+FONTS_DIR = REPO_ROOT / "crates" / "turbo-html2pdf-core" / "assets" / "fonts"
 
 # The data object is interpolated under the `data` root (mirrors `{{ data.* }}`
 # in the engine's docs), so the payload is nested under a "data" key.

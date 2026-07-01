@@ -9,7 +9,7 @@
 //                     with the password when qpdf is present).
 //   * appendPdfs / appendPdf -> page count grows by the appended document.
 //
-// Fonts come from crates/turbo-pdf-core/assets/fonts. The suite is SKIPPED (not
+// Fonts come from crates/turbo-html2pdf-core/assets/fonts. The suite is SKIPPED (not
 // failed) when the native addon is not built.
 
 import assert from "node:assert/strict";
@@ -35,7 +35,7 @@ function tryLoad() {
 }
 
 const lib = tryLoad();
-const FONT = join(repoRoot, "crates", "turbo-pdf-core", "assets", "fonts", "Go-Regular.ttf");
+const FONT = join(repoRoot, "crates", "turbo-html2pdf-core", "assets", "fonts", "Go-Regular.ttf");
 const CSS = "@page { size: 200px 200px; margin: 10px } p { font-size: 12px }";
 
 function qpdfAvailable() {

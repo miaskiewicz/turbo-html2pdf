@@ -15,6 +15,7 @@ pub mod emit;
 #[cfg(feature = "endnotes")]
 pub mod endnotes;
 pub mod error;
+pub mod html_layout;
 pub mod image;
 pub mod layout;
 pub mod node;
@@ -37,6 +38,7 @@ pub use emit::{
 #[cfg(feature = "encrypt")]
 pub use emit::{Encryption, Permissions};
 pub use error::{CompileError, Diagnostics, ErrorCode, Lint, LintCode, RenderError, Span};
+pub use html_layout::{collect_style_css, layout_html, parse_html};
 pub use image::{ImageResolver, NoImages};
 pub use layout::fragment::{
     BreakMeta, Fragment, FragmentContent, ImagePlacement, NodeId, PositionedGlyph, RepeatKind,

@@ -1,6 +1,6 @@
 {
   "name": "turbo-html2pdf-react",
-  "version": "0.2.3",
+  "version": "0.2.4",
   "description": "Author turbo-html2pdf PDF templates as React components — HTML/CSS + Jinja to PDF.",
   "license": "MIT",
   "type": "module",

@@ -28,7 +28,7 @@ const PKG = join(root, "pkg-node", "turbo_pdf_wasm.js");
 
 const wasm = existsSync(PKG) ? require(PKG) : null;
 const FONT = readFileSync(
-  join(repoRoot, "crates", "turbo-pdf-core", "assets", "fonts", "Go-Regular.ttf"),
+  join(repoRoot, "crates", "turbo-html2pdf-core", "assets", "fonts", "Go-Regular.ttf"),
 );
 const CSS = "@page { size: 200px 200px; margin: 10px } p { font-size: 12px }";
 

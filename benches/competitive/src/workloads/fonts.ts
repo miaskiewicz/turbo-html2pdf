@@ -8,7 +8,7 @@ import { fileURLToPath } from "node:url";
 const HERE = dirname(fileURLToPath(import.meta.url));
 
 /** Repo-root-relative path to the shared font assets. */
-export const FONT_DIR = resolve(HERE, "../../../../crates/turbo-pdf-core/assets/fonts");
+export const FONT_DIR = resolve(HERE, "../../../../crates/turbo-html2pdf-core/assets/fonts");
 
 /** The regular + bold faces every workload uses. Evolventa = our base sans. */
 export const FONTS = {

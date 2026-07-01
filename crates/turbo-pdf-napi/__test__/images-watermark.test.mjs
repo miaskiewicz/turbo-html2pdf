@@ -10,7 +10,7 @@
 //      with a watermark fade ExtGState (`/GSwm`) present.
 //
 // The PNG is generated in-process (no external files); fonts come from
-// crates/turbo-pdf-core/assets/fonts. The suite is SKIPPED (not failed) when the
+// crates/turbo-html2pdf-core/assets/fonts. The suite is SKIPPED (not failed) when the
 // native addon is not built.
 
 import assert from "node:assert/strict";
@@ -37,7 +37,7 @@ function tryLoad() {
 }
 
 const lib = tryLoad();
-const FONT = join(repoRoot, "crates", "turbo-pdf-core", "assets", "fonts", "Go-Regular.ttf");
+const FONT = join(repoRoot, "crates", "turbo-html2pdf-core", "assets", "fonts", "Go-Regular.ttf");
 
 function qpdfAvailable() {
   try {

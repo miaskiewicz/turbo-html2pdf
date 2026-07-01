@@ -5,7 +5,7 @@
 
 mod filters;
 mod functions;
-mod markup;
+pub(crate) mod markup;
 mod regions;
 mod switch;
 

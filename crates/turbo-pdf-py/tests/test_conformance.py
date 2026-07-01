@@ -26,7 +26,7 @@ import pytest
 t = pytest.importorskip("turbo_html2pdf")
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
-FONTS_DIR = REPO_ROOT / "crates" / "turbo-pdf-core" / "assets" / "fonts"
+FONTS_DIR = REPO_ROOT / "crates" / "turbo-html2pdf-core" / "assets" / "fonts"
 CSS = "@page { size: 200px 200px; margin: 10px } p { font-size: 12px }"
 TEMPLATE = "<p>Conformance body text</p>"
 

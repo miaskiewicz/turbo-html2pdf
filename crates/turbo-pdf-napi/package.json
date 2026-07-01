@@ -1,6 +1,6 @@
 {
   "name": "turbo-html2pdf",
-  "version": "0.2.3",
+  "version": "0.2.4",
   "description": "Fast native HTML/CSS + Jinja templating to PDF for Node — no headless browser, no Chromium.",
   "license": "MIT",
   "main": "index.js",
