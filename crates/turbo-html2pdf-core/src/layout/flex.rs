@@ -212,6 +212,7 @@ fn measure_item(
         abs_cb_y: 0.0,
         abs_cb_w: w,
         root_w: w,
+        floats: Vec::new(),
     };
     let frag = block::layout_box_sized(item, &bs, 0.0, 0.0, w, &mut mctx);
     Size {

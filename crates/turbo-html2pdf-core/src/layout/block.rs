@@ -39,6 +39,26 @@ pub(crate) struct Ctx<'a> {
     /// The initial containing block width (page content width) — the CB for
     /// `position:fixed` boxes.
     pub(crate) root_w: f32,
+    /// Floats active in the current **block formatting context**, in absolute
+    /// galley coordinates. In-flow content within the same BFC flows in the
+    /// inline region these leave free (a `float:right` infobox narrows the text
+    /// column to its left), across block *and* sibling-section boundaries — a
+    /// float belongs to its BFC, not to the nearest block. Saved/cleared when a
+    /// box establishes a new BFC (`float`, out-of-flow, `overflow`≠visible,
+    /// flex/grid/table), and that box grows to contain the floats placed inside.
+    pub(crate) floats: Vec<FloatRect>,
+}
+
+/// A placed float's margin box in absolute galley coordinates, plus which edge
+/// it packs against. Consulted to narrow the inline region of in-flow content
+/// whose vertical span overlaps `[top, bottom)`.
+#[derive(Clone, Copy)]
+pub(crate) struct FloatRect {
+    x0: f32,
+    x1: f32,
+    top: f32,
+    bottom: f32,
+    side: Float,
 }
 
 /// The containing-block origin (x, y) + width a positioned box resolves its
@@ -323,10 +343,6 @@ fn layout_block_flow(
     let mut frags = Vec::new();
     let mut cursor = cy;
     let mut pending = 0.0_f32;
-    let mut band = FloatBand::default();
-    // Lowest edge of any float placed in this block — the band itself is reset once
-    // in-flow content flows past it, so the container's height is tracked separately.
-    let mut float_bottom = cy;
     for kid in kids {
         let kbs = resolve(kid, cw, fs);
         // `absolute`/`fixed`: taken out of flow — placed at its insets against the
@@ -338,22 +354,18 @@ fn layout_block_flow(
             frags.push(layout_box(kid, bx, by, cw, fs, ctx));
             continue;
         }
-        // `float:left/right`: packed to the edge in a float band; contributes no
-        // cursor advance. Following in-flow content clears below the band.
+        // `float:left/right`: packed to its edge and registered in the BFC's float
+        // set (so following in-flow content — even in later sibling blocks/sections
+        // — wraps beside it). Contributes no cursor advance.
         if kbs.float != Float::None {
-            if !band.any {
-                band.top = cursor + pending;
-                band.bottom = band.top;
-            }
-            frags.push(place_float(kid, &kbs, cx, cw, fs, &mut band, ctx));
-            float_bottom = float_bottom.max(band.bottom);
+            frags.push(place_float(kid, &kbs, cx, cw, fs, cursor + pending, ctx));
             continue;
         }
-        // `clear`: skip past the active floats before laying this box out.
-        if band.any && clears(kid, &band) && cursor + pending < band.bottom {
-            cursor = band.bottom;
+        // `clear`: skip past the floats on the cleared side(s) before laying out.
+        let cleared = clear_below(ctx, kid, cursor + pending);
+        if cleared > cursor + pending {
+            cursor = cleared;
             pending = 0.0;
-            band = FloatBand::default();
         }
         // `relative`: flows normally (its space is reserved via the cursor) but
         // is painted shifted by its insets, so lay it out at the shifted origin.
@@ -363,18 +375,13 @@ fn layout_block_flow(
             (0.0, 0.0)
         };
         pending = pending.max(kbs.margin.top);
-        // Once content has flowed below the floats, drop the band (full width again);
-        // until then, in-flow boxes flow *beside* the float in the free inline region
-        // (so text wraps next to a `float:right` infobox rather than stacking below).
-        if band.any && cursor + pending >= band.bottom - 0.5 {
-            band = FloatBand::default();
-        }
         let flow_y = cursor + pending;
-        let (region_x, region_w) = if band.any {
-            (cx + band.left, (cw - band.left - band.right).max(1.0))
-        } else {
-            (cx, cw)
-        };
+        // Flow the box in the inline region the active floats leave free at its top
+        // edge (a `float:right` infobox narrows the column to its left, so text
+        // wraps beside it rather than stacking below). The subtraction is idempotent
+        // under nesting: a child already narrowed to the free region ends at the
+        // float's edge, so re-consulting the same float subtracts nothing.
+        let (region_x, region_w) = inline_region(ctx, cx, cw, flow_y);
         let mut frag = layout_box(
             kid,
             region_x + kbs.margin.left + dx,
@@ -399,8 +406,10 @@ fn layout_block_flow(
         }
         frags.push(frag);
     }
-    // The block is as tall as its in-flow content or its floats, whichever is lower.
-    (frags, cursor.max(float_bottom) - cy)
+    // Height is the in-flow content only. Floats are contained by their BFC (see
+    // `layout_box_sized`), not by every block they pass through — a non-BFC block
+    // does not grow to enclose a float, so following content wraps beside it.
+    (frags, cursor - cy)
 }
 
 /// The horizontal shift to align a width-constrained in-flow block within its
@@ -421,17 +430,6 @@ fn block_h_offset(align: Align, kbs: &BoxStyle, kid: &LayoutBox, frag_w: f32, cw
     0.0
 }
 
-/// Whether a box's `clear` requires it to drop below the currently active float
-/// band (`clear:left/right/both`, matched against which edges the band occupies).
-fn clears(kid: &LayoutBox, band: &FloatBand) -> bool {
-    match kid.style.get("clear").map(str::trim) {
-        Some("both") => true,
-        Some("left") => band.left > 0.0,
-        Some("right") => band.right > 0.0,
-        _ => false,
-    }
-}
-
 /// Whether a box centers itself via `margin: … auto` (horizontal auto margins).
 fn auto_x_margins(s: &crate::style::ComputedStyle) -> bool {
     let is_auto = |p| s.get(p).map(str::trim) == Some("auto");
@@ -440,27 +438,78 @@ fn auto_x_margins(s: &crate::style::ComputedStyle) -> bool {
             .is_some_and(|m| m.split_whitespace().any(|t| t == "auto"))
 }
 
-/// A float band: floated boxes packed from the left and right edges of a row,
-/// wrapping to a new row (below the tallest float so far) when full. `top` is the
-/// absolute y of the current row; `bottom` the lowest float edge placed so far.
-#[derive(Default)]
-struct FloatBand {
-    left: f32,
-    right: f32,
-    top: f32,
-    bottom: f32,
-    any: bool,
+/// Whether a box establishes a new block formatting context — floats it contains
+/// are isolated from the outer context (they don't wrap outer floats, and they
+/// grow this box). Floats, out-of-flow boxes, non-`visible` `overflow`, and the
+/// independent formatting roots (flex/grid/table) all qualify.
+fn establishes_bfc(lb: &LayoutBox, bs: &BoxStyle) -> bool {
+    if bs.float != Float::None || bs.position.is_out_of_flow() {
+        return true;
+    }
+    if matches!(
+        lb.kind,
+        BoxKind::Flex(_) | BoxKind::Grid(_) | BoxKind::Table(_)
+    ) {
+        return true;
+    }
+    ["overflow", "overflow-x", "overflow-y"].iter().any(|p| {
+        matches!(
+            lb.style.get(p).map(str::trim),
+            Some("hidden" | "auto" | "scroll" | "clip")
+        )
+    })
 }
 
-/// Lay a floated box into the band: size it (shrink-to-fit for auto width), pack
-/// it to its edge, wrapping to a new row when the row is full, and grow the band.
+/// The free inline region `(x, width)` at vertical position `y` within the
+/// content box `[cx, cx+cw]`, narrowed by every float in the current BFC whose
+/// vertical span contains `y` (left floats push the start right, right floats
+/// pull the end left). Width floors at 1px so a fully-covered row still lays out.
+fn inline_region(ctx: &Ctx, cx: f32, cw: f32, y: f32) -> (f32, f32) {
+    let mut left = cx;
+    let mut right = cx + cw;
+    for f in &ctx.floats {
+        if y + 0.5 < f.top || y > f.bottom - 0.5 {
+            continue;
+        }
+        match f.side {
+            Float::Left => left = left.max(f.x1),
+            Float::Right => right = right.min(f.x0),
+            Float::None => {}
+        }
+    }
+    (left, (right - left).max(1.0))
+}
+
+/// The y a box with `clear` must drop to: the lowest bottom edge of any active
+/// float on the cleared side(s) (`clear:left/right/both`), or `y` if none.
+fn clear_below(ctx: &Ctx, kid: &LayoutBox, y: f32) -> f32 {
+    let (cl, cr) = match kid.style.get("clear").map(str::trim) {
+        Some("both") => (true, true),
+        Some("left") => (true, false),
+        Some("right") => (false, true),
+        _ => return y,
+    };
+    let mut ny = y;
+    for f in &ctx.floats {
+        let hit = matches!(f.side, Float::Left) && cl || matches!(f.side, Float::Right) && cr;
+        if hit && f.bottom > ny {
+            ny = f.bottom;
+        }
+    }
+    ny
+}
+
+/// Place a floated box: size it (shrink-to-fit for auto width), drop it to the
+/// first y at or below `y0` where it fits on its side beside earlier floats
+/// (else below them), pack it to that edge, and register it in the BFC's float
+/// set so following in-flow content wraps beside it.
 fn place_float(
     kid: &LayoutBox,
     kbs: &BoxStyle,
     cx: f32,
     cw: f32,
     fs: f32,
-    band: &mut FloatBand,
+    y0: f32,
     ctx: &mut Ctx,
 ) -> Fragment {
     let replaced = kid.image.as_ref().is_some_and(|s| s.replaced);
@@ -470,32 +519,46 @@ fn place_float(
     } else {
         border_box_width(kbs, cw)
     };
-    // Wrap to a new band row (below the tallest float so far) when full.
-    if (band.left > 0.0 || band.right > 0.0) && band.left + band.right + w > cw {
-        band.top = band.bottom;
-        band.left = 0.0;
-        band.right = 0.0;
+    // Find the y at/below y0 where a `w`-wide float fits beside existing same-BFC
+    // floats; if the row is too full, drop past the nearest float bottom and retry.
+    let mut y = y0;
+    loop {
+        let (_, avail) = inline_region(ctx, cx, cw, y);
+        if avail >= w - 0.5 {
+            break;
+        }
+        let next = ctx
+            .floats
+            .iter()
+            .filter(|f| f.bottom > y + 0.5)
+            .map(|f| f.bottom)
+            .fold(f32::INFINITY, f32::min);
+        if !next.is_finite() {
+            break;
+        }
+        y = next;
     }
+    let (rx, rw) = inline_region(ctx, cx, cw, y);
     let bx = match kbs.float {
-        Float::Right => cx + cw - band.right - w,
-        _ => cx + band.left,
+        Float::Right => rx + rw - w,
+        _ => rx,
     };
     let mut f = if shrink {
-        layout_box_sized(kid, kbs, bx, band.top, w, ctx)
+        layout_box_sized(kid, kbs, bx, y, w, ctx)
     } else {
-        layout_box(kid, bx, band.top, cw, fs, ctx)
+        layout_box(kid, bx, y, cw, fs, ctx)
     };
     // Re-anchor a right float to the true right edge if its laid width differs.
     if kbs.float == Float::Right && (f.width - w).abs() > 0.5 {
-        let target = cx + cw - band.right - f.width;
-        f.translate(target - f.x, 0.0);
+        f.translate(rx + rw - f.width - f.x, 0.0);
     }
-    match kbs.float {
-        Float::Right => band.right += f.width,
-        _ => band.left += f.width,
-    }
-    band.bottom = band.bottom.max(band.top + f.height);
-    band.any = true;
+    ctx.floats.push(FloatRect {
+        x0: f.x,
+        x1: f.x + f.width,
+        top: y,
+        bottom: y + f.height,
+        side: kbs.float,
+    });
     f
 }
 
@@ -563,7 +626,22 @@ pub(crate) fn layout_box_sized(
         ctx.abs_cb_y = content_y;
         ctx.abs_cb_w = content_w;
     }
-    let (mut children, content_h) = layout_content(lb, bs, content_x, content_y, content_w, ctx);
+    // A box that establishes a block formatting context isolates floats: its
+    // content does not wrap around outer floats, and the floats placed inside it
+    // are contained by (grow) this box rather than escaping to sibling blocks.
+    let bfc = establishes_bfc(lb, bs);
+    let saved_floats = bfc.then(|| std::mem::take(&mut ctx.floats));
+    let (mut children, mut content_h) =
+        layout_content(lb, bs, content_x, content_y, content_w, ctx);
+    if let Some(outer) = saved_floats {
+        let inner_bottom = ctx
+            .floats
+            .iter()
+            .map(|f| f.bottom)
+            .fold(content_y, f32::max);
+        content_h = content_h.max(inner_bottom - content_y);
+        ctx.floats = outer;
+    }
     (ctx.abs_cb_x, ctx.abs_cb_y, ctx.abs_cb_w) = saved_cb;
     let bbh = content_box_height(bs, content_h) + bs.padding.vertical() + bw.vertical();
     prepend_background_image(
@@ -753,6 +831,15 @@ pub fn layout_tree_with_images(
         abs_cb_y: 0.0,
         abs_cb_w: cb_width,
         root_w: cb_width,
+        floats: Vec::new(),
     };
-    layout_box(root, 0.0, 0.0, cb_width, DEFAULT_FONT_SIZE, &mut ctx)
+    let mut frag = layout_box(root, 0.0, 0.0, cb_width, DEFAULT_FONT_SIZE, &mut ctx);
+    // The galley (initial containing block) contains every float — grow it to the
+    // lowest float edge if a float outran the in-flow content (a tall right-floated
+    // infobox on a short page). Floats inside a nested BFC are already contained.
+    let float_bottom = ctx.floats.iter().map(|f| f.bottom).fold(0.0, f32::max);
+    if float_bottom > frag.height {
+        frag.height = float_bottom;
+    }
+    frag
 }

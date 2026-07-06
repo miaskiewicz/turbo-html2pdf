@@ -368,3 +368,64 @@ fn infobox_floats_right_via_no_space_media_query() {
         "text wraps left of infobox"
     );
 }
+
+// --------------------------------------------------------------------------
+// harness 8: float escapes its section — text in a LATER sibling section wraps
+// --------------------------------------------------------------------------
+
+#[test]
+fn float_wraps_content_in_a_later_sibling_section() {
+    // The Wikipedia bug: the taxobox (`float:right`) lives in the lead `<section>`,
+    // but the following section (Etymology) is a *sibling* block. A float belongs
+    // to its block formatting context, not to the section it sits in — so the later
+    // section's text must wrap in the narrowed column beside the float, not clear
+    // below it. Before the BFC-scoped float fix the float was trapped in section 0
+    // (which grew to contain it), so section 1 stacked full-width below the box.
+    let html = r#"<body><div class="mw-parser-output">
+        <section>
+          <div style="float:right;width:300px;height:600px;background-color:#ff0000"></div>
+          <p>Lead paragraph one with a handful of words to fill a line.</p>
+        </section>
+        <section>
+          <p style="background-color:#00ff00">Etymology text that must wrap beside the tall floated infobox above.</p>
+        </section>
+      </div></body>"#;
+    let f = lay(html, 1000.0);
+    let float_box = rect(&f, RED).expect("float");
+    let para = rect(&f, GREEN).expect("later-section paragraph");
+    assert!(
+        para[1] < float_box[1] + float_box[3] - 1.0,
+        "later section flows beside the float, not below it (para y {}, float bottom {})",
+        para[1],
+        float_box[1] + float_box[3],
+    );
+    assert!(
+        para[0] + para[2] <= float_box[0] + 1.0,
+        "later-section text stays left of the float (para end {}, float x {})",
+        para[0] + para[2],
+        float_box[0],
+    );
+}
+
+#[test]
+fn bfc_container_contains_its_float_but_a_plain_block_does_not() {
+    // A block that establishes a BFC (`overflow:hidden`) grows to contain a tall
+    // float inside it, so following content clears below the whole box. A plain
+    // block does not — the float escapes it (asserted above). Here the floated box
+    // is taller than the text; the BFC wrapper must be at least the float's height.
+    let html = r#"<body>
+        <div style="overflow:hidden;background-color:#0000ff">
+          <div style="float:left;width:100px;height:400px;background-color:#ff0000"></div>
+          <p>short</p>
+        </div>
+      </body>"#;
+    let f = lay(html, 1000.0);
+    let wrapper = rect(&f, BLUE).expect("bfc wrapper");
+    let float_box = rect(&f, RED).expect("float");
+    assert!(
+        wrapper[3] >= float_box[3] - 1.0,
+        "BFC wrapper contains the float (wrapper h {}, float h {})",
+        wrapper[3],
+        float_box[3],
+    );
+}
