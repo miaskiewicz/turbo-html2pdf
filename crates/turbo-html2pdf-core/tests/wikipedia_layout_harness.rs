@@ -590,3 +590,42 @@ fn centered_row_flex_lays_children_side_by_side() {
         b[0]
     );
 }
+
+// --------------------------------------------------------------------------
+// harness 11: Codex radio — an absolute icon in a flex-column stays its own size
+// (not stretched), and an empty min-sized box keeps its height. This is the
+// `.cdx-radio` control (Wikipedia's Appearance panel radios).
+// --------------------------------------------------------------------------
+
+#[test]
+fn absolute_child_in_flex_column_keeps_its_own_width() {
+    // `.cdx-radio{display:flex;flex-direction:column}` with an absolute
+    // `.cdx-radio__icon{position:absolute;width:18px}`. The icon must stay 18px, not
+    // stretch to the row width (align-items:stretch applies to flex items, and an
+    // out-of-flow child is NOT a flex item).
+    let html = r#"<body><div style="display:flex;flex-direction:column;position:relative;width:200px">
+        <div style="position:absolute;left:0;width:18px;height:18px;background-color:#ff0000"></div>
+        <div style="height:20px;background-color:#00ff00">Standard</div>
+      </div></body>"#;
+    let f = lay(html, 400.0);
+    let icon = rect(&f, RED).expect("icon");
+    assert!(
+        (icon[2] - 18.0).abs() < 1.0,
+        "absolute icon keeps its 18px width, not stretched (got {})",
+        icon[2]
+    );
+}
+
+#[test]
+fn empty_box_honors_min_height() {
+    // The radio icon is an empty span sized by `min-height`/`height`. An empty box
+    // with only `min-height` must not collapse to 0.
+    let html = r#"<body><div style="min-width:18px;min-height:18px;background-color:#ff0000"></div></body>"#;
+    let f = lay(html, 400.0);
+    let box_ = rect(&f, RED).expect("box");
+    assert!(
+        box_[3] >= 18.0 - 0.5,
+        "min-height honored (got h={})",
+        box_[3]
+    );
+}

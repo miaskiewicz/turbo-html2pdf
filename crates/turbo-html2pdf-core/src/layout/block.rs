@@ -154,10 +154,20 @@ fn border_box_width(bs: &BoxStyle, cb_width: f32) -> f32 {
 }
 
 fn content_box_height(bs: &BoxStyle, content_h: f32) -> f32 {
-    match bs.height {
+    let mut h = match bs.height {
         LengthPct::Px(h) => h,
         _ => content_h,
+    };
+    // Honor `min-height`/`max-height` (px; `%` needs the CB height we don't track).
+    // Without this an empty box with only `min-height` collapsed to 0 — e.g. the
+    // Codex radio's `.cdx-radio__icon` (an empty span sized by min/height) vanished.
+    if let LengthPct::Px(min) = bs.min_height {
+        h = h.max(min);
     }
+    if let LengthPct::Px(max) = bs.max_height {
+        h = h.min(max);
+    }
+    h
 }
 
 // --------------------------------------------------------------------------

@@ -16,7 +16,8 @@ use taffy::style_helpers::{fr, line, minmax, percent};
 use taffy::{
     AlignItems, AvailableSpace, Dimension, Display, FlexDirection, FlexWrap, GridPlacement,
     JustifyContent, Layout, LengthPercentage, LengthPercentageAuto, Line, MaxTrackSizingFunction,
-    MinTrackSizingFunction, NodeId as TaffyId, Rect, Size, Style, TaffyTree, TrackSizingFunction,
+    MinTrackSizingFunction, NodeId as TaffyId, Position, Rect, Size, Style, TaffyTree,
+    TrackSizingFunction,
 };
 
 use crate::error::Diagnostics;
@@ -131,12 +132,59 @@ fn item_style(item: &LayoutBox, fs: f32) -> Style {
         parent_font_size: fs,
         cb_width: 0.0,
     });
+    // A `position:absolute`/`fixed` child is out of flow: taffy must NOT treat it as
+    // a flex item (else `align-items:stretch` in a column flex fills it to the
+    // container width, ignoring its own width — the Codex radio's absolute icon blew
+    // up from 18px to the whole row). Mark it absolute so taffy sizes it from its
+    // width/height + insets and excludes it from the flex line.
+    if bs.position.is_out_of_flow() {
+        return Style {
+            position: Position::Absolute,
+            inset: item_inset(&bs),
+            size: item_size(&bs),
+            margin: item_margins(&bs),
+            ..Default::default()
+        };
+    }
     Style {
         flex_grow: num(s, "flex-grow", 0.0),
         flex_shrink: num(s, "flex-shrink", 1.0),
         flex_basis: item_basis(s, fs),
         margin: item_margins(&bs),
         ..Default::default()
+    }
+}
+
+/// A `LengthPct` → taffy `Dimension` (`auto` when not a fixed/percentage length).
+fn dim(lp: LengthPct) -> Dimension {
+    match lp {
+        LengthPct::Px(v) => Dimension::length(v),
+        LengthPct::Pct(p) => Dimension::percent(p / 100.0),
+        LengthPct::Auto => Dimension::auto(),
+    }
+}
+
+/// The width/height of an out-of-flow flex child as a taffy `Size`.
+fn item_size(bs: &BoxStyle) -> Size<Dimension> {
+    Size {
+        width: dim(bs.width),
+        height: dim(bs.height),
+    }
+}
+
+/// The `inset` (top/right/bottom/left) of an out-of-flow flex child; `auto` edges
+/// let taffy keep the item at its static position on that axis.
+fn item_inset(bs: &BoxStyle) -> Rect<LengthPercentageAuto> {
+    let edge = |lp: LengthPct| match lp {
+        LengthPct::Px(v) => LengthPercentageAuto::length(v),
+        LengthPct::Pct(p) => LengthPercentageAuto::percent(p / 100.0),
+        LengthPct::Auto => LengthPercentageAuto::auto(),
+    };
+    Rect {
+        left: edge(bs.inset_left),
+        right: edge(bs.inset_right),
+        top: edge(bs.inset_top),
+        bottom: edge(bs.inset_bottom),
     }
 }
 
