@@ -440,6 +440,36 @@ fn finalize(rows: &[RowRef], laid: Vec<LaidCell>, geom: &Geom, cx: f32, cy: f32)
 }
 
 /// Lay out a table's rows into the content box at `(cx, cy)` of width `cw`.
+/// The table's min-content width: the sum of its columns' natural widths (each the
+/// widest cell in the column, colspans distributed). A table never shrinks below
+/// this — an explicit `width` narrower than the content is overridden (CSS auto
+/// table layout), so a fixed-width infobox still grows to fit a wide image row
+/// instead of overflowing it.
+pub(crate) fn min_content_width(items: &[LayoutBox], fonts: &FontRegistry) -> f32 {
+    let rows = collect_rows(items);
+    let (placed, ncols) = build_grid(&rows);
+    if ncols == 0 {
+        return 0.0;
+    }
+    // Each column's min-content is the widest single-column cell (text wraps to its
+    // longest word; a fixed-width cell keeps its size). The table is at least the sum
+    // of those, and at least any spanning cell's own min-content (e.g. the infobox's
+    // 267px cat-image row that spans both columns).
+    let mut w = vec![0.0_f32; ncols];
+    for p in &placed {
+        if p.colspan == 1 {
+            w[p.col] = w[p.col].max(super::flex::min_content_width(p.lb, fonts));
+        }
+    }
+    let base: f32 = w.iter().sum();
+    let span_max = placed
+        .iter()
+        .filter(|p| p.colspan > 1)
+        .map(|p| super::flex::min_content_width(p.lb, fonts))
+        .fold(0.0_f32, f32::max);
+    base.max(span_max)
+}
+
 /// Returns the row fragments (galley-absolute) and the table content height.
 pub(crate) fn layout_table(
     table: &LayoutBox,

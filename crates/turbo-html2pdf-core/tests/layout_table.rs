@@ -180,17 +180,33 @@ fn auto_layout_shrinks_to_content() {
 
 #[test]
 fn auto_layout_scales_down_on_overflow() {
-    // narrow container forces the content-sized columns to scale to fit
+    // A narrow container scales the content-sized (max-content) columns down to fit
+    // — but only down to their min-content (words can't break). Short words keep the
+    // min-content well under 200px, so the two columns scale to the 200px container.
     let t = table(
         vec![tr(vec![
-            td(&[], "a long stretch of words here"),
-            td(&[], "another long stretch of words"),
+            td(&[], "a b c d e f g h i j k l"),
+            td(&[], "m n o p q r s t u v w x"),
         ])],
         &[],
-        80.0,
+        200.0,
     );
     let total: f32 = cells(&rows(&t)[0]).iter().map(|c| c.width).sum();
-    assert!((total - 80.0).abs() < 1.0);
+    assert!(
+        (total - 200.0).abs() < 1.0,
+        "columns scale to fit 200px, got {total}"
+    );
+}
+
+#[test]
+fn auto_layout_never_below_min_content() {
+    // A table never shrinks below its min-content: a container narrower than the
+    // widest word leaves the table at min-content (it overflows the container rather
+    // than clip/break the word). This is why the Wikipedia infobox grows to fit its
+    // 267px cat-image row instead of squeezing it.
+    let t = table(vec![tr(vec![td(&[], "supercalifragilistic")])], &[], 40.0);
+    let w = cells(&rows(&t)[0])[0].width;
+    assert!(w > 60.0, "table keeps its long-word min-content, got {w}");
 }
 
 #[test]

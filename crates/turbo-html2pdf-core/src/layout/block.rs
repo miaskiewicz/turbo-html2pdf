@@ -781,7 +781,15 @@ fn layout_box(
     if let Some(frag) = replaced_image_box(lb, &bs, bx, by, cb_width, ctx) {
         return frag;
     }
-    let bbw = border_box_width(&bs, cb_width);
+    let mut bbw = border_box_width(&bs, cb_width);
+    // A table never shrinks below its content: grow the border box to the columns'
+    // min-content when a declared/`max-width` is narrower (CSS auto table layout).
+    // Wikipedia's infobox is `width:200px` but its cat-image row is 267px wide — so
+    // the box must be 267, not clip the images and squeeze the label column.
+    if let BoxKind::Table(items) = &lb.kind {
+        let frame = bs.padding.horizontal() + bs.border.widths().horizontal();
+        bbw = bbw.max(super::table::min_content_width(items, ctx.fonts) + frame);
+    }
     layout_box_sized(lb, &bs, bx, by, bbw, ctx)
 }
 

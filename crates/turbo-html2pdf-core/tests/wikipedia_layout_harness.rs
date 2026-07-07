@@ -657,3 +657,32 @@ fn border_radius_50pct_is_half_the_shorter_side() {
         "50% of a 20px border box = 10px radius (got {r})"
     );
 }
+
+// --------------------------------------------------------------------------
+// harness 13: infobox grows to fit a wide cell — a fixed-width table (Wikipedia's
+// `width:200px` taxobox) must expand to its content min-content (the 267px cat-
+// image row) instead of overflowing it / squeezing the label column.
+// --------------------------------------------------------------------------
+
+#[test]
+fn table_grows_to_a_wide_spanning_cell() {
+    let html = r#"<body><table style="width:200px;background-color:#00ff00">
+        <tbody>
+          <tr><td colspan="2"><div style="width:267px;height:40px;background-color:#ff0000"></div></td></tr>
+          <tr><td>Kingdom:</td><td>Animalia</td></tr>
+        </tbody></table></body>"#;
+    let f = lay(html, 1000.0);
+    let table = rect(&f, GREEN).expect("table");
+    let wide = rect(&f, RED).expect("wide cell content");
+    assert!(
+        table[2] >= 267.0 - 1.0,
+        "table grows to its 267px content (declared 200), got {}",
+        table[2]
+    );
+    assert!(
+        wide[0] + wide[2] <= table[0] + table[2] + 1.0,
+        "wide image stays within the table (image right {}, table right {})",
+        wide[0] + wide[2],
+        table[0] + table[2]
+    );
+}

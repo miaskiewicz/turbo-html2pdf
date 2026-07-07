@@ -245,6 +245,41 @@ pub(crate) fn natural_width(lb: &LayoutBox, fonts: &FontRegistry) -> f32 {
     inner + frame
 }
 
+/// The widest single unbreakable piece (max word / longest line at zero available
+/// width) of an inline run — the text's min-content width.
+fn lines_min(items: &[InlineItem], fs: f32, fonts: &FontRegistry) -> f32 {
+    let runs = block::build_runs(items, fs, 0.0, fonts);
+    let mut scratch = Diagnostics::default();
+    inline::layout_runs(&runs, fonts, 0.0, Align::Left, &mut scratch).width
+}
+
+/// The **min-content** width of a box: the least width it can take without its
+/// content overflowing. Text wraps to its widest word; a fixed/`%`-width box and a
+/// replaced image keep their declared size; a container is the widest child's
+/// min-content. Used so a table never shrinks a column below its content.
+pub(crate) fn min_content_width(lb: &LayoutBox, fonts: &FontRegistry) -> f32 {
+    let bs = lb.resolved(ResolveCtx {
+        parent_font_size: DEFAULT_FONT_SIZE,
+        cb_width: 0.0,
+    });
+    let frame = bs.padding.horizontal() + bs.border.widths().horizontal();
+    if let LengthPct::Px(w) = bs.width {
+        return w + frame;
+    }
+    if lb.image.as_ref().is_some_and(|s| s.replaced) {
+        return natural_width(lb, fonts); // replaced image: intrinsic/declared size
+    }
+    let inner = match &lb.kind {
+        BoxKind::Lines(items) => lines_min(items, bs.font_size, fonts),
+        BoxKind::Flex(k) | BoxKind::Block(k) | BoxKind::Grid(k) | BoxKind::Table(k) => k
+            .iter()
+            .map(|c| min_content_width(c, fonts))
+            .fold(0.0_f32, f32::max),
+        BoxKind::Directive(_) => 0.0,
+    };
+    inner + frame
+}
+
 fn measure_width(
     known: Option<f32>,
     avail: AvailableSpace,
