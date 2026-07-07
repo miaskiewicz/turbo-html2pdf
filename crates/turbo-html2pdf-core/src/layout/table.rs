@@ -408,6 +408,7 @@ fn make_row_frag(row: &RowRef, r: usize, geom: &Geom, cx: f32, cy: f32) -> Fragm
     let content = FragmentContent::Box {
         background: None,
         border: BorderEdges::default(),
+        border_radius: 0.0,
     };
     let mut f = Fragment::new(
         row.node_id,

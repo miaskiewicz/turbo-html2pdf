@@ -221,7 +221,9 @@ fn paint_one(
 /// Dispatch a fragment's own paint by content kind.
 fn paint_content(content: &mut Content, frag: &Fragment, ctx: &PaintCtx) {
     match &frag.content {
-        FragmentContent::Box { background, border } => {
+        FragmentContent::Box {
+            background, border, ..
+        } => {
             paint_box(
                 content,
                 frag,

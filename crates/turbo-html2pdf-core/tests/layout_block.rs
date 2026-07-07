@@ -148,7 +148,9 @@ fn background_and_border_become_box_content() {
         500.0,
     );
     match &root.children[0].content {
-        FragmentContent::Box { background, border } => {
+        FragmentContent::Box {
+            background, border, ..
+        } => {
             assert!(background.is_some());
             assert_eq!(border.top.width, 2);
         }

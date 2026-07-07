@@ -498,6 +498,8 @@ pub struct BoxStyle {
     pub max_width: LengthPct,
     pub min_height: LengthPct,
     pub max_height: LengthPct,
+    /// `border-radius` (first value; `%` against the box size at layout).
+    pub border_radius: LengthPct,
     pub box_sizing: BoxSizing,
     pub font_families: Vec<String>,
     pub font_size: f32,
@@ -640,6 +642,16 @@ fn length_prop(s: &ComputedStyle, prop: &str, fs: f32, default: LengthPct) -> Le
     s.get(prop)
         .and_then(|v| parse_length_pct(v, fs))
         .unwrap_or(default)
+}
+
+/// `border-radius`: the first radius (horizontal, first corner). Elliptical `/`
+/// and per-corner values collapse to that single radius — enough for the common
+/// uniform-radius / pill / circle (`50%`) cases.
+fn border_radius_of(s: &ComputedStyle, fs: f32) -> LengthPct {
+    s.get("border-radius")
+        .and_then(|v| v.split(['/', ' ']).find(|t| !t.trim().is_empty()))
+        .and_then(|t| parse_length_pct(t.trim(), fs))
+        .unwrap_or(LengthPct::Px(0.0))
 }
 
 fn border_width_token(token: &str, fs: f32) -> Option<u16> {
@@ -798,6 +810,7 @@ fn resolve_box_metrics(s: &ComputedStyle, fs: f32, ctx: ResolveCtx) -> BoxStyle 
         max_width: length_prop(s, "max-width", fs, LengthPct::Auto),
         min_height: length_prop(s, "min-height", fs, LengthPct::Px(0.0)),
         max_height: length_prop(s, "max-height", fs, LengthPct::Auto),
+        border_radius: border_radius_of(s, fs),
         box_sizing: box_sizing_of(s),
         font_families: font_families(s),
         font_size: fs,

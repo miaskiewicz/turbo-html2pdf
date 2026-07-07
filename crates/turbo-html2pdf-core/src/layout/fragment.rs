@@ -78,6 +78,9 @@ pub enum FragmentContent {
     Box {
         background: Option<Rgba>,
         border: BorderEdges,
+        /// `border-radius` resolved to px (0 = square corners). Clamped to half the
+        /// box's shorter side at layout, so `50%` on a square is a full circle.
+        border_radius: f32,
     },
     /// One laid-out line of shaped text.
     TextLine {

@@ -629,3 +629,31 @@ fn empty_box_honors_min_height() {
         box_[3]
     );
 }
+
+// --------------------------------------------------------------------------
+// harness 12: border-radius — a `border-radius:50%` box resolves to a circle
+// radius (half the shorter side). The raster paints it round (the Appearance
+// radio circles); square corners had no radius at all.
+// --------------------------------------------------------------------------
+
+#[test]
+fn border_radius_50pct_is_half_the_shorter_side() {
+    use turbo_html2pdf_core::FragmentContent;
+    fn radius(f: &Fragment) -> Option<f32> {
+        if let FragmentContent::Box { border_radius, .. } = &f.content {
+            if *border_radius > 0.0 {
+                return Some(*border_radius);
+            }
+        }
+        f.children.iter().find_map(radius)
+    }
+    // 18px content + 1px border each side = a 20px border box; 50% = a 10px radius
+    // (a full circle).
+    let html = r#"<body><div style="width:18px;height:18px;border:1px solid #72777d;border-radius:50%;background-color:#fff"></div></body>"#;
+    let f = lay(html, 400.0);
+    let r = radius(&f).expect("box with a radius");
+    assert!(
+        (r - 10.0).abs() < 0.5,
+        "50% of a 20px border box = 10px radius (got {r})"
+    );
+}

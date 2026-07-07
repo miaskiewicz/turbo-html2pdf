@@ -11,6 +11,7 @@ fn box_content() -> FragmentContent {
     FragmentContent::Box {
         background: Some(Rgba::new(10, 20, 30, 255)),
         border: BorderEdges::default(),
+        border_radius: 0.0,
     }
 }
 

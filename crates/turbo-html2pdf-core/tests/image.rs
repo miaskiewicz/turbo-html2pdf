@@ -647,6 +647,7 @@ fn image_frag(name: &str) -> turbo_html2pdf_core::Fragment {
         FragmentContent::Box {
             background: None,
             border: Default::default(),
+            border_radius: 0.0,
         },
     );
     // Carry the image as a child so collect recurses into it too.

@@ -623,14 +623,26 @@ fn break_meta_of(bs: &BoxStyle) -> BreakMeta {
     }
 }
 
-fn content_kind(lb: &LayoutBox, bs: &BoxStyle) -> FragmentContent {
+fn content_kind(lb: &LayoutBox, bs: &BoxStyle, bbw: f32, bbh: f32) -> FragmentContent {
     match &lb.kind {
         BoxKind::Directive(k) => FragmentContent::Directive(*k),
         _ => FragmentContent::Box {
             background: bs.background,
             border: bs.border,
+            border_radius: resolve_radius(bs.border_radius, bbw, bbh),
         },
     }
+}
+
+/// Resolve `border-radius` to px against the border box, clamped to half the
+/// shorter side (so `50%` on a square is a circle, and no corner over-rounds).
+fn resolve_radius(r: LengthPct, bbw: f32, bbh: f32) -> f32 {
+    let px = match r {
+        LengthPct::Px(v) => v,
+        LengthPct::Pct(p) => p / 100.0 * bbw.min(bbh),
+        LengthPct::Auto => 0.0,
+    };
+    px.clamp(0.0, (bbw.min(bbh) / 2.0).max(0.0))
 }
 
 /// Lay out a box whose border-box width is already decided (`bbw`), at border-box
@@ -688,7 +700,7 @@ pub(crate) fn layout_box_sized(
         y: by,
         width: bbw,
         height: bbh,
-        content: content_kind(lb, bs),
+        content: content_kind(lb, bs, bbw, bbh),
         break_meta: break_meta_of(bs),
         children,
         z_index: bs.z_index,

@@ -55,7 +55,9 @@ pub(super) fn wrap_kind(frag: &Fragment, artifact_band: bool) -> WrapKind {
 fn content_band_kind(frag: &Fragment) -> WrapKind {
     match &frag.content {
         FragmentContent::TextLine { .. } | FragmentContent::Image(_) => WrapKind::Content,
-        FragmentContent::Box { background, border } => box_wrap(*background, border),
+        FragmentContent::Box {
+            background, border, ..
+        } => box_wrap(*background, border),
         FragmentContent::Directive(_) => WrapKind::None,
     }
 }
@@ -84,7 +86,9 @@ fn artifact_or_none(frag: &Fragment) -> WrapKind {
 fn paints(frag: &Fragment) -> bool {
     match &frag.content {
         FragmentContent::TextLine { .. } | FragmentContent::Image(_) => true,
-        FragmentContent::Box { background, border } => background.is_some() || border.any_visible(),
+        FragmentContent::Box {
+            background, border, ..
+        } => background.is_some() || border.any_visible(),
         FragmentContent::Directive(_) => false,
     }
 }
