@@ -788,7 +788,7 @@ fn layout_box(
     // the box must be 267, not clip the images and squeeze the label column.
     if let BoxKind::Table(items) = &lb.kind {
         let frame = bs.padding.horizontal() + bs.border.widths().horizontal();
-        bbw = bbw.max(super::table::min_content_width(items, ctx.fonts) + frame);
+        bbw = bbw.max(super::table::min_content_width(items, &lb.style, ctx.fonts) + frame);
     }
     layout_box_sized(lb, &bs, bx, by, bbw, ctx)
 }

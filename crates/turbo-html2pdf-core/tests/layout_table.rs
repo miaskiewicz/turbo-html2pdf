@@ -98,7 +98,11 @@ fn colspan_widens_cell() {
             tr(vec![td(&[("colspan", "2")], "wide")]),
             tr(vec![td(&[], "a"), td(&[], "b")]),
         ],
-        &[("table-layout", "fixed"), ("width", "300px")],
+        &[
+            ("table-layout", "fixed"),
+            ("width", "300px"),
+            ("border-collapse", "collapse"),
+        ],
         500.0,
     );
     let wide = cells(&rows(&t)[0])[0].width;
@@ -144,7 +148,11 @@ fn thead_tfoot_rows_are_repeatable() {
 fn fixed_layout_splits_equally() {
     let t = table(
         vec![tr(vec![td(&[], "a"), td(&[], "b"), td(&[], "c")])],
-        &[("table-layout", "fixed"), ("width", "300px")],
+        &[
+            ("table-layout", "fixed"),
+            ("width", "300px"),
+            ("border-collapse", "collapse"),
+        ],
         500.0,
     );
     for c in cells(&rows(&t)[0]) {
@@ -163,7 +171,11 @@ fn fixed_layout_honors_explicit_then_shares() {
     );
     let t = table(
         vec![tr(vec![first, td(&[], "b"), td(&[], "c")])],
-        &[("table-layout", "fixed"), ("width", "300px")],
+        &[
+            ("table-layout", "fixed"),
+            ("width", "300px"),
+            ("border-collapse", "collapse"),
+        ],
         500.0,
     );
     let cs = cells(&rows(&t)[0]);
@@ -188,7 +200,7 @@ fn auto_layout_scales_down_on_overflow() {
             td(&[], "a b c d e f g h i j k l"),
             td(&[], "m n o p q r s t u v w x"),
         ])],
-        &[],
+        &[("border-collapse", "collapse")],
         200.0,
     );
     let total: f32 = cells(&rows(&t)[0]).iter().map(|c| c.width).sum();
@@ -213,7 +225,7 @@ fn auto_layout_never_below_min_content() {
 fn explicit_table_width_scales_columns() {
     let t = table(
         vec![tr(vec![td(&[], "a"), td(&[], "b")])],
-        &[("width", "200px")],
+        &[("width", "200px"), ("border-collapse", "collapse")],
         500.0,
     );
     let total: f32 = cells(&rows(&t)[0]).iter().map(|c| c.width).sum();
@@ -289,7 +301,11 @@ fn fixed_layout_all_columns_explicit() {
     );
     let t = table(
         vec![tr(vec![only])],
-        &[("table-layout", "fixed"), ("width", "300px")],
+        &[
+            ("table-layout", "fixed"),
+            ("width", "300px"),
+            ("border-collapse", "collapse"),
+        ],
         500.0,
     );
     assert_eq!(cells(&rows(&t)[0])[0].width, 300.0);
@@ -373,4 +389,27 @@ fn empty_spacer_row_keeps_its_explicit_height() {
         rs[1].height
     );
     assert!(rs[2].y >= rs[1].y + 4.5, "row after spacer sits below it");
+}
+
+#[test]
+fn border_spacing_separates_cells_by_default() {
+    // The default separate model puts 2px between cells (and at the edges), so a
+    // label cell doesn't butt against its value ("SpeciesF. catus" in the infobox).
+    let sep = table(vec![tr(vec![td(&[], "a"), td(&[], "b")])], &[], 500.0);
+    let cs = cells(&rows(&sep)[0]);
+    let gap = cs[1].x - (cs[0].x + cs[0].width);
+    assert!((gap - 2.0).abs() < 0.5, "2px between cells, got {gap}");
+    assert!(cs[0].x >= 1.5, "2px before the first cell, got {}", cs[0].x);
+
+    // `border-collapse:collapse` removes the spacing.
+    let col = table(
+        vec![tr(vec![td(&[], "a"), td(&[], "b")])],
+        &[("border-collapse", "collapse")],
+        500.0,
+    );
+    let cc = cells(&rows(&col)[0]);
+    assert!(
+        (cc[1].x - (cc[0].x + cc[0].width)).abs() < 0.5,
+        "collapsed = no gap"
+    );
 }

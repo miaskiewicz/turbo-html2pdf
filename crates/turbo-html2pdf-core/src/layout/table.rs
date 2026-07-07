@@ -391,16 +391,6 @@ fn row_heights(laid: &[LaidCell], rows: &[RowRef]) -> Vec<f32> {
     h
 }
 
-fn prefix(vals: &[f32]) -> Vec<f32> {
-    let mut out = Vec::with_capacity(vals.len());
-    let mut acc = 0.0;
-    for v in vals {
-        out.push(acc);
-        acc += v;
-    }
-    out
-}
-
 struct Geom {
     col_x: Vec<f32>,
     row_y: Vec<f32>,
@@ -474,12 +464,47 @@ fn finalize(rows: &[RowRef], laid: Vec<LaidCell>, geom: &Geom, cx: f32, cy: f32)
 /// this — an explicit `width` narrower than the content is overridden (CSS auto
 /// table layout), so a fixed-width infobox still grows to fit a wide image row
 /// instead of overflowing it.
-pub(crate) fn min_content_width(items: &[LayoutBox], fonts: &FontRegistry) -> f32 {
+/// `(horizontal, vertical)` `border-spacing` in px — the gap around/between cells
+/// in the default `separate` model (`2px` per CSS UA); `border-collapse:collapse`
+/// removes it. Without it a table's cells butt together (the infobox label ran
+/// straight into its value: "SpeciesF. catus").
+fn border_spacing(style: &ComputedStyle) -> (f32, f32) {
+    if style.get("border-collapse").map(str::trim) == Some("collapse") {
+        return (0.0, 0.0);
+    }
+    let mut it = style
+        .get("border-spacing")
+        .map(str::split_whitespace)
+        .into_iter()
+        .flatten();
+    let h = it.next().and_then(|t| parse_px(t, DEFAULT_FONT_SIZE));
+    let v = it.next().and_then(|t| parse_px(t, DEFAULT_FONT_SIZE));
+    (h.unwrap_or(2.0), v.or(h).unwrap_or(2.0))
+}
+
+/// Prefix offsets for `n` tracks separated (and bracketed) by `gap`: track `i`
+/// starts at `gap*(i+1) + sum(tracks[..i])`.
+fn spaced_offsets(tracks: &[f32], gap: f32) -> Vec<f32> {
+    let mut out = Vec::with_capacity(tracks.len());
+    let mut acc = gap;
+    for t in tracks {
+        out.push(acc);
+        acc += t + gap;
+    }
+    out
+}
+
+pub(crate) fn min_content_width(
+    items: &[LayoutBox],
+    style: &ComputedStyle,
+    fonts: &FontRegistry,
+) -> f32 {
     let rows = collect_rows(items);
     let (placed, ncols) = build_grid(&rows);
     if ncols == 0 {
         return 0.0;
     }
+    let (hs, _) = border_spacing(style);
     // Each column's min-content is the widest single-column cell (text wraps to its
     // longest word; a fixed-width cell keeps its size). The table is at least the sum
     // of those, and at least any spanning cell's own min-content (e.g. the infobox's
@@ -496,7 +521,7 @@ pub(crate) fn min_content_width(items: &[LayoutBox], fonts: &FontRegistry) -> f3
         .filter(|p| p.colspan > 1)
         .map(|p| super::flex::min_content_width(p.lb, fonts))
         .fold(0.0_f32, f32::max);
-    base.max(span_max)
+    base.max(span_max) + hs * (ncols as f32 + 1.0)
 }
 
 /// Returns the row fragments (galley-absolute) and the table content height.
@@ -514,15 +539,20 @@ pub(crate) fn layout_table(
     if ncols == 0 {
         return (Vec::new(), 0.0);
     }
-    let cols = column_widths(&table.style, &placed, ncols, cw, ctx.fonts);
+    let (hs, vs) = border_spacing(&table.style);
+    // Reserve the horizontal spacing (gaps + edges) out of the content width so the
+    // columns + gaps still fit the table box.
+    let inner = (cw - hs * (ncols as f32 + 1.0)).max(1.0);
+    let cols = column_widths(&table.style, &placed, ncols, inner, ctx.fonts);
     let laid = layout_cells(&placed, &cols, fs, ctx);
     let row_h = row_heights(&laid, &rows);
+    let nrows = row_h.len();
     let geom = Geom {
-        col_x: prefix(&cols),
-        row_y: prefix(&row_h),
-        table_w: cols.iter().sum(),
+        col_x: spaced_offsets(&cols, hs),
+        row_y: spaced_offsets(&row_h, vs),
+        table_w: cols.iter().sum::<f32>() + hs * (ncols as f32 + 1.0),
         row_h,
     };
-    let height = geom.row_h.iter().sum();
+    let height = geom.row_h.iter().sum::<f32>() + vs * (nrows as f32 + 1.0);
     (finalize(&rows, laid, &geom, cx, cy), height)
 }
