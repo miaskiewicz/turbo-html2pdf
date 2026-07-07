@@ -219,8 +219,43 @@ fn raw_to_px(raw: RawLength, font_size: f32, basis: f32) -> f32 {
     }
 }
 
-/// Parse an absolute/`em` length to px (no `%`); used for font-relative values.
+/// Evaluate an additive `calc(A ± B ± …)` of non-`%` length terms to px. CSS
+/// mandates spaces around `+`/`-`, so the body tokenizes on whitespace. Real
+/// stylesheets lean on this for component sizing — Codex's radio label offset
+/// `padding-left: calc(1rem + 10px)`, breakpoints like `calc(1120px - 1px)`, etc.
+/// (`var()` is already substituted by the cascade.) Multiplicative or `%` terms
+/// aren't handled here and yield `None` (the caller falls back to its default).
+fn eval_calc_px(s: &str, font_size: f32) -> Option<f32> {
+    let body = s
+        .trim()
+        .strip_prefix("calc(")
+        .or_else(|| s.trim().strip_prefix("CALC("))?
+        .strip_suffix(')')?;
+    let term_px = |t: &str| match parse_raw(t)? {
+        RawLength::Pct(_) => None,
+        raw => Some(raw_to_px(raw, font_size, 0.0)),
+    };
+    let toks: Vec<&str> = body.split_whitespace().collect();
+    let mut total = term_px(toks.first()?)?;
+    let mut i = 1;
+    while i + 1 < toks.len() + 1 && i < toks.len() {
+        let v = term_px(toks.get(i + 1)?)?;
+        match toks[i] {
+            "+" => total += v,
+            "-" => total -= v,
+            _ => return None,
+        }
+        i += 2;
+    }
+    Some(total)
+}
+
+/// Parse an absolute/`em` length (or `calc()` thereof) to px (no `%`); used for
+/// font-relative values.
 pub fn parse_px(s: &str, font_size: f32) -> Option<f32> {
+    if let Some(px) = eval_calc_px(s, font_size) {
+        return Some(px);
+    }
     match parse_raw(s)? {
         RawLength::Pct(_) => None,
         raw => Some(raw_to_px(raw, font_size, 0.0)),
@@ -232,6 +267,9 @@ pub fn parse_length_pct(s: &str, font_size: f32) -> Option<LengthPct> {
     let t = s.trim();
     if t.eq_ignore_ascii_case("auto") {
         return Some(LengthPct::Auto);
+    }
+    if let Some(px) = eval_calc_px(t, font_size) {
+        return Some(LengthPct::Px(px));
     }
     match parse_raw(t)? {
         RawLength::Pct(p) => Some(LengthPct::Pct(p)),

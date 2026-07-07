@@ -64,6 +64,23 @@ fn parse_px_units() {
 }
 
 #[test]
+fn parse_calc_additive_lengths() {
+    // Additive calc() of px/em terms (Codex component sizing, Vector breakpoints).
+    approx(parse_px("calc(100px + 20px)", 16.0).unwrap(), 120.0);
+    approx(parse_px("calc(1rem + 10px)", 16.0).unwrap(), 26.0);
+    approx(parse_px("calc(1120px - 1px)", 16.0).unwrap(), 1119.0);
+    approx(parse_px("calc(2em - 8px)", 16.0).unwrap(), 24.0);
+    // As a length-percentage too (width/padding/etc.).
+    assert_eq!(
+        parse_length_pct("calc(1rem + 4px)", 16.0),
+        Some(LengthPct::Px(20.0))
+    );
+    // Multiplicative / percentage calc isn't handled here → None (caller defaults).
+    assert_eq!(parse_px("calc(2 * 10px)", 16.0), None);
+    assert_eq!(parse_px("calc(100% - 20px)", 16.0), None);
+}
+
+#[test]
 fn parse_px_rejects_pct_and_garbage() {
     assert_eq!(parse_px("50%", 16.0), None);
     assert_eq!(parse_px("5xx", 16.0), None);

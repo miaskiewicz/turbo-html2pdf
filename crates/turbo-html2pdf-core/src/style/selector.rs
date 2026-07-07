@@ -59,6 +59,11 @@ pub enum Pseudo {
     /// `:not(...)` — matches when the element matches none of the inner compound
     /// selectors (a simple selector list; combinators inside `:not` are not split).
     Not(Vec<Compound>),
+    /// `:is(...)` / `:where(...)` (+ `:matches`/`-webkit-any`) — matches when the
+    /// element matches ANY inner compound. Without this the arg is dropped and the
+    /// bare compound matches everything (e.g. `a:where(.new)` reddening every link).
+    /// Specificity differences between `:is`/`:where` are not modeled.
+    Is(Vec<Compound>),
     /// An interactive/dynamic pseudo-class (`:hover`/`:focus`/`:active`/`:target`/
     /// `:visited`/…) — never matches in a static render (resting state).
     NeverMatch,
@@ -369,6 +374,7 @@ fn parse_pseudo(name: &str, arg: &str) -> Option<Pseudo> {
         "enabled" => Some(Pseudo::Enabled),
         "disabled" => Some(Pseudo::Disabled),
         "not" => Some(Pseudo::Not(parse_not(arg))),
+        "is" | "where" | "matches" | "-webkit-any" | "-moz-any" => Some(Pseudo::Is(parse_not(arg))),
         "link" | "any-link" => Some(Pseudo::Link),
         // Interactive / dynamic pseudo-classes: valid but never active in a
         // static render, so they never match (their gated styles stay off).

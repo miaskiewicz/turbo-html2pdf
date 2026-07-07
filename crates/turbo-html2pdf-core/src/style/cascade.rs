@@ -256,6 +256,7 @@ fn pseudo_matches(pseudo: &Pseudo, ctx: &Ctx) -> bool {
             matches!(ctx.tag, Some("a" | "area" | "link")) && has_attr(ctx.attrs, "href")
         }
         Pseudo::Not(compounds) => !compounds.iter().any(|c| compound_matches(c, ctx)),
+        Pseudo::Is(compounds) => compounds.iter().any(|c| compound_matches(c, ctx)),
         Pseudo::NeverMatch => false,
     }
 }

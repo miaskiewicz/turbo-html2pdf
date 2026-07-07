@@ -538,6 +538,59 @@ fn not_pseudo_excludes() {
 }
 
 #[test]
+fn where_pseudo_matches_only_its_argument() {
+    // `:where(...)` / `:is(...)` must honor their argument list. Wikipedia colours
+    // broken links with `a:where(.new){color:var(--color-destructive)}`; treating
+    // `:where` as always-matching (dropping its arg) reddened EVERY link. A plain
+    // `<a>` keeps the base colour; only `a.new` gets the `:where(.new)` rule.
+    let css = "a { color: blue } a:where(.new) { color: red } a:is(.stub) { color: green }";
+    let n = styled(
+        "<div><a id='p'>plain</a><a id='n' class='new'>new</a><a id='s' class='stub'>stub</a></div>",
+        css,
+    );
+    assert_eq!(
+        prop(&n, "p", "color").as_deref(),
+        Some("blue"),
+        "plain link unaffected"
+    );
+    assert_eq!(
+        prop(&n, "n", "color").as_deref(),
+        Some("red"),
+        ":where(.new) matches a.new"
+    );
+    assert_eq!(
+        prop(&n, "s", "color").as_deref(),
+        Some("green"),
+        ":is(.stub) matches a.stub"
+    );
+}
+
+#[test]
+fn where_with_nested_not_matches() {
+    // The exact Wikipedia shape: `a:where(.new:not([role='button']))`.
+    let css = "a { color: blue } a:where(.new:not([role='button'])) { color: red }";
+    let n = styled(
+        "<div><a id='p'>plain</a><a id='n' class='new'>new</a><a id='b' class='new' role='button'>btn</a></div>",
+        css,
+    );
+    assert_eq!(
+        prop(&n, "p", "color").as_deref(),
+        Some("blue"),
+        "plain link unaffected"
+    );
+    assert_eq!(
+        prop(&n, "n", "color").as_deref(),
+        Some("red"),
+        "new link matched"
+    );
+    assert_eq!(
+        prop(&n, "b", "color").as_deref(),
+        Some("blue"),
+        "role=button excluded by nested :not"
+    );
+}
+
+#[test]
 fn hover_never_matches_in_static_render() {
     let css = "a:hover { color: red }";
     let n = styled("<div><a id='a' href='#'>x</a></div>", css);
