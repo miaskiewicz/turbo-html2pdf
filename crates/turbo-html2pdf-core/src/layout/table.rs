@@ -252,13 +252,41 @@ fn fixed_columns(placed: &[Placed], ncols: usize, table_width: f32) -> Vec<f32> 
     w.iter().map(|x| x.unwrap_or(each)).collect()
 }
 
-fn scale_to(cols: &mut [f32], target: f32) {
+/// Each column's min-content width (widest single-column cell that can't shrink).
+fn min_columns(placed: &[Placed], ncols: usize, fonts: &FontRegistry) -> Vec<f32> {
+    let mut w = vec![0.0_f32; ncols];
+    for p in placed {
+        if p.colspan == 1 {
+            w[p.col] = w[p.col].max(super::flex::min_content_width(p.lb, fonts));
+        }
+    }
+    w
+}
+
+/// Fit `cols` to `target`. Growing scales up proportionally; shrinking takes only
+/// from each column's slack above its min-content, so a column never clips its
+/// content (the infobox label column kept clipping "Infraclass:" when the whole
+/// row was scaled down uniformly). If even the minima don't fit, columns sit at
+/// their min-content and the table overflows.
+fn scale_to(cols: &mut [f32], target: f32, mins: &[f32]) {
     let sum: f32 = cols.iter().sum();
-    if sum > 0.0 && (sum - target).abs() > f32::EPSILON {
+    if sum <= 0.0 || (sum - target).abs() <= f32::EPSILON {
+        return;
+    }
+    if target >= sum {
         let k = target / sum;
         for c in cols.iter_mut() {
             *c *= k;
         }
+        return;
+    }
+    let slack: f32 = cols.iter().zip(mins).map(|(c, m)| (c - m).max(0.0)).sum();
+    let reduce = sum - target;
+    for (c, m) in cols.iter_mut().zip(mins) {
+        if slack > 0.0 {
+            *c -= reduce * (*c - *m).max(0.0) / slack;
+        }
+        *c = c.max(*m);
     }
 }
 
@@ -294,7 +322,8 @@ fn column_widths(
     } else {
         cols.iter().sum::<f32>().min(cw)
     };
-    scale_to(&mut cols, target);
+    let mins = min_columns(placed, ncols, fonts);
+    scale_to(&mut cols, target, &mins);
     cols
 }
 
