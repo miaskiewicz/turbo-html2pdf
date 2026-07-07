@@ -45,6 +45,28 @@ const RED: (u8, u8, u8) = (255, 0, 0);
 const GREEN: (u8, u8, u8) = (0, 255, 0);
 const BLUE: (u8, u8, u8) = (0, 0, 255);
 
+/// Every rendered text line's rectangle `[x, y, w, h]`. A normal block box spans
+/// the full column; a float only shortens the *line boxes* inside it, so float
+/// wrapping is asserted against these, not the (full-width) paragraph box.
+fn text_lines(f: &Fragment, out: &mut Vec<[f32; 4]>) {
+    if matches!(f.content, FragmentContent::TextLine { .. }) {
+        out.push([f.x, f.y, f.width, f.height]);
+    }
+    for c in &f.children {
+        text_lines(c, out);
+    }
+}
+
+/// The article text lines wrapping beside a `float:right` box: those starting left
+/// of `float[x]` whose top is above the float's bottom. Excludes the float's own
+/// text (which starts at/after the float's left edge).
+fn lines_beside_right_float(f: &Fragment, float: [f32; 4]) -> Vec<[f32; 4]> {
+    let mut v = Vec::new();
+    text_lines(f, &mut v);
+    v.retain(|l| l[1] < float[1] + float[3] - 1.0 && l[0] < float[0] - 1.0);
+    v
+}
+
 // --------------------------------------------------------------------------
 // harness 1: menus (dropdowns hidden at rest)
 // --------------------------------------------------------------------------
@@ -332,20 +354,21 @@ fn text_wraps_beside_a_right_float() {
       </body>"#;
     let f = lay(html, 1000.0);
     let float_box = rect(&f, RED).expect("float");
-    let para = rect(&f, GREEN).expect("paragraph");
-    // paragraph starts beside the float (same top region), left of it, narrowed.
+    // The paragraph box spans the full column (CSS: a float shortens line boxes,
+    // not the block); assert the *text lines* beside the float stay left of it.
+    let beside = lines_beside_right_float(&f, float_box);
     assert!(
-        para[1] < float_box[1] + float_box[3] - 1.0,
-        "paragraph flows beside float, not below (para y {}, float bottom {})",
-        para[1],
-        float_box[1] + float_box[3]
+        !beside.is_empty(),
+        "text flows beside the float, not below it"
     );
-    assert!(
-        para[0] + para[2] <= float_box[0] + 1.0,
-        "paragraph stays left of the float (para end {}, float x {})",
-        para[0] + para[2],
-        float_box[0]
-    );
+    for l in &beside {
+        assert!(
+            l[0] + l[2] <= float_box[0] + 1.0,
+            "line stays left of the float (line end {}, float x {})",
+            l[0] + l[2],
+            float_box[0],
+        );
+    }
 }
 
 #[test]
@@ -355,18 +378,18 @@ fn infobox_floats_right_via_no_space_media_query() {
     // must float right with the article text wrapping to its left.
     let css = "@media(min-width:640px){.mw-parser-output .infobox{float:right;width:300px}}";
     let html = r#"<body><div class="mw-parser-output">
-        <table class="infobox" style="background-color:#ff0000"><tbody><tr><td>Cat</td></tr></tbody></table>
-        <p style="background-color:#00ff00">The cat is a small domesticated carnivorous mammal member of Felidae with lots of words here</p>
+        <table class="infobox" style="background-color:#ff0000"><tbody><tr><td style="height:200px">Cat</td></tr></tbody></table>
+        <p style="background-color:#00ff00">The cat is a small domesticated carnivorous mammal member of Felidae with lots and lots and lots of words here to fill several lines beside the tall infobox</p>
       </div></body>"#;
     let mut d = Diagnostics::default();
     let f = layout_html(html, css, 1000.0, &FontRegistry::new(), &mut d).expect("layout");
     let info = rect(&f, RED).expect("infobox");
-    let para = rect(&f, GREEN).expect("paragraph");
     assert!(info[0] > 500.0, "infobox floats right, got x={}", info[0]);
-    assert!(
-        para[0] + para[2] <= info[0] + 1.0,
-        "text wraps left of infobox"
-    );
+    let beside = lines_beside_right_float(&f, info);
+    assert!(!beside.is_empty(), "article text wraps beside the infobox");
+    for l in &beside {
+        assert!(l[0] + l[2] <= info[0] + 1.0, "text wraps left of infobox");
+    }
 }
 
 // --------------------------------------------------------------------------
@@ -392,19 +415,20 @@ fn float_wraps_content_in_a_later_sibling_section() {
       </div></body>"#;
     let f = lay(html, 1000.0);
     let float_box = rect(&f, RED).expect("float");
-    let para = rect(&f, GREEN).expect("later-section paragraph");
+    // The later section's text lines beside the float must sit left of it.
+    let beside = lines_beside_right_float(&f, float_box);
     assert!(
-        para[1] < float_box[1] + float_box[3] - 1.0,
-        "later section flows beside the float, not below it (para y {}, float bottom {})",
-        para[1],
-        float_box[1] + float_box[3],
+        !beside.is_empty(),
+        "later section flows beside the float, not below it",
     );
-    assert!(
-        para[0] + para[2] <= float_box[0] + 1.0,
-        "later-section text stays left of the float (para end {}, float x {})",
-        para[0] + para[2],
-        float_box[0],
-    );
+    for l in &beside {
+        assert!(
+            l[0] + l[2] <= float_box[0] + 1.0,
+            "later-section line stays left of the float (line end {}, float x {})",
+            l[0] + l[2],
+            float_box[0],
+        );
+    }
 }
 
 #[test]
@@ -427,5 +451,45 @@ fn bfc_container_contains_its_float_but_a_plain_block_does_not() {
         "BFC wrapper contains the float (wrapper h {}, float h {})",
         wrapper[3],
         float_box[3],
+    );
+}
+
+#[test]
+fn paragraph_lines_widen_below_the_float() {
+    // Per-line wrapping: one long paragraph beside a short `float:right` box. Lines
+    // whose top is above the float bottom wrap in the narrow column (stay left of
+    // the box); lines below it use the full width and extend past the box's left
+    // edge. Block-level narrowing kept the whole paragraph narrow (the bug the
+    // Wikipedia screenshot showed below the taxobox).
+    let words = "cat ".repeat(200);
+    let html = format!(
+        r#"<body>
+        <div style="float:right;width:300px;height:80px;background-color:#ff0000"></div>
+        <p>{words}</p>
+      </body>"#
+    );
+    let f = lay(&html, 1000.0);
+    let float_box = rect(&f, RED).expect("float");
+    let float_left = float_box[0];
+    let float_bottom = float_box[1] + float_box[3];
+    let mut lines = Vec::new();
+    text_lines(&f, &mut lines);
+    let above: Vec<_> = lines.iter().filter(|l| l[1] < float_bottom - 1.0).collect();
+    let below: Vec<_> = lines.iter().filter(|l| l[1] > float_bottom + 1.0).collect();
+    assert!(
+        !above.is_empty() && !below.is_empty(),
+        "paragraph spans the float bottom"
+    );
+    for l in &above {
+        assert!(
+            l[0] + l[2] <= float_left + 1.0,
+            "line beside the float stays left of it (end {}, float x {})",
+            l[0] + l[2],
+            float_left,
+        );
+    }
+    assert!(
+        below.iter().any(|l| l[0] + l[2] > float_left + 50.0),
+        "lines below the float widen past its left edge (full width)",
     );
 }

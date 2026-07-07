@@ -220,7 +220,7 @@ fn lines_to_fragments(para: &inline::ParagraphLayout, cx: f32, cy: f32, out: &mu
             };
             out.push(Fragment::new(
                 gr.node_id,
-                cx,
+                cx + line.indent,
                 cy + line.top,
                 line.width,
                 line.height,
@@ -312,14 +312,23 @@ fn layout_lines(
         }
     }
     let fonts = ctx.fonts;
-    let para = inline::layout_paragraph(&pieces, fonts, cw, bs.text_align, ctx.diags);
+    // Per-line float wrapping: each line's `(indent, width)` is the free inline
+    // region the BFC's floats leave at that line's own y (absolute `cy + top`), so
+    // text flows beside a `float:right` infobox and widens once below its bottom.
+    // Clone the float set so the closure can borrow it while `ctx.diags` is used.
+    let floats = ctx.floats.clone();
+    let region = |top: f32| {
+        let (rx, rw) = inline_region_from(&floats, cx, cw, cy + top);
+        (rx - cx, rw)
+    };
+    let para = inline::layout_paragraph_in(&pieces, fonts, bs.text_align, ctx.diags, &region);
     let mut frags = Vec::new();
     lines_to_fragments(&para, cx, cy, &mut frags);
     // Translate each pre-laid atom to where it landed within its line.
     for line in &para.lines {
         for placed in &line.atoms {
             let mut f = atom_frags[placed.id].clone();
-            f.translate(cx + placed.x, cy + line.top + placed.y);
+            f.translate(cx + line.indent + placed.x, cy + line.top + placed.y);
             frags.push(f);
         }
     }
@@ -376,12 +385,18 @@ fn layout_block_flow(
         };
         pending = pending.max(kbs.margin.top);
         let flow_y = cursor + pending;
-        // Flow the box in the inline region the active floats leave free at its top
-        // edge (a `float:right` infobox narrows the column to its left, so text
-        // wraps beside it rather than stacking below). The subtraction is idempotent
-        // under nesting: a child already narrowed to the free region ends at the
-        // float's edge, so re-consulting the same float subtracts nothing.
-        let (region_x, region_w) = inline_region(ctx, cx, cw, flow_y);
+        // A normal-flow block box spans the full content width; a float only shortens
+        // the *line boxes* of its inline content (handled per-line in `layout_lines`),
+        // not the block itself. Only a box that avoids floats as a unit — one that
+        // establishes a BFC (table/flex/grid/`overflow`), or a replaced `<img>` — is
+        // narrowed and shifted into the free region beside the float.
+        let avoids_floats =
+            establishes_bfc(kid, &kbs) || kid.image.as_ref().is_some_and(|s| s.replaced);
+        let (region_x, region_w) = if avoids_floats {
+            inline_region(ctx, cx, cw, flow_y)
+        } else {
+            (cx, cw)
+        };
         let mut frag = layout_box(
             kid,
             region_x + kbs.margin.left + dx,
@@ -465,9 +480,13 @@ fn establishes_bfc(lb: &LayoutBox, bs: &BoxStyle) -> bool {
 /// vertical span contains `y` (left floats push the start right, right floats
 /// pull the end left). Width floors at 1px so a fully-covered row still lays out.
 fn inline_region(ctx: &Ctx, cx: f32, cw: f32, y: f32) -> (f32, f32) {
+    inline_region_from(&ctx.floats, cx, cw, y)
+}
+
+fn inline_region_from(floats: &[FloatRect], cx: f32, cw: f32, y: f32) -> (f32, f32) {
     let mut left = cx;
     let mut right = cx + cw;
-    for f in &ctx.floats {
+    for f in floats {
         if y + 0.5 < f.top || y > f.bottom - 0.5 {
             continue;
         }

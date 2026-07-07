@@ -76,6 +76,10 @@ pub struct InlineLine {
     pub width: f32,
     pub top: f32,
     pub height: f32,
+    /// Horizontal offset of the line box from the paragraph's left edge — nonzero
+    /// when a `float:left` (or the free region between floats) pushes this line's
+    /// start to the right. Its available width shrinks by the same floats.
+    pub indent: f32,
 }
 
 /// The result of laying out a paragraph of runs into a column of `max_width`.
@@ -264,22 +268,40 @@ fn flush_run_group(
 // line breaking
 // --------------------------------------------------------------------------
 
-fn wrap_words(words: Vec<Word>, max_width: f32) -> Vec<Vec<Word>> {
-    let mut lines = Vec::new();
+/// A line region query: given a line's top (relative to the paragraph origin),
+/// return the `(indent, available_width)` the floats in the current BFC leave
+/// free for that line. The default (no floats) is `(0, max_width)` for every y.
+pub type LineRegion<'a> = &'a dyn Fn(f32) -> (f32, f32);
+
+/// Break `words` into placed lines, threading `y` top-down so each line's
+/// available width is queried from `region` at its own vertical position — text
+/// wraps in the narrow column beside a float, then widens once past its bottom.
+fn wrap_and_place(words: Vec<Word>, align: Align, region: LineRegion) -> Vec<InlineLine> {
+    let mut out: Vec<InlineLine> = Vec::new();
     let mut cur: Vec<Word> = Vec::new();
-    let mut x = 0.0;
+    let mut y = 0.0_f32;
+    let (mut indent, mut lw) = region(y);
+    let mut x = 0.0_f32;
     for word in words {
-        if !cur.is_empty() && x + word.width > max_width {
-            lines.push(std::mem::take(&mut cur));
+        if !cur.is_empty() && x + word.width > lw {
+            let mut line = place_line(std::mem::take(&mut cur), lw, align);
+            line.top = y;
+            line.indent = indent;
+            y += line.height;
+            out.push(line);
+            (indent, lw) = region(y);
             x = 0.0;
         }
         x += word.width + word.space_after;
         cur.push(word);
     }
     if !cur.is_empty() {
-        lines.push(cur);
+        let mut line = place_line(cur, lw, align);
+        line.top = y;
+        line.indent = indent;
+        out.push(line);
     }
-    lines
+    out
 }
 
 // --------------------------------------------------------------------------
@@ -424,21 +446,21 @@ fn place_line(words: Vec<Word>, max_width: f32, align: Align) -> InlineLine {
         width,
         top: 0.0,
         height: m.height,
+        indent: 0.0,
     }
 }
 
-fn finalize(mut lines: Vec<InlineLine>) -> ParagraphLayout {
-    let mut y = 0.0;
+fn finalize(lines: Vec<InlineLine>) -> ParagraphLayout {
+    let mut height = 0.0_f32;
     let mut width = 0.0_f32;
-    for line in &mut lines {
-        line.top = y;
-        y += line.height;
-        width = width.max(line.width);
+    for line in &lines {
+        height = height.max(line.top + line.height);
+        width = width.max(line.indent + line.width);
     }
     ParagraphLayout {
         lines,
         width,
-        height: y,
+        height,
     }
 }
 
@@ -452,13 +474,21 @@ pub fn layout_paragraph(
     align: Align,
     diags: &mut Diagnostics,
 ) -> ParagraphLayout {
+    layout_paragraph_in(pieces, reg, align, diags, &|_| (0.0, max_width))
+}
+
+/// [`layout_paragraph`] with a per-line float region — each line's `(indent,
+/// width)` comes from `region` at the line's own top, so text wraps beside a
+/// float and widens below it. `layout_paragraph` passes a full-width region.
+pub fn layout_paragraph_in(
+    pieces: &[Piece],
+    reg: &FontRegistry,
+    align: Align,
+    diags: &mut Diagnostics,
+    region: LineRegion,
+) -> ParagraphLayout {
     let words = build_pieces(pieces, reg, diags);
-    let lines = wrap_words(words, max_width);
-    let placed = lines
-        .into_iter()
-        .map(|w| place_line(w, max_width, align))
-        .collect();
-    finalize(placed)
+    finalize(wrap_and_place(words, align, region))
 }
 
 /// Lay out a paragraph of text runs only (no atoms) — a convenience for callers
