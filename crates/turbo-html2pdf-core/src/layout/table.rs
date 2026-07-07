@@ -344,7 +344,7 @@ fn layout_one<'a>(p: &'a Placed<'a>, cols: &[f32], fs: f32, ctx: &mut Ctx) -> La
         parent_font_size: fs,
         cb_width: w,
     });
-    let frag = block::layout_box_sized(p.lb, &bs, 0.0, 0.0, w, ctx);
+    let frag = block::layout_box_sized_isolated(p.lb, &bs, 0.0, 0.0, w, ctx);
     let content_h = frag.height;
     LaidCell {
         p,

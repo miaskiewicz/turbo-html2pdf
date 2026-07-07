@@ -655,6 +655,34 @@ pub(crate) fn layout_box_sized(
     bbw: f32,
     ctx: &mut Ctx,
 ) -> Fragment {
+    layout_box_sized_impl(lb, bs, bx, by, bbw, ctx, false)
+}
+
+/// [`layout_box_sized`] for a box that ALWAYS establishes a block formatting
+/// context — a flex/grid item or a table cell (§CSS: each is an independent
+/// formatting context). Without this, an item that floats its content (a clearfix
+/// bar like Wikipedia's page-title row) doesn't contain the float, so its
+/// min-content height measures 0 and the grid row collapses under the overflow.
+pub(crate) fn layout_box_sized_isolated(
+    lb: &LayoutBox,
+    bs: &BoxStyle,
+    bx: f32,
+    by: f32,
+    bbw: f32,
+    ctx: &mut Ctx,
+) -> Fragment {
+    layout_box_sized_impl(lb, bs, bx, by, bbw, ctx, true)
+}
+
+fn layout_box_sized_impl(
+    lb: &LayoutBox,
+    bs: &BoxStyle,
+    bx: f32,
+    by: f32,
+    bbw: f32,
+    ctx: &mut Ctx,
+    force_bfc: bool,
+) -> Fragment {
     let bw = bs.border.widths();
     let content_x = bx + bw.left + bs.padding.left;
     let content_y = by + bw.top + bs.padding.top;
@@ -670,7 +698,7 @@ pub(crate) fn layout_box_sized(
     // A box that establishes a block formatting context isolates floats: its
     // content does not wrap around outer floats, and the floats placed inside it
     // are contained by (grow) this box rather than escaping to sibling blocks.
-    let bfc = establishes_bfc(lb, bs);
+    let bfc = force_bfc || establishes_bfc(lb, bs);
     let saved_floats = bfc.then(|| std::mem::take(&mut ctx.floats));
     let (mut children, mut content_h) =
         layout_content(lb, bs, content_x, content_y, content_w, ctx);

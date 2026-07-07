@@ -318,7 +318,7 @@ fn measure_item(
         root_w: w,
         floats: Vec::new(),
     };
-    let frag = block::layout_box_sized(item, &bs, 0.0, 0.0, w, &mut mctx);
+    let frag = block::layout_box_sized_isolated(item, &bs, 0.0, 0.0, w, &mut mctx);
     Size {
         width: known.width.unwrap_or(frag.width),
         height: known.height.unwrap_or(frag.height),
@@ -372,7 +372,7 @@ fn place_one(
         parent_font_size: fs,
         cb_width: layout.size.width,
     });
-    let mut frag = block::layout_box_sized(item, &bs, 0.0, 0.0, layout.size.width, ctx);
+    let mut frag = block::layout_box_sized_isolated(item, &bs, 0.0, 0.0, layout.size.width, ctx);
     frag.translate(cx + layout.location.x, cy + layout.location.y);
     frag
 }

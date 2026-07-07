@@ -686,3 +686,32 @@ fn table_grows_to_a_wide_spanning_cell() {
         table[0] + table[2]
     );
 }
+
+// --------------------------------------------------------------------------
+// harness 14: a grid/flex item contains its floats (independent formatting
+// context). Wikipedia's page-title row is a grid cell that floats its h1 (a
+// clearfix bar); without containment the cell's min-content height measured 0 and
+// the grid row collapsed, so the title overlapped the tabs below it.
+// --------------------------------------------------------------------------
+
+#[test]
+fn grid_item_contains_its_floated_child() {
+    let html = r#"<body><div style="display:grid;grid-template-rows:min-content 1fr;height:300px">
+        <div style="grid-area:1/1;background-color:#ff0000"><div style="float:left;width:40px;height:40px;background-color:#00ff00"></div></div>
+        <div style="background-color:#0000ff">body</div>
+      </div></body>"#;
+    let f = lay(html, 800.0);
+    let cell = rect(&f, RED).expect("grid cell");
+    let body = rect(&f, BLUE).expect("body row");
+    assert!(
+        cell[3] >= 40.0 - 1.0,
+        "cell grows to contain its 40px float, got h={}",
+        cell[3]
+    );
+    assert!(
+        body[1] >= cell[1] + cell[3] - 1.0,
+        "the next row sits below the (contained) title cell, not overlapping (cell bottom {}, body y {})",
+        cell[1] + cell[3],
+        body[1]
+    );
+}
