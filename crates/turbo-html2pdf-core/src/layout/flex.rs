@@ -156,6 +156,28 @@ fn kids_natural(kids: &[LayoutBox], fonts: &FontRegistry) -> f32 {
         .fold(0.0_f32, f32::max)
 }
 
+/// Max-content width of a flex container. A **row** flex lays its items side by
+/// side, so its max-content is the SUM of the items' widths plus the column gaps
+/// (not the widest item, as for block/column) — otherwise a shrink-to-fit row flex
+/// collapses to one item's width and its children wrap/stack (Wikipedia's centered
+/// header did exactly this). A **column** flex stacks, so max = widest item.
+fn flex_natural(kids: &[LayoutBox], s: &ComputedStyle, fonts: &FontRegistry) -> f32 {
+    if matches!(
+        flex_direction(s),
+        FlexDirection::Row | FlexDirection::RowReverse
+    ) {
+        let gap = s
+            .get("column-gap")
+            .or_else(|| s.get("gap"))
+            .and_then(|v| parse_px(v, DEFAULT_FONT_SIZE))
+            .unwrap_or(0.0);
+        let sum: f32 = kids.iter().map(|k| natural_width(k, fonts)).sum();
+        sum + gap * kids.len().saturating_sub(1) as f32
+    } else {
+        kids_natural(kids, fonts)
+    }
+}
+
 pub(crate) fn natural_width(lb: &LayoutBox, fonts: &FontRegistry) -> f32 {
     crate::hot!("layout.natural_width");
     let bs = lb.resolved(ResolveCtx {
@@ -168,9 +190,8 @@ pub(crate) fn natural_width(lb: &LayoutBox, fonts: &FontRegistry) -> f32 {
     }
     let inner = match &lb.kind {
         BoxKind::Lines(items) => lines_natural(items, bs.font_size, fonts),
-        BoxKind::Block(k) | BoxKind::Flex(k) | BoxKind::Grid(k) | BoxKind::Table(k) => {
-            kids_natural(k, fonts)
-        }
+        BoxKind::Flex(k) => flex_natural(k, &lb.style, fonts),
+        BoxKind::Block(k) | BoxKind::Grid(k) | BoxKind::Table(k) => kids_natural(k, fonts),
         BoxKind::Directive(_) => 0.0,
     };
     inner + frame

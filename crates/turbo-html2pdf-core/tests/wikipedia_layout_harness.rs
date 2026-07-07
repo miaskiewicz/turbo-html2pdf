@@ -558,3 +558,35 @@ fn media_max_width_calc_breakpoint() {
         "mobile @media block applies below the 1120px breakpoint"
     );
 }
+
+// --------------------------------------------------------------------------
+// harness 10: row-flex max-content — a shrink-to-fit row flex must be as wide as
+// its items in a row (sum), not one item (max). Wikipedia centers `.mw-header`
+// (a row flex, no flex-grow) in a `justify-content:center` flex container; the
+// max-content bug collapsed it to one child's width and stacked its children.
+// --------------------------------------------------------------------------
+
+#[test]
+fn centered_row_flex_lays_children_side_by_side() {
+    let html = r#"<body><div style="display:flex;justify-content:center;width:1000px">
+        <div style="display:flex">
+          <div style="width:140px;height:40px;background-color:#ff0000"></div>
+          <div style="width:300px;height:40px;background-color:#00ff00"></div>
+        </div>
+      </div></body>"#;
+    let f = lay(html, 1000.0);
+    let a = rect(&f, RED).expect("first item");
+    let b = rect(&f, GREEN).expect("second item");
+    assert!(
+        (a[1] - b[1]).abs() < 1.0,
+        "items share a row (a y {}, b y {})",
+        a[1],
+        b[1]
+    );
+    assert!(
+        b[0] >= a[0] + a[2] - 1.0,
+        "second item sits right of the first, not stacked below (a end {}, b start {})",
+        a[0] + a[2],
+        b[0]
+    );
+}
