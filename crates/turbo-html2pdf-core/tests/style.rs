@@ -591,6 +591,16 @@ fn where_with_nested_not_matches() {
 }
 
 #[test]
+fn superscript_ua_is_smaller_and_raised() {
+    // A footnote marker `<sup>[4]</sup>` must render small + raised, not full-size
+    // at the baseline. The UA sheet gives `sub,sup` `font-size:0.83em` on top of
+    // their `vertical-align`.
+    let n = styled("<p>t<sup id='s'>[4]</sup></p>", "");
+    assert_eq!(prop(&n, "s", "font-size").as_deref(), Some("0.83em"));
+    assert_eq!(prop(&n, "s", "vertical-align").as_deref(), Some("super"));
+}
+
+#[test]
 fn hover_never_matches_in_static_render() {
     let css = "a:hover { color: red }";
     let n = styled("<div><a id='a' href='#'>x</a></div>", css);

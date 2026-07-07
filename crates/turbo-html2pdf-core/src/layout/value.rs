@@ -176,6 +176,8 @@ impl BorderEdges {
 enum RawLength {
     Abs(f32),
     Em(f32),
+    /// `rem` — relative to the ROOT font size, not the parent's (unlike `em`).
+    Rem(f32),
     Pct(f32),
 }
 
@@ -206,7 +208,8 @@ fn parse_raw(s: &str) -> Option<RawLength> {
     let value: f32 = num.parse().ok()?;
     match unit {
         "%" => Some(RawLength::Pct(value)),
-        "em" | "rem" => Some(RawLength::Em(value)),
+        "em" => Some(RawLength::Em(value)),
+        "rem" => Some(RawLength::Rem(value)),
         u => unit_factor(u).map(|f| RawLength::Abs(value * f)),
     }
 }
@@ -215,6 +218,9 @@ fn raw_to_px(raw: RawLength, font_size: f32, basis: f32) -> f32 {
     match raw {
         RawLength::Abs(v) => v,
         RawLength::Em(v) => v * font_size,
+        // `rem` is root-relative; the root font size is the initial 16px (turbo does
+        // not track a document-level `html { font-size }` override).
+        RawLength::Rem(v) => v * DEFAULT_FONT_SIZE,
         RawLength::Pct(p) => p / 100.0 * basis,
     }
 }
@@ -275,6 +281,7 @@ pub fn parse_length_pct(s: &str, font_size: f32) -> Option<LengthPct> {
         RawLength::Pct(p) => Some(LengthPct::Pct(p)),
         RawLength::Abs(v) => Some(LengthPct::Px(v)),
         RawLength::Em(v) => Some(LengthPct::Px(v * font_size)),
+        RawLength::Rem(v) => Some(LengthPct::Px(v * DEFAULT_FONT_SIZE)),
     }
 }
 

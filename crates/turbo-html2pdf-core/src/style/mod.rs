@@ -40,6 +40,7 @@ span { display: inline }
 b, strong, i, em { display: inline }
 code, kbd, samp { display: inline }
 sub, sup, abbr, cite, q, mark, u, s, label, time { display: inline }
+sub, sup { font-size: 0.83em }
 sub { vertical-align: sub }
 sup { vertical-align: super }
 table { display: table; text-align: left }

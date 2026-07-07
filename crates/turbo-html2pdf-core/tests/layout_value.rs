@@ -64,6 +64,17 @@ fn parse_px_units() {
 }
 
 #[test]
+fn rem_is_root_relative_not_parent_relative() {
+    // `em` scales with the (parent) font size; `rem` is fixed to the 16px root, so
+    // a `1rem` label inside a shrunk-font ancestor stays 16px instead of compounding
+    // down to unreadable (the Wikipedia appearance-panel radio labels).
+    approx(parse_px("1rem", 8.0).unwrap(), 16.0);
+    approx(parse_px("1rem", 40.0).unwrap(), 16.0);
+    approx(parse_px("2em", 8.0).unwrap(), 16.0);
+    assert_eq!(parse_length_pct("1.5rem", 8.0), Some(LengthPct::Px(24.0)));
+}
+
+#[test]
 fn parse_calc_additive_lengths() {
     // Additive calc() of px/em terms (Codex component sizing, Vector breakpoints).
     approx(parse_px("calc(100px + 20px)", 16.0).unwrap(), 120.0);
