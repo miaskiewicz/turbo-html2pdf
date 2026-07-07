@@ -14,8 +14,8 @@
 
 use crate::layout::fragment::Fragment;
 use crate::layout::ImageCtx;
-use crate::node::{Node, Tag};
-use crate::style::{build_cascade_with_width, style_tree, TokenSet};
+use crate::node::{Element, Node, Tag};
+use crate::style::{build_cascade_with_width, style_tree_with_roots, TokenSet};
 use crate::text::FontRegistry;
 use crate::{Diagnostics, RenderError};
 
@@ -24,6 +24,12 @@ use crate::{Diagnostics, RenderError};
 /// callers that already have final HTML (see the module docs).
 pub fn parse_html(html: &str) -> Result<Vec<Node>, RenderError> {
     crate::template::markup::parse(html)
+}
+
+/// Parse `html`, returning the body flow nodes plus the `<html>`/`<body>` ancestor
+/// shells the cascade seeds for selector matching (see [`parse_with_roots`]).
+pub fn parse_html_with_roots(html: &str) -> Result<(Vec<Node>, Vec<Element>), RenderError> {
+    crate::template::markup::parse_with_roots(html)
 }
 
 /// Elements whose text content is *not* visible page content and must not be laid
@@ -93,11 +99,11 @@ pub fn layout_html(
     fonts: &FontRegistry,
     diags: &mut Diagnostics,
 ) -> Result<Fragment, RenderError> {
-    let nodes = parse_html(html)?;
+    let (nodes, roots) = parse_html_with_roots(html)?;
     let mut author_css = collect_style_css(&nodes);
     author_css.push_str(extra_css);
     let cascade = build_cascade_with_width(&author_css, "", TokenSet::default(), cb_width);
-    let styled = style_tree(&strip_non_visual(nodes), &cascade);
+    let styled = style_tree_with_roots(&strip_non_visual(nodes), &cascade, &roots);
     Ok(crate::layout(&styled, cb_width, fonts, diags))
 }
 
@@ -115,11 +121,11 @@ pub fn layout_html_with_images(
     images: &ImageCtx,
     diags: &mut Diagnostics,
 ) -> Result<Fragment, RenderError> {
-    let nodes = parse_html(html)?;
+    let (nodes, roots) = parse_html_with_roots(html)?;
     let mut author_css = collect_style_css(&nodes);
     author_css.push_str(extra_css);
     let cascade = build_cascade_with_width(&author_css, "", TokenSet::default(), cb_width);
-    let styled = style_tree(&strip_non_visual(nodes), &cascade);
+    let styled = style_tree_with_roots(&strip_non_visual(nodes), &cascade, &roots);
     Ok(crate::layout_with_images(
         &styled, cb_width, fonts, images, diags,
     ))

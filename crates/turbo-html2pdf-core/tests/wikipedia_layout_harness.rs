@@ -493,3 +493,68 @@ fn paragraph_lines_widen_below_the_float() {
         "lines below the float widen past its left edge (full width)",
     );
 }
+
+// --------------------------------------------------------------------------
+// harness 9: skin-chrome gating — @supports, html/body-class ancestors, calc()
+// media. Together these un-hide Vector's sidebar TOC + appearance panel.
+// --------------------------------------------------------------------------
+
+#[test]
+fn html_class_gates_descendant_rule() {
+    // Real skins gate huge amounts of CSS on `<html>`/`<body>` classes (Wikipedia's
+    // `vector-feature-*`, `client-js`, theme classes). Those elements aren't laid
+    // out, but the cascade seeds them as match-only ancestors, so a descendant rule
+    // keyed on the html class must still apply.
+    let html = r#"<html class="feat"><body><style>
+        .box{display:none}
+        .feat .box{display:block;background-color:#ff0000;height:20px}
+      </style><div class="box">x</div></body></html>"#;
+    let f = lay(html, 800.0);
+    assert!(
+        rect(&f, RED).is_some(),
+        "html-class-gated rule un-hides the box"
+    );
+}
+
+#[test]
+fn supports_grid_applies_and_negation_dropped() {
+    // `@supports (display:grid)` is satisfied (we render like a modern browser), so
+    // its body applies; the `not(display:grid)` legacy fallback stays dropped. This
+    // is exactly how Vector un-hides `.vector-pinned-container` (the sidebar TOC +
+    // appearance panel live inside it).
+    let html = r#"<body><style>
+        .b{display:none}
+        @supports (display:grid){ .b{display:block;background-color:#ff0000;height:20px} }
+        @supports not (display:grid){ .c{background-color:#0000ff;height:20px} }
+      </style><div class="b">x</div><div class="c">y</div></body>"#;
+    let f = lay(html, 800.0);
+    assert!(
+        rect(&f, RED).is_some(),
+        "@supports (display:grid) body applies"
+    );
+    assert!(
+        rect(&f, BLUE).is_none(),
+        "@supports not(display:grid) fallback stays dropped"
+    );
+}
+
+#[test]
+fn media_max_width_calc_breakpoint() {
+    // `@media (max-width: calc(1120px - 1px))` is a 1119px breakpoint: excluded at
+    // 1280 (desktop), applied at 1000 (mobile). A calc() that failed to parse would
+    // make the block always-match — wrongly hiding the desktop sidebar columns.
+    let css =
+        "@media screen and (max-width:calc(1120px - 1px)){.m{background-color:#ff0000;height:20px}}";
+    let html = r#"<body><div class="m">x</div></body>"#;
+    let mut d = Diagnostics::default();
+    let wide = layout_html(html, css, 1280.0, &FontRegistry::new(), &mut d).expect("layout");
+    let narrow = layout_html(html, css, 1000.0, &FontRegistry::new(), &mut d).expect("layout");
+    assert!(
+        rect(&wide, RED).is_none(),
+        "mobile @media block excluded at desktop width (calc breakpoint parsed)"
+    );
+    assert!(
+        rect(&narrow, RED).is_some(),
+        "mobile @media block applies below the 1120px breakpoint"
+    );
+}

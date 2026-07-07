@@ -6,7 +6,10 @@ mod parser;
 mod selector;
 mod token;
 
-pub use cascade::{style_tree, Cascade, ComputedStyle, LeveledRule, StyledElement, StyledNode};
+pub use cascade::{
+    style_tree, style_tree_with_roots, Cascade, ComputedStyle, LeveledRule, StyledElement,
+    StyledNode,
+};
 pub use parser::{parse_stylesheet, AtRule, Declaration, Rule, Stylesheet};
 pub use token::{StyleToken, TokenSet};
 
@@ -67,10 +70,104 @@ fn add_leveled(rules: &mut Vec<LeveledRule>, order: &mut usize, level: u8, sheet
     // as in CSS). Non-matching / non-`screen` blocks are dropped. Nested at-rules
     // inside a matched block are handled one level deep (the common case).
     for at in sheet.at_rules {
-        if at.name == "media" && media_matches(&at.prelude, VIEWPORT_WIDTH.get()) {
+        let apply = match at.name.as_str() {
+            "media" => media_matches(&at.prelude, VIEWPORT_WIDTH.get()),
+            "supports" => supports_matches(&at.prelude),
+            _ => false,
+        };
+        if apply {
             add_leveled(rules, order, level, parse_stylesheet(&at.body));
         }
     }
+}
+
+/// Whether an `@supports` condition holds for this engine. We render like a modern
+/// browser, so a bare feature test `(prop: value)` is treated as supported; `not`
+/// negates and `and`/`or` combine. This makes progressive-enhancement blocks —
+/// e.g. Wikipedia's `@supports (display:grid){ .vector-pinned-container{display:
+/// block} }`, which un-hides the sidebar TOC + appearance panel — actually apply,
+/// while their `not(...)` legacy fallbacks stay dropped.
+fn supports_matches(cond: &str) -> bool {
+    supports_or(&cond.trim().to_ascii_lowercase())
+}
+
+/// Split the (already lowercased) `s` on the whole word `op` (space-delimited) at
+/// paren depth 0.
+fn split_top<'a>(s: &'a str, op: &str) -> Vec<&'a str> {
+    let needle = format!(" {op} ");
+    let (mut out, mut depth, mut start, bytes) = (Vec::new(), 0i32, 0usize, s.as_bytes());
+    let mut i = 0;
+    while i < s.len() {
+        match bytes[i] {
+            b'(' => depth += 1,
+            b')' => depth -= 1,
+            _ => {}
+        }
+        if depth == 0 && s[i..].starts_with(&needle) {
+            out.push(&s[start..i]);
+            i += needle.len();
+            start = i;
+            continue;
+        }
+        i += 1;
+    }
+    out.push(&s[start..]);
+    out
+}
+
+fn supports_or(s: &str) -> bool {
+    let parts = split_top(s, "or");
+    if parts.len() > 1 {
+        return parts.iter().any(|p| supports_and(p.trim()));
+    }
+    supports_and(s)
+}
+
+fn supports_and(s: &str) -> bool {
+    let parts = split_top(s, "and");
+    if parts.len() > 1 {
+        return parts.iter().all(|p| supports_unary(p.trim()));
+    }
+    supports_unary(s)
+}
+
+fn supports_unary(s: &str) -> bool {
+    let s = s.trim();
+    if let Some(rest) = s.strip_prefix("not ").or_else(|| s.strip_prefix("not(")) {
+        // `not(` keeps the paren the strip consumed only for the spaced form; re-add
+        // it for the parenless `not(...)` case so the group parses.
+        let inner = if s.starts_with("not(") { &s[3..] } else { rest };
+        return !supports_unary(inner);
+    }
+    // A parenthesised group: an operator expression (recurse) or a leaf test.
+    if let Some(inner) = strip_group(s) {
+        if inner.contains('(')
+            || split_top(inner, "and").len() > 1
+            || split_top(inner, "or").len() > 1
+        {
+            return supports_or(inner);
+        }
+        // Leaf `(property: value)`: a modern browser supports it.
+        return true;
+    }
+    // Bare/unrecognised condition — assume supported.
+    true
+}
+
+/// The inside of `s` if it is exactly one matching-paren group, else `None`.
+fn strip_group(s: &str) -> Option<&str> {
+    let inner = s.trim().strip_prefix('(')?.strip_suffix(')')?;
+    // Confirm the opening paren matches the closing one (not `(a) and (b)`).
+    let mut depth = 0i32;
+    for ch in inner.chars() {
+        match ch {
+            '(' => depth += 1,
+            ')' if depth == 0 => return None,
+            ')' => depth -= 1,
+            _ => {}
+        }
+    }
+    (depth == 0).then_some(inner)
 }
 
 /// The viewport width (px) `@media` width conditions are evaluated against for the
@@ -126,11 +223,35 @@ fn clause_matches(clause: &str, width: f32) -> bool {
 /// The px value of a `(min-width: …)` / `(max-width: …)` feature in `clause`.
 fn feature_len(feat: &str, name: &str) -> Option<f32> {
     let rest = feat.split_once(name)?.1.trim_start();
-    let val = rest.strip_prefix(':')?.trim().trim_end_matches([')', ' ']);
+    // Drop the leading `:` and the feature's own closing paren; a `calc(...)` value
+    // keeps its own parens, so strip exactly one trailing `)` (the feature's).
+    let val = rest.strip_prefix(':')?.trim();
+    let val = val.strip_suffix(')').unwrap_or(val).trim();
+    if let Some(inner) = val.strip_prefix("calc(").and_then(|s| s.strip_suffix(')')) {
+        return eval_calc(inner);
+    }
+    parse_len(val)
+}
+
+/// A single length token → px (`px` bare, or `em`/`rem` against a 16px root).
+fn parse_len(val: &str) -> Option<f32> {
+    let val = val.trim();
     if let Some(em) = val.strip_suffix("rem").or_else(|| val.strip_suffix("em")) {
         return em.trim().parse::<f32>().ok().map(|n| n * 16.0);
     }
     val.trim_end_matches("px").trim().parse::<f32>().ok()
+}
+
+/// Evaluate a minimal `calc()` body of two length terms — `A + B` / `A - B` (as in
+/// Vector's `calc(1120px - 1px)` breakpoint). Falls back to the single term, or a
+/// bare parse, so unknown shapes don't silently drop the whole media condition.
+fn eval_calc(inner: &str) -> Option<f32> {
+    for (op, sign) in [(" - ", -1.0), (" + ", 1.0)] {
+        if let Some((a, b)) = inner.split_once(op) {
+            return Some(parse_len(a)? + sign * parse_len(b)?);
+        }
+    }
+    parse_len(inner)
 }
 
 /// The user-agent stylesheet, parsed once. It is a fixed constant, so parsing it

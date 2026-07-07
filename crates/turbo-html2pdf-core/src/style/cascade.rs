@@ -679,3 +679,29 @@ fn style_siblings<'a>(
 pub fn style_tree(nodes: &[Node], cascade: &Cascade) -> Vec<StyledNode> {
     style_siblings(nodes, &[], &ComputedStyle::default(), cascade)
 }
+
+/// [`style_tree`] with `<html>`/`<body>` ancestor shells seeded as match-only
+/// contexts, so descendant selectors gated on their classes resolve. The shells
+/// are not laid out; they only participate in selector matching.
+pub fn style_tree_with_roots(
+    nodes: &[Node],
+    cascade: &Cascade,
+    roots: &[Element],
+) -> Vec<StyledNode> {
+    let ancestors: Vec<Ctx> = roots
+        .iter()
+        .map(|e| ctx_of(e, root_pos(), Vec::new()))
+        .collect();
+    style_siblings(nodes, &ancestors, &ComputedStyle::default(), cascade)
+}
+
+/// The position for a match-only root shell (a lone only-child); the structural
+/// pseudos on `<html>`/`<body>` don't affect real page layout.
+fn root_pos() -> ElemPos {
+    ElemPos {
+        index: 0,
+        of_type_index: 0,
+        of_type_total: 1,
+        siblings: 1,
+    }
+}
