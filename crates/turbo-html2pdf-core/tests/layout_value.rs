@@ -263,6 +263,21 @@ fn borders_shorthand_side_and_longhand() {
 }
 
 #[test]
+fn all_sides_border_color_longhand_overrides_shorthand() {
+    // `border:1px solid transparent` + `border-color:#72777d` (Codex radio icon):
+    // the all-sides `border-color` longhand must override the shorthand's colour, or
+    // the circle outline is invisible.
+    let b = resolve(&[
+        ("border", "1px solid transparent"),
+        ("border-color", "#72777d"),
+    ])
+    .border;
+    assert_eq!(b.top.color, Some(Rgba::new(0x72, 0x77, 0x7d, 255)));
+    assert_eq!(b.left.color, Some(Rgba::new(0x72, 0x77, 0x7d, 255)));
+    assert_eq!(b.top.width, 1);
+}
+
+#[test]
 fn border_keyword_widths() {
     assert_eq!(resolve(&[("border", "thin")]).border.top.width, 1);
     assert_eq!(resolve(&[("border", "medium")]).border.top.width, 3);

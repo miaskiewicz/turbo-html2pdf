@@ -671,6 +671,19 @@ fn resolve_border_side(s: &ComputedStyle, name: &str, fs: f32) -> BorderSide {
     if let Some(v) = s.get(&format!("border-{name}")) {
         b = parse_border_shorthand(Some(v), fs);
     }
+    // All-sides longhands (`border-color`/`border-width`) override the `border`
+    // shorthand's values. Without this a `border:1px solid transparent` +
+    // `border-color:#72777d` (Codex's radio icon) kept the transparent colour and
+    // the circle outline was invisible.
+    if let Some(c) = s.get("border-color").and_then(parse_color) {
+        b.color = Some(c);
+    }
+    if let Some(w) = s
+        .get("border-width")
+        .and_then(|v| border_width_token(v, fs))
+    {
+        b.width = w;
+    }
     if let Some(w) = s
         .get(&format!("border-{name}-width"))
         .and_then(|v| border_width_token(v, fs))
