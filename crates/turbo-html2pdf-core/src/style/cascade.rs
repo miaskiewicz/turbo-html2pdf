@@ -510,6 +510,76 @@ fn pick_winners(cands: Vec<Cand>) -> BTreeMap<String, String> {
     best.into_iter().map(|(k, (_, v))| (k, v)).collect()
 }
 
+/// The document root font size (px). CSS `rem` and the initial `font-size` both
+/// resolve against it; turbo does not honor an `html { font-size }` override.
+const ROOT_FONT_PX: f32 = 16.0;
+
+/// Resolve `font-size` to an absolute px value against the parent's (already
+/// absolute) font size, then store it back as `"<n>px"`. Font-relative units
+/// resolve at the element that *declares* them (§4.2): if we left `em`/`%` as a
+/// string, every descendant that inherits it would re-multiply against the
+/// parent's px — e.g. `h1{font-size:1.8em}` compounding to 1.8²·16 on its text.
+fn resolve_font_size(map: &mut BTreeMap<String, String>, parent: &ComputedStyle) {
+    let parent_px = parent
+        .get("font-size")
+        .and_then(parse_abs_px)
+        .unwrap_or(ROOT_FONT_PX);
+    let Some(raw) = map.get("font-size") else {
+        return;
+    };
+    let px = font_size_px(raw, parent_px);
+    map.insert("font-size".to_string(), format!("{px}px"));
+}
+
+/// Parse an already-absolute px string (`"28.8px"` / `"16"`); `None` for anything
+/// still carrying a relative unit.
+fn parse_abs_px(v: &str) -> Option<f32> {
+    let t = v.trim();
+    t.strip_suffix("px").unwrap_or(t).trim().parse::<f32>().ok()
+}
+
+/// Resolve one `font-size` value to px against `parent_px`: `px`/`pt`/`pc`/`in`/
+/// `cm`/`mm` absolute, `em`/`%` parent-relative, `rem` root-relative, and the
+/// `larger`/`smaller`/`xx-small…xx-large` keywords (coarse steps).
+fn font_size_px(value: &str, parent_px: f32) -> f32 {
+    let t = value.trim();
+    let kw = match t {
+        "larger" => Some(parent_px * 1.2),
+        "smaller" => Some(parent_px / 1.2),
+        "xx-small" => Some(ROOT_FONT_PX * 0.6),
+        "x-small" => Some(ROOT_FONT_PX * 0.75),
+        "small" => Some(ROOT_FONT_PX * 0.89),
+        "medium" => Some(ROOT_FONT_PX),
+        "large" => Some(ROOT_FONT_PX * 1.2),
+        "x-large" => Some(ROOT_FONT_PX * 1.5),
+        "xx-large" => Some(ROOT_FONT_PX * 2.0),
+        _ => None,
+    };
+    if let Some(px) = kw {
+        return px;
+    }
+    let split = t
+        .char_indices()
+        .find(|(_, c)| c.is_ascii_alphabetic() || *c == '%')
+        .map(|(i, _)| i)
+        .unwrap_or(t.len());
+    let Ok(n) = t[..split].parse::<f32>() else {
+        return parent_px;
+    };
+    match t[split..].trim() {
+        "" | "px" => n,
+        "pt" => n * 96.0 / 72.0,
+        "pc" => n * 16.0,
+        "in" => n * 96.0,
+        "cm" => n * 96.0 / 2.54,
+        "mm" => n * 96.0 / 25.4,
+        "em" => n * parent_px,
+        "rem" => n * ROOT_FONT_PX,
+        "%" => n / 100.0 * parent_px,
+        _ => parent_px,
+    }
+}
+
 fn inherit(own: BTreeMap<String, String>, parent: &ComputedStyle) -> ComputedStyle {
     let mut map = BTreeMap::new();
     for prop in INHERITED {
@@ -525,6 +595,7 @@ fn inherit(own: BTreeMap<String, String>, parent: &ComputedStyle) -> ComputedSty
     }
     map.extend(own);
     resolve_var_refs(&mut map);
+    resolve_font_size(&mut map, parent);
     ComputedStyle { map }
 }
 

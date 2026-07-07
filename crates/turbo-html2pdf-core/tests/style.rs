@@ -306,7 +306,10 @@ fn tokens_extends_and_later_token_wins() {
     );
     assert_eq!(prop(&tree, "e", "color").as_deref(), Some("#666"));
     assert_eq!(prop(&tree, "e", "font-weight").as_deref(), Some("700"));
-    assert_eq!(prop(&tree, "e", "font-size").as_deref(), Some("14pt"));
+    // font-size is a computed absolute value: 14pt = 14·96/72 ≈ 18.67px.
+    let fs = prop(&tree, "e", "font-size").unwrap();
+    let px: f32 = fs.strip_suffix("px").unwrap().parse().unwrap();
+    assert!((px - 18.6667).abs() < 0.01, "14pt -> {px}px");
 }
 
 #[test]
@@ -591,12 +594,44 @@ fn where_with_nested_not_matches() {
 }
 
 #[test]
+fn em_font_size_does_not_compound_on_inheritance() {
+    // `font-size` computes to an absolute px at the element that declares the `em`,
+    // so descendants inherit the resolved value — they must NOT re-multiply. A
+    // Wikipedia `h1{font-size:1.8em}` whose text re-applied 1.8em rendered at
+    // 1.8²·16 = 51.8px instead of 28.8px.
+    let css = ".big { font-size: 1.8em }";
+    let n = styled(
+        "<div class='big' id='h'>Cat<span id='c'>inner</span></div>",
+        css,
+    );
+    let px = |id| {
+        prop(&n, id, "font-size")
+            .unwrap()
+            .strip_suffix("px")
+            .unwrap()
+            .parse::<f32>()
+            .unwrap()
+    };
+    assert!(
+        (px("h") - 28.8).abs() < 0.01,
+        "1.8em of 16px root = 28.8, got {}",
+        px("h")
+    );
+    assert!(
+        (px("c") - 28.8).abs() < 0.01,
+        "child inherits the resolved 28.8px, not 1.8em again (got {})",
+        px("c")
+    );
+}
+
+#[test]
 fn superscript_ua_is_smaller_and_raised() {
     // A footnote marker `<sup>[4]</sup>` must render small + raised, not full-size
     // at the baseline. The UA sheet gives `sub,sup` `font-size:0.83em` on top of
     // their `vertical-align`.
     let n = styled("<p>t<sup id='s'>[4]</sup></p>", "");
-    assert_eq!(prop(&n, "s", "font-size").as_deref(), Some("0.83em"));
+    // font-size is a computed (absolute) value: 0.83em of the 16px root = 13.28px.
+    assert_eq!(prop(&n, "s", "font-size").as_deref(), Some("13.28px"));
     assert_eq!(prop(&n, "s", "vertical-align").as_deref(), Some("super"));
 }
 
