@@ -735,3 +735,17 @@ fn var_nested_reference() {
     );
     assert_eq!(prop(&n, "e", "width").as_deref(), Some("15px"));
 }
+
+#[test]
+fn self_referential_var_uses_fallback() {
+    // Codex redefines a design token from its inherited value:
+    // `--font-size-medium: var(--font-size-medium, 1rem)`. turbo flattens the
+    // cascade so it can't follow the reference up the tree; a self-cycle must
+    // resolve to the fallback (not spin to the depth cap and leave an unresolved
+    // `var()` that breaks the surrounding `calc()` — which zeroed every icon box).
+    let n = styled(
+        r#"<div id="e" class="ic">x</div>"#,
+        ".ic{--fsm:var(--fsm,1rem);width:calc(var(--fsm,1rem) + 4px)}",
+    );
+    assert_eq!(prop(&n, "e", "width").as_deref(), Some("calc(1rem + 4px)"));
+}

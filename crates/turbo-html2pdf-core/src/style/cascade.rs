@@ -611,7 +611,7 @@ fn resolve_var_refs(map: &mut BTreeMap<String, String>) {
         .collect();
     for (key, value) in map.iter_mut() {
         if value.contains("var(") {
-            *value = substitute_vars(value, &vars, 0);
+            *value = substitute_vars(value, &vars, 0, &[]);
             let _ = key;
         }
     }
@@ -620,7 +620,12 @@ fn resolve_var_refs(map: &mut BTreeMap<String, String>) {
 /// Replace `var(--name[, fallback])` references in `value` using `vars`. Balanced
 /// parens (a fallback may itself contain `var()` / functions); a missing or empty
 /// custom property falls back. Depth-limited against a cyclic `--a: var(--a)`.
-fn substitute_vars(value: &str, vars: &BTreeMap<String, String>, depth: u8) -> String {
+fn substitute_vars(
+    value: &str,
+    vars: &BTreeMap<String, String>,
+    depth: u8,
+    chain: &[&str],
+) -> String {
     if depth > 16 || !value.contains("var(") {
         return value.to_string();
     }
@@ -635,7 +640,7 @@ fn substitute_vars(value: &str, vars: &BTreeMap<String, String>, depth: u8) -> S
                 break;
             };
             let inner = &value[inner_start..close];
-            out.push_str(&resolve_one_var(inner, vars, depth));
+            out.push_str(&resolve_one_var(inner, vars, depth, chain));
             i = close + 1;
         } else {
             let ch = value[i..].chars().next().unwrap();
@@ -665,15 +670,30 @@ fn matching_paren(s: &str, open: usize) -> Option<usize> {
     None
 }
 
-/// Resolve one `var()` body (`--name` or `--name, fallback`) to its value.
-fn resolve_one_var(inner: &str, vars: &BTreeMap<String, String>, depth: u8) -> String {
+/// Resolve one `var()` body (`--name` or `--name, fallback`) to its value. `chain`
+/// is the stack of custom properties currently being resolved: a name that appears
+/// again is a reference cycle (`--a: var(--a, 1rem)` — Codex's "redefine a token
+/// from its inherited value" idiom, which we flatten and so cannot follow up the
+/// tree), so it resolves to the fallback instead of spinning to the depth cap and
+/// leaving an unresolved `var()` that breaks the surrounding `calc()`.
+fn resolve_one_var(
+    inner: &str,
+    vars: &BTreeMap<String, String>,
+    depth: u8,
+    chain: &[&str],
+) -> String {
     let (name, fallback) = match inner.find(',') {
         Some(c) => (inner[..c].trim(), inner[c + 1..].trim()),
         None => (inner.trim(), ""),
     };
+    let cyclic = chain.contains(&name);
     match vars.get(name).map(|v| v.trim()).filter(|v| !v.is_empty()) {
-        Some(v) => substitute_vars(v, vars, depth + 1),
-        None => substitute_vars(fallback, vars, depth + 1),
+        Some(v) if !cyclic => {
+            let mut next: Vec<&str> = chain.to_vec();
+            next.push(name);
+            substitute_vars(v, vars, depth + 1, &next)
+        }
+        _ => substitute_vars(fallback, vars, depth + 1, chain),
     }
 }
 

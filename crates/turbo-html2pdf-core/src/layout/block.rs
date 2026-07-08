@@ -653,10 +653,7 @@ fn mask_tint(bs: &BoxStyle) -> super::value::Rgba {
 fn prepend_mask_image(
     lb: &LayoutBox,
     bs: &BoxStyle,
-    cx: f32,
-    cy: f32,
-    cw: f32,
-    ch: f32,
+    rect: (f32, f32, f32, f32),
     ctx: &Ctx,
     children: &mut Vec<Fragment>,
 ) {
@@ -670,6 +667,7 @@ fn prepend_mask_image(
     let Some(intrinsic) = probe_source(&src, ctx) else {
         return;
     };
+    let (cx, cy, cw, ch) = rect;
     let mut placement = super::imgsize::placement_of(name.clone(), intrinsic);
     placement.tint = Some(mask_tint(bs));
     let frag = Fragment::new(
@@ -769,10 +767,7 @@ fn layout_box_sized_impl(
     prepend_mask_image(
         lb,
         bs,
-        content_x,
-        content_y,
-        content_w,
-        fill_h,
+        (content_x, content_y, content_w, fill_h),
         &*ctx,
         &mut children,
     );
