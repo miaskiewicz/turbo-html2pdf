@@ -4,6 +4,19 @@ All notable changes to turbo-html2pdf are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/); versions follow SemVer. The npm,
 PyPI, and crates.io packages release in lockstep from a `v*` tag (PyPI on `pyv*`).
 
+## [0.2.8]
+
+Overlay chrome: `box-shadow` so cards and modals read as raised chrome instead
+of flat rectangles.
+
+### Added
+- **CSS `box-shadow`.** The first (topmost) shadow layer parses into a `BoxShadow`
+  on `FragmentContent::Box` — `[inset]? <offset-x> <offset-y> <blur>? <spread>?
+  <color>?` in any color position, comma-separated layers (first kept), color
+  defaulting to `currentColor`, bare `0` accepted as a length. Exported as
+  `turbo_html2pdf_core::BoxShadow` for raster consumers to stamp + blur behind the
+  box. Inset shadows are flagged but painted outer-only by the v1 raster.
+
 ## [0.2.7]
 
 Real-page fidelity, round two: the fixes that make Wikipedia render like Chromium,
