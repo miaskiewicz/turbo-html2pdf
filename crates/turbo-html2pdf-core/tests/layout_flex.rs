@@ -267,3 +267,22 @@ fn deeply_nested_flex_is_not_exponential() {
     .expect("layout");
     assert!(f.height > 0.0);
 }
+
+#[test]
+fn row_flex_fits_margin_spaced_items() {
+    // A row flex's max-content must include the items' horizontal margins, else the
+    // container measures short and margin-spaced children overflow it (Wikipedia's
+    // page-action tabs spilled "View history" past the toolbar).
+    let mk = |m: &str| item(&[("margin-left", m), ("flex-shrink", "0")], "tab");
+    let root = flex(&[], vec![mk("0"), mk("20px"), mk("20px")], 1000.0);
+    let its = items_of(&root);
+    // last item's right edge stays within the (content-sized) container width.
+    let container_w = root.children[0].width;
+    let last_right = its[2].x + its[2].width;
+    assert!(
+        last_right <= container_w + 0.5,
+        "items (right {last_right}) must fit the container ({container_w})"
+    );
+    // the 40px of margins are present between the three tabs.
+    assert!(its[2].x - (its[0].x + its[0].width) >= 40.0 - 1.0);
+}

@@ -233,11 +233,29 @@ fn flex_natural(kids: &[LayoutBox], s: &ComputedStyle, fonts: &FontRegistry) -> 
             .or_else(|| s.get("gap"))
             .and_then(|v| parse_px(v, DEFAULT_FONT_SIZE))
             .unwrap_or(0.0);
-        let sum: f32 = kids.iter().map(|k| natural_width(k, fonts)).sum();
+        // Each item contributes its border-box natural width PLUS its horizontal
+        // margins — the items are laid side by side including those margins, so
+        // omitting them undersizes the row and its children overflow (Wikipedia's
+        // page-action tabs are margin-spaced; the row measured short and "View
+        // history" spilled past the toolbar into the next column).
+        let sum: f32 = kids
+            .iter()
+            .map(|k| natural_width(k, fonts) + item_hmargin(k))
+            .sum();
         sum + gap * kids.len().saturating_sub(1) as f32
     } else {
         kids_natural(kids, fonts)
     }
+}
+
+/// The item's positive horizontal margins (px), which sit between it and its flex
+/// siblings. Negative/auto margins contribute nothing to the intrinsic width.
+fn item_hmargin(k: &LayoutBox) -> f32 {
+    let bs = k.resolved(ResolveCtx {
+        parent_font_size: DEFAULT_FONT_SIZE,
+        cb_width: 0.0,
+    });
+    bs.margin.left.max(0.0) + bs.margin.right.max(0.0)
 }
 
 pub(crate) fn natural_width(lb: &LayoutBox, fonts: &FontRegistry) -> f32 {
