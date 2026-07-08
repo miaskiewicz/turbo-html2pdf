@@ -306,26 +306,35 @@ fn measure_item(
     scratch: &mut Diagnostics,
 ) -> Size<f32> {
     let w = measure_width(known.width, avail.width, item, fonts);
-    let bs = item.resolved(ResolveCtx {
-        parent_font_size: fs,
-        cb_width: w,
+    // Memoize the full sub-layout by proposed width: taffy probes each item several
+    // times per solve, and each probe recurses a full layout, so nested flex is
+    // exponential without this. `fs` (the flex container's font size) is stable per
+    // item, so width alone keys the cache.
+    let (cw, ch) = item.measure_cached(w, || {
+        let bs = item.resolved(ResolveCtx {
+            parent_font_size: fs,
+            cb_width: w,
+        });
+        let images = super::ImageCtx::none();
+        let mut sd = Diagnostics::default();
+        let mut mctx = Ctx {
+            fonts,
+            images: &images,
+            diags: &mut sd,
+            // Scratch measurement: the item is its own containing block at origin.
+            abs_cb_x: 0.0,
+            abs_cb_y: 0.0,
+            abs_cb_w: w,
+            root_w: w,
+            floats: Vec::new(),
+        };
+        let frag = block::layout_box_sized_isolated(item, &bs, 0.0, 0.0, w, &mut mctx);
+        (frag.width, frag.height)
     });
-    let images = super::ImageCtx::none();
-    let mut mctx = Ctx {
-        fonts,
-        images: &images,
-        diags: scratch,
-        // Scratch measurement: the item is its own containing block at origin.
-        abs_cb_x: 0.0,
-        abs_cb_y: 0.0,
-        abs_cb_w: w,
-        root_w: w,
-        floats: Vec::new(),
-    };
-    let frag = block::layout_box_sized_isolated(item, &bs, 0.0, 0.0, w, &mut mctx);
+    let _ = scratch;
     Size {
-        width: known.width.unwrap_or(frag.width),
-        height: known.height.unwrap_or(frag.height),
+        width: known.width.unwrap_or(cw),
+        height: known.height.unwrap_or(ch),
     }
 }
 

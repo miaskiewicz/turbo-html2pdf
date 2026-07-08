@@ -230,3 +230,26 @@ fn empty_flex_container_has_no_items() {
     assert!(items_of(&root).is_empty());
     assert_eq!(root.children[0].height, 0.0);
 }
+
+#[test]
+fn deeply_nested_flex_is_not_exponential() {
+    // Each flex container's items are probed by taffy several times per solve, and
+    // each probe recurses a full sub-layout, so nested flex was exponential in depth
+    // (~8 levels stopped completing). The per-box measure cache collapses the repeat
+    // probes; a depth-7 tree must lay out — this test completing is the assertion.
+    use turbo_html2pdf_core::{layout_html, Diagnostics, FontRegistry};
+    let mut html = String::from("<span>leaf</span>");
+    for _ in 0..7 {
+        html = format!("<div style=\"display:flex\"><div>a</div>{html}<div>b</div></div>");
+    }
+    let mut d = Diagnostics::default();
+    let f = layout_html(
+        &format!("<body>{html}</body>"),
+        "",
+        800.0,
+        &FontRegistry::new(),
+        &mut d,
+    )
+    .expect("layout");
+    assert!(f.height > 0.0);
+}

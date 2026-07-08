@@ -44,6 +44,12 @@ pub struct LayoutBox {
     /// nested tree measured naively is superlinear. Cache the first result per box.
     natural_cache: std::cell::Cell<Option<f32>>,
     min_content_cache: std::cell::Cell<Option<f32>>,
+    /// Memoized flex/grid measurement: the content `(width, height)` this box lays
+    /// out to at a given proposed width. taffy probes each item's size several times
+    /// per solve (min/max-content, then the resolved width) and each probe does a
+    /// FULL sub-layout, so a deeply nested flex tree is exponential without this —
+    /// keyed by the rounded proposed width (a handful of distinct values per box).
+    measure_cache: RefCell<Vec<(u32, (f32, f32))>>,
     /// The PDF/UA structure role derived from this box's HTML tag (`pdf-ua`),
     /// carried down to the fragment so the emitter can tag it (AC-11.1).
     #[cfg(feature = "pdf-ua")]
@@ -89,6 +95,26 @@ impl LayoutBox {
                 w
             }
         }
+    }
+
+    /// The memoized measured content size at proposed width `w`, computing it once
+    /// per distinct (rounded) width via `f`.
+    pub(crate) fn measure_cached(&self, w: f32, f: impl FnOnce() -> (f32, f32)) -> (f32, f32) {
+        let key = w.round().clamp(0.0, u32::MAX as f32) as u32;
+        // Scope the immutable borrow to this `let` so it is dropped before `f()` (a
+        // recursive sub-layout) or the `borrow_mut` below can run.
+        let hit = self
+            .measure_cache
+            .borrow()
+            .iter()
+            .find(|(k, _)| *k == key)
+            .map(|(_, s)| *s);
+        if let Some(size) = hit {
+            return size;
+        }
+        let size = f();
+        self.measure_cache.borrow_mut().push((key, size));
+        size
     }
 
     /// Resolve this box's [`BoxStyle`] for `ctx`, reusing the cached resolution
@@ -356,6 +382,7 @@ fn build_block_box(el: &StyledElement, ids: &mut Ids) -> LayoutBox {
             style_cache: RefCell::new(StyleCache::Unknown),
             natural_cache: std::cell::Cell::new(None),
             min_content_cache: std::cell::Cell::new(None),
+            measure_cache: RefCell::new(Vec::new()),
             #[cfg(feature = "pdf-ua")]
             ua_role: None,
             #[cfg(feature = "pdf-ua")]
@@ -374,6 +401,7 @@ fn build_block_box(el: &StyledElement, ids: &mut Ids) -> LayoutBox {
         style_cache: RefCell::new(StyleCache::Unknown),
         natural_cache: std::cell::Cell::new(None),
         min_content_cache: std::cell::Cell::new(None),
+        measure_cache: RefCell::new(Vec::new()),
         #[cfg(feature = "pdf-ua")]
         ua_role: ua::role_of(el),
         #[cfg(feature = "pdf-ua")]
@@ -474,6 +502,7 @@ fn anon_lines_box(
         style_cache: RefCell::new(StyleCache::Unknown),
         natural_cache: std::cell::Cell::new(None),
         min_content_cache: std::cell::Cell::new(None),
+        measure_cache: RefCell::new(Vec::new()),
         // An anonymous block wrapping an inline run reads as a paragraph of text.
         #[cfg(feature = "pdf-ua")]
         ua_role: Some(crate::layout::fragment::UaRole::Paragraph),
@@ -554,6 +583,7 @@ pub fn build_box_tree(styled: &[StyledNode]) -> LayoutBox {
         style_cache: RefCell::new(StyleCache::Unknown),
         natural_cache: std::cell::Cell::new(None),
         min_content_cache: std::cell::Cell::new(None),
+        measure_cache: RefCell::new(Vec::new()),
         // The synthetic document root maps to the `Document` structure element.
         #[cfg(feature = "pdf-ua")]
         ua_role: Some(crate::layout::fragment::UaRole::Group),
