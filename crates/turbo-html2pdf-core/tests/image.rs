@@ -612,6 +612,7 @@ fn no_image_default_path_skips_image_fragments() {
         intrinsic_w: 2,
         intrinsic_h: 2,
         has_alpha: false,
+        tint: None,
     };
     let frag = turbo_html2pdf_core::Fragment::new(
         turbo_html2pdf_core::NodeId(1),
@@ -637,6 +638,7 @@ fn image_frag(name: &str) -> turbo_html2pdf_core::Fragment {
         intrinsic_w: 2,
         intrinsic_h: 2,
         has_alpha: false,
+        tint: None,
     };
     let mut frag = turbo_html2pdf_core::Fragment::new(
         turbo_html2pdf_core::NodeId(1),
@@ -848,5 +850,63 @@ fn layout_html_with_images_sizes_a_resolvable_img() {
         count_images(&g.content, &g.children),
         1,
         "only the resolvable <img> becomes an Image fragment"
+    );
+}
+
+#[test]
+fn mask_image_box_emits_tinted_image_and_no_solid_background() {
+    // A `mask-image` box paints its `background-color` THROUGH the mask (a tinted
+    // Image fragment), and must NOT also paint a solid rectangle — otherwise the
+    // icon glyph shows as a filled square. The tinted image fills the box even with
+    // no flow content (an empty icon span sized only by width/height).
+    fn find_tinted(f: &turbo_html2pdf_core::Fragment) -> Option<(String, [u8; 4], f32, f32)> {
+        if let FragmentContent::Image(p) = &f.content {
+            if let Some(t) = p.tint {
+                return Some((p.name.clone(), [t.r, t.g, t.b, t.a], f.width, f.height));
+            }
+        }
+        f.children.iter().find_map(find_tinted)
+    }
+    fn any_solid_bg(f: &turbo_html2pdf_core::Fragment) -> bool {
+        (matches!(
+            &f.content,
+            FragmentContent::Box {
+                background: Some(_),
+                ..
+            }
+        )) || f.children.iter().any(any_solid_bg)
+    }
+    let style = ComputedStyle::from_pairs([
+        ("-webkit-mask-image", "url('caret.svg')"),
+        ("background-color", "#2244dd"),
+        ("width", "20px"),
+        ("height", "20px"),
+        ("display", "block"),
+    ]);
+    let el = StyledElement {
+        tag: Tag::Html("span".into()),
+        attrs: Vec::new(),
+        style,
+        children: vec![],
+    };
+    let styled = vec![StyledNode::Element(el)];
+    let resolver = MapResolver::new(vec![("caret.svg", png_rgb_2x2())]);
+    let ctx = ImageCtx {
+        resolver: &resolver,
+        body_height: Some(700.0),
+    };
+    let mut diags = Diagnostics::default();
+    let galley = layout_with_images(&styled, 540.0, &common::registry(), &ctx, &mut diags);
+    let (name, tint, w, h) = find_tinted(&galley).expect("masked box must emit a tinted image");
+    assert_eq!(name, "caret.svg");
+    assert_eq!(
+        tint,
+        [0x22, 0x44, 0xdd, 0xff],
+        "tint is the background-color"
+    );
+    assert_eq!((w, h), (20.0, 20.0), "mask fills the (empty) box's size");
+    assert!(
+        !any_solid_bg(&galley),
+        "a masked box must not paint a solid rectangle"
     );
 }

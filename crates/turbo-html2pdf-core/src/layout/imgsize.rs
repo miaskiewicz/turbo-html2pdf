@@ -56,6 +56,7 @@ pub fn placement_of(name: String, intrinsic: Intrinsic) -> ImagePlacement {
         intrinsic_w: intrinsic.width,
         intrinsic_h: intrinsic.height,
         has_alpha: intrinsic.has_alpha,
+        tint: None,
     }
 }
 

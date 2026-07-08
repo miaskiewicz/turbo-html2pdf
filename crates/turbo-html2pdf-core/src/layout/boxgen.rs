@@ -32,6 +32,12 @@ pub struct LayoutBox {
     /// A raster image this box paints (§7.4): a replaced `<img>` (which also
     /// sizes the box) or a `background-image` (painted behind the box content).
     pub image: Option<ImageSource>,
+    /// A `mask-image: url(...)` (or `-webkit-mask-image`): the icon technique where
+    /// an SVG is used as an alpha mask and the box's paint (its `background-color`,
+    /// falling back to `color`) shows through only where the mask is opaque. Ubiquitous
+    /// for Wikipedia's UI glyphs (TOC carets, search/eye/pencil). The box paints as a
+    /// tinted mask instead of a solid rectangle.
+    pub mask: Option<String>,
     /// Memoized style resolution. Layout resolves each box's `BoxStyle` several
     /// times (max-content measurement, then placement); when the metrics cannot
     /// vary with the containing block, the first resolution is reused instead of
@@ -379,6 +385,7 @@ fn build_block_box(el: &StyledElement, ids: &mut Ids) -> LayoutBox {
             display: Display::Block,
             kind: BoxKind::Directive(*kind),
             image: None,
+            mask: None,
             style_cache: RefCell::new(StyleCache::Unknown),
             natural_cache: std::cell::Cell::new(None),
             min_content_cache: std::cell::Cell::new(None),
@@ -398,6 +405,7 @@ fn build_block_box(el: &StyledElement, ids: &mut Ids) -> LayoutBox {
         display,
         kind,
         image: image_of(el),
+        mask: mask_image(&el.style),
         style_cache: RefCell::new(StyleCache::Unknown),
         natural_cache: std::cell::Cell::new(None),
         min_content_cache: std::cell::Cell::new(None),
@@ -454,6 +462,21 @@ fn background_image(style: &ComputedStyle) -> Option<String> {
         .find_map(url_token)
 }
 
+/// The url of a `mask-image`/`-webkit-mask-image: url(...)` (or a `url(...)` in the
+/// `mask` shorthand). Icons use this with `background-color` to tint an SVG glyph.
+fn mask_image(style: &ComputedStyle) -> Option<String> {
+    for prop in ["mask-image", "-webkit-mask-image", "mask", "-webkit-mask"] {
+        if let Some(url) = style.get(prop).and_then(|v| {
+            super::value::css_value_tokens(v)
+                .into_iter()
+                .find_map(url_token)
+        }) {
+            return Some(url);
+        }
+    }
+    None
+}
+
 /// The bare url inside a `url(...)` token (quotes stripped), or `None` for any
 /// other token.
 fn url_token(token: &str) -> Option<String> {
@@ -499,6 +522,7 @@ fn anon_lines_box(
         display: Display::Block,
         kind: BoxKind::Lines(items),
         image: None,
+        mask: None,
         style_cache: RefCell::new(StyleCache::Unknown),
         natural_cache: std::cell::Cell::new(None),
         min_content_cache: std::cell::Cell::new(None),
@@ -580,6 +604,7 @@ pub fn build_box_tree(styled: &[StyledNode]) -> LayoutBox {
         display: Display::Block,
         kind,
         image: None,
+        mask: None,
         style_cache: RefCell::new(StyleCache::Unknown),
         natural_cache: std::cell::Cell::new(None),
         min_content_cache: std::cell::Cell::new(None),

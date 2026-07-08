@@ -114,6 +114,10 @@ pub struct ImagePlacement {
     pub intrinsic_h: u32,
     /// Whether the source had transparency (drives SMask emission).
     pub has_alpha: bool,
+    /// When set, the image is a CSS `mask-image`: paint this solid colour everywhere
+    /// the source is opaque (using the source's alpha as a stencil) rather than
+    /// blitting the source pixels. Tints Wikipedia's monochrome SVG UI glyphs.
+    pub tint: Option<Rgba>,
 }
 
 /// Break hints attached to a fragment, consumed by the fragmenter.

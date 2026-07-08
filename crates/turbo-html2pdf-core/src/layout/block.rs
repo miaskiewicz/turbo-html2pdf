@@ -631,11 +631,56 @@ fn content_kind(lb: &LayoutBox, bs: &BoxStyle, bbw: f32, bbh: f32) -> FragmentCo
     match &lb.kind {
         BoxKind::Directive(k) => FragmentContent::Directive(*k),
         _ => FragmentContent::Box {
-            background: bs.background,
+            // A masked box paints its fill THROUGH the mask (a separate tinted image
+            // fragment), so it must not also paint a solid rectangle behind it.
+            background: bs.background.filter(|_| lb.mask.is_none()),
             border: bs.border,
             border_radius: resolve_radius(bs.border_radius, bbw, bbh),
         },
     }
+}
+
+/// The colour a `mask-image` box paints through the mask: its `background-color`,
+/// falling back to `color` (`currentColor`, the common idiom) when the background
+/// is transparent.
+fn mask_tint(bs: &BoxStyle) -> super::value::Rgba {
+    bs.background.unwrap_or(bs.color)
+}
+
+/// If the box carries a resolvable `mask-image`, insert a tinted `Image` fragment
+/// filling its content box (in front of the background, behind its children) that
+/// the raster paints as `mask_tint` stencilled by the mask's alpha.
+fn prepend_mask_image(
+    lb: &LayoutBox,
+    bs: &BoxStyle,
+    cx: f32,
+    cy: f32,
+    cw: f32,
+    ch: f32,
+    ctx: &Ctx,
+    children: &mut Vec<Fragment>,
+) {
+    let Some(name) = lb.mask.as_ref() else {
+        return;
+    };
+    let src = ImageSource {
+        name: name.clone(),
+        replaced: false,
+    };
+    let Some(intrinsic) = probe_source(&src, ctx) else {
+        return;
+    };
+    let mut placement = super::imgsize::placement_of(name.clone(), intrinsic);
+    placement.tint = Some(mask_tint(bs));
+    let frag = Fragment::new(
+        lb.node_id,
+        cx,
+        cy,
+        cw,
+        ch,
+        FragmentContent::Image(placement),
+    );
+    children.insert(0, frag);
 }
 
 /// Resolve `border-radius` to px against the border box, clamped to half the
@@ -716,13 +761,27 @@ fn layout_box_sized_impl(
         ctx.floats = outer;
     }
     (ctx.abs_cb_x, ctx.abs_cb_y, ctx.abs_cb_w) = saved_cb;
-    let bbh = content_box_height(bs, content_h) + bs.padding.vertical() + bw.vertical();
+    // The content-box height honoring an explicit/min/max `height` — a `background`
+    // or `mask` image fills the box even when it has no flow content (an empty icon
+    // span sized only by `height`, whose measured `content_h` is 0).
+    let fill_h = content_box_height(bs, content_h);
+    let bbh = fill_h + bs.padding.vertical() + bw.vertical();
+    prepend_mask_image(
+        lb,
+        bs,
+        content_x,
+        content_y,
+        content_w,
+        fill_h,
+        &*ctx,
+        &mut children,
+    );
     prepend_background_image(
         lb,
         content_x,
         content_y,
         content_w,
-        content_h,
+        fill_h,
         &*ctx,
         &mut children,
     );
