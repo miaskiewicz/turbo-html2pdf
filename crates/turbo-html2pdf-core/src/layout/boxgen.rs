@@ -38,6 +38,12 @@ pub struct LayoutBox {
     /// re-parsing the ~25 properties. The (one-time) independence classification
     /// is also cached so context-*dependent* boxes never re-scan their values.
     style_cache: RefCell<StyleCache>,
+    /// Memoized intrinsic widths (max-content, min-content). Both are pure
+    /// functions of the box subtree + fonts (no layout context), but the flex/table
+    /// sizers call them repeatedly and RE-descend the subtree each time, so a deeply
+    /// nested tree measured naively is superlinear. Cache the first result per box.
+    natural_cache: std::cell::Cell<Option<f32>>,
+    min_content_cache: std::cell::Cell<Option<f32>>,
     /// The PDF/UA structure role derived from this box's HTML tag (`pdf-ua`),
     /// carried down to the fragment so the emitter can tag it (AC-11.1).
     #[cfg(feature = "pdf-ua")]
@@ -61,6 +67,30 @@ enum StyleCache {
 }
 
 impl LayoutBox {
+    /// The memoized max-content width, computing it once via `f` on a miss.
+    pub(crate) fn natural_cached(&self, f: impl FnOnce() -> f32) -> f32 {
+        match self.natural_cache.get() {
+            Some(w) => w,
+            None => {
+                let w = f();
+                self.natural_cache.set(Some(w));
+                w
+            }
+        }
+    }
+
+    /// The memoized min-content width, computing it once via `f` on a miss.
+    pub(crate) fn min_content_cached(&self, f: impl FnOnce() -> f32) -> f32 {
+        match self.min_content_cache.get() {
+            Some(w) => w,
+            None => {
+                let w = f();
+                self.min_content_cache.set(Some(w));
+                w
+            }
+        }
+    }
+
     /// Resolve this box's [`BoxStyle`] for `ctx`, reusing the cached resolution
     /// when the style is context-independent.
     pub(crate) fn resolved(&self, ctx: ResolveCtx) -> BoxStyle {
@@ -324,6 +354,8 @@ fn build_block_box(el: &StyledElement, ids: &mut Ids) -> LayoutBox {
             kind: BoxKind::Directive(*kind),
             image: None,
             style_cache: RefCell::new(StyleCache::Unknown),
+            natural_cache: std::cell::Cell::new(None),
+            min_content_cache: std::cell::Cell::new(None),
             #[cfg(feature = "pdf-ua")]
             ua_role: None,
             #[cfg(feature = "pdf-ua")]
@@ -340,6 +372,8 @@ fn build_block_box(el: &StyledElement, ids: &mut Ids) -> LayoutBox {
         kind,
         image: image_of(el),
         style_cache: RefCell::new(StyleCache::Unknown),
+        natural_cache: std::cell::Cell::new(None),
+        min_content_cache: std::cell::Cell::new(None),
         #[cfg(feature = "pdf-ua")]
         ua_role: ua::role_of(el),
         #[cfg(feature = "pdf-ua")]
@@ -438,6 +472,8 @@ fn anon_lines_box(
         kind: BoxKind::Lines(items),
         image: None,
         style_cache: RefCell::new(StyleCache::Unknown),
+        natural_cache: std::cell::Cell::new(None),
+        min_content_cache: std::cell::Cell::new(None),
         // An anonymous block wrapping an inline run reads as a paragraph of text.
         #[cfg(feature = "pdf-ua")]
         ua_role: Some(crate::layout::fragment::UaRole::Paragraph),
@@ -516,6 +552,8 @@ pub fn build_box_tree(styled: &[StyledNode]) -> LayoutBox {
         kind,
         image: None,
         style_cache: RefCell::new(StyleCache::Unknown),
+        natural_cache: std::cell::Cell::new(None),
+        min_content_cache: std::cell::Cell::new(None),
         // The synthetic document root maps to the `Document` structure element.
         #[cfg(feature = "pdf-ua")]
         ua_role: Some(crate::layout::fragment::UaRole::Group),

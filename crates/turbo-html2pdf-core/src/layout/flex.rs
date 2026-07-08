@@ -228,21 +228,23 @@ fn flex_natural(kids: &[LayoutBox], s: &ComputedStyle, fonts: &FontRegistry) -> 
 
 pub(crate) fn natural_width(lb: &LayoutBox, fonts: &FontRegistry) -> f32 {
     crate::hot!("layout.natural_width");
-    let bs = lb.resolved(ResolveCtx {
-        parent_font_size: DEFAULT_FONT_SIZE,
-        cb_width: 0.0,
-    });
-    let frame = bs.padding.horizontal() + bs.border.widths().horizontal();
-    if let LengthPct::Px(w) = bs.width {
-        return w + frame;
-    }
-    let inner = match &lb.kind {
-        BoxKind::Lines(items) => lines_natural(items, bs.font_size, fonts),
-        BoxKind::Flex(k) => flex_natural(k, &lb.style, fonts),
-        BoxKind::Block(k) | BoxKind::Grid(k) | BoxKind::Table(k) => kids_natural(k, fonts),
-        BoxKind::Directive(_) => 0.0,
-    };
-    inner + frame
+    lb.natural_cached(|| {
+        let bs = lb.resolved(ResolveCtx {
+            parent_font_size: DEFAULT_FONT_SIZE,
+            cb_width: 0.0,
+        });
+        let frame = bs.padding.horizontal() + bs.border.widths().horizontal();
+        if let LengthPct::Px(w) = bs.width {
+            return w + frame;
+        }
+        let inner = match &lb.kind {
+            BoxKind::Lines(items) => lines_natural(items, bs.font_size, fonts),
+            BoxKind::Flex(k) => flex_natural(k, &lb.style, fonts),
+            BoxKind::Block(k) | BoxKind::Grid(k) | BoxKind::Table(k) => kids_natural(k, fonts),
+            BoxKind::Directive(_) => 0.0,
+        };
+        inner + frame
+    })
 }
 
 /// The widest single unbreakable piece (max word / longest line at zero available
@@ -258,26 +260,28 @@ fn lines_min(items: &[InlineItem], fs: f32, fonts: &FontRegistry) -> f32 {
 /// replaced image keep their declared size; a container is the widest child's
 /// min-content. Used so a table never shrinks a column below its content.
 pub(crate) fn min_content_width(lb: &LayoutBox, fonts: &FontRegistry) -> f32 {
-    let bs = lb.resolved(ResolveCtx {
-        parent_font_size: DEFAULT_FONT_SIZE,
-        cb_width: 0.0,
-    });
-    let frame = bs.padding.horizontal() + bs.border.widths().horizontal();
-    if let LengthPct::Px(w) = bs.width {
-        return w + frame;
-    }
-    if lb.image.as_ref().is_some_and(|s| s.replaced) {
-        return natural_width(lb, fonts); // replaced image: intrinsic/declared size
-    }
-    let inner = match &lb.kind {
-        BoxKind::Lines(items) => lines_min(items, bs.font_size, fonts),
-        BoxKind::Flex(k) | BoxKind::Block(k) | BoxKind::Grid(k) | BoxKind::Table(k) => k
-            .iter()
-            .map(|c| min_content_width(c, fonts))
-            .fold(0.0_f32, f32::max),
-        BoxKind::Directive(_) => 0.0,
-    };
-    inner + frame
+    lb.min_content_cached(|| {
+        let bs = lb.resolved(ResolveCtx {
+            parent_font_size: DEFAULT_FONT_SIZE,
+            cb_width: 0.0,
+        });
+        let frame = bs.padding.horizontal() + bs.border.widths().horizontal();
+        if let LengthPct::Px(w) = bs.width {
+            return w + frame;
+        }
+        if lb.image.as_ref().is_some_and(|s| s.replaced) {
+            return natural_width(lb, fonts); // replaced image: intrinsic/declared size
+        }
+        let inner = match &lb.kind {
+            BoxKind::Lines(items) => lines_min(items, bs.font_size, fonts),
+            BoxKind::Flex(k) | BoxKind::Block(k) | BoxKind::Grid(k) | BoxKind::Table(k) => k
+                .iter()
+                .map(|c| min_content_width(c, fonts))
+                .fold(0.0_f32, f32::max),
+            BoxKind::Directive(_) => 0.0,
+        };
+        inner + frame
+    })
 }
 
 fn measure_width(
