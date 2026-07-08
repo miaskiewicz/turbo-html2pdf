@@ -220,6 +220,21 @@ fn unknown_pseudo_class_is_ignored() {
 }
 
 #[test]
+fn pseudo_element_rule_does_not_style_the_element() {
+    // A `::before`/`::after` (and legacy single-colon) selector targets generated
+    // content turbo does not create, so its declarations must NOT fall onto the
+    // originating element. Regression: `.bar::after{height:1px}` was collapsing to
+    // `.bar` and applying `height:1px` to the real element (Wikipedia's page-title
+    // bar shrank to 1px, overlapping the `<h1>`).
+    let tree = styled(
+        r#"<div id="e" class="bar">x</div>"#,
+        ".bar::after { height: 1px } .bar:before { color: red } .bar::first-line { color: lime }",
+    );
+    assert_eq!(prop(&tree, "e", "height"), None);
+    assert_eq!(prop(&tree, "e", "color"), None);
+}
+
+#[test]
 fn next_sibling_combinator_tight() {
     // `div+span` (no spaces) matches a span immediately after a div.
     let tree = styled(

@@ -380,8 +380,28 @@ fn parse_pseudo(name: &str, arg: &str) -> Option<Pseudo> {
         // static render, so they never match (their gated styles stay off).
         "hover" | "focus" | "focus-within" | "focus-visible" | "active" | "target" | "visited"
         | "autofocus" | "default" | "placeholder-shown" => Some(Pseudo::NeverMatch),
-        // A pseudo-*element* (`::before` etc., seen here as an empty extra `:`
-        // segment) or any unknown pseudo: ignored (matches nothing extra).
+        // A pseudo-*ELEMENT* (`::before`/`::after`/`::first-line`/…, whether written
+        // with `::` or the legacy single `:`). turbo generates no pseudo-elements, so
+        // their declared styles must NOT fall onto the originating element — the
+        // selector matches nothing. (Wikipedia's `.vector-page-titlebar::after` sets
+        // `height:1px;position:absolute`; leaking that onto the real titlebar collapsed
+        // it to 1px so the `<h1>` overlapped the tabs below.)
+        "before"
+        | "after"
+        | "first-line"
+        | "first-letter"
+        | "marker"
+        | "selection"
+        | "placeholder"
+        | "backdrop"
+        | "cue"
+        | "file-selector-button"
+        | "target-text"
+        | "grammar-error"
+        | "spelling-error"
+        | "highlight" => Some(Pseudo::NeverMatch),
+        // The empty extra `:` segment of a `::pseudo` (first colon parses as an empty
+        // name), or any unknown pseudo: ignored (matches nothing extra).
         _ => None,
     }
 }
