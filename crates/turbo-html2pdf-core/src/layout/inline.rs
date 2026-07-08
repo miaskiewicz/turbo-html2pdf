@@ -29,6 +29,11 @@ pub struct InlineRun {
     pub letter_spacing: f32,
     pub color: Rgba,
     pub valign: VAlign,
+    /// `white-space:nowrap`/`pre` — the run's inter-word spaces are not line-break
+    /// opportunities, so its text stays on one line (menu tabs, buttons, nowrap
+    /// labels). Modeled by folding those spaces into the word rather than emitting a
+    /// breakable gap.
+    pub nowrap: bool,
 }
 
 /// An atomic inline box (an `inline-block` or replaced `<img>`) that flows within
@@ -208,15 +213,18 @@ fn space_width(c: &CharInfo, runs: &[InlineRun]) -> f32 {
 }
 
 fn build_words(chars: &[CharInfo], runs: &[InlineRun]) -> Vec<Word> {
+    // A space is a line-break opportunity only when its run wraps; a `nowrap` run's
+    // spaces stay inside the word so its whole text is one unbreakable unit.
+    let breakable = |c: &CharInfo| c.ch.is_whitespace() && !runs[c.run].nowrap;
     let mut words = Vec::new();
     let mut i = 0;
     while i < chars.len() {
-        if chars[i].ch.is_whitespace() {
+        if breakable(&chars[i]) {
             i += 1;
             continue;
         }
         let start = i;
-        while i < chars.len() && !chars[i].ch.is_whitespace() {
+        while i < chars.len() && !breakable(&chars[i]) {
             i += 1;
         }
         let space_after = chars.get(i).map_or(0.0, |c| space_width(c, runs));

@@ -204,6 +204,10 @@ fn text_run(item: &InlineItem, parent_fs: f32, cw: f32, fonts: &FontRegistry) ->
         letter_spacing: bs.letter_spacing,
         color: bs.color,
         valign: bs.vertical_align,
+        nowrap: matches!(
+            style.get("white-space").map(str::trim),
+            Some("nowrap") | Some("pre")
+        ),
     })
 }
 
