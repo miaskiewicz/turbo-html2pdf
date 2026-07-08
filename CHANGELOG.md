@@ -4,6 +4,48 @@ All notable changes to turbo-html2pdf are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/); versions follow SemVer. The npm,
 PyPI, and crates.io packages release in lockstep from a `v*` tag (PyPI on `pyv*`).
 
+## [0.2.7]
+
+Real-page fidelity, round two: the fixes that make Wikipedia render like Chromium,
+plus the CSS features complex sites rely on (mask-image icons, `white-space`,
+data-URI values, self-referential design tokens).
+
+### Added
+- **CSS `mask-image` icons.** `mask-image`/`-webkit-mask-image: url(...)` on a box
+  paints its `background-color` (falling back to `color`) *through* the mask's alpha
+  (a tinted `Image` fragment) instead of a solid rectangle — Wikipedia's UI glyphs
+  (language/menu/ellipsis/edit), Codex icon fonts.
+- **`white-space: nowrap` / `pre`.** A nowrap run's inter-word spaces are no longer
+  line-break opportunities, so menu tabs/buttons stay on one line and size to their
+  full text.
+- **Data-URI values.** The declaration parser no longer splits on a `;`/`,` inside
+  `url()`, so a `data:image/svg+xml;utf8,<svg…>` mask (or background) survives whole.
+
+### Fixed
+- **Pseudo-element selectors don't leak onto their element.** `::before`/`::after`/
+  `::first-line`/… now match nothing (turbo generates no pseudo-elements) instead of
+  applying their declarations to the originating element. Wikipedia's
+  `.vector-page-titlebar::after{height:1px}` was collapsing the real title bar so the
+  `<h1>` overlapped the tabs.
+- **Self-referential `var()` resolves to its fallback.** `--x: var(--x, 1rem)`
+  (Codex's redefine-from-inherited idiom) no longer spins to the depth cap and leaves
+  an unresolved `var()` inside `calc()` — which had zeroed every `.vector-icon` box.
+- **Flex fidelity.** An item's `width` drives its basis when `flex-basis:auto`; a
+  row's max-content includes item margins; flex/grid items and table cells contain
+  their floats (independent formatting context). Fixes full-width headers, non-wrapping
+  margin-spaced tab rows, and float-clearfix bars that collapsed.
+- **Tables** grow to their columns' min-content (no clipped/squeezed infoboxes),
+  respect a separate-model `border-spacing`, and never shrink a column below its
+  min-content.
+- **`<input type=hidden>`** no longer paints a default input box.
+- **`background`/`mask` images fill the resolved content-box height**, so an empty
+  icon box sized only by `height` paints.
+
+### Performance
+- Memoize per-box intrinsic widths (`natural_width`/`min_content_width`) and the
+  flex/grid measure-by-width — a deeply nested flex tree was exponential (Wikipedia's
+  header/menus); now linear.
+
 ## [0.2.6]
 
 Real-page fidelity: a large batch of layout + cascade fixes that let complex sites

@@ -200,6 +200,10 @@ pub enum InlineItem {
 }
 
 /// A block-level box or an inline-level run, before anonymous-block wrapping.
+// A transient classification value moved straight into the box tree; the big
+// `Block` variant holds the actual `LayoutBox`, so boxing it would just add an
+// allocation on the hot construction path for no real gain.
+#[allow(clippy::large_enum_variant)]
 enum Level {
     Block(LayoutBox),
     Inline(Vec<InlineItem>),
