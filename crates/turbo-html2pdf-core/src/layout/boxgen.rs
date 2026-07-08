@@ -466,11 +466,18 @@ fn background_image(style: &ComputedStyle) -> Option<String> {
 /// `mask` shorthand). Icons use this with `background-color` to tint an SVG glyph.
 fn mask_image(style: &ComputedStyle) -> Option<String> {
     for prop in ["mask-image", "-webkit-mask-image", "mask", "-webkit-mask"] {
-        if let Some(url) = style.get(prop).and_then(|v| {
-            super::value::css_value_tokens(v)
-                .into_iter()
-                .find_map(url_token)
-        }) {
+        let Some(v) = style.get(prop).map(str::trim) else {
+            continue;
+        };
+        // A single `url(...)` may be a `data:` URI whose body contains commas (an
+        // inline `<svg>` mask) — take it whole rather than splitting on commas.
+        if let Some(url) = url_token(v) {
+            return Some(url);
+        }
+        if let Some(url) = super::value::css_value_tokens(v)
+            .into_iter()
+            .find_map(url_token)
+        {
             return Some(url);
         }
     }

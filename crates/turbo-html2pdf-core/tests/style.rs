@@ -749,3 +749,37 @@ fn self_referential_var_uses_fallback() {
     );
     assert_eq!(prop(&n, "e", "width").as_deref(), Some("calc(1rem + 4px)"));
 }
+
+#[test]
+fn declaration_semicolon_inside_url_is_not_a_separator() {
+    // A `data:image/svg+xml;utf8,<svg…>` mask URL contains a `;` and commas; the
+    // declaration splitter must not cut the value there (it zeroed Wikipedia's
+    // search icon into a solid box). The whole url() survives, plus the trailing
+    // declaration still parses.
+    let n = styled(
+        r#"<div id="e" class="ic">x</div>"#,
+        ".ic{-webkit-mask-image:url('data:image/svg+xml;utf8,<svg width=\"20\">a,b;c</svg>');color:red}",
+    );
+    let mask = prop(&n, "e", "-webkit-mask-image").unwrap_or_default();
+    assert!(
+        mask.contains("<svg") && mask.contains("a,b;c"),
+        "url() kept whole: {mask}"
+    );
+    assert_eq!(
+        prop(&n, "e", "color").as_deref(),
+        Some("red"),
+        "trailing decl parses"
+    );
+}
+
+#[test]
+fn hidden_input_is_not_rendered() {
+    // `<input type=hidden>` must not paint a default input box (Wikipedia's search
+    // form has one, which overlapped the visible field).
+    let n = styled(
+        r#"<input id="e" type="hidden"><input id="v" type="text">"#,
+        "",
+    );
+    assert_eq!(prop(&n, "e", "display").as_deref(), Some("none"));
+    assert_ne!(prop(&n, "v", "display").as_deref(), Some("none"));
+}

@@ -75,9 +75,42 @@ fn split_important(value: &str) -> (String, bool) {
     }
 }
 
-/// Parse a `;`-separated declaration block body.
+/// Parse a `;`-separated declaration block body. Splits on top-level `;` only —
+/// a `;` inside `url(...)` (a `data:image/svg+xml;utf8,<svg…>` mask) or a quoted
+/// string is part of the value, not a declaration separator.
 pub fn parse_declarations(body: &str) -> Vec<Declaration> {
-    body.split(';').filter_map(parse_declaration).collect()
+    split_top_level(body, ';')
+        .into_iter()
+        .filter_map(parse_declaration)
+        .collect()
+}
+
+/// Split `s` on `sep` at the top level, skipping any `sep` nested inside parentheses
+/// or a `'`/`"` string.
+fn split_top_level(s: &str, sep: char) -> Vec<&str> {
+    let mut out = Vec::new();
+    let (mut depth, mut quote, mut start) = (0i32, None::<char>, 0usize);
+    for (i, c) in s.char_indices() {
+        match quote {
+            Some(q) => {
+                if c == q {
+                    quote = None;
+                }
+            }
+            None => match c {
+                '\'' | '"' => quote = Some(c),
+                '(' => depth += 1,
+                ')' => depth = (depth - 1).max(0),
+                _ if c == sep && depth == 0 => {
+                    out.push(&s[start..i]);
+                    start = i + c.len_utf8();
+                }
+                _ => {}
+            },
+        }
+    }
+    out.push(&s[start..]);
+    out
 }
 
 /// A top-level chunk of the stylesheet: either a qualified rule or an at-rule.

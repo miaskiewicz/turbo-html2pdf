@@ -53,6 +53,7 @@ center { display: block; text-align: center }
 br { display: block; height: 1em }
 hr { display: block; height: 1px; background-color: #cccccc }
 input { display: inline-block; width: 150px; height: 1.4em; border: 1px solid #a9a9a9; background-color: #ffffff }
+input[type=hidden] { display: none }
 textarea { display: inline-block; width: 200px; height: 3em; border: 1px solid #a9a9a9; background-color: #ffffff }
 select, button { display: inline-block; border: 1px solid #a9a9a9; background-color: #efefef }
 ";
