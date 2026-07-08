@@ -303,6 +303,7 @@ fn separator_rule() -> Fragment {
             background: Some(Rgba::BLACK),
             border: crate::layout::value::BorderEdges::default(),
             border_radius: 0.0,
+            shadow: None,
         },
     )
 }

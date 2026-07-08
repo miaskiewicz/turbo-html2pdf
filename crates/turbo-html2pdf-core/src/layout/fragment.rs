@@ -81,6 +81,9 @@ pub enum FragmentContent {
         /// `border-radius` resolved to px (0 = square corners). Clamped to half the
         /// box's shorter side at layout, so `50%` on a square is a full circle.
         border_radius: f32,
+        /// `box-shadow` (first/topmost layer), painted behind the box by the raster
+        /// so overlay cards/modals read as raised chrome. `None` = no shadow.
+        shadow: Option<BoxShadow>,
     },
     /// One laid-out line of shaped text.
     TextLine {
@@ -98,6 +101,20 @@ pub enum FragmentContent {
     /// intrinsic pixel size (diagnostic / round-trip), and whether it carries an
     /// alpha channel (so an SMask is emitted).
     Image(ImagePlacement),
+}
+
+/// A resolved `box-shadow` layer (§CSS backgrounds §7). Geometry is px in the
+/// galley's coordinate space; the raster stamps a rounded rect of `color` at the
+/// box's outline, offset by `(offset_x, offset_y)`, grown by `spread`, blurred by
+/// `blur`. `inset` shadows paint inside the box (v1 paints outer only).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct BoxShadow {
+    pub offset_x: i32,
+    pub offset_y: i32,
+    pub blur: u32,
+    pub spread: i32,
+    pub color: Rgba,
+    pub inset: bool,
 }
 
 /// A placed raster image: the resolver key plus its intrinsic pixel size and

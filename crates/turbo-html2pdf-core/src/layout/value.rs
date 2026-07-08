@@ -517,6 +517,8 @@ pub struct BoxStyle {
     pub orphans: u8,
     pub widows: u8,
     pub background: Option<Rgba>,
+    /// `box-shadow` first/topmost layer (outer or inset), or `None`.
+    pub box_shadow: Option<super::fragment::BoxShadow>,
 }
 
 /// Context for resolving font-relative and percentage values.
@@ -834,7 +836,66 @@ fn resolve_box_metrics(s: &ComputedStyle, fs: f32, ctx: ResolveCtx) -> BoxStyle 
         orphans: int_prop(s, "orphans", 2),
         widows: int_prop(s, "widows", 2),
         background: background_of(s),
+        box_shadow: box_shadow_of(s, fs),
     }
+}
+
+/// The first (topmost) `box-shadow` layer: `[inset]? <ox> <oy> <blur>? <spread>?
+/// <color>?` in any color position, comma-separated layers (v1 keeps the first).
+/// `None` for `none`/absent/malformed (needs at least the two offset lengths).
+/// The color defaults to the box's `color` (CSS `currentColor`).
+fn box_shadow_of(s: &ComputedStyle, fs: f32) -> Option<super::fragment::BoxShadow> {
+    let value = s.get("box-shadow")?.trim();
+    if value.is_empty() || value.eq_ignore_ascii_case("none") {
+        return None;
+    }
+    let first = top_level_comma_split(value).next()?;
+    let mut inset = false;
+    let mut lengths = Vec::new();
+    let mut color = None;
+    for tok in css_value_tokens(first) {
+        if tok.eq_ignore_ascii_case("inset") {
+            inset = true;
+        } else if tok == "0" {
+            lengths.push(0.0);
+        } else if let Some(px) = parse_px(tok, fs) {
+            lengths.push(px);
+        } else if let Some(c) = parse_color(tok) {
+            color = Some(c);
+        }
+    }
+    if lengths.len() < 2 {
+        return None;
+    }
+    Some(super::fragment::BoxShadow {
+        offset_x: lengths[0].round() as i32,
+        offset_y: lengths[1].round() as i32,
+        blur: lengths.get(2).copied().unwrap_or(0.0).max(0.0).round() as u32,
+        spread: lengths.get(3).copied().unwrap_or(0.0).round() as i32,
+        color: color.unwrap_or_else(|| s.get("color").and_then(parse_color).unwrap_or(Rgba::BLACK)),
+        inset,
+    })
+}
+
+/// Split a CSS value on top-level commas, keeping parenthesized groups
+/// (`rgba(0, 0, 0, .2)`) intact. Used to separate `box-shadow` layers.
+fn top_level_comma_split(value: &str) -> impl Iterator<Item = &str> {
+    let bytes = value.as_bytes();
+    let mut parts = Vec::new();
+    let (mut start, mut depth) = (0usize, 0i32);
+    for (i, &b) in bytes.iter().enumerate() {
+        match b {
+            b'(' => depth += 1,
+            b')' => depth -= 1,
+            b',' if depth == 0 => {
+                parts.push(value[start..i].trim());
+                start = i + 1;
+            }
+            _ => {}
+        }
+    }
+    parts.push(value[start..].trim());
+    parts.into_iter().filter(|p| !p.is_empty())
 }
 
 /// The used background colour: the `background-color` longhand, else a colour
@@ -914,4 +975,46 @@ fn font_size_absolute(s: &ComputedStyle) -> bool {
         s.get("font-size").and_then(parse_raw),
         Some(RawLength::Abs(_))
     )
+}
+
+#[cfg(test)]
+mod box_shadow_tests {
+    use super::*;
+
+    fn shadow(value: &str) -> Option<super::super::fragment::BoxShadow> {
+        let s = ComputedStyle::from_pairs([("box-shadow", value), ("color", "#123456")]);
+        box_shadow_of(&s, 16.0)
+    }
+
+    #[test]
+    fn parses_offsets_blur_spread_and_color() {
+        let sh = shadow("2px 4px 8px 1px rgba(0,0,0,0.5)").expect("shadow");
+        assert_eq!((sh.offset_x, sh.offset_y), (2, 4));
+        assert_eq!((sh.blur, sh.spread), (8, 1));
+        assert_eq!((sh.color.r, sh.color.a), (0, 128)); // 0.5·255 = 127.5 → 128
+        assert!(!sh.inset);
+    }
+
+    #[test]
+    fn color_defaults_to_currentcolor_and_zero_is_a_valid_length() {
+        // No color token → the box's `color` (#123456). Bare `0` counts as a length.
+        let sh = shadow("0 0 4px").expect("shadow");
+        assert_eq!((sh.offset_x, sh.offset_y, sh.blur), (0, 0, 4));
+        assert_eq!((sh.color.r, sh.color.g, sh.color.b), (0x12, 0x34, 0x56));
+    }
+
+    #[test]
+    fn inset_keyword_and_leading_color_both_parse() {
+        let sh = shadow("inset #f00 3px 3px").expect("shadow");
+        assert!(sh.inset);
+        assert_eq!((sh.offset_x, sh.offset_y, sh.color.r), (3, 3, 255));
+    }
+
+    #[test]
+    fn first_layer_wins_and_none_or_partial_yields_none() {
+        // Comma-split: the first (topmost) layer is kept.
+        assert_eq!(shadow("1px 1px red, 9px 9px blue").unwrap().offset_x, 1);
+        assert!(shadow("none").is_none());
+        assert!(shadow("2px").is_none()); // needs both offsets
+    }
 }

@@ -636,6 +636,7 @@ fn content_kind(lb: &LayoutBox, bs: &BoxStyle, bbw: f32, bbh: f32) -> FragmentCo
             background: bs.background.filter(|_| lb.mask.is_none()),
             border: bs.border,
             border_radius: resolve_radius(bs.border_radius, bbw, bbh),
+            shadow: bs.box_shadow,
         },
     }
 }

@@ -41,7 +41,8 @@ pub use error::{CompileError, Diagnostics, ErrorCode, Lint, LintCode, RenderErro
 pub use html_layout::{collect_style_css, layout_html, layout_html_with_images, parse_html};
 pub use image::{ImageResolver, NoImages};
 pub use layout::fragment::{
-    BreakMeta, Fragment, FragmentContent, ImagePlacement, NodeId, PositionedGlyph, RepeatKind,
+    BoxShadow, BreakMeta, Fragment, FragmentContent, ImagePlacement, NodeId, PositionedGlyph,
+    RepeatKind,
 };
 pub use layout::value::{BreakRule, Rgba};
 pub use layout::{layout, layout_with_images, ImageCtx};
