@@ -97,6 +97,20 @@ fn content_sized_item_uses_natural_width() {
 }
 
 #[test]
+fn percent_width_item_fills_via_flex_basis() {
+    // `flex-basis:auto` (initial) defers to `width`, so a `width:100%` flex item
+    // fills the row instead of shrink-wrapping. Wikipedia's `.mw-header` is a
+    // `width:100%` grid that is itself a flex child; without this it collapsed to
+    // its content width and the whole top bar was narrow + centered.
+    let root = flex(
+        &[],
+        vec![item(&[("width", "100%"), ("flex-shrink", "0")], "hi")],
+        500.0,
+    );
+    assert!((items_of(&root)[0].width - 500.0).abs() < 1.0);
+}
+
+#[test]
 fn nested_block_item_measures_children() {
     let inner = el(
         "div",

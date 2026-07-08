@@ -108,13 +108,27 @@ fn num(s: &ComputedStyle, prop: &str, default: f32) -> f32 {
         .unwrap_or(default)
 }
 
-fn item_basis(s: &ComputedStyle, fs: f32) -> Dimension {
-    if let Some(b) = s.get("flex-basis") {
-        if let Some(px) = parse_px(b, fs) {
-            return Dimension::length(px);
+/// A flex item's main-size basis. `flex-basis:auto` (the initial value) defers to
+/// the item's `width` — without that fallback a `width:100%` flex item (e.g.
+/// Wikipedia's `.mw-header`, a `width:100%` grid that is itself a flex child)
+/// shrink-wrapped to its content instead of filling the row.
+fn item_basis(s: &ComputedStyle, bs: &BoxStyle, fs: f32) -> Dimension {
+    match s.get("flex-basis").map(str::trim) {
+        None | Some("auto") => dim(bs.width),
+        Some("content") => Dimension::auto(),
+        Some(b) => {
+            if let Some(px) = parse_px(b, fs) {
+                Dimension::length(px)
+            } else if let Some(p) = b
+                .strip_suffix('%')
+                .and_then(|n| n.trim().parse::<f32>().ok())
+            {
+                Dimension::percent(p / 100.0)
+            } else {
+                dim(bs.width)
+            }
         }
     }
-    Dimension::auto()
 }
 
 fn item_margins(bs: &BoxStyle) -> Rect<LengthPercentageAuto> {
@@ -149,7 +163,7 @@ fn item_style(item: &LayoutBox, fs: f32) -> Style {
     Style {
         flex_grow: num(s, "flex-grow", 0.0),
         flex_shrink: num(s, "flex-shrink", 1.0),
-        flex_basis: item_basis(s, fs),
+        flex_basis: item_basis(s, &bs, fs),
         margin: item_margins(&bs),
         ..Default::default()
     }
