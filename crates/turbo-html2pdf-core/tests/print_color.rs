@@ -22,6 +22,7 @@ fn box_fragment(background: Rgba) -> Fragment {
             border: BorderEdges::default(),
             border_radius: 0.0,
             shadow: None,
+            gradient: None,
         },
     )
 }

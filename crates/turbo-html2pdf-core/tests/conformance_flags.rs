@@ -162,6 +162,7 @@ fn red_box_page() -> Page {
             border: BorderEdges::default(),
             border_radius: 0.0,
             shadow: None,
+            gradient: None,
         },
     );
     Page {

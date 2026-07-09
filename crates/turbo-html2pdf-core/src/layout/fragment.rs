@@ -84,6 +84,9 @@ pub enum FragmentContent {
         /// `box-shadow` (first/topmost layer), painted behind the box by the raster
         /// so overlay cards/modals read as raised chrome. `None` = no shadow.
         shadow: Option<BoxShadow>,
+        /// A `linear-gradient(...)` background image, painted over the box (a
+        /// gradient hides the `background` colour). `None` = solid/absent background.
+        gradient: Option<LinearGradient>,
     },
     /// One laid-out line of shaped text.
     TextLine {
@@ -115,6 +118,24 @@ pub struct BoxShadow {
     pub spread: i32,
     pub color: Rgba,
     pub inset: bool,
+}
+
+/// A CSS `linear-gradient(...)` background (§CSS images §3.1). `angle_deg` is the
+/// CSS gradient-line angle (0 = to top, 90 = to right, clockwise); `stops` are the
+/// colour stops with positions resolved to a 0..1 fraction of the gradient line,
+/// in order. The raster maps this to its own gradient shader.
+#[derive(Debug, Clone, PartialEq)]
+pub struct LinearGradient {
+    pub angle_deg: f32,
+    pub stops: Vec<GradientStop>,
+}
+
+/// One colour stop of a [`LinearGradient`]: a colour at a 0..1 position along the
+/// gradient line.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct GradientStop {
+    pub color: Rgba,
+    pub pos: f32,
 }
 
 /// A placed raster image: the resolver key plus its intrinsic pixel size and

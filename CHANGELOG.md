@@ -4,6 +4,22 @@ All notable changes to turbo-html2pdf are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/); versions follow SemVer. The npm,
 PyPI, and crates.io packages release in lockstep from a `v*` tag (PyPI on `pyv*`).
 
+## [0.2.9]
+
+Overlay chrome, round two: `linear-gradient(...)` backgrounds so hero sections,
+buttons, and cards paint their gradient fills instead of a flat colour.
+
+### Added
+- **CSS `linear-gradient(...)` backgrounds.** `background`/`background-image:
+  linear-gradient(...)` parses into a `LinearGradient` (angle + positioned colour
+  stops) on `FragmentContent::Box`, exported as `turbo_html2pdf_core::{LinearGradient,
+  GradientStop}` for raster consumers. Supports an angle (`<deg>`) or `to <side>`/`to
+  <corner>` direction (default `to bottom`), `rgb()/rgba()/#hex/named` stops with
+  optional `%` positions (unpositioned stops spread evenly; endpoints default 0/1),
+  and nested-comma-safe parsing. `radial-`/`conic-gradient` are unsupported (→ no
+  gradient, the solid `background` colour still applies). A gradient hides the solid
+  background colour, matching CSS paint order.
+
 ## [0.2.8]
 
 Overlay chrome: `box-shadow` so cards and modals read as raised chrome instead

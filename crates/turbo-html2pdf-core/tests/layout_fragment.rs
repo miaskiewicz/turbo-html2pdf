@@ -13,6 +13,7 @@ fn box_content() -> FragmentContent {
         border: BorderEdges::default(),
         border_radius: 0.0,
         shadow: None,
+        gradient: None,
     }
 }
 

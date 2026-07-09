@@ -304,6 +304,7 @@ fn separator_rule() -> Fragment {
             border: crate::layout::value::BorderEdges::default(),
             border_radius: 0.0,
             shadow: None,
+            gradient: None,
         },
     )
 }

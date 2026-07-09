@@ -183,6 +183,7 @@ fn box_fragment(background: Option<Rgba>, border: BorderEdges) -> Fragment {
             border,
             border_radius: 0.0,
             shadow: None,
+            gradient: None,
         },
     )
 }

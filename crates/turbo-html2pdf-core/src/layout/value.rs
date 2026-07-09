@@ -519,6 +519,8 @@ pub struct BoxStyle {
     pub background: Option<Rgba>,
     /// `box-shadow` first/topmost layer (outer or inset), or `None`.
     pub box_shadow: Option<super::fragment::BoxShadow>,
+    /// A `linear-gradient(...)` background image, or `None`.
+    pub background_gradient: Option<super::fragment::LinearGradient>,
 }
 
 /// Context for resolving font-relative and percentage values.
@@ -837,7 +839,148 @@ fn resolve_box_metrics(s: &ComputedStyle, fs: f32, ctx: ResolveCtx) -> BoxStyle 
         widows: int_prop(s, "widows", 2),
         background: background_of(s),
         box_shadow: box_shadow_of(s, fs),
+        background_gradient: linear_gradient_of(s),
     }
+}
+
+/// A `linear-gradient(...)` from `background-image` or the `background` shorthand,
+/// or `None` (no gradient / `radial-`/`conic-` unsupported / unparsable). Syntax:
+/// `linear-gradient( [<angle> | to <side/corner>]? , <color> [<pos>]? , ...)`. The
+/// direction defaults to `to bottom` (180°); stops without a position spread evenly.
+fn linear_gradient_of(s: &ComputedStyle) -> Option<super::fragment::LinearGradient> {
+    let raw = s
+        .get("background-image")
+        .or_else(|| s.get("background"))
+        .map(str::trim)?;
+    let inner = raw
+        .find("linear-gradient(")
+        .map(|i| &raw[i + "linear-gradient(".len()..])?;
+    // Take up to the matching close paren (the gradient's own parens are balanced).
+    let inner = balanced_paren_slice(inner)?;
+    let mut parts = top_level_comma_split(inner);
+    let first = parts.next()?;
+    // Leading angle / `to <side>`, else `first` is actually the first colour stop.
+    let (angle, first_stop) = match parse_gradient_direction(first) {
+        Some(a) => (a, None),
+        None => (180.0, Some(first)),
+    };
+    let stop_tokens: Vec<&str> = first_stop.into_iter().chain(parts).collect();
+    let stops = gradient_stops(&stop_tokens)?;
+    (stops.len() >= 2).then_some(super::fragment::LinearGradient {
+        angle_deg: angle,
+        stops,
+    })
+}
+
+/// The substring up to the paren that closes the one just opened before `s`
+/// (depth starts at 1). Handles `rgb(...)`/nested funcs inside a gradient.
+fn balanced_paren_slice(s: &str) -> Option<&str> {
+    let mut depth = 1i32;
+    for (i, b) in s.bytes().enumerate() {
+        match b {
+            b'(' => depth += 1,
+            b')' => {
+                depth -= 1;
+                if depth == 0 {
+                    return Some(&s[..i]);
+                }
+            }
+            _ => {}
+        }
+    }
+    None
+}
+
+/// A gradient direction token → CSS angle in degrees (0 = to top, clockwise), or
+/// `None` if the token isn't a direction (so the caller treats it as a colour stop).
+fn parse_gradient_direction(tok: &str) -> Option<f32> {
+    let t = tok.trim();
+    if let Some(deg) = t.strip_suffix("deg") {
+        return deg.trim().parse::<f32>().ok();
+    }
+    let sides = t
+        .strip_prefix("to ")?
+        .split_whitespace()
+        .collect::<Vec<_>>();
+    let angle = match sides.as_slice() {
+        ["top"] => 0.0,
+        ["right"] => 90.0,
+        ["bottom"] => 180.0,
+        ["left"] => 270.0,
+        // Corners: 45° diagonals (exact CSS corner math is aspect-dependent; this is
+        // the common visual approximation).
+        ["top", "right"] | ["right", "top"] => 45.0,
+        ["bottom", "right"] | ["right", "bottom"] => 135.0,
+        ["bottom", "left"] | ["left", "bottom"] => 225.0,
+        ["top", "left"] | ["left", "top"] => 315.0,
+        _ => return None,
+    };
+    Some(angle)
+}
+
+/// Resolve colour-stop tokens (`<color> [<pos%>]?`) to positioned 0..1 stops.
+/// Explicit `%` positions are honoured; stops without one spread evenly across the
+/// remaining span (endpoints default 0 and 1). `None` if a token names no colour.
+fn gradient_stops(tokens: &[&str]) -> Option<Vec<super::fragment::GradientStop>> {
+    let n = tokens.len();
+    let mut colors = Vec::with_capacity(n);
+    let mut positions: Vec<Option<f32>> = Vec::with_capacity(n);
+    for (i, tok) in tokens.iter().enumerate() {
+        let mut parts = css_value_tokens(tok).into_iter();
+        let color = parse_color(parts.next()?)?;
+        let pos = parts
+            .next()
+            .and_then(|p| p.strip_suffix('%'))
+            .and_then(|p| {
+                p.trim()
+                    .parse::<f32>()
+                    .ok()
+                    .map(|v| (v / 100.0).clamp(0.0, 1.0))
+            });
+        // First/last default to the endpoints when unpositioned.
+        let pos = pos.or(if i == 0 {
+            Some(0.0)
+        } else if i == n - 1 {
+            Some(1.0)
+        } else {
+            None
+        });
+        colors.push(color);
+        positions.push(pos);
+    }
+    // Fill gaps by even interpolation between the nearest known positions.
+    let mut i = 0;
+    while i < n {
+        if positions[i].is_some() {
+            i += 1;
+            continue;
+        }
+        let prev = positions[..i]
+            .iter()
+            .rposition(|p| p.is_some())
+            .unwrap_or(0);
+        let next = (i..n).find(|&k| positions[k].is_some()).unwrap_or(n - 1);
+        let (p0, p1) = (
+            positions[prev].unwrap_or(0.0),
+            positions[next].unwrap_or(1.0),
+        );
+        let span = (next - prev).max(1) as f32;
+        for (step, slot) in positions[prev + 1..next].iter_mut().enumerate() {
+            // `step + 1` is the stop's distance (in stop count) from `prev`.
+            *slot = Some(p0 + (p1 - p0) * ((step + 1) as f32 / span));
+        }
+        i = next;
+    }
+    Some(
+        colors
+            .into_iter()
+            .zip(positions)
+            .map(|(color, pos)| super::fragment::GradientStop {
+                color,
+                pos: pos.unwrap_or(0.0),
+            })
+            .collect(),
+    )
 }
 
 /// The first (topmost) `box-shadow` layer: `[inset]? <ox> <oy> <blur>? <spread>?
@@ -1016,5 +1159,65 @@ mod box_shadow_tests {
         assert_eq!(shadow("1px 1px red, 9px 9px blue").unwrap().offset_x, 1);
         assert!(shadow("none").is_none());
         assert!(shadow("2px").is_none()); // needs both offsets
+    }
+}
+
+#[cfg(test)]
+mod gradient_tests {
+    use super::*;
+
+    fn grad(value: &str) -> Option<super::super::fragment::LinearGradient> {
+        linear_gradient_of(&ComputedStyle::from_pairs([("background-image", value)]))
+    }
+
+    #[test]
+    fn angle_direction_and_two_stops() {
+        let g = grad("linear-gradient(90deg, #ff0000, #0000ff)").expect("gradient");
+        assert_eq!(g.angle_deg, 90.0);
+        assert_eq!(g.stops.len(), 2);
+        assert_eq!((g.stops[0].color.r, g.stops[0].pos), (255, 0.0));
+        assert_eq!((g.stops[1].color.b, g.stops[1].pos), (255, 1.0));
+    }
+
+    #[test]
+    fn to_side_keywords_map_to_angles_and_default_is_to_bottom() {
+        assert_eq!(
+            grad("linear-gradient(to right, red, blue)")
+                .unwrap()
+                .angle_deg,
+            90.0
+        );
+        assert_eq!(
+            grad("linear-gradient(to top, red, blue)")
+                .unwrap()
+                .angle_deg,
+            0.0
+        );
+        // No direction token → defaults to 180° (to bottom); first token is a stop.
+        let g = grad("linear-gradient(red, blue)").unwrap();
+        assert_eq!(g.angle_deg, 180.0);
+        assert_eq!(g.stops.len(), 2);
+    }
+
+    #[test]
+    fn explicit_percent_stops_and_even_spread_of_the_middle() {
+        // Middle stop has no position → evenly interpolated between 0 and 1 → 0.5.
+        let g = grad("linear-gradient(180deg, #000, #888, #fff)").unwrap();
+        assert_eq!(
+            g.stops.iter().map(|s| s.pos).collect::<Vec<_>>(),
+            vec![0.0, 0.5, 1.0]
+        );
+        // Honour an explicit % on the middle stop.
+        let g = grad("linear-gradient(#000, #888 25%, #fff)").unwrap();
+        assert_eq!(g.stops[1].pos, 0.25);
+    }
+
+    #[test]
+    fn nested_rgb_commas_dont_split_stops_and_non_linear_is_none() {
+        let g = grad("linear-gradient(to right, rgb(1, 2, 3), rgba(4, 5, 6, 0.5))").unwrap();
+        assert_eq!(g.stops.len(), 2);
+        assert_eq!(g.stops[1].color.a, 128);
+        assert!(grad("radial-gradient(red, blue)").is_none());
+        assert!(grad("#ffffff").is_none());
     }
 }

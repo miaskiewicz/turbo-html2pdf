@@ -632,11 +632,15 @@ fn content_kind(lb: &LayoutBox, bs: &BoxStyle, bbw: f32, bbh: f32) -> FragmentCo
         BoxKind::Directive(k) => FragmentContent::Directive(*k),
         _ => FragmentContent::Box {
             // A masked box paints its fill THROUGH the mask (a separate tinted image
-            // fragment), so it must not also paint a solid rectangle behind it.
-            background: bs.background.filter(|_| lb.mask.is_none()),
+            // fragment), so it must not also paint a solid rectangle behind it. A
+            // gradient background likewise covers the solid colour.
+            background: bs
+                .background
+                .filter(|_| lb.mask.is_none() && bs.background_gradient.is_none()),
             border: bs.border,
             border_radius: resolve_radius(bs.border_radius, bbw, bbh),
             shadow: bs.box_shadow,
+            gradient: bs.background_gradient.clone(),
         },
     }
 }
