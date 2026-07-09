@@ -4,6 +4,24 @@ All notable changes to turbo-html2pdf are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/); versions follow SemVer. The npm,
 PyPI, and crates.io packages release in lockstep from a `v*` tag (PyPI on `pyv*`).
 
+## [0.2.10]
+
+Real-page sizing: images and flex boxes no longer collapse to nothing on
+content-driven layouts (Nike's hero/product imagery, search bars, hero banners).
+
+### Fixed
+- **Image `%` sizing.** `<img>` `width`/`height` percentages resolved against a 0
+  basis, collapsing every `width:100%` responsive image to a 0×0 (invisible) box.
+  Percentages now resolve against the containing block (`SizeCtx::cb_height` added
+  for `%` height against a definite CB height); `auto`/unresolvable `%` falls back
+  to the intrinsic aspect ratio.
+- **Absolute containing-block height.** A positioned ancestor's definite content
+  height is threaded (`abs_cb_h`) so an `<img height:100%>` in a sized hero card
+  gets a real height.
+- **Flex `height`/`min-height`/`max-height`.** The taffy flex container and item
+  styles dropped these, so a flex box sized only by a `min-height` (`min-height:50px`
+  search bar, hero banner) collapsed to its content height. Now passed through.
+
 ## [0.2.9]
 
 Overlay chrome, round two: `linear-gradient(...)` backgrounds so hero sections,
