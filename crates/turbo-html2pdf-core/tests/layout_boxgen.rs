@@ -259,3 +259,42 @@ fn mask_shorthand_url_is_extracted_via_token_scan() {
     let div = &as_block(&root.kind)[0];
     assert_eq!(div.mask.as_deref(), Some("icon.svg"));
 }
+
+#[test]
+fn input_button_value_renders_as_text() {
+    use turbo_html2pdf_core::node::Attr;
+    let input = |ty: &str| {
+        StyledNode::Element(StyledElement {
+            tag: Tag::Html("input".into()),
+            attrs: vec![
+                Attr {
+                    name: "type".into(),
+                    value: ty.into(),
+                },
+                Attr {
+                    name: "value".into(),
+                    value: "Go".into(),
+                },
+            ],
+            style: cs(&[]),
+            children: vec![],
+        })
+    };
+    // submit/button/reset → the value becomes the box's text.
+    for ty in ["submit", "button", "reset"] {
+        let root = build_box_tree(&[input(ty)]);
+        let inner = as_block(&root.kind);
+        let lines = as_lines(&inner[0].kind);
+        let has_go = lines
+            .iter()
+            .any(|it| matches!(it, InlineItem::Text { text, .. } if text.contains("Go")));
+        assert!(has_go, "{ty} input value should render as text");
+    }
+    // a text input's value is NOT drawn as content (it's an editable field).
+    let root = build_box_tree(&[input("text")]);
+    let lines = as_lines(&as_block(&root.kind)[0].kind);
+    assert!(
+        lines.is_empty(),
+        "text input value is not flowed as content"
+    );
+}

@@ -385,12 +385,31 @@ fn flatten_inline(el: &StyledElement, ids: &mut Ids) -> Vec<InlineItem> {
 // --------------------------------------------------------------------------
 
 fn box_kind_for(display: Display, el: &StyledElement, ids: &mut Ids) -> BoxKind {
+    // A button `<input type="submit|button|reset">` carries its label in the `value`
+    // ATTRIBUTE, not as text content — render it so the box isn't empty (google's
+    // "Google Search" / "I'm Feeling Lucky" buttons were blank grey rectangles).
+    if let Some(label) = input_button_text(el) {
+        let text = vec![StyledNode::Text(label)];
+        return build_flow(&text, &el.style, ids);
+    }
     match display {
         Display::Flex => BoxKind::Flex(child_block_boxes(el, ids)),
         Display::Grid => BoxKind::Grid(child_block_boxes(el, ids)),
         Display::Table => BoxKind::Table(child_block_boxes(el, ids)),
         _ => build_flow(&el.children, &el.style, ids),
     }
+}
+
+/// The label of a button-like `<input>` (`type` submit/button/reset) — its `value`
+/// attribute, shown as the box's text. `None` for any other element/input type.
+fn input_button_text(el: &StyledElement) -> Option<String> {
+    if !matches!(&el.tag, Tag::Html(n) if n == "input") {
+        return None;
+    }
+    let ty = attr_value(&el.attrs, "type").unwrap_or("text");
+    matches!(ty, "submit" | "button" | "reset")
+        .then(|| attr_value(&el.attrs, "value").map(str::to_string))
+        .flatten()
 }
 
 fn build_block_box(el: &StyledElement, ids: &mut Ids) -> LayoutBox {
