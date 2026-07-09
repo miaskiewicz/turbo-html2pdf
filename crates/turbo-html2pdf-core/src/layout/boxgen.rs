@@ -472,12 +472,43 @@ fn image_of(el: &StyledElement) -> Option<ImageSource> {
     })
 }
 
-/// The `src` of an `<img>` element, or `None` for any other tag.
+/// The image URL an `<img>` paints, or `None` for any other tag. Prefers a plain
+/// `src`, then a lazy-load data attribute, then the first `srcset` candidate.
 fn img_src(el: &StyledElement) -> Option<&str> {
     match &el.tag {
-        Tag::Html(name) if name == "img" => attr_value(&el.attrs, "src"),
+        Tag::Html(name) if name == "img" => img_url_attr(&el.attrs),
         _ => None,
     }
+}
+
+/// The painted URL among an `<img>`'s attributes: `src` first, else a lazy-load
+/// data attribute (`data-src`/`data-landscape-url`/…), else the first `srcset`
+/// candidate. Nike's hero `<img>`s ship no `src`/`srcset` — the real URL lives in
+/// `data-landscape-url` (client JS copies it to `src` on scroll) — so without this
+/// fallback every hero image laid out as an empty box (a blank hero band).
+fn img_url_attr(attrs: &[Attr]) -> Option<&str> {
+    const KEYS: [&str; 6] = [
+        "src",
+        "data-src",
+        "data-landscape-url",
+        "data-portrait-url",
+        "data-original",
+        "data-image-src",
+    ];
+    for k in KEYS {
+        if let Some(v) = attr_value(attrs, k).filter(|v| !v.trim().is_empty()) {
+            return Some(v);
+        }
+    }
+    attr_value(attrs, "srcset").and_then(srcset_first_url)
+}
+
+/// The URL of a `srcset`'s first candidate (`url [descriptor]`, comma-separated).
+fn srcset_first_url(srcset: &str) -> Option<&str> {
+    srcset
+        .split(',')
+        .next()
+        .and_then(|c| c.split_whitespace().next())
 }
 
 /// The value of the named attribute in `attrs`, if present.

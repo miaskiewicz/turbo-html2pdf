@@ -261,6 +261,49 @@ fn mask_shorthand_url_is_extracted_via_token_scan() {
 }
 
 #[test]
+fn img_lazy_data_url_and_srcset_become_replaced_source() {
+    use turbo_html2pdf_core::node::Attr;
+    let img = |attrs: &[(&str, &str)]| {
+        StyledNode::Element(StyledElement {
+            tag: Tag::Html("img".into()),
+            attrs: attrs
+                .iter()
+                .map(|(n, v)| Attr {
+                    name: n.to_string(),
+                    value: v.to_string(),
+                })
+                .collect(),
+            style: cs(&[("display", "block")]),
+            children: vec![],
+        })
+    };
+    let src_of = |node: StyledNode| {
+        let root = build_box_tree(&[node]);
+        let b = as_block(&root.kind)[0].clone();
+        let s = b.image.as_ref().expect("img -> replaced source");
+        assert!(s.replaced, "an <img> source is replaced content");
+        s.name.clone()
+    };
+    // No `src`: fall back to the lazy `data-landscape-url` (nike's hero pattern).
+    assert_eq!(
+        src_of(img(&[("data-landscape-url", "hero.jpg")])),
+        "hero.jpg"
+    );
+    // No `src`/data-*: take the first `srcset` candidate's url.
+    assert_eq!(src_of(img(&[("srcset", "a.jpg 1x, b.jpg 2x")])), "a.jpg");
+    // An empty `src` is skipped in favor of the lazy attribute.
+    assert_eq!(
+        src_of(img(&[("src", "  "), ("data-src", "lazy.jpg")])),
+        "lazy.jpg"
+    );
+    // A real `src` still wins over any lazy attribute.
+    assert_eq!(
+        src_of(img(&[("src", "real.jpg"), ("data-src", "lazy.jpg")])),
+        "real.jpg"
+    );
+}
+
+#[test]
 fn input_button_value_renders_as_text() {
     use turbo_html2pdf_core::node::Attr;
     let input = |ty: &str| {
