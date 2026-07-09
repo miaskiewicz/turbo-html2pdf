@@ -82,8 +82,12 @@ fn gap_len(s: &ComputedStyle) -> LengthPercentage {
     LengthPercentage::length(px)
 }
 
-fn container_style(container: &LayoutBox, cw: f32) -> Style {
+fn container_style(container: &LayoutBox, cw: f32, fs: f32) -> Style {
     let s = &container.style;
+    let bs = container.resolved(ResolveCtx {
+        parent_font_size: fs,
+        cb_width: cw,
+    });
     Style {
         display: Display::Flex,
         flex_direction: flex_direction(s),
@@ -94,9 +98,21 @@ fn container_style(container: &LayoutBox, cw: f32) -> Style {
             width: gap_len(s),
             height: gap_len(s),
         },
+        // Carry the container's own `height` and `min/max-height` to taffy: a flex
+        // box with only a `min-height` (a search bar's `min-height:50px`, a hero
+        // banner) must not collapse to its content height. Width stays the given
+        // content width.
         size: Size {
             width: Dimension::length(cw),
-            height: Dimension::auto(),
+            height: dim(bs.height),
+        },
+        min_size: Size {
+            width: dim(bs.min_width),
+            height: dim(bs.min_height),
+        },
+        max_size: Size {
+            width: dim(bs.max_width),
+            height: dim(bs.max_height),
         },
         ..Default::default()
     }
@@ -165,6 +181,21 @@ fn item_style(item: &LayoutBox, fs: f32) -> Style {
         flex_shrink: num(s, "flex-shrink", 1.0),
         flex_basis: item_basis(s, &bs, fs),
         margin: item_margins(&bs),
+        // A flex item's own `min/max-height` (and explicit cross-axis `height`) must
+        // reach taffy — else an item whose height is only a `min-height` collapses.
+        // The main axis stays driven by `flex_basis`.
+        size: Size {
+            width: Dimension::auto(),
+            height: dim(bs.height),
+        },
+        min_size: Size {
+            width: dim(bs.min_width),
+            height: dim(bs.min_height),
+        },
+        max_size: Size {
+            width: dim(bs.max_width),
+            height: dim(bs.max_height),
+        },
         ..Default::default()
     }
 }
@@ -357,6 +388,7 @@ fn measure_item(
             abs_cb_x: 0.0,
             abs_cb_y: 0.0,
             abs_cb_w: w,
+            abs_cb_h: 0.0,
             root_w: w,
             floats: Vec::new(),
         };
@@ -787,7 +819,7 @@ pub(crate) fn layout_flex(
     let mut tree: TaffyTree<usize> = TaffyTree::new();
     let leaves = build_leaves(&mut tree, items, fs);
     let root = tree
-        .new_with_children(container_style(container, cw), &leaves)
+        .new_with_children(container_style(container, cw, fs), &leaves)
         .expect("flex root");
     solve(&mut tree, root, items, fs, cw, ctx.fonts);
     let frags = place_items(&tree, &leaves, items, cx, cy, fs, ctx);

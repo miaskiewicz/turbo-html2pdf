@@ -36,6 +36,11 @@ pub(crate) struct Ctx<'a> {
     pub(crate) abs_cb_x: f32,
     pub(crate) abs_cb_y: f32,
     pub(crate) abs_cb_w: f32,
+    /// The nearest positioned ancestor's **definite** content-box height, if known
+    /// (0 = unknown) — the basis a `%` height / `inset:0` bottom resolves against.
+    /// Set only when the ancestor's height is explicit (not derived from content),
+    /// so an `<img height:100%>` in a sized hero card gets a real height.
+    pub(crate) abs_cb_h: f32,
     /// The initial containing block width (page content width) — the CB for
     /// `position:fixed` boxes.
     pub(crate) root_w: f32,
@@ -151,6 +156,25 @@ fn border_box_width(bs: &BoxStyle, cb_width: f32) -> f32 {
         Some(w) => to_border(w, bs.box_sizing, extra),
     };
     clamp_width(bb, bs, cb_width, extra)
+}
+
+/// A box's **definite** content-box height, or 0 when it isn't known without
+/// laying out content: an explicit `px` height, or a `%` height resolved against a
+/// (definite) outer CB height. `auto`/an unresolvable `%` → 0. Used to expose a
+/// positioned box's height to its `%`-height descendants.
+fn definite_content_height(bs: &BoxStyle, outer_cb_h: f32) -> f32 {
+    let h = match bs.height {
+        LengthPct::Px(px) => px,
+        LengthPct::Pct(p) if outer_cb_h > 0.0 => p / 100.0 * outer_cb_h,
+        _ => return 0.0,
+    };
+    // A content-box height excludes padding/border; a border-box height includes
+    // them, so subtract to recover the content height the CB exposes.
+    let inset = match bs.box_sizing {
+        BoxSizing::BorderBox => bs.padding.vertical() + bs.border.widths().vertical(),
+        BoxSizing::ContentBox => 0.0,
+    };
+    (h - inset).max(0.0)
 }
 
 fn content_box_height(bs: &BoxStyle, content_h: f32) -> f32 {
@@ -741,11 +765,15 @@ fn layout_box_sized_impl(
     let content_w = (bbw - bs.padding.horizontal() - bw.horizontal()).max(0.0);
     // A positioned box establishes the containing block for its `absolute`
     // descendants (its content box). Save/restore around the child layout.
-    let saved_cb = (ctx.abs_cb_x, ctx.abs_cb_y, ctx.abs_cb_w);
+    let saved_cb = (ctx.abs_cb_x, ctx.abs_cb_y, ctx.abs_cb_w, ctx.abs_cb_h);
     if bs.position != Position::Static {
         ctx.abs_cb_x = content_x;
         ctx.abs_cb_y = content_y;
         ctx.abs_cb_w = content_w;
+        // Expose this box's height to `%`-height / `inset:0` descendants only when
+        // it's definite (explicit px, or `%` resolved against a known outer CB) —
+        // an auto height derived from content would be circular.
+        ctx.abs_cb_h = definite_content_height(bs, saved_cb.3);
     }
     // A box that establishes a block formatting context isolates floats: its
     // content does not wrap around outer floats, and the floats placed inside it
@@ -763,7 +791,7 @@ fn layout_box_sized_impl(
         content_h = content_h.max(inner_bottom - content_y);
         ctx.floats = outer;
     }
-    (ctx.abs_cb_x, ctx.abs_cb_y, ctx.abs_cb_w) = saved_cb;
+    (ctx.abs_cb_x, ctx.abs_cb_y, ctx.abs_cb_w, ctx.abs_cb_h) = saved_cb;
     // The content-box height honoring an explicit/min/max `height` — a `background`
     // or `mask` image fills the box even when it has no flow content (an empty icon
     // span sized only by `height`, whose measured `content_h` is 0).
@@ -907,6 +935,7 @@ fn size_ctx<'a>(bs: &'a BoxStyle, cb_width: f32, ctx: &Ctx) -> SizeCtx<'a> {
     SizeCtx {
         style: bs,
         cb_width,
+        cb_height: (ctx.abs_cb_h > 0.0).then_some(ctx.abs_cb_h),
         body_height: ctx.images.body_height,
     }
 }
@@ -970,6 +999,7 @@ pub fn layout_tree_with_images(
         abs_cb_x: 0.0,
         abs_cb_y: 0.0,
         abs_cb_w: cb_width,
+        abs_cb_h: 0.0,
         root_w: cb_width,
         floats: Vec::new(),
     };

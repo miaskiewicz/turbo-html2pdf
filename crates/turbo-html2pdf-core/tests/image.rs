@@ -377,6 +377,7 @@ fn intrinsic_size_used_when_it_fits() {
     let ctx = SizeCtx {
         style: &bs,
         cb_width: 500.0,
+        cb_height: None,
         body_height: Some(1000.0),
     };
     let intrinsic = probe(&png_rgb_2x2()).unwrap();
@@ -392,6 +393,7 @@ fn width_cap_clamps_to_containing_block_and_preserves_aspect() {
     let ctx = SizeCtx {
         style: &bs,
         cb_width: 200.0,
+        cb_height: None,
         body_height: None, // height cap inactive: only the width cap applies
     };
     let intrinsic = probe(&png_wide()).unwrap(); // 400x100
@@ -405,6 +407,55 @@ fn width_cap_clamps_to_containing_block_and_preserves_aspect() {
 }
 
 #[test]
+fn percent_width_resolves_against_containing_block_not_zero() {
+    // Regression: `width:100%` used to resolve against a 0 basis, collapsing every
+    // responsive image to a 0-size box. It must size against `cb_width`, with an
+    // `auto` height filled from the intrinsic aspect ratio.
+    let style = ComputedStyle::from_pairs([("width", "100%")]);
+    let bs = box_style(&style);
+    let ctx = SizeCtx {
+        style: &bs,
+        cb_width: 300.0,
+        cb_height: None,
+        body_height: None,
+    };
+    let intrinsic = probe(&png_wide()).unwrap(); // 400x100, ratio 4:1
+    let sized = size_replaced("x".into(), intrinsic, &ctx);
+    assert_eq!(sized.width, 300.0, "100% -> cb_width");
+    assert!(
+        (sized.height - 75.0).abs() < 1e-3,
+        "aspect preserved: 300/4 = 75, got {}",
+        sized.height
+    );
+}
+
+#[test]
+fn percent_height_resolves_against_cb_height_when_known() {
+    // `height:100%` fills a definite containing-block height (a hero card), with an
+    // `auto` width filled from the intrinsic aspect ratio.
+    let style = ComputedStyle::from_pairs([("height", "100%")]);
+    let bs = box_style(&style);
+    let ctx = SizeCtx {
+        style: &bs,
+        cb_width: 2000.0, // width never binds
+        cb_height: Some(200.0),
+        body_height: None,
+    };
+    let intrinsic = probe(&png_wide()).unwrap(); // 400x100, ratio 4:1
+    let sized = size_replaced("x".into(), intrinsic, &ctx);
+    assert!(
+        (sized.height - 200.0).abs() < 1e-3,
+        "height 100% -> cb_height 200, got {}",
+        sized.height
+    );
+    assert!(
+        (sized.width - 800.0).abs() < 1e-3,
+        "aspect: 200 * 4 = 800, got {}",
+        sized.width
+    );
+}
+
+#[test]
 fn height_cap_clamps_to_60_percent_of_body_height() {
     let style = empty_style();
     let bs = box_style(&style);
@@ -412,6 +463,7 @@ fn height_cap_clamps_to_60_percent_of_body_height() {
     let ctx = SizeCtx {
         style: &bs,
         cb_width: 10_000.0, // width never binds
+        cb_height: None,
         body_height: Some(body_height),
     };
     let intrinsic = probe(&png_tall()).unwrap(); // 100x4000
@@ -433,6 +485,7 @@ fn explicit_width_fills_height_from_aspect_ratio() {
     let ctx = SizeCtx {
         style: &bs,
         cb_width: 500.0,
+        cb_height: None,
         body_height: Some(10_000.0),
     };
     let intrinsic = probe(&png_wide()).unwrap(); // 400x100, ratio 4:1
@@ -448,6 +501,7 @@ fn explicit_width_and_height_are_used_verbatim() {
     let ctx = SizeCtx {
         style: &bs,
         cb_width: 1000.0,
+        cb_height: None,
         body_height: Some(10_000.0),
     };
     let intrinsic = probe(&png_rgb_2x2()).unwrap();
@@ -462,6 +516,7 @@ fn explicit_height_fills_width_from_aspect_ratio() {
     let ctx = SizeCtx {
         style: &bs,
         cb_width: 1000.0,
+        cb_height: None,
         body_height: Some(10_000.0),
     };
     let intrinsic = probe(&png_wide()).unwrap(); // 400x100, ratio 4:1
@@ -480,6 +535,7 @@ fn degenerate_zero_dimension_falls_back_to_given() {
     let ctx = SizeCtx {
         style: &bs,
         cb_width: 1000.0,
+        cb_height: None,
         body_height: None,
     };
     let intrinsic = Intrinsic {
@@ -499,6 +555,7 @@ fn height_cap_inactive_without_body_height() {
     let ctx = SizeCtx {
         style: &bs,
         cb_width: 10_000.0,
+        cb_height: None,
         body_height: None,
     };
     let intrinsic = probe(&png_tall()).unwrap(); // 100x4000

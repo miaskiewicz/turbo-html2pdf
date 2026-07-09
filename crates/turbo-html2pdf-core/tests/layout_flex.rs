@@ -59,6 +59,31 @@ fn grow_splits_free_space_equally() {
 }
 
 #[test]
+fn container_min_height_prevents_collapse() {
+    // A flex container whose height is only a `min-height` (a search bar,
+    // `min-height:50px`) must not collapse to its near-zero content height — the
+    // regression that left google.com's flex search box (and the page) blank.
+    let root = flex(&[("min-height", "50px")], vec![item(&[], "")], 300.0);
+    assert!(
+        root.height >= 50.0,
+        "min-height:50px flex container should be >=50px tall, got {}",
+        root.height
+    );
+}
+
+#[test]
+fn item_min_height_applies() {
+    // A flex item's own `min-height` reaches taffy too.
+    let root = flex(&[], vec![item(&[("min-height", "40px")], "")], 300.0);
+    let its = items_of(&root);
+    assert!(
+        its[0].height >= 40.0,
+        "item min-height:40px should be >=40px, got {}",
+        its[0].height
+    );
+}
+
+#[test]
 fn explicit_basis_sizes_items() {
     let root = flex(
         &[],
