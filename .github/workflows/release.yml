@@ -189,8 +189,13 @@ jobs:
           fi
           echo "OK: $f is musl-linked"
 
+      # Stamp the npm version from the tag (v0.2.11 → 0.2.11) so it always tracks the
+      # crates.io release — the package.json version is otherwise easy to forget to
+      # bump, and re-publishing a stale version 403s ("cannot publish over 0.2.6").
       - name: Publish turbo-html2pdf
-        run: npm publish --access public --ignore-scripts
+        run: |
+          npm pkg set version="${GITHUB_REF_NAME#v}"
+          npm publish --access public --ignore-scripts
         working-directory: crates/turbo-pdf-napi
         # --ignore-scripts: binaries are already built; skip any prepublish rebuild.
         env:
@@ -225,7 +230,9 @@ jobs:
         run: pnpm --filter turbo-html2pdf-${{ matrix.pkg }} build
 
       - name: Publish turbo-html2pdf-${{ matrix.pkg }}
-        run: pnpm --filter turbo-html2pdf-${{ matrix.pkg }} publish --access public --no-git-checks
+        run: |
+          (cd packages/${{ matrix.pkg }} && npm pkg set version="${GITHUB_REF_NAME#v}")
+          pnpm --filter turbo-html2pdf-${{ matrix.pkg }} publish --access public --no-git-checks
         # pnpm publish rewrites any `workspace:` dep on turbo-html2pdf to the
         # real version. --no-git-checks: tag-driven; tree matches tagged commit.
         env:
