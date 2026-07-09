@@ -1091,3 +1091,47 @@ fn percent_height_absolute_img_resolves_against_positioned_ancestor() {
         "absolute img height:100% → 120 (ancestor), got {h}"
     );
 }
+
+#[test]
+fn flex_item_wrapping_img_sizes_to_img_intrinsic() {
+    // The flex ITEM is a <div> wrapping the <img> (google's logo:
+    // <div.k1zIA><img.lnXdpd>). The item's max-content width must come from the
+    // nested image's intrinsic width (2px) — not collapse to 0, which clamped the
+    // logo to nothing.
+    let img = Node::Element(turbo_html2pdf_core::Element {
+        tag: Tag::Html("img".into()),
+        attrs: vec![Attr {
+            name: "src".into(),
+            value: "logo".into(),
+        }],
+        children: Vec::new(),
+    });
+    let wrap = turbo_html2pdf_core::Element {
+        tag: Tag::Html("div".into()),
+        attrs: vec![],
+        children: vec![img],
+    };
+    let nodes = vec![Node::Element(turbo_html2pdf_core::Element {
+        tag: Tag::Html("div".into()),
+        attrs: vec![],
+        children: vec![Node::Element(wrap)],
+    })];
+    let cascade = build_cascade(
+        "div{display:flex;flex-direction:column;align-items:center} img{max-width:100%;max-height:100%;width:auto}",
+        "",
+        TokenSet::default(),
+    );
+    let styled = style_tree(&nodes, &cascade);
+    let resolver = MapResolver::new(vec![("logo", png_rgb_2x2())]);
+    let ctx = ImageCtx {
+        resolver: &resolver,
+        body_height: None,
+    };
+    let mut diags = Diagnostics::default();
+    let galley = layout_with_images(&styled, 1280.0, &common::registry(), &ctx, &mut diags);
+    let (w, h) = first_image_frag(&galley).expect("an image fragment");
+    assert!(
+        w >= 2.0 && h >= 2.0,
+        "nested img should keep intrinsic 2x2, got {w}x{h}"
+    );
+}
