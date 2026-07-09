@@ -16,7 +16,7 @@ use crate::node::TKind;
 use crate::text::{Align, FontRegistry};
 
 use super::boxgen::{BoxKind, ImageSource, InlineItem, LayoutBox};
-use super::fragment::{BreakMeta, Fragment, FragmentContent, ImagePlacement, NodeId};
+use super::fragment::{BreakMeta, Fragment, FragmentContent, ImagePlacement, NodeId, Transform2D};
 use super::imgsize::{size_replaced, SizeCtx, SizedImage};
 use super::inline::{self, InlineRun};
 use super::value::{
@@ -665,6 +665,18 @@ fn content_kind(lb: &LayoutBox, bs: &BoxStyle, bbw: f32, bbh: f32) -> FragmentCo
             border_radius: resolve_radius(bs.border_radius, bbw, bbh),
             shadow: bs.box_shadow,
             gradient: bs.background_gradient.clone(),
+            // Resolve a `%` translate against the box size and place the transform
+            // origin at the box centre (the CSS default `50% 50%`). The raster
+            // composes this about the box's absolute position.
+            transform: bs.transform.map(|t| {
+                let e = t.tx.resolve(bbw).unwrap_or(0.0);
+                let f = t.ty.resolve(bbh).unwrap_or(0.0);
+                Transform2D {
+                    matrix: [t.linear[0], t.linear[1], t.linear[2], t.linear[3], e, f],
+                    origin_x: bbw / 2.0,
+                    origin_y: bbh / 2.0,
+                }
+            }),
         },
     }
 }

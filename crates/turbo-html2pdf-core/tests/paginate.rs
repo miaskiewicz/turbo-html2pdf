@@ -21,6 +21,7 @@ fn box_content() -> FragmentContent {
         border_radius: 0.0,
         shadow: None,
         gradient: None,
+        transform: None,
     }
 }
 

@@ -521,6 +521,21 @@ pub struct BoxStyle {
     pub box_shadow: Option<super::fragment::BoxShadow>,
     /// A `linear-gradient(...)` background image, or `None`.
     pub background_gradient: Option<super::fragment::LinearGradient>,
+    /// A CSS 2D `transform` — the linear part `[a,b,c,d]` plus the translate
+    /// components (kept as `<length-percentage>` so a `%` translate resolves against
+    /// the box's own size at layout). `None` for `none`/unparsable/3D-only.
+    pub transform: Option<RawTransform>,
+}
+
+/// A parsed CSS 2D transform before its `%` translate is resolved: the linear
+/// matrix part `[a, b, c, d]` (`matrix(a,b,c,d,·,·)`) and the two translate offsets
+/// (`e`/`f`), which may be `%` of the box size. Layout resolves the translate and
+/// combines it into the full `[a,b,c,d,e,f]` matrix.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct RawTransform {
+    pub linear: [f32; 4],
+    pub tx: LengthPct,
+    pub ty: LengthPct,
 }
 
 /// Context for resolving font-relative and percentage values.
@@ -840,7 +855,142 @@ fn resolve_box_metrics(s: &ComputedStyle, fs: f32, ctx: ResolveCtx) -> BoxStyle 
         background: background_of(s),
         box_shadow: box_shadow_of(s, fs),
         background_gradient: linear_gradient_of(s),
+        transform: transform_of(s, fs),
     }
+}
+
+/// Parse a CSS 2D `transform` list into a [`RawTransform`]: the non-translate
+/// functions (`scale`/`rotate`/`matrix`/`skew`) multiply into the linear part, and
+/// a leading `translate*` keeps its `<length-percentage>` offsets for layout to
+/// resolve against the box size. `None` for `none`/absent/no recognized function.
+/// (Exact when the translate leads the list — the dominant real-world form,
+/// `translate(...) scale(...)`; a translate BEHIND a rotate is approximated.)
+fn transform_of(s: &ComputedStyle, fs: f32) -> Option<RawTransform> {
+    let value = s.get("transform")?.trim();
+    if value.is_empty() || value.eq_ignore_ascii_case("none") {
+        return None;
+    }
+    let mut linear = [1.0f32, 0.0, 0.0, 1.0]; // identity 2×2 as (a,b,c,d)
+    let (mut tx, mut ty) = (LengthPct::Px(0.0), LengthPct::Px(0.0));
+    let mut any = false;
+    for (name, args) in transform_functions(value) {
+        let n = |i: usize| args.get(i).and_then(|a| a.trim().parse::<f32>().ok());
+        match name.as_str() {
+            "translatex" => tx = len_or_zero(args.first(), fs),
+            "translatey" => ty = len_or_zero(args.first(), fs),
+            "translate" | "translate3d" => {
+                tx = len_or_zero(args.first(), fs);
+                ty = len_or_zero(args.get(1), fs);
+            }
+            "scale" | "scale3d" => {
+                let sx = n(0).unwrap_or(1.0);
+                let sy = n(1).unwrap_or(sx);
+                linear = mul_linear(linear, [sx, 0.0, 0.0, sy]);
+            }
+            "scalex" => linear = mul_linear(linear, [n(0).unwrap_or(1.0), 0.0, 0.0, 1.0]),
+            "scaley" => linear = mul_linear(linear, [1.0, 0.0, 0.0, n(0).unwrap_or(1.0)]),
+            "rotate" | "rotatez" => {
+                let (sn, c) = parse_angle(args.first())
+                    .unwrap_or(0.0)
+                    .to_radians()
+                    .sin_cos();
+                linear = mul_linear(linear, [c, sn, -sn, c]);
+            }
+            "skewx" => {
+                let t = parse_angle(args.first()).unwrap_or(0.0).to_radians().tan();
+                linear = mul_linear(linear, [1.0, 0.0, t, 1.0]);
+            }
+            "skewy" => {
+                let t = parse_angle(args.first()).unwrap_or(0.0).to_radians().tan();
+                linear = mul_linear(linear, [1.0, t, 0.0, 1.0]);
+            }
+            "matrix" if args.len() == 6 => {
+                let m: Vec<f32> = args.iter().filter_map(|a| a.trim().parse().ok()).collect();
+                if m.len() == 6 {
+                    linear = mul_linear(linear, [m[0], m[1], m[2], m[3]]);
+                    tx = LengthPct::Px(m[4]);
+                    ty = LengthPct::Px(m[5]);
+                }
+            }
+            _ => continue, // translate3d z, perspective, matrix3d, unknown: ignored
+        }
+        any = true;
+    }
+    any.then_some(RawTransform { linear, tx, ty })
+}
+
+/// Multiply two 2×2 linear parts stored as `(a, b, c, d)` = `[[a, c], [b, d]]`
+/// (CSS `matrix` order): the result applies `l1` after `l2` (`l1 · l2`).
+fn mul_linear(l1: [f32; 4], l2: [f32; 4]) -> [f32; 4] {
+    let [a1, b1, c1, d1] = l1;
+    let [a2, b2, c2, d2] = l2;
+    [
+        a1 * a2 + c1 * b2,
+        b1 * a2 + d1 * b2,
+        a1 * c2 + c1 * d2,
+        b1 * c2 + d1 * d2,
+    ]
+}
+
+/// A `<length-percentage>` transform arg → `LengthPct` (px resolved via `fs`),
+/// defaulting to `0` for an absent/`0`/unparsable arg.
+fn len_or_zero(tok: Option<&&str>, fs: f32) -> LengthPct {
+    match tok.map(|t| t.trim()) {
+        Some(t) if !t.is_empty() && t != "0" => {
+            parse_length_pct(t, fs).unwrap_or(LengthPct::Px(0.0))
+        }
+        _ => LengthPct::Px(0.0),
+    }
+}
+
+/// A CSS `<angle>` → degrees (`deg`/`rad`/`grad`/`turn`, bare number = deg).
+fn parse_angle(tok: Option<&&str>) -> Option<f32> {
+    let t = tok?.trim();
+    for (unit, factor) in [("deg", 1.0), ("grad", 0.9), ("turn", 360.0)] {
+        if let Some(num) = t.strip_suffix(unit) {
+            return num.trim().parse::<f32>().ok().map(|v| v * factor);
+        }
+    }
+    if let Some(num) = t.strip_suffix("rad") {
+        return num.trim().parse::<f32>().ok().map(f32::to_degrees);
+    }
+    t.parse::<f32>().ok() // bare number = degrees
+}
+
+/// Split a `transform` value into `(lowercased-function-name, args)` pairs.
+fn transform_functions(value: &str) -> Vec<(String, Vec<&str>)> {
+    let mut out = Vec::new();
+    let bytes = value.as_bytes();
+    let mut i = 0;
+    while i < bytes.len() {
+        // function name = run up to '('
+        while i < bytes.len() && (bytes[i].is_ascii_whitespace() || bytes[i] == b',') {
+            i += 1;
+        }
+        let name_start = i;
+        while i < bytes.len() && bytes[i] != b'(' {
+            i += 1;
+        }
+        if i >= bytes.len() {
+            break;
+        }
+        let name = value[name_start..i].trim().to_ascii_lowercase();
+        i += 1; // past '('
+        let args_start = i;
+        while i < bytes.len() && bytes[i] != b')' {
+            i += 1;
+        }
+        let args: Vec<&str> = value[args_start..i.min(bytes.len())]
+            .split(',')
+            .map(str::trim)
+            .filter(|a| !a.is_empty())
+            .collect();
+        if !name.is_empty() {
+            out.push((name, args));
+        }
+        i += 1; // past ')'
+    }
+    out
 }
 
 /// A `linear-gradient(...)` from `background-image` or the `background` shorthand,
@@ -1219,5 +1369,53 @@ mod gradient_tests {
         assert_eq!(g.stops[1].color.a, 128);
         assert!(grad("radial-gradient(red, blue)").is_none());
         assert!(grad("#ffffff").is_none());
+    }
+}
+
+#[cfg(test)]
+mod transform_tests {
+    use super::*;
+
+    fn xf(value: &str) -> Option<RawTransform> {
+        transform_of(&ComputedStyle::from_pairs([("transform", value)]), 16.0)
+    }
+
+    #[test]
+    fn translate_keeps_length_percentage_offsets() {
+        let t = xf("translate(20px, 30px)").expect("xf");
+        assert_eq!(t.linear, [1.0, 0.0, 0.0, 1.0]); // identity linear
+        assert_eq!(t.tx, LengthPct::Px(20.0));
+        assert_eq!(t.ty, LengthPct::Px(30.0));
+        // Single-axis + percentage (the `translate(-50%,-50%)` centring idiom).
+        let t = xf("translateY(-50%)").unwrap();
+        assert_eq!(t.ty, LengthPct::Pct(-50.0));
+        assert_eq!(t.tx, LengthPct::Px(0.0));
+    }
+
+    #[test]
+    fn rotate_builds_a_rotation_matrix() {
+        let t = xf("rotate(90deg)").unwrap();
+        // cos90≈0, sin90≈1 → (a,b,c,d) = (0,1,-1,0).
+        assert!(t.linear[0].abs() < 1e-3 && (t.linear[1] - 1.0).abs() < 1e-3);
+        assert!((t.linear[2] + 1.0).abs() < 1e-3 && t.linear[3].abs() < 1e-3);
+    }
+
+    #[test]
+    fn scale_and_combined_translate_scale() {
+        assert_eq!(xf("scale(2)").unwrap().linear, [2.0, 0.0, 0.0, 2.0]);
+        assert_eq!(xf("scale(2, 3)").unwrap().linear, [2.0, 0.0, 0.0, 3.0]);
+        // Real Nike form: leading translate then scale — split stays exact.
+        let t = xf("translate3d(-50%,-50%,0) scale(10)").unwrap();
+        assert_eq!(t.linear, [10.0, 0.0, 0.0, 10.0]);
+        assert_eq!((t.tx, t.ty), (LengthPct::Pct(-50.0), LengthPct::Pct(-50.0)));
+    }
+
+    #[test]
+    fn matrix_and_none() {
+        let t = xf("matrix(1, 0, 0, 1, 12, 34)").unwrap();
+        assert_eq!(t.linear, [1.0, 0.0, 0.0, 1.0]);
+        assert_eq!((t.tx, t.ty), (LengthPct::Px(12.0), LengthPct::Px(34.0)));
+        assert!(xf("none").is_none());
+        assert!(xf("").is_none());
     }
 }

@@ -23,6 +23,7 @@ fn box_fragment(background: Rgba) -> Fragment {
             border_radius: 0.0,
             shadow: None,
             gradient: None,
+            transform: None,
         },
     )
 }

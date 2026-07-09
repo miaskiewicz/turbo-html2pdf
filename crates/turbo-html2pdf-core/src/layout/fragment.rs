@@ -87,6 +87,11 @@ pub enum FragmentContent {
         /// A `linear-gradient(...)` background image, painted over the box (a
         /// gradient hides the `background` colour). `None` = solid/absent background.
         gradient: Option<LinearGradient>,
+        /// A CSS `transform` (translate/rotate/scale/matrix): the raster paints this
+        /// box AND its whole subtree through the affine matrix, about the box's
+        /// `transform-origin`. `None` = untransformed. Carousels/slide decks position
+        /// slides via `translate`, so without this they pile up at one spot.
+        transform: Option<Transform2D>,
     },
     /// One laid-out line of shaped text.
     TextLine {
@@ -118,6 +123,18 @@ pub struct BoxShadow {
     pub spread: i32,
     pub color: Rgba,
     pub inset: bool,
+}
+
+/// A resolved CSS 2D `transform`. `matrix` is the CSS `matrix(a,b,c,d,e,f)` the
+/// `transform` list multiplies out to (mapping a point `(x,y)` to
+/// `(a·x + c·y + e, b·x + d·y + f)`), applied about `(origin_x, origin_y)` — the
+/// `transform-origin` as a px offset from the box's own top-left. The raster
+/// composes it about the box's absolute position.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Transform2D {
+    pub matrix: [f32; 6],
+    pub origin_x: f32,
+    pub origin_y: f32,
 }
 
 /// A CSS `linear-gradient(...)` background (§CSS images §3.1). `angle_deg` is the

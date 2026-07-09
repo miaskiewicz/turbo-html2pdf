@@ -163,6 +163,7 @@ fn red_box_page() -> Page {
             border_radius: 0.0,
             shadow: None,
             gradient: None,
+            transform: None,
         },
     );
     Page {
