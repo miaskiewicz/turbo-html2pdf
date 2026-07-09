@@ -125,6 +125,33 @@ fn num(s: &ComputedStyle, prop: &str, default: f32) -> f32 {
         .unwrap_or(default)
 }
 
+/// The `(flex-grow, flex-shrink)` implied by the `flex` shorthand, so a `flex:1`
+/// item grows to fill without an explicit `flex-grow` longhand (google's search box
+/// input `flex:1` collapsed, cramming its trailing icons to the left). Defaults to
+/// the CSS initial `(0, 1)`; the explicit longhands still override in `item_style`.
+fn flex_grow_shrink(s: &ComputedStyle) -> (f32, f32) {
+    let Some(v) = s.get("flex") else {
+        return (0.0, 1.0);
+    };
+    match v.trim() {
+        "none" => (0.0, 0.0),
+        "auto" => (1.0, 1.0),
+        "initial" => (0.0, 1.0),
+        // `<grow> [<shrink>] [<basis>]`: the leading unitless numbers are grow/shrink
+        // (a `<basis>` length/% carries a unit and is skipped by the number parse).
+        rest => {
+            let nums: Vec<f32> = rest
+                .split_whitespace()
+                .filter_map(|t| t.parse().ok())
+                .collect();
+            (
+                nums.first().copied().unwrap_or(1.0),
+                nums.get(1).copied().unwrap_or(1.0),
+            )
+        }
+    }
+}
+
 /// A flex item's main-size basis. `flex-basis:auto` (the initial value) defers to
 /// the item's `width` â without that fallback a `width:100%` flex item (e.g.
 /// Wikipedia's `.mw-header`, a `width:100%` grid that is itself a flex child)
@@ -177,9 +204,10 @@ fn item_style(item: &LayoutBox, fs: f32) -> Style {
             ..Default::default()
         };
     }
+    let (grow, shrink) = flex_grow_shrink(s);
     Style {
-        flex_grow: num(s, "flex-grow", 0.0),
-        flex_shrink: num(s, "flex-shrink", 1.0),
+        flex_grow: num(s, "flex-grow", grow),
+        flex_shrink: num(s, "flex-shrink", shrink),
         flex_basis: item_basis(s, &bs, fs),
         margin: item_margins(&bs),
         // A flex item's own `min/max-height` (and explicit cross-axis `height`) must
@@ -888,6 +916,17 @@ mod coverage_tests {
 
     fn cs(pairs: &[(&str, &str)]) -> ComputedStyle {
         ComputedStyle::from_pairs(pairs.iter().map(|(k, v)| (k.to_string(), v.to_string())))
+    }
+
+    #[test]
+    fn flex_shorthand_grow_shrink() {
+        assert_eq!(flex_grow_shrink(&cs(&[])), (0.0, 1.0)); // no `flex` -> CSS initial
+        assert_eq!(flex_grow_shrink(&cs(&[("flex", "none")])), (0.0, 0.0));
+        assert_eq!(flex_grow_shrink(&cs(&[("flex", "auto")])), (1.0, 1.0));
+        assert_eq!(flex_grow_shrink(&cs(&[("flex", "initial")])), (0.0, 1.0));
+        assert_eq!(flex_grow_shrink(&cs(&[("flex", "1")])), (1.0, 1.0)); // grow 1, shrink default
+        assert_eq!(flex_grow_shrink(&cs(&[("flex", "2 3")])), (2.0, 3.0));
+        assert_eq!(flex_grow_shrink(&cs(&[("flex", "1 1 0%")])), (1.0, 1.0)); // basis skipped
     }
 
     fn bs_of(pairs: &[(&str, &str)]) -> BoxStyle {
