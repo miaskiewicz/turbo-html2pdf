@@ -1135,3 +1135,46 @@ fn flex_item_wrapping_img_sizes_to_img_intrinsic() {
         "nested img should keep intrinsic 2x2, got {w}x{h}"
     );
 }
+
+#[test]
+fn flex_row_item_wrapping_img_natural_width_uses_intrinsic() {
+    // A flex ROW measures each item's max-content via `natural_width`; a `<div>`
+    // wrapping an `<img>` must contribute the image's intrinsic width (2px), else the
+    // row (and the item) collapses. Exercises the replaced-image `natural_width` path.
+    let img = Node::Element(turbo_html2pdf_core::Element {
+        tag: Tag::Html("img".into()),
+        attrs: vec![Attr {
+            name: "src".into(),
+            value: "logo".into(),
+        }],
+        children: Vec::new(),
+    });
+    let wrap = Node::Element(turbo_html2pdf_core::Element {
+        tag: Tag::Html("div".into()),
+        attrs: vec![],
+        children: vec![img],
+    });
+    let nodes = vec![Node::Element(turbo_html2pdf_core::Element {
+        tag: Tag::Html("div".into()),
+        attrs: vec![],
+        children: vec![wrap],
+    })];
+    let cascade = build_cascade(
+        "div{display:flex;flex-direction:row} img{width:auto}",
+        "",
+        TokenSet::default(),
+    );
+    let styled = style_tree(&nodes, &cascade);
+    let resolver = MapResolver::new(vec![("logo", png_rgb_2x2())]);
+    let ctx = ImageCtx {
+        resolver: &resolver,
+        body_height: None,
+    };
+    let mut diags = Diagnostics::default();
+    let galley = layout_with_images(&styled, 1280.0, &common::registry(), &ctx, &mut diags);
+    let (w, _h) = first_image_frag(&galley).expect("an image fragment");
+    assert!(
+        w >= 2.0,
+        "row-flex wrapped img should keep intrinsic width, got {w}"
+    );
+}

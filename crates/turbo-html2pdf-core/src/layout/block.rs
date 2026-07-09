@@ -1065,6 +1065,43 @@ fn layout_box(
     layout_box_sized(lb, &bs, bx, by, bbw, ctx)
 }
 
+/// Stamp every replaced `<img>` box's intrinsic pixel width from the resolver,
+/// depth-first, before layout. The intrinsic size needs the decoded bytes (only this
+/// entry has the resolver), but the resolver-less `natural_width`/`min_content_width`
+/// sizers run deep in the flex/table passes — so without a stamped width a `<div>`
+/// wrapping an `<img>` (a logo) measured 0 and its flex item collapsed / mis-aligned.
+pub(crate) fn stamp_intrinsic_widths(lb: &LayoutBox, images: &ImageCtx) {
+    stamp_replaced_intrinsic(lb, images);
+    match &lb.kind {
+        BoxKind::Block(k) | BoxKind::Flex(k) | BoxKind::Grid(k) | BoxKind::Table(k) => {
+            k.iter().for_each(|c| stamp_intrinsic_widths(c, images));
+        }
+        BoxKind::Lines(items) => items
+            .iter()
+            .filter_map(inline_atomic)
+            .for_each(|c| stamp_intrinsic_widths(c, images)),
+        BoxKind::Directive(_) => {}
+    }
+}
+
+/// Stamp one box's `intrinsic_w` if it is a resolvable replaced image.
+fn stamp_replaced_intrinsic(lb: &LayoutBox, images: &ImageCtx) {
+    let Some(src) = lb.image.as_ref().filter(|s| s.replaced) else {
+        return;
+    };
+    if let Some(i) = images.resolver.resolve(&src.name).and_then(probe) {
+        lb.intrinsic_w.set(Some(i.width as f32));
+    }
+}
+
+/// The box inside an atomic inline item (an inline-block / inline `<img>`), if any.
+fn inline_atomic(it: &InlineItem) -> Option<&LayoutBox> {
+    match it {
+        InlineItem::Atomic(b) => Some(b),
+        _ => None,
+    }
+}
+
 /// Build the fragment for a replaced `<img>` box, or `None` when the box is not
 /// a (resolvable) replaced image. The box size is the capped image size; the
 /// image is the fragment's own content (no children flow inside an `<img>`).
@@ -1164,6 +1201,7 @@ pub fn layout_tree_with_images(
         root_w: cb_width,
         floats: Vec::new(),
     };
+    stamp_intrinsic_widths(root, images);
     let mut frag = layout_box(root, 0.0, 0.0, cb_width, DEFAULT_FONT_SIZE, &mut ctx);
     // The galley (initial containing block) contains every float — grow it to the
     // lowest float edge if a float outran the in-flow content (a tall right-floated

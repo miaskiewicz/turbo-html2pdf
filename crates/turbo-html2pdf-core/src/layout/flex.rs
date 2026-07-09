@@ -301,6 +301,11 @@ pub(crate) fn natural_width(lb: &LayoutBox, fonts: &FontRegistry) -> f32 {
         if let LengthPct::Px(w) = bs.width {
             return w + frame;
         }
+        // A replaced `<img>`: its intrinsic width (stamped from the resolver before
+        // layout) — so a `<div>` wrapping a logo measures the image, not 0.
+        if let Some(iw) = lb.intrinsic_w.get() {
+            return iw + frame;
+        }
         let inner = match &lb.kind {
             BoxKind::Lines(items) => lines_natural(items, bs.font_size, fonts),
             BoxKind::Flex(k) => flex_natural(k, &lb.style, fonts),
