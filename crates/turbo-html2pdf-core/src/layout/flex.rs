@@ -485,14 +485,21 @@ fn gap_axis(s: &ComputedStyle, axis: &str) -> LengthPercentage {
     LengthPercentage::length(px)
 }
 
+/// Parse a `minmax(min, max)` track, if `t` is one (both sides required).
+fn minmax_track(t: &str) -> Option<TrackSizingFunction> {
+    let inner = t
+        .strip_prefix("minmax(")
+        .and_then(|x| x.strip_suffix(')'))?;
+    let (a, b) = inner.split_once(',')?;
+    Some(minmax(min_track(a), max_track(b)))
+}
+
 /// One grid track: `1fr`, `50%`, `200px`/`15.5rem`, `minmax(min, max)`, or
 /// `auto`/`min-content`/`max-content` (→ taffy `AUTO`). Unparsable → `AUTO`.
 fn track_of(tok: &str) -> TrackSizingFunction {
     let t = tok.trim();
-    if let Some(inner) = t.strip_prefix("minmax(").and_then(|x| x.strip_suffix(')')) {
-        if let Some((a, b)) = inner.split_once(',') {
-            return minmax(min_track(a), max_track(b));
-        }
+    if let Some(mm) = minmax_track(t) {
+        return mm;
     }
     if let Some(f) = t
         .strip_suffix("fr")
@@ -703,17 +710,22 @@ fn shorthand_axis(s: &ComputedStyle, want_cols: bool) -> Option<String> {
     (!part.is_empty()).then(|| part.to_string())
 }
 
+/// Advance `chars` past the next occurrence of `quote` (its closing delimiter).
+fn skip_quoted(chars: &mut impl Iterator<Item = char>, quote: char) {
+    for c in chars {
+        if c == quote {
+            break;
+        }
+    }
+}
+
 /// Remove single/double-quoted segments (area-template rows) from a value.
 fn strip_quoted(value: &str) -> String {
     let mut out = String::new();
     let mut chars = value.chars();
     while let Some(ch) = chars.next() {
         if ch == '"' || ch == '\'' {
-            for c in chars.by_ref() {
-                if c == ch {
-                    break;
-                }
-            }
+            skip_quoted(&mut chars, ch);
         } else {
             out.push(ch);
         }

@@ -232,28 +232,38 @@ fn raw_to_px(raw: RawLength, font_size: f32, basis: f32) -> f32 {
 /// (`var()` is already substituted by the cascade.) Multiplicative or `%` terms
 /// aren't handled here and yield `None` (the caller falls back to its default).
 fn eval_calc_px(s: &str, font_size: f32) -> Option<f32> {
-    let body = s
-        .trim()
-        .strip_prefix("calc(")
-        .or_else(|| s.trim().strip_prefix("CALC("))?
-        .strip_suffix(')')?;
-    let term_px = |t: &str| match parse_raw(t)? {
+    let toks: Vec<&str> = strip_calc(s)?.split_whitespace().collect();
+    sum_calc_terms(&toks, font_size)
+}
+
+/// The inside of a `calc( … )` / `CALC( … )` wrapper, or `None` if `s` isn't one.
+fn strip_calc(s: &str) -> Option<&str> {
+    let t = s.trim();
+    t.strip_prefix("calc(")
+        .or_else(|| t.strip_prefix("CALC("))?
+        .strip_suffix(')')
+}
+
+/// One `calc()` term as px — an absolute/font-relative length (never a `%`).
+fn calc_term_px(t: &str, font_size: f32) -> Option<f32> {
+    match parse_raw(t)? {
         RawLength::Pct(_) => None,
         raw => Some(raw_to_px(raw, font_size, 0.0)),
-    };
-    let toks: Vec<&str> = body.split_whitespace().collect();
-    let mut total = term_px(toks.first()?)?;
-    let mut i = 1;
-    while i + 1 < toks.len() + 1 && i < toks.len() {
-        let v = term_px(toks.get(i + 1)?)?;
-        match toks[i] {
-            "+" => total += v,
-            "-" => total -= v,
-            _ => return None,
-        }
-        i += 2;
     }
-    Some(total)
+}
+
+/// Left-fold `term (± term)*` (only `+`/`-` supported), or `None` on any bad token.
+fn sum_calc_terms(toks: &[&str], font_size: f32) -> Option<f32> {
+    let (first, rest) = toks.split_first()?;
+    let init = calc_term_px(first, font_size)?;
+    rest.chunks_exact(2).try_fold(init, |total, pair| {
+        let v = calc_term_px(pair[1], font_size)?;
+        match pair[0] {
+            "+" => Some(total + v),
+            "-" => Some(total - v),
+            _ => None,
+        }
+    })
 }
 
 /// Parse an absolute/`em` length (or `calc()` thereof) to px (no `%`); used for
@@ -698,14 +708,20 @@ fn parse_border_shorthand(v: Option<&str>, fs: f32) -> BorderSide {
 }
 
 fn resolve_border_side(s: &ComputedStyle, name: &str, fs: f32) -> BorderSide {
+    // Base: the `border` shorthand, overridden by the per-side `border-<name>`.
     let mut b = parse_border_shorthand(s.get("border"), fs);
     if let Some(v) = s.get(&format!("border-{name}")) {
         b = parse_border_shorthand(Some(v), fs);
     }
-    // All-sides longhands (`border-color`/`border-width`) override the `border`
-    // shorthand's values. Without this a `border:1px solid transparent` +
-    // `border-color:#72777d` (Codex's radio icon) kept the transparent colour and
-    // the circle outline was invisible.
+    apply_border_longhands(&mut b, s, name, fs);
+    b
+}
+
+/// Apply the `border-{color,width}` and `border-<name>-{width,color}` longhands over
+/// a side already parsed from the shorthands. Without this a
+/// `border:1px solid transparent` + `border-color:#72777d` (Codex's radio icon) kept
+/// the transparent colour and the circle outline was invisible.
+fn apply_border_longhands(b: &mut BorderSide, s: &ComputedStyle, name: &str, fs: f32) {
     if let Some(c) = s.get("border-color").and_then(parse_color) {
         b.color = Some(c);
     }
@@ -724,7 +740,6 @@ fn resolve_border_side(s: &ComputedStyle, name: &str, fs: f32) -> BorderSide {
     if let Some(c) = s.get(&format!("border-{name}-color")).and_then(parse_color) {
         b.color = Some(c);
     }
-    b
 }
 
 fn resolve_borders(s: &ComputedStyle, fs: f32) -> BorderEdges {
@@ -867,56 +882,84 @@ fn resolve_box_metrics(s: &ComputedStyle, fs: f32, ctx: ResolveCtx) -> BoxStyle 
 /// `translate(...) scale(...)`; a translate BEHIND a rotate is approximated.)
 fn transform_of(s: &ComputedStyle, fs: f32) -> Option<RawTransform> {
     let value = s.get("transform")?.trim();
-    if value.is_empty() || value.eq_ignore_ascii_case("none") {
+    if is_none_keyword(value) {
         return None;
     }
-    let mut linear = [1.0f32, 0.0, 0.0, 1.0]; // identity 2×2 as (a,b,c,d)
-    let (mut tx, mut ty) = (LengthPct::Px(0.0), LengthPct::Px(0.0));
+    let mut acc = TransformAcc {
+        linear: [1.0, 0.0, 0.0, 1.0], // identity 2×2 as (a,b,c,d)
+        tx: LengthPct::Px(0.0),
+        ty: LengthPct::Px(0.0),
+    };
     let mut any = false;
     for (name, args) in transform_functions(value) {
-        let n = |i: usize| args.get(i).and_then(|a| a.trim().parse::<f32>().ok());
-        match name.as_str() {
-            "translatex" => tx = len_or_zero(args.first(), fs),
-            "translatey" => ty = len_or_zero(args.first(), fs),
-            "translate" | "translate3d" => {
-                tx = len_or_zero(args.first(), fs);
-                ty = len_or_zero(args.get(1), fs);
-            }
-            "scale" | "scale3d" => {
-                let sx = n(0).unwrap_or(1.0);
-                let sy = n(1).unwrap_or(sx);
-                linear = mul_linear(linear, [sx, 0.0, 0.0, sy]);
-            }
-            "scalex" => linear = mul_linear(linear, [n(0).unwrap_or(1.0), 0.0, 0.0, 1.0]),
-            "scaley" => linear = mul_linear(linear, [1.0, 0.0, 0.0, n(0).unwrap_or(1.0)]),
-            "rotate" | "rotatez" => {
-                let (sn, c) = parse_angle(args.first())
-                    .unwrap_or(0.0)
-                    .to_radians()
-                    .sin_cos();
-                linear = mul_linear(linear, [c, sn, -sn, c]);
-            }
-            "skewx" => {
-                let t = parse_angle(args.first()).unwrap_or(0.0).to_radians().tan();
-                linear = mul_linear(linear, [1.0, 0.0, t, 1.0]);
-            }
-            "skewy" => {
-                let t = parse_angle(args.first()).unwrap_or(0.0).to_radians().tan();
-                linear = mul_linear(linear, [1.0, t, 0.0, 1.0]);
-            }
-            "matrix" if args.len() == 6 => {
-                let m: Vec<f32> = args.iter().filter_map(|a| a.trim().parse().ok()).collect();
-                if m.len() == 6 {
-                    linear = mul_linear(linear, [m[0], m[1], m[2], m[3]]);
-                    tx = LengthPct::Px(m[4]);
-                    ty = LengthPct::Px(m[5]);
-                }
-            }
-            _ => continue, // translate3d z, perspective, matrix3d, unknown: ignored
-        }
-        any = true;
+        any |= apply_transform_fn(&mut acc, &name, &args, fs);
     }
-    any.then_some(RawTransform { linear, tx, ty })
+    any.then_some(RawTransform {
+        linear: acc.linear,
+        tx: acc.tx,
+        ty: acc.ty,
+    })
+}
+
+/// Accumulated 2D-transform state built by folding over the function list: the
+/// 2×2 linear part (as `(a, b, c, d)`) and the pending translate offsets.
+struct TransformAcc {
+    linear: [f32; 4],
+    tx: LengthPct,
+    ty: LengthPct,
+}
+
+/// Apply one parsed transform function to `acc`, returning whether it was a
+/// recognized function (so the caller knows the list contributed anything).
+/// Unrecognized functions (`translate3d` z, `perspective`, `matrix3d`, …) are
+/// ignored and return `false`.
+fn apply_transform_fn(acc: &mut TransformAcc, name: &str, args: &[&str], fs: f32) -> bool {
+    let n = |i: usize| args.get(i).and_then(|a| a.trim().parse::<f32>().ok());
+    match name {
+        "translatex" => acc.tx = len_or_zero(args.first(), fs),
+        "translatey" => acc.ty = len_or_zero(args.first(), fs),
+        "translate" | "translate3d" => {
+            acc.tx = len_or_zero(args.first(), fs);
+            acc.ty = len_or_zero(args.get(1), fs);
+        }
+        "scale" | "scale3d" => {
+            let sx = n(0).unwrap_or(1.0);
+            let sy = n(1).unwrap_or(sx);
+            acc.linear = mul_linear(acc.linear, [sx, 0.0, 0.0, sy]);
+        }
+        "scalex" => acc.linear = mul_linear(acc.linear, [n(0).unwrap_or(1.0), 0.0, 0.0, 1.0]),
+        "scaley" => acc.linear = mul_linear(acc.linear, [1.0, 0.0, 0.0, n(0).unwrap_or(1.0)]),
+        "rotate" | "rotatez" => {
+            let (sn, c) = parse_angle(args.first())
+                .unwrap_or(0.0)
+                .to_radians()
+                .sin_cos();
+            acc.linear = mul_linear(acc.linear, [c, sn, -sn, c]);
+        }
+        "skewx" => {
+            let t = parse_angle(args.first()).unwrap_or(0.0).to_radians().tan();
+            acc.linear = mul_linear(acc.linear, [1.0, 0.0, t, 1.0]);
+        }
+        "skewy" => {
+            let t = parse_angle(args.first()).unwrap_or(0.0).to_radians().tan();
+            acc.linear = mul_linear(acc.linear, [1.0, t, 0.0, 1.0]);
+        }
+        "matrix" if args.len() == 6 => {
+            let m: Vec<f32> = args.iter().filter_map(|a| a.trim().parse().ok()).collect();
+            if m.len() == 6 {
+                acc.linear = mul_linear(acc.linear, [m[0], m[1], m[2], m[3]]);
+                acc.tx = LengthPct::Px(m[4]);
+                acc.ty = LengthPct::Px(m[5]);
+            }
+        }
+        _ => return false,
+    }
+    true
+}
+
+/// A CSS keyword value that produces no effect: empty or the `none` keyword.
+fn is_none_keyword(value: &str) -> bool {
+    value.is_empty() || value.eq_ignore_ascii_case("none")
 }
 
 /// Multiply two 2×2 linear parts stored as `(a, b, c, d)` = `[[a, c], [b, d]]`
@@ -963,23 +1006,17 @@ fn transform_functions(value: &str) -> Vec<(String, Vec<&str>)> {
     let bytes = value.as_bytes();
     let mut i = 0;
     while i < bytes.len() {
+        i = skip_separators(bytes, i);
         // function name = run up to '('
-        while i < bytes.len() && (bytes[i].is_ascii_whitespace() || bytes[i] == b',') {
-            i += 1;
-        }
         let name_start = i;
-        while i < bytes.len() && bytes[i] != b'(' {
-            i += 1;
-        }
+        i = scan_until(bytes, i, b'(');
         if i >= bytes.len() {
             break;
         }
         let name = value[name_start..i].trim().to_ascii_lowercase();
         i += 1; // past '('
         let args_start = i;
-        while i < bytes.len() && bytes[i] != b')' {
-            i += 1;
-        }
+        i = scan_until(bytes, i, b')');
         let args: Vec<&str> = value[args_start..i.min(bytes.len())]
             .split(',')
             .map(str::trim)
@@ -993,20 +1030,28 @@ fn transform_functions(value: &str) -> Vec<(String, Vec<&str>)> {
     out
 }
 
+/// Advance past any run of ASCII whitespace and commas, returning the new index.
+fn skip_separators(bytes: &[u8], mut i: usize) -> usize {
+    while i < bytes.len() && (bytes[i].is_ascii_whitespace() || bytes[i] == b',') {
+        i += 1;
+    }
+    i
+}
+
+/// Advance until `bytes[i] == stop` (or the end), returning that index.
+fn scan_until(bytes: &[u8], mut i: usize, stop: u8) -> usize {
+    while i < bytes.len() && bytes[i] != stop {
+        i += 1;
+    }
+    i
+}
+
 /// A `linear-gradient(...)` from `background-image` or the `background` shorthand,
 /// or `None` (no gradient / `radial-`/`conic-` unsupported / unparsable). Syntax:
 /// `linear-gradient( [<angle> | to <side/corner>]? , <color> [<pos>]? , ...)`. The
 /// direction defaults to `to bottom` (180°); stops without a position spread evenly.
 fn linear_gradient_of(s: &ComputedStyle) -> Option<super::fragment::LinearGradient> {
-    let raw = s
-        .get("background-image")
-        .or_else(|| s.get("background"))
-        .map(str::trim)?;
-    let inner = raw
-        .find("linear-gradient(")
-        .map(|i| &raw[i + "linear-gradient(".len()..])?;
-    // Take up to the matching close paren (the gradient's own parens are balanced).
-    let inner = balanced_paren_slice(inner)?;
+    let inner = linear_gradient_inner(s)?;
     let mut parts = top_level_comma_split(inner);
     let first = parts.next()?;
     // Leading angle / `to <side>`, else `first` is actually the first colour stop.
@@ -1020,6 +1065,20 @@ fn linear_gradient_of(s: &ComputedStyle) -> Option<super::fragment::LinearGradie
         angle_deg: angle,
         stops,
     })
+}
+
+/// The balanced text inside the first `linear-gradient(...)` of a box's
+/// `background-image` (else `background` shorthand), or `None` if there is none.
+fn linear_gradient_inner(s: &ComputedStyle) -> Option<&str> {
+    let raw = s
+        .get("background-image")
+        .or_else(|| s.get("background"))
+        .map(str::trim)?;
+    let inner = raw
+        .find("linear-gradient(")
+        .map(|i| &raw[i + "linear-gradient(".len()..])?;
+    // Take up to the matching close paren (the gradient's own parens are balanced).
+    balanced_paren_slice(inner)
 }
 
 /// The substring up to the paren that closes the one just opened before `s`
@@ -1076,29 +1135,55 @@ fn gradient_stops(tokens: &[&str]) -> Option<Vec<super::fragment::GradientStop>>
     let mut colors = Vec::with_capacity(n);
     let mut positions: Vec<Option<f32>> = Vec::with_capacity(n);
     for (i, tok) in tokens.iter().enumerate() {
-        let mut parts = css_value_tokens(tok).into_iter();
-        let color = parse_color(parts.next()?)?;
-        let pos = parts
-            .next()
-            .and_then(|p| p.strip_suffix('%'))
-            .and_then(|p| {
-                p.trim()
-                    .parse::<f32>()
-                    .ok()
-                    .map(|v| (v / 100.0).clamp(0.0, 1.0))
-            });
-        // First/last default to the endpoints when unpositioned.
-        let pos = pos.or(if i == 0 {
-            Some(0.0)
-        } else if i == n - 1 {
-            Some(1.0)
-        } else {
-            None
-        });
+        let (color, pos) = parse_gradient_stop(tok)?;
         colors.push(color);
-        positions.push(pos);
+        // First/last default to the endpoints when unpositioned.
+        positions.push(pos.or_else(|| endpoint_default(i, n)));
     }
-    // Fill gaps by even interpolation between the nearest known positions.
+    fill_position_gaps(&mut positions);
+    Some(
+        colors
+            .into_iter()
+            .zip(positions)
+            .map(|(color, pos)| super::fragment::GradientStop {
+                color,
+                pos: pos.unwrap_or(0.0),
+            })
+            .collect(),
+    )
+}
+
+/// Parse one gradient stop token (`<color> [<pos%>]?`) into its colour and an
+/// optional explicit 0..1 position. `None` if the token names no colour.
+fn parse_gradient_stop(tok: &str) -> Option<(Rgba, Option<f32>)> {
+    let mut parts = css_value_tokens(tok).into_iter();
+    let color = parse_color(parts.next()?)?;
+    let pos = parts
+        .next()
+        .and_then(|p| p.strip_suffix('%'))
+        .and_then(|p| {
+            p.trim()
+                .parse::<f32>()
+                .ok()
+                .map(|v| (v / 100.0).clamp(0.0, 1.0))
+        });
+    Some((color, pos))
+}
+
+/// The default position for stop `i` of `n` when it carries no explicit one: the
+/// endpoints pin to 0 and 1, interior stops stay unresolved (`None`).
+fn endpoint_default(i: usize, n: usize) -> Option<f32> {
+    match i {
+        0 => Some(0.0),
+        _ if i == n - 1 => Some(1.0),
+        _ => None,
+    }
+}
+
+/// Fill unpositioned interior stops by even interpolation between the nearest
+/// resolved neighbours (endpoints already pinned to 0/1 by the caller).
+fn fill_position_gaps(positions: &mut [Option<f32>]) {
+    let n = positions.len();
     let mut i = 0;
     while i < n {
         if positions[i].is_some() {
@@ -1121,16 +1206,6 @@ fn gradient_stops(tokens: &[&str]) -> Option<Vec<super::fragment::GradientStop>>
         }
         i = next;
     }
-    Some(
-        colors
-            .into_iter()
-            .zip(positions)
-            .map(|(color, pos)| super::fragment::GradientStop {
-                color,
-                pos: pos.unwrap_or(0.0),
-            })
-            .collect(),
-    )
 }
 
 /// The first (topmost) `box-shadow` layer: `[inset]? <ox> <oy> <blur>? <spread>?
@@ -1139,35 +1214,61 @@ fn gradient_stops(tokens: &[&str]) -> Option<Vec<super::fragment::GradientStop>>
 /// The color defaults to the box's `color` (CSS `currentColor`).
 fn box_shadow_of(s: &ComputedStyle, fs: f32) -> Option<super::fragment::BoxShadow> {
     let value = s.get("box-shadow")?.trim();
-    if value.is_empty() || value.eq_ignore_ascii_case("none") {
+    if is_none_keyword(value) {
         return None;
     }
     let first = top_level_comma_split(value).next()?;
-    let mut inset = false;
-    let mut lengths = Vec::new();
-    let mut color = None;
-    for tok in css_value_tokens(first) {
-        if tok.eq_ignore_ascii_case("inset") {
-            inset = true;
-        } else if tok == "0" {
-            lengths.push(0.0);
-        } else if let Some(px) = parse_px(tok, fs) {
-            lengths.push(px);
-        } else if let Some(c) = parse_color(tok) {
-            color = Some(c);
-        }
-    }
-    if lengths.len() < 2 {
+    let parts = parse_shadow_parts(first, fs);
+    if parts.lengths.len() < 2 {
         return None;
     }
+    let lengths = parts.lengths;
     Some(super::fragment::BoxShadow {
         offset_x: lengths[0].round() as i32,
         offset_y: lengths[1].round() as i32,
         blur: lengths.get(2).copied().unwrap_or(0.0).max(0.0).round() as u32,
         spread: lengths.get(3).copied().unwrap_or(0.0).round() as i32,
-        color: color.unwrap_or_else(|| s.get("color").and_then(parse_color).unwrap_or(Rgba::BLACK)),
-        inset,
+        color: parts
+            .color
+            .unwrap_or_else(|| s.get("color").and_then(parse_color).unwrap_or(Rgba::BLACK)),
+        inset: parts.inset,
     })
+}
+
+/// The raw pieces of one `box-shadow` layer: the `inset` flag, the offset/blur/
+/// spread lengths in source order, and an explicit colour if the layer names one.
+struct ShadowParts {
+    inset: bool,
+    lengths: Vec<f32>,
+    color: Option<Rgba>,
+}
+
+/// Classify the whitespace tokens of a single `box-shadow` layer into a
+/// [`ShadowParts`] (the `inset` keyword, `<length>`s, and a colour).
+fn parse_shadow_parts(layer: &str, fs: f32) -> ShadowParts {
+    let mut parts = ShadowParts {
+        inset: false,
+        lengths: Vec::new(),
+        color: None,
+    };
+    for tok in css_value_tokens(layer) {
+        classify_shadow_token(tok, fs, &mut parts);
+    }
+    parts
+}
+
+/// Fold one `box-shadow` token into `parts`: `inset`, a `<length>` (`0`, or any
+/// `parse_px`-able value), or a colour. Anything else is ignored.
+fn classify_shadow_token(tok: &str, fs: f32, parts: &mut ShadowParts) {
+    if tok.eq_ignore_ascii_case("inset") {
+        parts.inset = true;
+    } else if tok == "0" {
+        parts.lengths.push(0.0);
+    } else if let Some(px) = parse_px(tok, fs) {
+        parts.lengths.push(px);
+    } else if let Some(c) = parse_color(tok) {
+        parts.color = Some(c);
+    }
 }
 
 /// Split a CSS value on top-level commas, keeping parenthesized groups
@@ -1225,19 +1326,26 @@ pub(crate) fn css_value_tokens(value: &str) -> Vec<&str> {
             continue;
         }
         let start = i;
-        let mut depth = 0i32;
-        while i < bytes.len() {
-            match bytes[i] {
-                b'(' => depth += 1,
-                b')' => depth -= 1,
-                b if b.is_ascii_whitespace() && depth == 0 => break,
-                _ => {}
-            }
-            i += 1;
-        }
+        i = scan_value_token(bytes, i);
         tokens.push(&value[start..i]);
     }
     tokens
+}
+
+/// The index just past the value token starting at `i`: run until unnested
+/// whitespace, keeping parenthesized groups (`rgb(1, 2, 3)`) whole.
+fn scan_value_token(bytes: &[u8], mut i: usize) -> usize {
+    let mut depth = 0i32;
+    while i < bytes.len() {
+        match bytes[i] {
+            b'(' => depth += 1,
+            b')' => depth -= 1,
+            b if b.is_ascii_whitespace() && depth == 0 => break,
+            _ => {}
+        }
+        i += 1;
+    }
+    i
 }
 
 fn box_sizing_of(s: &ComputedStyle) -> BoxSizing {

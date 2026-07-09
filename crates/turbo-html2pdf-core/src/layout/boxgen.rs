@@ -300,13 +300,19 @@ fn is_visually_hidden(style: &ComputedStyle) -> bool {
     {
         return true;
     }
-    // `clip-path: inset(50%|100%)` clips the whole box away.
-    if let Some(cp) = style.get("clip-path").map(str::trim) {
-        if cp.contains("inset(") && (cp.contains("50%") || cp.contains("100%")) {
-            return true;
-        }
-    }
-    // A 0/1px box with clipped overflow — the modern visually-hidden pattern.
+    clip_path_hides(style) || tiny_clipped(style)
+}
+
+/// `clip-path: inset(50%|100%)` clips the whole box away.
+fn clip_path_hides(style: &ComputedStyle) -> bool {
+    style
+        .get("clip-path")
+        .map(str::trim)
+        .is_some_and(|cp| cp.contains("inset(") && (cp.contains("50%") || cp.contains("100%")))
+}
+
+/// A 0/1px box with clipped overflow — the modern visually-hidden pattern.
+fn tiny_clipped(style: &ComputedStyle) -> bool {
     let tiny = |p: &str| {
         matches!(
             style.get(p).map(str::trim),

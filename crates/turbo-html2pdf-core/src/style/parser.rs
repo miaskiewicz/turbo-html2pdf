@@ -91,26 +91,42 @@ fn split_top_level(s: &str, sep: char) -> Vec<&str> {
     let mut out = Vec::new();
     let (mut depth, mut quote, mut start) = (0i32, None::<char>, 0usize);
     for (i, c) in s.char_indices() {
-        match quote {
-            Some(q) => {
-                if c == q {
-                    quote = None;
-                }
-            }
-            None => match c {
-                '\'' | '"' => quote = Some(c),
-                '(' => depth += 1,
-                ')' => depth = (depth - 1).max(0),
-                _ if c == sep && depth == 0 => {
-                    out.push(&s[start..i]);
-                    start = i + c.len_utf8();
-                }
-                _ => {}
-            },
+        if top_level_sep(c, sep, &mut depth, &mut quote) {
+            out.push(&s[start..i]);
+            start = i + c.len_utf8();
         }
     }
     out.push(&s[start..]);
     out
+}
+
+/// Advance the quote/paren nesting state by one char; returns `true` when `c` is
+/// a top-level `sep` — outside any `'`/`"` string and any parentheses — i.e. a
+/// real split point.
+fn top_level_sep(c: char, sep: char, depth: &mut i32, quote: &mut Option<char>) -> bool {
+    match *quote {
+        Some(q) => {
+            if c == q {
+                *quote = None;
+            }
+            false
+        }
+        None => match c {
+            '\'' | '"' => {
+                *quote = Some(c);
+                false
+            }
+            '(' => {
+                *depth += 1;
+                false
+            }
+            ')' => {
+                *depth = (*depth - 1).max(0);
+                false
+            }
+            _ => c == sep && *depth == 0,
+        },
+    }
 }
 
 /// A top-level chunk of the stylesheet: either a qualified rule or an at-rule.

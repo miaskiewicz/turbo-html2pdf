@@ -13,15 +13,21 @@ fn lay(html: &str, w: f32) -> Fragment {
 }
 
 fn rect(f: &Fragment, rgb: (u8, u8, u8)) -> Option<[f32; 4]> {
-    fn go(f: &Fragment, t: (u8, u8, u8), o: &mut Option<[f32; 4]>) {
-        if let FragmentContent::Box {
+    // This fragment's own filled-box rect, if it paints exactly color `t`.
+    fn own_rect(f: &Fragment, t: (u8, u8, u8)) -> Option<[f32; 4]> {
+        let FragmentContent::Box {
             background: Some(Rgba { r, g, b, a }),
             ..
         } = &f.content
-        {
-            if *a > 0 && (*r, *g, *b) == t && o.is_none() {
-                *o = Some([f.x, f.y, f.width, f.height]);
-            }
+        else {
+            return None;
+        };
+        (*a > 0 && (*r, *g, *b) == t).then_some([f.x, f.y, f.width, f.height])
+    }
+    fn go(f: &Fragment, t: (u8, u8, u8), o: &mut Option<[f32; 4]>) {
+        // Pre-order, first match wins: once `o` is set it is never overwritten.
+        if o.is_none() {
+            *o = own_rect(f, t);
         }
         for c in &f.children {
             go(c, t, o);

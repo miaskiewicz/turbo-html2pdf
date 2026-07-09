@@ -314,8 +314,45 @@ fn layout_lines(
     cw: f32,
     ctx: &mut Ctx,
 ) -> (Vec<Fragment>, f32) {
-    // Pre-lay each atomic (recursively) to learn its size, and build the inline
-    // piece sequence in document order; directives are collected as markers.
+    let (pieces, atom_frags, directives) = build_inline_pieces(items, bs, cx, cy, cw, ctx);
+    let fonts = ctx.fonts;
+    // Per-line float wrapping: each line's `(indent, width)` is the free inline
+    // region the BFC's floats leave at that line's own y (absolute `cy + top`), so
+    // text flows beside a `float:right` infobox and widens once below its bottom.
+    // Clone the float set so the closure can borrow it while `ctx.diags` is used.
+    let floats = ctx.floats.clone();
+    let region = |top: f32| {
+        let (rx, rw) = inline_region_from(&floats, cx, cw, cy + top);
+        (rx - cx, rw)
+    };
+    let para = inline::layout_paragraph_in(&pieces, fonts, bs.text_align, ctx.diags, &region);
+    let mut frags = Vec::new();
+    lines_to_fragments(&para, cx, cy, &mut frags);
+    // Translate each pre-laid atom to where it landed within its line.
+    for line in &para.lines {
+        for placed in &line.atoms {
+            let mut f = atom_frags[placed.id].clone();
+            f.translate(cx + line.indent + placed.x, cy + line.top + placed.y);
+            frags.push(f);
+        }
+    }
+    frags.extend(directives);
+    (frags, para.height)
+}
+
+/// Pre-lay the inline sequence in document order, returning `(pieces, atoms,
+/// markers)`. Text becomes measured runs; each atomic inline is laid out
+/// recursively and returned *separately* (keyed by its index in `atoms`, via the
+/// piece's id) so it can be re-placed once its line position is known; directives
+/// collapse to zero-size markers at the container origin.
+fn build_inline_pieces(
+    items: &[InlineItem],
+    bs: &BoxStyle,
+    cx: f32,
+    cy: f32,
+    cw: f32,
+    ctx: &mut Ctx,
+) -> (Vec<inline::Piece>, Vec<Fragment>, Vec<Fragment>) {
     let mut atom_frags: Vec<Fragment> = Vec::new();
     let mut directives: Vec<Fragment> = Vec::new();
     let mut pieces: Vec<inline::Piece> = Vec::new();
@@ -349,34 +386,21 @@ fn layout_lines(
             }
         }
     }
-    let fonts = ctx.fonts;
-    // Per-line float wrapping: each line's `(indent, width)` is the free inline
-    // region the BFC's floats leave at that line's own y (absolute `cy + top`), so
-    // text flows beside a `float:right` infobox and widens once below its bottom.
-    // Clone the float set so the closure can borrow it while `ctx.diags` is used.
-    let floats = ctx.floats.clone();
-    let region = |top: f32| {
-        let (rx, rw) = inline_region_from(&floats, cx, cw, cy + top);
-        (rx - cx, rw)
-    };
-    let para = inline::layout_paragraph_in(&pieces, fonts, bs.text_align, ctx.diags, &region);
-    let mut frags = Vec::new();
-    lines_to_fragments(&para, cx, cy, &mut frags);
-    // Translate each pre-laid atom to where it landed within its line.
-    for line in &para.lines {
-        for placed in &line.atoms {
-            let mut f = atom_frags[placed.id].clone();
-            f.translate(cx + line.indent + placed.x, cy + line.top + placed.y);
-            frags.push(f);
-        }
-    }
-    frags.extend(directives);
-    (frags, para.height)
+    (pieces, atom_frags, directives)
 }
 
 // --------------------------------------------------------------------------
 // block flow + margin collapsing
 // --------------------------------------------------------------------------
+
+/// Mutable running state of a block formatting context's vertical stacking: the
+/// y `cursor` where the next in-flow box goes, the `pending` collapsed top-margin
+/// carried from the previous box, and the container's block-level `align`.
+struct FlowRun {
+    cursor: f32,
+    pending: f32,
+    align: Align,
+}
 
 fn layout_block_flow(
     kids: &[LayoutBox],
@@ -388,81 +412,143 @@ fn layout_block_flow(
     ctx: &mut Ctx,
 ) -> (Vec<Fragment>, f32) {
     let mut frags = Vec::new();
-    let mut cursor = cy;
-    let mut pending = 0.0_f32;
+    let mut flow = FlowRun {
+        cursor: cy,
+        pending: 0.0,
+        align,
+    };
     for kid in kids {
         let kbs = resolve(kid, cw, fs);
-        // `absolute`/`fixed`: taken out of flow — placed at its insets against the
-        // containing block, or (for `auto` insets) at its static in-flow position.
-        // Contributes nothing to the cursor or margin run.
-        if kbs.position.is_out_of_flow() {
-            let static_pos = (cx + kbs.margin.left, cursor + pending.max(kbs.margin.top));
-            let (bx, by) = out_of_flow_origin(&kbs, cw, ctx, static_pos);
-            frags.push(layout_box(kid, bx, by, cw, fs, ctx));
+        // `absolute`/`fixed`/`float`: taken out of normal flow, placed on the side
+        // without advancing the cursor or margin run (handled by `place_special_kid`).
+        if let Some(f) = place_special_kid(kid, &kbs, cx, cw, fs, &flow, ctx) {
+            frags.push(f);
             continue;
         }
-        // `float:left/right`: packed to its edge and registered in the BFC's float
-        // set (so following in-flow content — even in later sibling blocks/sections
-        // — wraps beside it). Contributes no cursor advance.
-        if kbs.float != Float::None {
-            frags.push(place_float(kid, &kbs, cx, cw, fs, cursor + pending, ctx));
-            continue;
-        }
-        // `clear`: skip past the floats on the cleared side(s) before laying out.
-        let cleared = clear_below(ctx, kid, cursor + pending);
-        if cleared > cursor + pending {
-            cursor = cleared;
-            pending = 0.0;
-        }
-        // `relative`: flows normally (its space is reserved via the cursor) but
-        // is painted shifted by its insets, so lay it out at the shifted origin.
-        let (dx, dy) = if matches!(kbs.position, Position::Relative | Position::Sticky) {
-            relative_offset(&kbs, cw)
-        } else {
-            (0.0, 0.0)
-        };
-        pending = pending.max(kbs.margin.top);
-        let flow_y = cursor + pending;
-        // A normal-flow block box spans the full content width; a float only shortens
-        // the *line boxes* of its inline content (handled per-line in `layout_lines`),
-        // not the block itself. Only a box that avoids floats as a unit — one that
-        // establishes a BFC (table/flex/grid/`overflow`), or a replaced `<img>` — is
-        // narrowed and shifted into the free region beside the float.
-        let avoids_floats =
-            establishes_bfc(kid, &kbs) || kid.image.as_ref().is_some_and(|s| s.replaced);
-        let (region_x, region_w) = if avoids_floats {
-            inline_region(ctx, cx, cw, flow_y)
-        } else {
-            (cx, cw)
-        };
-        let mut frag = layout_box(
-            kid,
-            region_x + kbs.margin.left + dx,
-            flow_y + dy,
-            region_w,
-            fs,
-            ctx,
-        );
-        // Horizontally align a width-constrained block within its inline region:
-        // `margin: … auto` centers it, and a `text-align:center`/`right` container
-        // centers/right-aligns block children (legacy `<center>` / `align=center`).
-        let hx = block_h_offset(align, &kbs, kid, frag.width, region_w);
-        if hx != 0.0 {
-            frag.translate(hx, 0.0);
-        }
-        // Advance the cursor by the box's height at its *unshifted* flow position.
-        if frag.height == 0.0 {
-            pending = pending.max(kbs.margin.bottom);
-        } else {
-            cursor += pending + frag.height;
-            pending = kbs.margin.bottom;
-        }
-        frags.push(frag);
+        frags.push(layout_in_flow_kid(kid, &kbs, cx, cw, fs, &mut flow, ctx));
     }
     // Height is the in-flow content only. Floats are contained by their BFC (see
     // `layout_box_sized`), not by every block they pass through — a non-BFC block
     // does not grow to enclose a float, so following content wraps beside it.
-    (frags, cursor - cy)
+    (frags, flow.cursor - cy)
+}
+
+/// Place a child that sits outside normal block flow, returning its fragment if
+/// it was handled (contributing nothing to the cursor/margin run) or `None` for a
+/// normal-flow box. `absolute`/`fixed` land at their insets against the containing
+/// block (or their static in-flow position for `auto` insets); a `float:left/right`
+/// packs to its edge and registers in the BFC's float set so later in-flow content
+/// — even in sibling blocks — wraps beside it.
+fn place_special_kid(
+    kid: &LayoutBox,
+    kbs: &BoxStyle,
+    cx: f32,
+    cw: f32,
+    fs: f32,
+    flow: &FlowRun,
+    ctx: &mut Ctx,
+) -> Option<Fragment> {
+    if kbs.position.is_out_of_flow() {
+        let static_pos = (
+            cx + kbs.margin.left,
+            flow.cursor + flow.pending.max(kbs.margin.top),
+        );
+        let (bx, by) = out_of_flow_origin(kbs, cw, ctx, static_pos);
+        return Some(layout_box(kid, bx, by, cw, fs, ctx));
+    }
+    if kbs.float != Float::None {
+        return Some(place_float(
+            kid,
+            kbs,
+            cx,
+            cw,
+            fs,
+            flow.cursor + flow.pending,
+            ctx,
+        ));
+    }
+    None
+}
+
+/// Lay out one normal-flow block child, advancing `flow`'s cursor/margin run, and
+/// return its fragment. Applies `clear`, the `relative`/`sticky` paint shift, float
+/// avoidance for BFC/replaced boxes, and horizontal alignment.
+fn layout_in_flow_kid(
+    kid: &LayoutBox,
+    kbs: &BoxStyle,
+    cx: f32,
+    cw: f32,
+    fs: f32,
+    flow: &mut FlowRun,
+    ctx: &mut Ctx,
+) -> Fragment {
+    // `clear`: skip past the floats on the cleared side(s) before laying out.
+    let base = flow.cursor + flow.pending;
+    let cleared = clear_below(ctx, kid, base);
+    if cleared > base {
+        flow.cursor = cleared;
+        flow.pending = 0.0;
+    }
+    let (dx, dy) = flow_relative_offset(kbs, cw);
+    flow.pending = flow.pending.max(kbs.margin.top);
+    let flow_y = flow.cursor + flow.pending;
+    let (region_x, region_w) = flow_region(kid, kbs, ctx, cx, cw, flow_y);
+    let mut frag = layout_box(
+        kid,
+        region_x + kbs.margin.left + dx,
+        flow_y + dy,
+        region_w,
+        fs,
+        ctx,
+    );
+    // Horizontally align a width-constrained block within its inline region:
+    // `margin: … auto` centers it, and a `text-align:center`/`right` container
+    // centers/right-aligns block children (legacy `<center>` / `align=center`).
+    let hx = block_h_offset(flow.align, kbs, kid, frag.width, region_w);
+    if hx != 0.0 {
+        frag.translate(hx, 0.0);
+    }
+    // Advance the cursor by the box's height at its *unshifted* flow position.
+    if frag.height == 0.0 {
+        flow.pending = flow.pending.max(kbs.margin.bottom);
+    } else {
+        flow.cursor += flow.pending + frag.height;
+        flow.pending = kbs.margin.bottom;
+    }
+    frag
+}
+
+/// The paint-time shift for a `relative`/`sticky` box: it flows normally (its
+/// space is reserved via the cursor) but is painted shifted by its insets. Any
+/// other positioning contributes no shift.
+fn flow_relative_offset(kbs: &BoxStyle, cw: f32) -> (f32, f32) {
+    if matches!(kbs.position, Position::Relative | Position::Sticky) {
+        relative_offset(kbs, cw)
+    } else {
+        (0.0, 0.0)
+    }
+}
+
+/// The inline region `(x, width)` a normal-flow block child occupies at `flow_y`.
+/// A plain block spans the full content width — a float only shortens the *line
+/// boxes* of its inline content (handled per-line in `layout_lines`), not the
+/// block itself. Only a box that avoids floats as a unit — one establishing a BFC
+/// (table/flex/grid/`overflow`) or a replaced `<img>` — is narrowed and shifted
+/// into the free region beside the float.
+fn flow_region(
+    kid: &LayoutBox,
+    kbs: &BoxStyle,
+    ctx: &Ctx,
+    cx: f32,
+    cw: f32,
+    flow_y: f32,
+) -> (f32, f32) {
+    let avoids_floats = establishes_bfc(kid, kbs) || kid.image.as_ref().is_some_and(|s| s.replaced);
+    if avoids_floats {
+        inline_region(ctx, cx, cw, flow_y)
+    } else {
+        (cx, cw)
+    }
 }
 
 /// The horizontal shift to align a width-constrained in-flow block within its
@@ -546,14 +632,18 @@ fn clear_below(ctx: &Ctx, kid: &LayoutBox, y: f32) -> f32 {
         Some("right") => (false, true),
         _ => return y,
     };
-    let mut ny = y;
-    for f in &ctx.floats {
-        let hit = matches!(f.side, Float::Left) && cl || matches!(f.side, Float::Right) && cr;
-        if hit && f.bottom > ny {
-            ny = f.bottom;
-        }
-    }
-    ny
+    // Drop to the lowest bottom of any active float on a cleared side, or stay at
+    // `y` if none (the fold seed) — equivalent to the running `max` over hits.
+    ctx.floats
+        .iter()
+        .filter(|f| float_on_cleared_side(f, cl, cr))
+        .map(|f| f.bottom)
+        .fold(y, f32::max)
+}
+
+/// Whether float `f` lies on a side the current box is clearing.
+fn float_on_cleared_side(f: &FloatRect, clear_left: bool, clear_right: bool) -> bool {
+    matches!(f.side, Float::Left) && clear_left || matches!(f.side, Float::Right) && clear_right
 }
 
 /// Place a floated box: size it (shrink-to-fit for auto width), drop it to the
@@ -570,14 +660,51 @@ fn place_float(
     ctx: &mut Ctx,
 ) -> Fragment {
     let replaced = kid.image.as_ref().is_some_and(|s| s.replaced);
+    let (w, shrink) = float_width(kid, kbs, cw, ctx.fonts, replaced);
+    let y = float_drop_y(ctx, cx, cw, w, y0);
+    let (rx, rw) = inline_region(ctx, cx, cw, y);
+    let bx = match kbs.float {
+        Float::Right => rx + rw - w,
+        _ => rx,
+    };
+    let mut f = if shrink {
+        layout_box_sized(kid, kbs, bx, y, w, ctx)
+    } else {
+        layout_box(kid, bx, y, cw, fs, ctx)
+    };
+    reanchor_right_float(&mut f, kbs, rx, rw, w);
+    ctx.floats.push(FloatRect {
+        x0: f.x,
+        x1: f.x + f.width,
+        top: y,
+        bottom: y + f.height,
+        side: kbs.float,
+    });
+    f
+}
+
+/// The border-box width of a float and whether it is shrink-to-fit sized. An
+/// `auto`-width non-replaced float takes its natural width capped at the container
+/// (`shrink = true`); otherwise it takes its resolved border-box width.
+fn float_width(
+    kid: &LayoutBox,
+    kbs: &BoxStyle,
+    cw: f32,
+    fonts: &FontRegistry,
+    replaced: bool,
+) -> (f32, bool) {
     let shrink = !replaced && kbs.width.resolve(cw).is_none();
     let w = if shrink {
-        super::flex::natural_width(kid, ctx.fonts).min(cw)
+        super::flex::natural_width(kid, fonts).min(cw)
     } else {
         border_box_width(kbs, cw)
     };
-    // Find the y at/below y0 where a `w`-wide float fits beside existing same-BFC
-    // floats; if the row is too full, drop past the nearest float bottom and retry.
+    (w, shrink)
+}
+
+/// The y at/below `y0` where a `w`-wide float fits beside existing same-BFC
+/// floats; if a row is too full, drop past the nearest float bottom and retry.
+fn float_drop_y(ctx: &Ctx, cx: f32, cw: f32, w: f32, y0: f32) -> f32 {
     let mut y = y0;
     loop {
         let (_, avail) = inline_region(ctx, cx, cw, y);
@@ -595,28 +722,15 @@ fn place_float(
         }
         y = next;
     }
-    let (rx, rw) = inline_region(ctx, cx, cw, y);
-    let bx = match kbs.float {
-        Float::Right => rx + rw - w,
-        _ => rx,
-    };
-    let mut f = if shrink {
-        layout_box_sized(kid, kbs, bx, y, w, ctx)
-    } else {
-        layout_box(kid, bx, y, cw, fs, ctx)
-    };
-    // Re-anchor a right float to the true right edge if its laid width differs.
+    y
+}
+
+/// Re-pin a right float to the true right edge when its laid width differs from
+/// the reserved width `w` (e.g. min/max-width clamped the box during layout).
+fn reanchor_right_float(f: &mut Fragment, kbs: &BoxStyle, rx: f32, rw: f32, w: f32) {
     if kbs.float == Float::Right && (f.width - w).abs() > 0.5 {
         f.translate(rx + rw - f.width - f.x, 0.0);
     }
-    ctx.floats.push(FloatRect {
-        x0: f.x,
-        x1: f.x + f.width,
-        top: y,
-        bottom: y + f.height,
-        side: kbs.float,
-    });
-    f
 }
 
 fn layout_content(

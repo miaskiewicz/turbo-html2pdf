@@ -423,39 +423,61 @@ fn collect_inline(element: &Element, out: &mut Vec<Cand>) {
 /// 0), so an author stylesheet always overrides them. Old table-layout sites
 /// (Hacker News' orange header `<td bgcolor>`, sized `<img>`) depend on them.
 fn collect_presentational(element: &Element, out: &mut Vec<Cand>) {
-    let mut decls = Vec::new();
-    let mut add = |prop: &str, val: String| {
-        decls.push(Declaration {
-            property: prop.to_string(),
-            value: val,
-            important: false,
-        });
-    };
-    if let Some(bg) = element
-        .attr("bgcolor")
-        .map(str::trim)
-        .filter(|v| !v.is_empty())
-    {
-        add("background-color", bg.to_string());
-    }
-    if let Some(w) = element.attr("width").and_then(attr_length) {
-        add("width", w);
-    }
-    if let Some(h) = element.attr("height").and_then(attr_length) {
-        add("height", h);
-    }
-    if is_tag(element, "font") {
-        if let Some(c) = element
-            .attr("color")
-            .map(str::trim)
-            .filter(|v| !v.is_empty())
-        {
-            add("color", c.to_string());
-        }
-    }
+    // Order matters (bgcolor, width, height, then `<font color>`); each entry is
+    // present only when its attribute is set and usable.
+    let decls: Vec<Declaration> = [
+        bgcolor_decl(element),
+        element.attr("width").and_then(attr_length).map(width_decl),
+        element
+            .attr("height")
+            .and_then(attr_length)
+            .map(height_decl),
+        font_color_decl(element),
+    ]
+    .into_iter()
+    .flatten()
+    .collect();
     if !decls.is_empty() {
         push_decls(&decls, 1, (0, 0, 0), 0, out);
     }
+}
+
+/// A presentational-hint declaration (level 1, never `important`).
+fn pres_decl(property: &str, value: String) -> Declaration {
+    Declaration {
+        property: property.to_string(),
+        value,
+        important: false,
+    }
+}
+
+fn width_decl(value: String) -> Declaration {
+    pres_decl("width", value)
+}
+
+fn height_decl(value: String) -> Declaration {
+    pres_decl("height", value)
+}
+
+/// `bgcolor="..."` → `background-color`, when non-empty.
+fn bgcolor_decl(element: &Element) -> Option<Declaration> {
+    let bg = element
+        .attr("bgcolor")
+        .map(str::trim)
+        .filter(|v| !v.is_empty())?;
+    Some(pres_decl("background-color", bg.to_string()))
+}
+
+/// `<font color="...">` → `color`, when non-empty (only on the `<font>` tag).
+fn font_color_decl(element: &Element) -> Option<Declaration> {
+    if !is_tag(element, "font") {
+        return None;
+    }
+    let c = element
+        .attr("color")
+        .map(str::trim)
+        .filter(|v| !v.is_empty())?;
+    Some(pres_decl("color", c.to_string()))
 }
 
 /// A presentational length attribute → a CSS length value: a bare number is `px`,

@@ -274,14 +274,23 @@ fn scale_to(cols: &mut [f32], target: f32, mins: &[f32]) {
         return;
     }
     if target >= sum {
-        let k = target / sum;
-        for c in cols.iter_mut() {
-            *c *= k;
-        }
-        return;
+        grow_columns(cols, target / sum);
+    } else {
+        shrink_columns(cols, mins, sum - target);
     }
+}
+
+/// Scale every column up by factor `k` (grow-to-fit distributes slack evenly).
+fn grow_columns(cols: &mut [f32], k: f32) {
+    for c in cols.iter_mut() {
+        *c *= k;
+    }
+}
+
+/// Remove `reduce` px total, taking only from each column's slack above its
+/// min-content so no column clips its content; a column never drops below `mins`.
+fn shrink_columns(cols: &mut [f32], mins: &[f32], reduce: f32) {
     let slack: f32 = cols.iter().zip(mins).map(|(c, m)| (c - m).max(0.0)).sum();
-    let reduce = sum - target;
     for (c, m) in cols.iter_mut().zip(mins) {
         if slack > 0.0 {
             *c -= reduce * (*c - *m).max(0.0) / slack;

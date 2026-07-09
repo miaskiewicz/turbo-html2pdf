@@ -141,19 +141,18 @@ fn supports_unary(s: &str) -> bool {
         let inner = if s.starts_with("not(") { &s[3..] } else { rest };
         return !supports_unary(inner);
     }
-    // A parenthesised group: an operator expression (recurse) or a leaf test.
-    if let Some(inner) = strip_group(s) {
-        if inner.contains('(')
-            || split_top(inner, "and").len() > 1
-            || split_top(inner, "or").len() > 1
-        {
-            return supports_or(inner);
-        }
-        // Leaf `(property: value)`: a modern browser supports it.
-        return true;
+    match strip_group(s) {
+        // A parenthesised group holding an operator expression → recurse. A leaf
+        // `(property: value)` or a bare/unrecognised condition → assume supported.
+        Some(inner) if is_group_expr(inner) => supports_or(inner),
+        _ => true,
     }
-    // Bare/unrecognised condition — assume supported.
-    true
+}
+
+/// Whether a group's inside is a nested operator expression (holds a sub-group or a
+/// top-level `and`/`or`) rather than a single `(property: value)` leaf.
+fn is_group_expr(inner: &str) -> bool {
+    inner.contains('(') || split_top(inner, "and").len() > 1 || split_top(inner, "or").len() > 1
 }
 
 /// The inside of `s` if it is exactly one matching-paren group, else `None`.
@@ -217,35 +216,34 @@ fn clause_matches(clause: &str, width: f32, height: f32) -> bool {
     if clause.contains("print") {
         return false;
     }
-    for feat in clause.split("and") {
-        let feat = feat.trim();
-        // `min-width` is a prefix of `max-width`? No — but `min-height`/`max-height`
-        // must be checked BEFORE `min-width`/`max-width` won't false-match (distinct
-        // names). Height gating is common on tall/compact layout variants (Google's
-        // homepage hides its tall search box below `max-height:575px`); ignoring it
-        // left those `display:none` variants always applied → the box vanished.
-        if let Some(min) = feature_len(feat, "min-width") {
-            if width < min {
-                return false;
+    // A clause matches unless one of its `and`-joined length features excludes the
+    // viewport. Height features (Google hides its tall search box below
+    // `max-height:575px`) matter as much as width — evaluate both.
+    !clause
+        .split("and")
+        .any(|feat| feature_excludes(feat.trim(), width, height))
+}
+
+/// Whether a single media feature's `(min|max)-(width|height)` bound excludes the
+/// viewport (so its clause must NOT match). Unknown features never exclude.
+fn feature_excludes(feat: &str, width: f32, height: f32) -> bool {
+    // (feature name, is-min bound, is-width axis).
+    const CHECKS: [(&str, bool, bool); 4] = [
+        ("min-width", true, true),
+        ("max-width", false, true),
+        ("min-height", true, false),
+        ("max-height", false, false),
+    ];
+    CHECKS.iter().any(|&(name, is_min, is_width)| {
+        feature_len(feat, name).is_some_and(|bound| {
+            let v = if is_width { width } else { height };
+            if is_min {
+                v < bound
+            } else {
+                v > bound
             }
-        }
-        if let Some(max) = feature_len(feat, "max-width") {
-            if width > max {
-                return false;
-            }
-        }
-        if let Some(min) = feature_len(feat, "min-height") {
-            if height < min {
-                return false;
-            }
-        }
-        if let Some(max) = feature_len(feat, "max-height") {
-            if height > max {
-                return false;
-            }
-        }
-    }
-    true
+        })
+    })
 }
 
 /// The px value of a `(min-width: …)` / `(max-width: …)` feature in `clause`.
