@@ -102,6 +102,23 @@ fn justify_items(s: &ComputedStyle) -> Option<AlignItems> {
     })
 }
 
+/// A flex item's `align-self` (its own cross-axis alignment, overriding the
+/// container's `align-items`), `None`/`auto` deferring to the container. Google's
+/// search-bar "AI Mode" pill, the "Sign in" button and the two search buttons all
+/// carry `align-self:center` with a fixed height — without it they inherited the
+/// default `stretch`/top and rode the top edge of their taller row (the Sign-in pill
+/// stretched to the header height and rendered as a circle).
+fn align_self(s: &ComputedStyle) -> Option<AlignItems> {
+    match s.get("align-self").map(str::trim) {
+        None | Some("auto") => None,
+        Some("flex-start") | Some("start") => Some(AlignItems::FlexStart),
+        Some("flex-end") | Some("end") => Some(AlignItems::FlexEnd),
+        Some("center") => Some(AlignItems::Center),
+        Some("baseline") => Some(AlignItems::Baseline),
+        Some(_) => Some(AlignItems::Stretch),
+    }
+}
+
 fn gap_len(s: &ComputedStyle) -> LengthPercentage {
     let px = s
         .get("gap")
@@ -236,6 +253,7 @@ fn item_style(item: &LayoutBox, fs: f32) -> Style {
         flex_grow: num(s, "flex-grow", grow),
         flex_shrink: num(s, "flex-shrink", shrink),
         flex_basis: item_basis(s, &bs, fs),
+        align_self: align_self(s),
         margin: item_margins(&bs),
         // A flex item's own `min/max-height` (and explicit cross-axis `height`) must
         // reach taffy â else an item whose height is only a `min-height` collapses.
@@ -971,6 +989,33 @@ mod coverage_tests {
 
     fn cs(pairs: &[(&str, &str)]) -> ComputedStyle {
         ComputedStyle::from_pairs(pairs.iter().map(|(k, v)| (k.to_string(), v.to_string())))
+    }
+
+    #[test]
+    fn align_self_maps_every_keyword() {
+        // unset / `auto` -> None (defer to the container's align-items).
+        assert_eq!(align_self(&cs(&[])), None);
+        assert_eq!(align_self(&cs(&[("align-self", "auto")])), None);
+        assert_eq!(
+            align_self(&cs(&[("align-self", "center")])),
+            Some(AlignItems::Center)
+        );
+        assert_eq!(
+            align_self(&cs(&[("align-self", "flex-start")])),
+            Some(AlignItems::FlexStart)
+        );
+        assert_eq!(
+            align_self(&cs(&[("align-self", "end")])),
+            Some(AlignItems::FlexEnd)
+        );
+        assert_eq!(
+            align_self(&cs(&[("align-self", "baseline")])),
+            Some(AlignItems::Baseline)
+        );
+        assert_eq!(
+            align_self(&cs(&[("align-self", "stretch")])),
+            Some(AlignItems::Stretch)
+        );
     }
 
     #[test]

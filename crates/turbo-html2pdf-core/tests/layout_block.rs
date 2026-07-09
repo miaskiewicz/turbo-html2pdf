@@ -313,6 +313,31 @@ fn inline_blocks_flow_horizontally() {
 }
 
 #[test]
+fn inline_block_auto_width_honors_min_width() {
+    // An auto-width (shrink-to-fit) inline-block whose content is far narrower than
+    // its `min-width` must widen to the min-width — google's header "Sign in" pill
+    // (min-width:85px) otherwise shrank to its text and rendered round, not a pill.
+    let root = lay(
+        &[el(
+            "div",
+            &[],
+            vec![ib(
+                &[("min-width", "100px"), ("background-color", "#123456")],
+                "x",
+            )],
+        )],
+        500.0,
+    );
+    let bx = bg_boxes(&root);
+    assert_eq!(bx.len(), 1);
+    assert!(
+        bx[0].width >= 100.0,
+        "auto-width inline-block should honor min-width, got {}",
+        bx[0].width
+    );
+}
+
+#[test]
 fn inline_blocks_wrap_when_row_full() {
     // Three 80px inline-blocks in a 200px box: two fit on row 1, the third wraps.
     let mk = |c: &str| {

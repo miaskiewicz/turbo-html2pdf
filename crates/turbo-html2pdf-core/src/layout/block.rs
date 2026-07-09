@@ -301,7 +301,12 @@ fn lay_atomic(b: &LayoutBox, cw: f32, fs: f32, ctx: &mut Ctx) -> Fragment {
     let bs = resolve(b, cw, fs);
     let replaced = b.image.as_ref().is_some_and(|s| s.replaced);
     if !replaced && bs.width.resolve(cw).is_none() {
-        let w = super::flex::natural_width(b, ctx.fonts).min(cw);
+        // Shrink-to-fit, then honor `min-width`/`max-width` — google's header "Sign in"
+        // pill has `min-width:85px`; unclamped it shrank to its ~68px text and, nearly
+        // as tall as wide under `border-radius:100px`, rendered as a circle not a pill.
+        let extra = bs.padding.horizontal() + bs.border.widths().horizontal();
+        let nat = super::flex::natural_width(b, ctx.fonts).min(cw);
+        let w = clamp_width(nat, &bs, cw, extra);
         layout_box_sized(b, &bs, 0.0, 0.0, w, ctx)
     } else {
         layout_box(b, 0.0, 0.0, cw, fs, ctx)
