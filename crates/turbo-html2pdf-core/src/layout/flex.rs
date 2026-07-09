@@ -293,10 +293,27 @@ fn item_inset(bs: &BoxStyle) -> Rect<LengthPercentageAuto> {
 // content measurement
 // --------------------------------------------------------------------------
 
+/// The max-content width contributed by an inline run's atomic items
+/// (`inline-block`/replaced boxes). `build_runs` keeps only text pieces, so a line
+/// whose content is an atomic measured 0 — google's footer wraps its "Settings"
+/// link in an `inline-block` button, and that whole footer cell collapsed and its
+/// text overflowed past the viewport. Atomics sit inline (side by side), so their
+/// natural widths sum, like the text runs they share the line with.
+fn atomics_natural(items: &[InlineItem], fonts: &FontRegistry) -> f32 {
+    items
+        .iter()
+        .filter_map(|it| match it {
+            InlineItem::Atomic(b) => Some(natural_width(b, fonts)),
+            _ => None,
+        })
+        .sum()
+}
+
 fn lines_natural(items: &[InlineItem], fs: f32, fonts: &FontRegistry) -> f32 {
     let runs = block::build_runs(items, fs, 0.0, fonts);
     let mut scratch = Diagnostics::default();
-    inline::layout_runs(&runs, fonts, f32::MAX, Align::Left, &mut scratch).width
+    let text = inline::layout_runs(&runs, fonts, f32::MAX, Align::Left, &mut scratch).width;
+    text + atomics_natural(items, fonts)
 }
 
 fn kids_natural(kids: &[LayoutBox], fonts: &FontRegistry) -> f32 {
@@ -376,7 +393,17 @@ pub(crate) fn natural_width(lb: &LayoutBox, fonts: &FontRegistry) -> f32 {
 fn lines_min(items: &[InlineItem], fs: f32, fonts: &FontRegistry) -> f32 {
     let runs = block::build_runs(items, fs, 0.0, fonts);
     let mut scratch = Diagnostics::default();
-    inline::layout_runs(&runs, fonts, 0.0, Align::Left, &mut scratch).width
+    let text = inline::layout_runs(&runs, fonts, 0.0, Align::Left, &mut scratch).width;
+    // An atomic doesn't break, so it contributes its own min-content; the line can
+    // wrap between pieces, so its min-content is the widest single piece.
+    let atom = items
+        .iter()
+        .filter_map(|it| match it {
+            InlineItem::Atomic(b) => Some(min_content_width(b, fonts)),
+            _ => None,
+        })
+        .fold(0.0_f32, f32::max);
+    text.max(atom)
 }
 
 /// The **min-content** width of a box: the least width it can take without its
@@ -1082,6 +1109,35 @@ mod coverage_tests {
         // Row lays items side by side (sum), column stacks them (widest) -> row >= col.
         assert!(rw >= cw);
         assert!(rw >= 0.0 && cw >= 0.0);
+    }
+
+    // --- inline-block atomic contributes to a line's natural/min width ---
+    #[test]
+    fn inline_block_atomic_measured_in_line() {
+        let fonts = FontRegistry::new();
+        // `<span display:inline>` wrapping a `<span display:inline-block>text</span>`
+        // -> a Lines box whose only piece is an atomic. `build_runs` drops atomics, so
+        // without folding their width in, the line (and the flex cell around it)
+        // measured 0 and its text overflowed (google's footer "Settings" link).
+        let tree = build_box_tree(&[el(
+            "span",
+            &[("display", "inline")],
+            vec![el(
+                "span",
+                &[("display", "inline-block")],
+                vec![StyledNode::Text("Settings".to_string())],
+            )],
+        )]);
+        let nat = natural_width(&tree, &fonts);
+        let min = min_content_width(&tree, &fonts);
+        assert!(
+            nat > 20.0,
+            "atomic line natural width should be its content, got {nat}"
+        );
+        assert!(
+            min > 20.0,
+            "atomic line min-content should be its content, got {min}"
+        );
     }
 
     // --- min_content_width: replaced image path + directive (zero) path ---
