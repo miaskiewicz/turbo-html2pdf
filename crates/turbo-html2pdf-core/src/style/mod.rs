@@ -307,9 +307,18 @@ pub fn build_cascade_with_width(
     viewport_width: f32,
 ) -> Cascade {
     VIEWPORT_WIDTH.set(viewport_width);
-    let cascade = build_cascade(author_css, node_style_css, tokens);
-    VIEWPORT_WIDTH.set(1280.0);
-    cascade
+    build_cascade(author_css, node_style_css, tokens)
+    // NB: the viewport width is left set (not reset to the 1280 default) so the same
+    // value backs `vw`/`vmin`/`vmax` unit resolution during the layout pass that
+    // follows this cascade build (see `viewport_px`).
+}
+
+/// The layout viewport `(width, height)` px that `vw`/`vh`/`vmin`/`vmax` units
+/// resolve against — the last values set by [`build_cascade_with_width`] +
+/// [`set_media_viewport_height`] (the screenshot tier's canvas size), or the
+/// 1280x800 desktop default.
+pub(crate) fn viewport_px() -> (f32, f32) {
+    (VIEWPORT_WIDTH.get(), VIEWPORT_HEIGHT.get())
 }
 
 /// Set the viewport HEIGHT (px) `@media (min-height:…)`/`(max-height:…)` conditions

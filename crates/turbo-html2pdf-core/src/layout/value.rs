@@ -210,8 +210,26 @@ fn parse_raw(s: &str) -> Option<RawLength> {
         "%" => Some(RawLength::Pct(value)),
         "em" => Some(RawLength::Em(value)),
         "rem" => Some(RawLength::Rem(value)),
+        // Viewport-percentage units resolve to px against the layout viewport now
+        // (they carry no dependency on the containing block) — `100vh` on a hero /
+        // full-screen section gives it a real height instead of failing to parse.
+        "vw" | "vh" | "vmin" | "vmax" => Some(RawLength::Abs(viewport_len(value, unit))),
         u => unit_factor(u).map(|f| RawLength::Abs(value * f)),
     }
+}
+
+/// A viewport-percentage length (`vw`/`vh`/`vmin`/`vmax`) as px against the current
+/// layout viewport (`1vh` = 1% of viewport height, `vmin`/`vmax` the smaller/larger
+/// axis).
+fn viewport_len(value: f32, unit: &str) -> f32 {
+    let (vw, vh) = crate::style::viewport_px();
+    let basis = match unit {
+        "vw" => vw,
+        "vh" => vh,
+        "vmin" => vw.min(vh),
+        _ => vw.max(vh),
+    };
+    value / 100.0 * basis
 }
 
 fn raw_to_px(raw: RawLength, font_size: f32, basis: f32) -> f32 {

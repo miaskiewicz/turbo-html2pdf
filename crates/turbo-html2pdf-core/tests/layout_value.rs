@@ -485,3 +485,17 @@ fn background_shorthand_resolves_color() {
         None
     );
 }
+
+#[test]
+fn parse_viewport_units_resolve_against_layout_viewport() {
+    use turbo_html2pdf_core::style::TokenSet;
+    use turbo_html2pdf_core::{build_cascade_with_width, set_media_viewport_height};
+    // Set the layout viewport: width 1000 (via the cascade), height 900.
+    set_media_viewport_height(900.0);
+    let _ = build_cascade_with_width("", "", TokenSet::new(), 1000.0);
+    approx(parse_px("100vh", 16.0).unwrap(), 900.0);
+    approx(parse_px("50vw", 16.0).unwrap(), 500.0);
+    approx(parse_px("10vmin", 16.0).unwrap(), 90.0); // min(1000,900)=900 → 90
+    approx(parse_px("10vmax", 16.0).unwrap(), 100.0); // max(1000,900)=1000 → 100
+    set_media_viewport_height(800.0); // restore the default for other tests
+}
