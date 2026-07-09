@@ -4,6 +4,17 @@ All notable changes to turbo-html2pdf are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/); versions follow SemVer. The npm,
 PyPI, and crates.io packages release in lockstep from a `v*` tag (PyPI on `pyv*`).
 
+## [0.2.11]
+
+CSS `transform`: carousels, slide decks, and overlays that position with
+`translate`/`rotate`/`scale`/`matrix` now transform instead of piling up.
+
+### Added
+- **CSS 2D `transform`.** `transform: translate*/scale*/rotate/skew*/matrix`
+  parses into a `RawTransform` (linear part + `<length-percentage>` translate) on
+  `FragmentContent::Box`, resolved at layout (with `transform-origin`, default box
+  centre) into a `Transform2D` for the raster to apply to the box + its subtree.
+
 ## [0.2.10]
 
 Real-page sizing: images and flex boxes no longer collapse to nothing on
