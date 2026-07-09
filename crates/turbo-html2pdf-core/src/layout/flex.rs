@@ -1,7 +1,7 @@
-//! Flex layout (§5.3, AC-5.6). `taffy` owns the flexbox math (direction, wrap,
+//! Flex layout (Â§5.3, AC-5.6). `taffy` owns the flexbox math (direction, wrap,
 //! grow/shrink/basis, justify/align, gap); we map CSS to `taffy::Style`, feed it
 //! each item's measured size, read back rects, then re-lay each item's content at
-//! its assigned width (§5.3 decision: taffy owns flex, the engine owns the rest).
+//! its assigned width (Â§5.3 decision: taffy owns flex, the engine owns the rest).
 //!
 //! Content sizing: an item's main size comes from its `flex-basis`/`width` when
 //! set, otherwise from a max-content measurement of its content (`natural_width`);
@@ -126,7 +126,7 @@ fn num(s: &ComputedStyle, prop: &str, default: f32) -> f32 {
 }
 
 /// A flex item's main-size basis. `flex-basis:auto` (the initial value) defers to
-/// the item's `width` — without that fallback a `width:100%` flex item (e.g.
+/// the item's `width` â without that fallback a `width:100%` flex item (e.g.
 /// Wikipedia's `.mw-header`, a `width:100%` grid that is itself a flex child)
 /// shrink-wrapped to its content instead of filling the row.
 fn item_basis(s: &ComputedStyle, bs: &BoxStyle, fs: f32) -> Dimension {
@@ -165,7 +165,7 @@ fn item_style(item: &LayoutBox, fs: f32) -> Style {
     });
     // A `position:absolute`/`fixed` child is out of flow: taffy must NOT treat it as
     // a flex item (else `align-items:stretch` in a column flex fills it to the
-    // container width, ignoring its own width — the Codex radio's absolute icon blew
+    // container width, ignoring its own width â the Codex radio's absolute icon blew
     // up from 18px to the whole row). Mark it absolute so taffy sizes it from its
     // width/height + insets and excludes it from the flex line.
     if bs.position.is_out_of_flow() {
@@ -183,7 +183,7 @@ fn item_style(item: &LayoutBox, fs: f32) -> Style {
         flex_basis: item_basis(s, &bs, fs),
         margin: item_margins(&bs),
         // A flex item's own `min/max-height` (and explicit cross-axis `height`) must
-        // reach taffy — else an item whose height is only a `min-height` collapses.
+        // reach taffy â else an item whose height is only a `min-height` collapses.
         // The main axis stays driven by `flex_basis`.
         size: Size {
             width: Dimension::auto(),
@@ -201,7 +201,7 @@ fn item_style(item: &LayoutBox, fs: f32) -> Style {
     }
 }
 
-/// A `LengthPct` → taffy `Dimension` (`auto` when not a fixed/percentage length).
+/// A `LengthPct` â taffy `Dimension` (`auto` when not a fixed/percentage length).
 fn dim(lp: LengthPct) -> Dimension {
     match lp {
         LengthPct::Px(v) => Dimension::length(v),
@@ -252,7 +252,7 @@ fn kids_natural(kids: &[LayoutBox], fonts: &FontRegistry) -> f32 {
 
 /// Max-content width of a flex container. A **row** flex lays its items side by
 /// side, so its max-content is the SUM of the items' widths plus the column gaps
-/// (not the widest item, as for block/column) — otherwise a shrink-to-fit row flex
+/// (not the widest item, as for block/column) â otherwise a shrink-to-fit row flex
 /// collapses to one item's width and its children wrap/stack (Wikipedia's centered
 /// header did exactly this). A **column** flex stacks, so max = widest item.
 fn flex_natural(kids: &[LayoutBox], s: &ComputedStyle, fonts: &FontRegistry) -> f32 {
@@ -266,7 +266,7 @@ fn flex_natural(kids: &[LayoutBox], s: &ComputedStyle, fonts: &FontRegistry) -> 
             .and_then(|v| parse_px(v, DEFAULT_FONT_SIZE))
             .unwrap_or(0.0);
         // Each item contributes its border-box natural width PLUS its horizontal
-        // margins — the items are laid side by side including those margins, so
+        // margins â the items are laid side by side including those margins, so
         // omitting them undersizes the row and its children overflow (Wikipedia's
         // page-action tabs are margin-spaced; the row measured short and "View
         // history" spilled past the toolbar into the next column).
@@ -302,7 +302,7 @@ pub(crate) fn natural_width(lb: &LayoutBox, fonts: &FontRegistry) -> f32 {
             return w + frame;
         }
         // A replaced `<img>`: its intrinsic width (stamped from the resolver before
-        // layout) — so a `<div>` wrapping a logo measures the image, not 0.
+        // layout) â so a `<div>` wrapping a logo measures the image, not 0.
         if let Some(iw) = lb.intrinsic_w.get() {
             return iw + frame;
         }
@@ -317,7 +317,7 @@ pub(crate) fn natural_width(lb: &LayoutBox, fonts: &FontRegistry) -> f32 {
 }
 
 /// The widest single unbreakable piece (max word / longest line at zero available
-/// width) of an inline run — the text's min-content width.
+/// width) of an inline run â the text's min-content width.
 fn lines_min(items: &[InlineItem], fs: f32, fonts: &FontRegistry) -> f32 {
     let runs = block::build_runs(items, fs, 0.0, fonts);
     let mut scratch = Diagnostics::default();
@@ -361,7 +361,10 @@ fn measure_width(
 ) -> f32 {
     match (known, avail) {
         (Some(w), _) => w,
-        (None, AvailableSpace::Definite(w)) => w,
+        // Cross-axis width sizing: max-content capped by the offer, NOT the full offer
+        // (returning the offer made an align-items:center item fill and never center
+        // — a logo column left-aligned; taffy stretches for align:stretch itself).
+        (None, AvailableSpace::Definite(w)) => natural_width(item, fonts).min(w),
         (None, _) => natural_width(item, fonts),
     }
 }
@@ -369,8 +372,8 @@ fn measure_width(
 /// The max-content width of a replaced `<img>` flex item: its explicit `width`, else
 /// the intrinsic pixel width from the resolver (plus the box frame). `None` for a
 /// non-replaced box (the caller falls back to the content measurement). Without this
-/// an `<img>` with `width:auto` measured 0 in a flex row — its `max-width:100%` clamps
-/// against a 0-width containing block in the scratch measurement — and the item (a
+/// an `<img>` with `width:auto` measured 0 in a flex row â its `max-width:100%` clamps
+/// against a 0-width containing block in the scratch measurement â and the item (a
 /// logo / hero image) collapsed to nothing.
 fn replaced_probe_width(item: &LayoutBox, images: &ImageCtx, fs: f32) -> Option<f32> {
     let src = item.image.as_ref().filter(|s| s.replaced)?;
@@ -531,7 +534,7 @@ fn minmax_track(t: &str) -> Option<TrackSizingFunction> {
 }
 
 /// One grid track: `1fr`, `50%`, `200px`/`15.5rem`, `minmax(min, max)`, or
-/// `auto`/`min-content`/`max-content` (→ taffy `AUTO`). Unparsable → `AUTO`.
+/// `auto`/`min-content`/`max-content` (â taffy `AUTO`). Unparsable â `AUTO`.
 fn track_of(tok: &str) -> TrackSizingFunction {
     let t = tok.trim();
     if let Some(mm) = minmax_track(t) {
@@ -593,7 +596,7 @@ fn max_track(t: &str) -> MaxTrackSizingFunction {
     MaxTrackSizingFunction::AUTO
 }
 
-/// A `grid-template-areas` map: area name → the grid-line rectangle it covers
+/// A `grid-template-areas` map: area name â the grid-line rectangle it covers
 /// `(row_start, row_end, col_start, col_end)`, 0-based cell indices (converted to
 /// 1-based taffy lines at use).
 type AreaMap = HashMap<String, (i16, i16, i16, i16)>;
@@ -618,7 +621,7 @@ fn grid_areas(value: &str) -> AreaMap {
     map
 }
 
-/// The quoted row strings of a `grid-template-areas` value (`'…'` or `"…"`).
+/// The quoted row strings of a `grid-template-areas` value (`'â¦'` or `"â¦"`).
 fn quoted_rows(value: &str) -> Vec<String> {
     let mut rows = Vec::new();
     let mut rest = value;
@@ -704,7 +707,7 @@ fn parse_repeat(tok: &str) -> Option<Vec<TrackSizingFunction>> {
 }
 
 /// Parse a `grid-template-columns`/`-rows` value into taffy tracks. Empty /
-/// `none` → no explicit tracks (taffy's implicit-grid auto-placement applies).
+/// `none` â no explicit tracks (taffy's implicit-grid auto-placement applies).
 fn grid_tracks(spec: Option<&str>) -> Vec<TrackSizingFunction> {
     let Some(spec) = spec
         .map(str::trim)
@@ -725,9 +728,9 @@ fn grid_tracks(spec: Option<&str>) -> Vec<TrackSizingFunction> {
 /// The track list for one axis: the longhand `grid-template-columns`/`-rows`, or,
 /// if absent, the corresponding side of the `grid-template` / `grid` shorthand
 /// (`<rows> / <cols>`). Parsing the shorthand matters for real pages (e.g.
-/// Wikipedia's Vector `grid-template: … / 12.25rem minmax(0,1fr)`): without it the
+/// Wikipedia's Vector `grid-template: â¦ / 12.25rem minmax(0,1fr)`): without it the
 /// axis falls back to AUTO tracks, which with named areas makes taffy content-size
-/// a huge subtree per track — pathologically slow — instead of using fixed tracks.
+/// a huge subtree per track â pathologically slow â instead of using fixed tracks.
 fn axis_tracks(s: &ComputedStyle, longhand: &str, want_cols: bool) -> Vec<TrackSizingFunction> {
     let explicit = grid_tracks(s.get(longhand));
     if !explicit.is_empty() {
@@ -771,8 +774,8 @@ fn strip_quoted(value: &str) -> String {
 
 fn grid_container_style(container: &LayoutBox, cw: f32, areas: &AreaMap) -> Style {
     let s = &container.style;
-    // Explicit tracks (longhand or the `grid-template` shorthand), else — when only
-    // `grid-template-areas` is given — one AUTO track per area column/row so named
+    // Explicit tracks (longhand or the `grid-template` shorthand), else â when only
+    // `grid-template-areas` is given â one AUTO track per area column/row so named
     // placement still has a grid to land in.
     let cols = axis_tracks(s, "grid-template-columns", true);
     let rows = axis_tracks(s, "grid-template-rows", false);
