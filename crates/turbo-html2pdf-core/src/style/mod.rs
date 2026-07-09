@@ -73,7 +73,7 @@ fn add_leveled(rules: &mut Vec<LeveledRule>, order: &mut usize, level: u8, sheet
     // inside a matched block are handled one level deep (the common case).
     for at in sheet.at_rules {
         let apply = match at.name.as_str() {
-            "media" => media_matches(&at.prelude, VIEWPORT_WIDTH.get()),
+            "media" => media_matches(&at.prelude, VIEWPORT_WIDTH.get(), VIEWPORT_HEIGHT.get()),
             "supports" => supports_matches(&at.prelude),
             _ => false,
         };
@@ -179,6 +179,7 @@ fn strip_group(s: &str) -> Option<&str> {
 mod viewport {
     use std::cell::Cell;
     thread_local!(static WIDTH: Cell<f32> = const { Cell::new(1280.0) });
+    thread_local!(static HEIGHT: Cell<f32> = const { Cell::new(800.0) });
     pub(super) struct ViewportWidth;
     impl ViewportWidth {
         pub(super) fn get(&self) -> f32 {
@@ -188,26 +189,41 @@ mod viewport {
             WIDTH.with(|c| c.set(w));
         }
     }
+    pub(super) struct ViewportHeight;
+    impl ViewportHeight {
+        pub(super) fn get(&self) -> f32 {
+            HEIGHT.with(Cell::get)
+        }
+        pub(super) fn set(&self, h: f32) {
+            HEIGHT.with(|c| c.set(h));
+        }
+    }
 }
 static VIEWPORT_WIDTH: viewport::ViewportWidth = viewport::ViewportWidth;
+static VIEWPORT_HEIGHT: viewport::ViewportHeight = viewport::ViewportHeight;
 
 /// Whether a `@media` query's condition matches `width` (px). Supports a comma
 /// list (any clause matches), the `screen`/`all` types (`print` never matches;
 /// no/other type is treated as applicable), and `min-width`/`max-width` features
 /// in `px`/`em`/`rem` (`em`/`rem` against a 16px root). Other features are ignored
 /// (a clause with only unknown features still matches if its type does).
-fn media_matches(query: &str, width: f32) -> bool {
+fn media_matches(query: &str, width: f32, height: f32) -> bool {
     let q = query.to_ascii_lowercase();
     q.split(',')
-        .any(|clause| clause_matches(clause.trim(), width))
+        .any(|clause| clause_matches(clause.trim(), width, height))
 }
 
-fn clause_matches(clause: &str, width: f32) -> bool {
+fn clause_matches(clause: &str, width: f32, height: f32) -> bool {
     if clause.contains("print") {
         return false;
     }
     for feat in clause.split("and") {
         let feat = feat.trim();
+        // `min-width` is a prefix of `max-width`? No — but `min-height`/`max-height`
+        // must be checked BEFORE `min-width`/`max-width` won't false-match (distinct
+        // names). Height gating is common on tall/compact layout variants (Google's
+        // homepage hides its tall search box below `max-height:575px`); ignoring it
+        // left those `display:none` variants always applied → the box vanished.
         if let Some(min) = feature_len(feat, "min-width") {
             if width < min {
                 return false;
@@ -215,6 +231,16 @@ fn clause_matches(clause: &str, width: f32) -> bool {
         }
         if let Some(max) = feature_len(feat, "max-width") {
             if width > max {
+                return false;
+            }
+        }
+        if let Some(min) = feature_len(feat, "min-height") {
+            if height < min {
+                return false;
+            }
+        }
+        if let Some(max) = feature_len(feat, "max-height") {
+            if height > max {
                 return false;
             }
         }
@@ -286,4 +312,15 @@ pub fn build_cascade_with_width(
     let cascade = build_cascade(author_css, node_style_css, tokens);
     VIEWPORT_WIDTH.set(1280.0);
     cascade
+}
+
+/// Set the viewport HEIGHT (px) `@media (min-height:…)`/`(max-height:…)` conditions
+/// evaluate against for the next cascade build on this thread. Defaults to 800.
+/// The screenshot tier sets this to its canvas height so height-gated responsive
+/// variants (e.g. Google's tall vs compact search box) pick the right one; without
+/// it every height feature was ignored and its rules always applied.
+pub fn set_media_viewport_height(viewport_height: f32) {
+    if viewport_height > 0.0 {
+        VIEWPORT_HEIGHT.set(viewport_height);
+    }
 }

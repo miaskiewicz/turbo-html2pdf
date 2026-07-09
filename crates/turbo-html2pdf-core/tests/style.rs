@@ -473,6 +473,38 @@ fn media_min_width_applies_above_breakpoint() {
 }
 
 #[test]
+fn media_height_gates_rules() {
+    // Google's homepage hides its tall search box below `max-height:575px`. The
+    // cascade must evaluate height features (not silently ignore them, which left
+    // the rule always applied → the box always `display:none`).
+    use turbo_html2pdf_core::{build_cascade_with_width, set_media_viewport_height};
+    let css = "div { display: block } @media (max-height: 575px) { div { display: none } }";
+    let styled = |vh: f32| {
+        set_media_viewport_height(vh);
+        let cascade = build_cascade_with_width(css, "", TokenSet::new(), 1280.0);
+        let nodes = render_nodes("<div>x</div>");
+        style_tree(&nodes, &cascade)
+    };
+    // Short viewport: the `max-height:575px` rule applies → hidden.
+    let short = styled(500.0);
+    let d = find(
+        &short,
+        &|e| matches!(&e.tag, turbo_html2pdf_core::Tag::Html(t) if t == "div"),
+    )
+    .unwrap();
+    assert_eq!(d.style.get("display"), Some("none"));
+    // Tall viewport: the rule is dropped, base `display:block` stands.
+    let tall = styled(800.0);
+    let d = find(
+        &tall,
+        &|e| matches!(&e.tag, turbo_html2pdf_core::Tag::Html(t) if t == "div"),
+    )
+    .unwrap();
+    assert_eq!(d.style.get("display"), Some("block"));
+    set_media_viewport_height(800.0); // restore the default for other tests
+}
+
+#[test]
 fn media_print_is_dropped_for_screen() {
     let css = "@media print { div { color: red } }";
     let tree = styled_at_width("<div>x</div>", css, 1280.0);

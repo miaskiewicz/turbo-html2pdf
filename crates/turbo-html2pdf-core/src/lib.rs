@@ -54,8 +54,8 @@ pub use paginate::{
 };
 pub use render::{render_pages, PageContext, RenderInputs};
 pub use style::{
-    build_cascade, build_cascade_with_width, style_tree, Cascade, ComputedStyle, StyledElement,
-    StyledNode,
+    build_cascade, build_cascade_with_width, set_media_viewport_height, style_tree, Cascade,
+    ComputedStyle, StyledElement, StyledNode,
 };
 pub use template::{compile, set_now, Program};
 pub use text::{layout_text, Align, FontFace, FontRegistry, LineBox, TextStyle, WhiteSpace};

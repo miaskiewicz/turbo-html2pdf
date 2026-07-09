@@ -4,6 +4,17 @@ All notable changes to turbo-html2pdf are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/); versions follow SemVer. The npm,
 PyPI, and crates.io packages release in lockstep from a `v*` tag (PyPI on `pyv*`).
 
+## [0.2.12] — `@media` height conditions (min-height/max-height)
+
+### Fixed
+- **`@media (min-height:…)` / `(max-height:…)` are now evaluated.** The cascade only
+  tested `min-width`/`max-width` and silently ignored height features, so a rule like
+  `@media (max-height:575px){.x{display:none}}` matched at every viewport — Google's
+  homepage hides its tall search box below `max-height:575px`, so the box was always
+  `display:none` and the page rendered blank. Height is threaded from the caller
+  (`set_media_viewport_height`, defaulting to 800px; the screenshot tier passes its
+  canvas height) and `min/max-height` are evaluated alongside width.
+
 ## [0.2.11]
 
 CSS `transform`: carousels, slide decks, and overlays that position with
