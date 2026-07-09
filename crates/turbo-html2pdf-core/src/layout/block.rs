@@ -893,6 +893,13 @@ fn layout_box_sized_impl(
     ctx: &mut Ctx,
     force_bfc: bool,
 ) -> Fragment {
+    // A replaced `<img>` sizes from its intrinsic dimensions + caps rather than
+    // flowing content — the same as the normal-flow `layout_box` path. Flex/grid
+    // items and table cells reach layout through here, so without this an `<img>`
+    // flex item (a logo/hero) laid out as an empty container: 0 height, no image.
+    if let Some(frag) = replaced_image_box(lb, bs, bx, by, bbw, ctx) {
+        return frag;
+    }
     let bw = bs.border.widths();
     let content_x = bx + bw.left + bs.padding.left;
     let content_y = by + bw.top + bs.padding.top;

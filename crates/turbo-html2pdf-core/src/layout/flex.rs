@@ -29,6 +29,7 @@ use super::boxgen::{BoxKind, InlineItem, LayoutBox};
 use super::fragment::Fragment;
 use super::inline;
 use super::value::{parse_px, BoxStyle, LengthPct, ResolveCtx, DEFAULT_FONT_SIZE};
+use super::ImageCtx;
 
 // --------------------------------------------------------------------------
 // CSS -> taffy style mapping
@@ -360,15 +361,42 @@ fn measure_width(
     }
 }
 
+/// The max-content width of a replaced `<img>` flex item: its explicit `width`, else
+/// the intrinsic pixel width from the resolver (plus the box frame). `None` for a
+/// non-replaced box (the caller falls back to the content measurement). Without this
+/// an `<img>` with `width:auto` measured 0 in a flex row — its `max-width:100%` clamps
+/// against a 0-width containing block in the scratch measurement — and the item (a
+/// logo / hero image) collapsed to nothing.
+fn replaced_probe_width(item: &LayoutBox, images: &ImageCtx, fs: f32) -> Option<f32> {
+    let src = item.image.as_ref().filter(|s| s.replaced)?;
+    let bs = item.resolved(ResolveCtx {
+        parent_font_size: fs,
+        cb_width: 0.0,
+    });
+    let frame = bs.padding.horizontal() + bs.border.widths().horizontal();
+    if let LengthPct::Px(w) = bs.width {
+        return Some(w + frame);
+    }
+    let intrinsic = images
+        .resolver
+        .resolve(&src.name)
+        .and_then(crate::image::probe)?;
+    Some(intrinsic.width as f32 + frame)
+}
+
 fn measure_item(
     known: Size<Option<f32>>,
     avail: Size<AvailableSpace>,
     item: &LayoutBox,
     fs: f32,
     fonts: &FontRegistry,
+    images: &ImageCtx,
     scratch: &mut Diagnostics,
 ) -> Size<f32> {
-    let w = measure_width(known.width, avail.width, item, fonts);
+    // A replaced `<img>` sizes from its intrinsic (or explicit) width; other items
+    // from a max-content measurement of their content.
+    let w = replaced_probe_width(item, images, fs)
+        .unwrap_or_else(|| measure_width(known.width, avail.width, item, fonts));
     // Memoize the full sub-layout by proposed width: taffy probes each item several
     // times per solve, and each probe recurses a full layout, so nested flex is
     // exponential without this. `fs` (the flex container's font size) is stable per
@@ -378,11 +406,12 @@ fn measure_item(
             parent_font_size: fs,
             cb_width: w,
         });
-        let images = super::ImageCtx::none();
         let mut sd = Diagnostics::default();
         let mut mctx = Ctx {
             fonts,
-            images: &images,
+            // The real resolver, so a replaced `<img>` reaches its intrinsic size in
+            // the scratch layout (an empty resolver measured every image to 0).
+            images,
             diags: &mut sd,
             // Scratch measurement: the item is its own containing block at origin.
             abs_cb_x: 0.0,
@@ -424,6 +453,7 @@ fn solve(
     fs: f32,
     cw: f32,
     fonts: &FontRegistry,
+    images: &ImageCtx,
 ) {
     let mut scratch = Diagnostics::default();
     let avail = Size {
@@ -432,7 +462,7 @@ fn solve(
     };
     tree.compute_layout_with_measure(root, avail, |known, av, _node, ctx_idx, _style| {
         let idx = *ctx_idx.expect("leaf context");
-        measure_item(known, av, &items[idx], fs, fonts, &mut scratch)
+        measure_item(known, av, &items[idx], fs, fonts, images, &mut scratch)
     })
     .expect("flex layout");
 }
@@ -808,7 +838,7 @@ pub(crate) fn layout_grid(
     let root = tree
         .new_with_children(grid_container_style(container, cw, &areas), &leaves)
         .expect("grid root");
-    solve(&mut tree, root, items, fs, cw, ctx.fonts);
+    solve(&mut tree, root, items, fs, cw, ctx.fonts, ctx.images);
     let frags = place_items(&tree, &leaves, items, cx, cy, fs, ctx);
     let height = tree.layout(root).expect("root layout").size.height;
     (frags, height)
@@ -833,7 +863,7 @@ pub(crate) fn layout_flex(
     let root = tree
         .new_with_children(container_style(container, cw, fs), &leaves)
         .expect("flex root");
-    solve(&mut tree, root, items, fs, cw, ctx.fonts);
+    solve(&mut tree, root, items, fs, cw, ctx.fonts, ctx.images);
     let frags = place_items(&tree, &leaves, items, cx, cy, fs, ctx);
     let height = tree.layout(root).expect("root layout").size.height;
     (frags, height)

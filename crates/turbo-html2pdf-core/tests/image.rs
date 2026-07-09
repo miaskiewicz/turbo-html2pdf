@@ -970,3 +970,65 @@ fn mask_image_box_emits_tinted_image_and_no_solid_background() {
         "a masked box must not paint a solid rectangle"
     );
 }
+
+/// Depth-first: the width of the first fragment whose content is a raster image.
+fn first_image_frag(f: &turbo_html2pdf_core::Fragment) -> Option<(f32, f32)> {
+    if matches!(f.content, FragmentContent::Image(_)) {
+        return Some((f.width, f.height));
+    }
+    f.children.iter().find_map(first_image_frag)
+}
+
+#[test]
+fn flex_row_img_item_sizes_to_intrinsic_not_zero() {
+    // A `max-width:100%` `<img>` with `width:auto` as a flex item must reach its
+    // intrinsic size (2x2 here). The flex scratch measurement used to size the item
+    // against a 0-width containing block (its `max-width:100%` clamping to 0) AND the
+    // item placement flowed it as an empty container, so a logo / hero image
+    // collapsed to nothing.
+    let nodes = vec![Node::Element(turbo_html2pdf_core::Element {
+        tag: Tag::Html("div".into()),
+        attrs: vec![],
+        children: img_node("logo"),
+    })];
+    let cascade = build_cascade(
+        "div{display:flex} img{max-width:100%;width:auto}",
+        "",
+        TokenSet::default(),
+    );
+    let styled = style_tree(&nodes, &cascade);
+    let resolver = MapResolver::new(vec![("logo", png_rgb_2x2())]);
+    let ctx = ImageCtx {
+        resolver: &resolver,
+        body_height: None,
+    };
+    let mut diags = Diagnostics::default();
+    let galley = layout_with_images(&styled, 540.0, &common::registry(), &ctx, &mut diags);
+    let (w, h) = first_image_frag(&galley).expect("an image fragment");
+    assert!(
+        w >= 2.0 && h >= 2.0,
+        "flex img should size to intrinsic 2x2, got {w}x{h}"
+    );
+}
+
+#[test]
+fn flex_img_item_with_explicit_width_uses_it() {
+    // An `<img width="8">` flex item takes its explicit width (the `LengthPct::Px`
+    // arm of the replaced-image probe), not the intrinsic 2px.
+    let nodes = vec![Node::Element(turbo_html2pdf_core::Element {
+        tag: Tag::Html("div".into()),
+        attrs: vec![],
+        children: img_node("logo"),
+    })];
+    let cascade = build_cascade("div{display:flex} img{width:8px}", "", TokenSet::default());
+    let styled = style_tree(&nodes, &cascade);
+    let resolver = MapResolver::new(vec![("logo", png_rgb_2x2())]);
+    let ctx = ImageCtx {
+        resolver: &resolver,
+        body_height: None,
+    };
+    let mut diags = Diagnostics::default();
+    let galley = layout_with_images(&styled, 540.0, &common::registry(), &ctx, &mut diags);
+    let (w, _h) = first_image_frag(&galley).expect("an image fragment");
+    assert!((w - 8.0).abs() < 0.5, "explicit width:8 wins, got {w}");
+}
