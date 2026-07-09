@@ -41,6 +41,12 @@ pub(crate) struct Ctx<'a> {
     /// Set only when the ancestor's height is explicit (not derived from content),
     /// so an `<img height:100%>` in a sized hero card gets a real height.
     pub(crate) abs_cb_h: f32,
+    /// The nearest ancestor's **definite** content-box height for *in-flow* `%`
+    /// height resolution (0 = unknown). Unlike [`Ctx::abs_cb_h`] (positioned CBs)
+    /// this is set for ANY box with a definite height, so a normal-flow
+    /// `<img height:100%>` / `max-height:100%` inside a fixed-height parent gets a
+    /// real height instead of falling back to its intrinsic size.
+    pub(crate) cb_h: f32,
     /// The initial containing block width (page content width) — the CB for
     /// `position:fixed` boxes.
     pub(crate) root_w: f32,
@@ -916,6 +922,11 @@ fn layout_box_sized_impl(
         // an auto height derived from content would be circular.
         ctx.abs_cb_h = definite_content_height(bs, saved_cb.3);
     }
+    // In-flow `%`-height CB: expose this box's own definite content height to its
+    // children (any box, not just positioned) so a `height:100%`/`max-height:100%`
+    // child resolves against it. 0 (auto) leaves children on their intrinsic size.
+    let saved_cb_h = ctx.cb_h;
+    ctx.cb_h = definite_content_height(bs, saved_cb_h);
     // A box that establishes a block formatting context isolates floats: its
     // content does not wrap around outer floats, and the floats placed inside it
     // are contained by (grow) this box rather than escaping to sibling blocks.
@@ -933,6 +944,7 @@ fn layout_box_sized_impl(
         ctx.floats = outer;
     }
     (ctx.abs_cb_x, ctx.abs_cb_y, ctx.abs_cb_w, ctx.abs_cb_h) = saved_cb;
+    ctx.cb_h = saved_cb_h;
     // The content-box height honoring an explicit/min/max `height` — a `background`
     // or `mask` image fills the box even when it has no flow content (an empty icon
     // span sized only by `height`, whose measured `content_h` is 0).
@@ -1073,10 +1085,17 @@ fn replaced_image_box(
 /// Assemble the [`SizeCtx`] for the image sizer from a box's style and the
 /// layout image context (containing-block width + optional page body height).
 fn size_ctx<'a>(bs: &'a BoxStyle, cb_width: f32, ctx: &Ctx) -> SizeCtx<'a> {
+    // A positioned image resolves `%` height against its nearest positioned ancestor
+    // (`abs_cb_h`); an in-flow one against its parent's definite height (`cb_h`).
+    let cbh = if bs.position != Position::Static {
+        ctx.abs_cb_h
+    } else {
+        ctx.cb_h
+    };
     SizeCtx {
         style: bs,
         cb_width,
-        cb_height: (ctx.abs_cb_h > 0.0).then_some(ctx.abs_cb_h),
+        cb_height: (cbh > 0.0).then_some(cbh),
         body_height: ctx.images.body_height,
     }
 }
@@ -1141,6 +1160,7 @@ pub fn layout_tree_with_images(
         abs_cb_y: 0.0,
         abs_cb_w: cb_width,
         abs_cb_h: 0.0,
+        cb_h: 0.0,
         root_w: cb_width,
         floats: Vec::new(),
     };

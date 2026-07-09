@@ -418,6 +418,7 @@ fn measure_item(
             abs_cb_y: 0.0,
             abs_cb_w: w,
             abs_cb_h: 0.0,
+            cb_h: 0.0,
             root_w: w,
             floats: Vec::new(),
         };

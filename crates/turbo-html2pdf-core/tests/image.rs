@@ -1032,3 +1032,62 @@ fn flex_img_item_with_explicit_width_uses_it() {
     let (w, _h) = first_image_frag(&galley).expect("an image fragment");
     assert!((w - 8.0).abs() < 0.5, "explicit width:8 wins, got {w}");
 }
+
+#[test]
+fn percent_height_img_resolves_against_definite_parent() {
+    // `<img height:100%>` in a fixed-height parent takes the parent's content height
+    // (200px) — its `%` now resolves against the parent's definite height instead of
+    // falling back to the 2px intrinsic. Width follows the 1:1 aspect ratio.
+    let nodes = vec![Node::Element(turbo_html2pdf_core::Element {
+        tag: Tag::Html("div".into()),
+        attrs: vec![],
+        children: img_node("logo"),
+    })];
+    let cascade = build_cascade(
+        "div{height:200px} img{height:100%;width:auto}",
+        "",
+        TokenSet::default(),
+    );
+    let styled = style_tree(&nodes, &cascade);
+    let resolver = MapResolver::new(vec![("logo", png_rgb_2x2())]);
+    let ctx = ImageCtx {
+        resolver: &resolver,
+        body_height: None,
+    };
+    let mut diags = Diagnostics::default();
+    let galley = layout_with_images(&styled, 540.0, &common::registry(), &ctx, &mut diags);
+    let (w, h) = first_image_frag(&galley).expect("an image fragment");
+    assert!(
+        (h - 200.0).abs() < 1.0 && (w - 200.0).abs() < 1.0,
+        "img height:100% of a 200px parent → 200x200 (1:1 aspect), got {w}x{h}"
+    );
+}
+
+#[test]
+fn percent_height_absolute_img_resolves_against_positioned_ancestor() {
+    // A `position:absolute` `<img height:100%>` resolves against its nearest
+    // positioned ancestor's definite height (`abs_cb_h`), not its parent's `cb_h`.
+    let nodes = vec![Node::Element(turbo_html2pdf_core::Element {
+        tag: Tag::Html("div".into()),
+        attrs: vec![],
+        children: img_node("logo"),
+    })];
+    let cascade = build_cascade(
+        "div{position:relative;height:120px} img{position:absolute;height:100%;width:auto}",
+        "",
+        TokenSet::default(),
+    );
+    let styled = style_tree(&nodes, &cascade);
+    let resolver = MapResolver::new(vec![("logo", png_rgb_2x2())]);
+    let ctx = ImageCtx {
+        resolver: &resolver,
+        body_height: None,
+    };
+    let mut diags = Diagnostics::default();
+    let galley = layout_with_images(&styled, 540.0, &common::registry(), &ctx, &mut diags);
+    let (_w, h) = first_image_frag(&galley).expect("an image fragment");
+    assert!(
+        (h - 120.0).abs() < 1.0,
+        "absolute img height:100% → 120 (ancestor), got {h}"
+    );
+}
