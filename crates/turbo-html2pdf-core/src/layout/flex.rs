@@ -52,17 +52,30 @@ fn flex_wrap(s: &ComputedStyle) -> FlexWrap {
     }
 }
 
+fn justify_content_value(v: &str) -> JustifyContent {
+    match v.trim() {
+        "flex-end" | "end" => JustifyContent::FlexEnd,
+        "center" => JustifyContent::Center,
+        "space-between" => JustifyContent::SpaceBetween,
+        "space-around" => JustifyContent::SpaceAround,
+        "space-evenly" => JustifyContent::SpaceEvenly,
+        _ => JustifyContent::FlexStart,
+    }
+}
+
 fn justify_content(s: &ComputedStyle) -> Option<JustifyContent> {
-    Some(
-        match s.get("justify-content").unwrap_or("flex-start").trim() {
-            "flex-end" | "end" => JustifyContent::FlexEnd,
-            "center" => JustifyContent::Center,
-            "space-between" => JustifyContent::SpaceBetween,
-            "space-around" => JustifyContent::SpaceAround,
-            "space-evenly" => JustifyContent::SpaceEvenly,
-            _ => JustifyContent::FlexStart,
-        },
-    )
+    Some(justify_content_value(
+        s.get("justify-content").unwrap_or("flex-start"),
+    ))
+}
+
+/// A grid's `justify-content`, `None` when unset. Unlike flex (whose initial is
+/// `flex-start`), CSS grid's initial `normal` acts as `stretch`: a single auto
+/// column then fills the container so `justify-items` can center within it. Leaving
+/// it `None` hands taffy that stretch default — forcing `FlexStart` instead pinned
+/// google's home logo track to its content width at the left padding edge.
+fn justify_content_grid(s: &ComputedStyle) -> Option<JustifyContent> {
+    s.get("justify-content").map(justify_content_value)
 }
 
 fn align_items(s: &ComputedStyle) -> Option<AlignItems> {
@@ -71,6 +84,20 @@ fn align_items(s: &ComputedStyle) -> Option<AlignItems> {
         "flex-end" | "end" => AlignItems::FlexEnd,
         "center" => AlignItems::Center,
         "baseline" => AlignItems::Baseline,
+        _ => AlignItems::Stretch,
+    })
+}
+
+/// CSS `justify-items` (a grid's inline-axis item alignment) → taffy. A grid item
+/// defaults to `stretch`; `center`/`start`/`end` instead shrink it to its content
+/// and place it in the track. Flex has no `justify-items`, so this is grid-only
+/// (google's home page centers its full-width-cell logo with `justify-items:center`
+/// — without mapping it the 272px logo pinned to the cell's left/padding edge).
+fn justify_items(s: &ComputedStyle) -> Option<AlignItems> {
+    Some(match s.get("justify-items").unwrap_or("stretch").trim() {
+        "start" | "flex-start" | "left" => AlignItems::Start,
+        "end" | "flex-end" | "right" => AlignItems::End,
+        "center" => AlignItems::Center,
         _ => AlignItems::Stretch,
     })
 }
@@ -817,7 +844,8 @@ fn grid_container_style(container: &LayoutBox, cw: f32, areas: &AreaMap) -> Styl
             width: gap_axis(s, "column-gap"),
             height: gap_axis(s, "row-gap"),
         },
-        justify_content: justify_content(s),
+        justify_content: justify_content_grid(s),
+        justify_items: justify_items(s),
         align_items: align_items(s),
         size: Size {
             width: Dimension::length(cw),
@@ -916,6 +944,65 @@ mod coverage_tests {
 
     fn cs(pairs: &[(&str, &str)]) -> ComputedStyle {
         ComputedStyle::from_pairs(pairs.iter().map(|(k, v)| (k.to_string(), v.to_string())))
+    }
+
+    #[test]
+    fn justify_content_grid_is_none_when_unset() {
+        // Grid leaves `justify-content` unset -> None (taffy's normal = stretch).
+        assert_eq!(justify_content_grid(&cs(&[])), None);
+        // An explicit value still maps through.
+        assert_eq!(
+            justify_content_grid(&cs(&[("justify-content", "center")])),
+            Some(JustifyContent::Center)
+        );
+    }
+
+    #[test]
+    fn justify_content_value_maps_every_keyword() {
+        assert_eq!(justify_content_value("flex-end"), JustifyContent::FlexEnd);
+        assert_eq!(justify_content_value("end"), JustifyContent::FlexEnd);
+        assert_eq!(justify_content_value("center"), JustifyContent::Center);
+        assert_eq!(
+            justify_content_value("space-between"),
+            JustifyContent::SpaceBetween
+        );
+        assert_eq!(
+            justify_content_value("space-around"),
+            JustifyContent::SpaceAround
+        );
+        assert_eq!(
+            justify_content_value("space-evenly"),
+            JustifyContent::SpaceEvenly
+        );
+        assert_eq!(
+            justify_content_value("flex-start"),
+            JustifyContent::FlexStart
+        );
+        // the flex default flows through `justify_content`.
+        assert_eq!(justify_content(&cs(&[])), Some(JustifyContent::FlexStart));
+    }
+
+    #[test]
+    fn justify_items_maps_grid_inline_alignment() {
+        // default (unset) and explicit `stretch` -> Stretch (grid item fills the cell).
+        assert_eq!(justify_items(&cs(&[])), Some(AlignItems::Stretch));
+        assert_eq!(
+            justify_items(&cs(&[("justify-items", "stretch")])),
+            Some(AlignItems::Stretch)
+        );
+        // `center` shrinks the item to content and centers it (google home logo).
+        assert_eq!(
+            justify_items(&cs(&[("justify-items", "center")])),
+            Some(AlignItems::Center)
+        );
+        assert_eq!(
+            justify_items(&cs(&[("justify-items", "start")])),
+            Some(AlignItems::Start)
+        );
+        assert_eq!(
+            justify_items(&cs(&[("justify-items", "end")])),
+            Some(AlignItems::End)
+        );
     }
 
     #[test]
