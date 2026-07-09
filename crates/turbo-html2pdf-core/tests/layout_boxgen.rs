@@ -231,3 +231,31 @@ fn node_ids_are_preorder() {
         _ => panic!("expected text"),
     }
 }
+
+#[test]
+fn background_shorthand_url_becomes_image_source() {
+    // No `background-image` longhand: the url is scanned out of the `background`
+    // shorthand's tokens (a non-replaced image source painted behind the box).
+    let root = build_box_tree(&[el(
+        "div",
+        &[("background", "url(bg.png) no-repeat")],
+        vec![],
+    )]);
+    let div = &as_block(&root.kind)[0];
+    let img = div.image.as_ref().expect("background image source");
+    assert_eq!(img.name, "bg.png");
+    assert!(!img.replaced, "background image is not replaced content");
+}
+
+#[test]
+fn mask_shorthand_url_is_extracted_via_token_scan() {
+    // A `mask` shorthand whose value is not a bare `url(...)` (it has trailing
+    // keywords) falls to the token-scan path to pull the url out.
+    let root = build_box_tree(&[el(
+        "div",
+        &[("mask", "url(icon.svg) no-repeat center")],
+        vec![],
+    )]);
+    let div = &as_block(&root.kind)[0];
+    assert_eq!(div.mask.as_deref(), Some("icon.svg"));
+}

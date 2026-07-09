@@ -815,3 +815,220 @@ fn hidden_input_is_not_rendered() {
     assert_eq!(prop(&n, "e", "display").as_deref(), Some("none"));
     assert_ne!(prop(&n, "v", "display").as_deref(), Some("none"));
 }
+
+// -------------------------------------------------- structural pseudo-classes
+
+#[test]
+fn only_child_pseudo_matches_lone_child() {
+    // `:only-child` (cascade.rs OnlyChild → pos.siblings == 1).
+    let css = "p:only-child { color: red }";
+    let lone = styled("<div><p id='a'>x</p></div>", css);
+    assert_eq!(prop(&lone, "a", "color").as_deref(), Some("red"));
+    let pair = styled("<div><p id='a'>x</p><p id='b'>y</p></div>", css);
+    assert_eq!(prop(&pair, "a", "color"), None, "not an only child");
+}
+
+#[test]
+fn of_type_pseudos_count_per_tag() {
+    // first/last/only-of-type (cascade.rs of_type_index / of_type_total branches).
+    let css = "p:first-of-type { color: red } \
+               p:last-of-type { background-color: blue } \
+               span:only-of-type { font-weight: bold }";
+    let n = styled(
+        "<div><p id='a'>1</p><span id='s'>2</span><p id='b'>3</p></div>",
+        css,
+    );
+    assert_eq!(prop(&n, "a", "color").as_deref(), Some("red"), "first p");
+    assert_eq!(prop(&n, "a", "background-color"), None);
+    assert_eq!(
+        prop(&n, "b", "background-color").as_deref(),
+        Some("blue"),
+        "last p"
+    );
+    assert_eq!(
+        prop(&n, "s", "font-weight").as_deref(),
+        Some("bold"),
+        "sole span of its type"
+    );
+}
+
+#[test]
+fn root_pseudo_matches_html_element() {
+    // `:root` (cascade.rs Root → ctx.tag == Some("html")). The compiler strips the
+    // `<html>` wrapper before render, so build a tree with a top-level html element
+    // by hand and style it directly.
+    use turbo_html2pdf_core::{Attr, Element, Node, Tag};
+    let html = Node::Element(Element {
+        tag: Tag::Html("html".to_string()),
+        attrs: vec![Attr {
+            name: "id".to_string(),
+            value: "r".to_string(),
+        }],
+        children: vec![Node::Text("x".to_string())],
+    });
+    let cascade = build_cascade(":root { color: teal }", "", TokenSet::new());
+    let styled = style_tree(&[html], &cascade);
+    assert_eq!(prop(&styled, "r", "color").as_deref(), Some("teal"));
+}
+
+#[test]
+fn empty_pseudo_matches_childless_element() {
+    // `:empty` (cascade.rs Empty → ctx.empty).
+    let css = "div:empty { color: red }";
+    let n = styled("<div id='a'></div><div id='b'>text</div>", css);
+    assert_eq!(prop(&n, "a", "color").as_deref(), Some("red"));
+    assert_eq!(prop(&n, "b", "color"), None, "has a text child");
+}
+
+#[test]
+fn enabled_and_disabled_pseudos_on_form_controls() {
+    // `:enabled` (is_form_control && !disabled) and `:disabled` (cascade.rs).
+    let css = "input:enabled { color: green } input:disabled { color: gray }";
+    let n = styled(
+        "<input id='on' type='text'><input id='off' type='text' disabled>",
+        css,
+    );
+    assert_eq!(prop(&n, "on", "color").as_deref(), Some("green"), "enabled");
+    assert_eq!(
+        prop(&n, "off", "color").as_deref(),
+        Some("gray"),
+        "disabled"
+    );
+}
+
+// -------------------------------------------------- presentational <font color>
+
+#[test]
+fn font_color_attribute_maps_to_color() {
+    // `<font color="...">` → `color` (cascade.rs font_color_decl non-empty path).
+    let n = styled("<font id='a' color='#ff0000'>x</font>", "");
+    assert_eq!(prop(&n, "a", "color").as_deref(), Some("#ff0000"));
+    // A blank color attribute contributes nothing (the filter drops it).
+    let blank = styled("<font id='b' color='  '>x</font>", "");
+    assert_ne!(prop(&blank, "b", "color").as_deref(), Some(""));
+    // The attribute is honored only on <font>, not other tags.
+    let other = styled("<span id='c' color='#ff0000'>x</span>", "");
+    assert_ne!(prop(&other, "c", "color").as_deref(), Some("#ff0000"));
+}
+
+// -------------------------------------------------- font-size unit resolution
+
+#[test]
+fn font_size_keyword_resolves_to_px() {
+    // `large` keyword → ROOT_FONT_PX * 1.2 = 19.2px (font_size_px keyword arm).
+    let n = styled("<div id='e' style='font-size: large'>x</div>", "");
+    assert_eq!(prop(&n, "e", "font-size").as_deref(), Some("19.2px"));
+}
+
+#[test]
+fn font_size_rem_and_percent_and_unknown_units() {
+    // rem (root-relative), % (parent-relative), and an unknown unit → parent px.
+    let rem = styled("<div id='e' style='font-size: 2rem'>x</div>", "");
+    assert_eq!(
+        prop(&rem, "e", "font-size").as_deref(),
+        Some("32px"),
+        "2rem"
+    );
+    let pct = styled("<div id='e' style='font-size: 150%'>x</div>", "");
+    assert_eq!(
+        prop(&pct, "e", "font-size").as_deref(),
+        Some("24px"),
+        "150%"
+    );
+    // `10zz` parses the number but the unknown unit falls back to parent px (16).
+    let unk = styled("<div id='e' style='font-size: 10zz'>x</div>", "");
+    assert_eq!(
+        prop(&unk, "e", "font-size").as_deref(),
+        Some("16px"),
+        "unit"
+    );
+    // A value whose numeric prefix does not parse falls back to parent px too.
+    let bad = styled("<div id='e' style='font-size: auto'>x</div>", "");
+    assert_eq!(
+        prop(&bad, "e", "font-size").as_deref(),
+        Some("16px"),
+        "prefix"
+    );
+}
+
+// -------------------------------------------------- @supports condition eval
+
+#[test]
+fn supports_or_applies_when_either_holds() {
+    let css = "@supports (color: red) or (display: grid) { div { color: green } }";
+    let n = styled("<div id='e'>x</div>", css);
+    assert_eq!(prop(&n, "e", "color").as_deref(), Some("green"));
+}
+
+#[test]
+fn supports_and_applies_when_both_hold() {
+    let css = "@supports (color: red) and (display: grid) { div { color: green } }";
+    let n = styled("<div id='e'>x</div>", css);
+    assert_eq!(prop(&n, "e", "color").as_deref(), Some("green"));
+}
+
+#[test]
+fn supports_nested_group_recurses() {
+    // A parenthesised group holding a group → is_group_expr → recurse (strip_group
+    // nested-paren depth arms).
+    let css = "@supports ((color: red)) { div { color: green } }";
+    let n = styled("<div id='e'>x</div>", css);
+    assert_eq!(prop(&n, "e", "color").as_deref(), Some("green"));
+}
+
+#[test]
+fn supports_not_negates() {
+    // `not (feature)` → the block is dropped (a supported feature negated to false).
+    let css = "div { color: red } @supports not (display: grid) { div { color: green } }";
+    let n = styled("<div id='e'>x</div>", css);
+    assert_eq!(
+        prop(&n, "e", "color").as_deref(),
+        Some("red"),
+        "not() → dropped"
+    );
+}
+
+#[test]
+fn supports_unmatched_paren_group_is_treated_as_supported() {
+    // A group whose first paren does not close at the end (strip_group returns None
+    // via its depth-0 close arm) is treated as a bare/unrecognised → supported.
+    let css = "@supports (color: red) (display: grid) { div { color: green } }";
+    let n = styled("<div id='e'>x</div>", css);
+    assert_eq!(prop(&n, "e", "color").as_deref(), Some("green"));
+}
+
+// -------------------------------------------------- @media calc() breakpoint
+
+#[test]
+fn media_calc_single_term_breakpoint() {
+    // `calc(1000px)` with no operator → eval_calc's bare-parse fallback.
+    let css = "@media (min-width: calc(1000px)) { div { color: green } }";
+    let wide = styled_at_width("<div>x</div>", css, 1280.0);
+    let d = find(
+        &wide,
+        &|e| matches!(&e.tag, turbo_html2pdf_core::Tag::Html(t) if t == "div"),
+    )
+    .unwrap();
+    assert_eq!(d.style.get("color"), Some("green"));
+}
+
+// -------------------------------------------------- var() paren scanning
+
+#[test]
+fn var_with_nested_function_fallback() {
+    // The fallback holds a nested `calc(...)` — matching_paren must balance the
+    // inner parens (its `'(' => depth += 1` arm) to find the var()'s own close.
+    let n = styled(
+        r#"<div id="e" style="width:var(--missing, calc(1px))">x</div>"#,
+        "",
+    );
+    assert_eq!(prop(&n, "e", "width").as_deref(), Some("calc(1px)"));
+}
+
+#[test]
+fn var_with_unclosed_paren_passes_through() {
+    // An unterminated `var(` (no matching `)`) — matching_paren returns None, so the
+    // remainder is copied through verbatim rather than dropped.
+    let n = styled(r#"<div id="e" style="width:var(--x">x</div>"#, "");
+    assert_eq!(prop(&n, "e", "width").as_deref(), Some("var(--x"));
+}

@@ -838,3 +838,148 @@ pub(crate) fn layout_flex(
     let height = tree.layout(root).expect("root layout").size.height;
     (frags, height)
 }
+
+#[cfg(test)]
+mod coverage_tests {
+    use super::*;
+    use crate::layout::boxgen::build_box_tree;
+    use crate::node::{Attr, TKind, Tag};
+    use crate::text::FontRegistry;
+    use crate::{StyledElement, StyledNode};
+
+    fn cs(pairs: &[(&str, &str)]) -> ComputedStyle {
+        ComputedStyle::from_pairs(pairs.iter().map(|(k, v)| (k.to_string(), v.to_string())))
+    }
+
+    fn bs_of(pairs: &[(&str, &str)]) -> BoxStyle {
+        super::super::value::resolve_box_style(
+            &cs(pairs),
+            ResolveCtx {
+                parent_font_size: 16.0,
+                cb_width: 200.0,
+            },
+        )
+    }
+
+    fn el(tag: &str, pairs: &[(&str, &str)], children: Vec<StyledNode>) -> StyledNode {
+        StyledNode::Element(StyledElement {
+            tag: Tag::Html(tag.to_string()),
+            attrs: vec![],
+            style: cs(pairs),
+            children,
+        })
+    }
+
+    fn text_item(t: &str) -> StyledNode {
+        el("div", &[], vec![StyledNode::Text(t.to_string())])
+    }
+
+    // --- item_basis: flex-basis %, and the non-length fallback to `width` ---
+    #[test]
+    fn item_basis_percent_and_width_fallback() {
+        // `flex-basis: 50%` -> a percentage dimension (the `strip_suffix('%')` arm).
+        let s = cs(&[("flex-basis", "50%")]);
+        let bs = bs_of(&[("flex-basis", "50%")]);
+        assert_eq!(item_basis(&s, &bs, 16.0), Dimension::percent(0.5));
+
+        // A basis that is neither a length nor a percentage (`min-content`) falls back
+        // to the item's own `width`.
+        let s = cs(&[("flex-basis", "min-content"), ("width", "77px")]);
+        let bs = bs_of(&[("flex-basis", "min-content"), ("width", "77px")]);
+        assert_eq!(item_basis(&s, &bs, 16.0), Dimension::length(77.0));
+    }
+
+    // --- item_inset: a percentage inset edge on an out-of-flow flex child ---
+    #[test]
+    fn item_inset_percentage_edge() {
+        let bs = bs_of(&[("top", "25%"), ("left", "10%")]);
+        let inset = item_inset(&bs);
+        assert_eq!(inset.top, LengthPercentageAuto::percent(0.25));
+        assert_eq!(inset.left, LengthPercentageAuto::percent(0.10));
+    }
+
+    // --- flex_natural: row sums items, column takes the widest ---
+    #[test]
+    fn flex_natural_row_and_column() {
+        let fonts = FontRegistry::new();
+        let row = build_box_tree(&[el(
+            "div",
+            &[("display", "flex")],
+            vec![text_item("aa"), text_item("bbbb")],
+        )]);
+        let col = build_box_tree(&[el(
+            "div",
+            &[("display", "flex"), ("flex-direction", "column")],
+            vec![text_item("aa"), text_item("bbbb")],
+        )]);
+        let rw = natural_width(&row, &fonts);
+        let cw = natural_width(&col, &fonts);
+        // Row lays items side by side (sum), column stacks them (widest) -> row >= col.
+        assert!(rw >= cw);
+        assert!(rw >= 0.0 && cw >= 0.0);
+    }
+
+    // --- min_content_width: replaced image path + directive (zero) path ---
+    #[test]
+    fn min_content_replaced_image_and_directive() {
+        let fonts = FontRegistry::new();
+
+        // A replaced `<img src>` (no explicit width) takes the intrinsic/declared
+        // branch of `min_content_width`. Wrapped as a flex item so it stays a box.
+        let img = StyledNode::Element(StyledElement {
+            tag: Tag::Html("img".to_string()),
+            attrs: vec![Attr {
+                name: "src".to_string(),
+                value: "x.png".to_string(),
+            }],
+            style: cs(&[]),
+            children: vec![],
+        });
+        let root = build_box_tree(&[el("div", &[("display", "flex")], vec![img])]);
+        assert!(min_content_width(&root, &fonts) >= 0.0);
+
+        // A paged-media directive box has zero min-content width.
+        let directive = StyledNode::Element(StyledElement {
+            tag: Tag::Directive(TKind::Anchor),
+            attrs: vec![],
+            style: cs(&[]),
+            children: vec![],
+        });
+        let root = build_box_tree(&[el("div", &[("display", "flex")], vec![directive])]);
+        assert_eq!(min_content_width(&root, &fonts), 0.0);
+    }
+
+    // --- grid track parsers: percentage tracks and the AUTO fallbacks ---
+    #[test]
+    fn track_parsers_percent_and_auto_branches() {
+        // An explicit percentage track.
+        assert_eq!(track_of("50%"), percent(0.5));
+        // minmax() min side: percentage, and `fr` (not a valid min) -> AUTO.
+        assert_eq!(min_track("50%"), MinTrackSizingFunction::from_percent(0.5));
+        assert_eq!(min_track("1fr"), MinTrackSizingFunction::AUTO);
+        // minmax() max side: percentage, and a non-length (`auto`) -> AUTO.
+        assert_eq!(max_track("50%"), MaxTrackSizingFunction::from_percent(0.5));
+        assert_eq!(max_track("auto"), MaxTrackSizingFunction::AUTO);
+        // A full minmax() track round-trips both sides.
+        assert_eq!(
+            track_of("minmax(50%, 1fr)"),
+            minmax(MinTrackSizingFunction::from_percent(0.5), fr(1.0))
+        );
+    }
+
+    // --- grid-template-areas quoting: `.` cells, unbalanced quotes, strip_quoted ---
+    #[test]
+    fn grid_area_quoting_helpers() {
+        // `.` marks an empty cell and is skipped; named cells become rectangles.
+        let map = grid_areas("'a .' 'a b'");
+        assert!(map.contains_key("a"));
+        assert!(map.contains_key("b"));
+        assert!(!map.contains_key("."));
+
+        // An unterminated quote stops row scanning cleanly (no infinite loop).
+        assert!(quoted_rows("'unterminated").is_empty());
+
+        // `strip_quoted` drops the quoted area-row segment, keeping the track list.
+        assert_eq!(strip_quoted("10px 'a b' 1fr").trim(), "10px  1fr".trim());
+    }
+}

@@ -145,6 +145,19 @@ fn minmax_track_fills_remaining_width() {
 }
 
 #[test]
+fn empty_grid_container_has_no_items() {
+    // A grid whose only child is collapsible whitespace produces no grid items, so
+    // layout returns early with an empty item list and zero content height.
+    let root = grid(
+        &[("grid-template-columns", "1fr")],
+        vec![StyledNode::Text("   ".into())],
+        300.0,
+    );
+    assert!(items_of(&root).is_empty());
+    assert_eq!(root.children[0].height, 0.0);
+}
+
+#[test]
 fn column_gap_spaces_tracks() {
     // Two 1fr columns with a 20px gap in 220px: each column = 100px, second
     // starts at 120px.

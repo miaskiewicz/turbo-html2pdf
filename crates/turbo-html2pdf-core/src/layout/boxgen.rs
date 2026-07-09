@@ -337,8 +337,9 @@ fn classify_html(el: &StyledElement, ids: &mut Ids) -> Option<Level> {
             el, ids,
         ))]));
     }
+    // `display:none` was already dropped by the `is_hidden` guard above, so it can
+    // never reach here — no `Display::None` arm (it would be dead code).
     match display_of(&el.style) {
-        Display::None => None,
         Display::Inline => Some(Level::Inline(flatten_inline(el, ids))),
         Display::InlineBlock => Some(Level::Inline(vec![InlineItem::Atomic(build_block_box(
             el, ids,

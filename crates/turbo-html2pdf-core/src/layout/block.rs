@@ -614,13 +614,21 @@ fn inline_region_from(floats: &[FloatRect], cx: f32, cw: f32, y: f32) -> (f32, f
         if y + 0.5 < f.top || y > f.bottom - 0.5 {
             continue;
         }
-        match f.side {
-            Float::Left => left = left.max(f.x1),
-            Float::Right => right = right.min(f.x0),
-            Float::None => {}
-        }
+        narrow_region(f, &mut left, &mut right);
     }
     (left, (right - left).max(1.0))
+}
+
+/// Narrow the inline region for one float whose span contains the row: a `float:left`
+/// pushes the start right, a `float:right` pulls the end left. A `FloatRect` is only
+/// ever built for a real left/right float (`None` never enters the list), so there is
+/// no dead third arm.
+fn narrow_region(f: &FloatRect, left: &mut f32, right: &mut f32) {
+    if matches!(f.side, Float::Left) {
+        *left = left.max(f.x1);
+    } else if matches!(f.side, Float::Right) {
+        *right = right.min(f.x0);
+    }
 }
 
 /// The y a box with `clear` must drop to: the lowest bottom edge of any active

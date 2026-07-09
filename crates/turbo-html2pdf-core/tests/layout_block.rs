@@ -600,3 +600,446 @@ fn inline_block_flows_within_the_line_next_to_text() {
         line.y
     );
 }
+
+/// The `border-radius` (px) of a box fragment, or `None` for a non-box.
+fn box_radius(f: &Fragment) -> Option<f32> {
+    match &f.content {
+        FragmentContent::Box { border_radius, .. } => Some(*border_radius),
+        _ => None,
+    }
+}
+
+#[test]
+fn absolute_right_inset_anchors_to_right_edge() {
+    // `position:absolute` with a `right` inset but no `left`: the box's right edge
+    // is placed `right` px in from the containing block's right edge
+    // (out_of_flow_origin's `(None, Some(r))` arm).
+    let root = lay(
+        &[el(
+            "div",
+            &[
+                ("position", "relative"),
+                ("width", "300px"),
+                ("height", "100px"),
+            ],
+            vec![el(
+                "div",
+                &[
+                    ("position", "absolute"),
+                    ("right", "10px"),
+                    ("width", "50px"),
+                    ("height", "20px"),
+                    ("background-color", "#ff0000"),
+                ],
+                vec![],
+            )],
+        )],
+        500.0,
+    );
+    let inner = &bg_boxes(&root)[0];
+    // cb = the relative div's content box (x=0, width=300). right:10, bbw=50 →
+    // x = 0 + 300 - 50 - 10 = 240.
+    assert!((inner.x - 240.0).abs() < 1.0, "got x={}", inner.x);
+}
+
+#[test]
+fn percent_height_positioned_box_resolves_against_definite_ancestor() {
+    // A positioned box with a `%` height inside a positioned ancestor of definite
+    // (px) height exercises `definite_content_height`'s `Pct` + border-box-inset
+    // arms (the height is exposed to the box's own `%`-height descendants).
+    let root = lay(
+        &[el(
+            "div",
+            &[
+                ("position", "relative"),
+                ("width", "300px"),
+                ("height", "200px"),
+            ],
+            vec![el(
+                "div",
+                &[
+                    ("position", "absolute"),
+                    ("top", "0"),
+                    ("left", "0"),
+                    ("width", "100px"),
+                    ("height", "50%"),
+                    ("box-sizing", "border-box"),
+                    ("padding", "10px"),
+                    ("background-color", "#00ff00"),
+                ],
+                vec![],
+            )],
+        )],
+        500.0,
+    );
+    let inner = &bg_boxes(&root)[0];
+    assert!((inner.width - 100.0).abs() < 1.0, "got w={}", inner.width);
+}
+
+#[test]
+fn max_height_clamps_taller_content() {
+    // A `max-height` shorter than the content clamps the box height
+    // (`content_box_height`'s max-height arm).
+    let root = lay(
+        &[el(
+            "div",
+            &[("max-height", "10px"), ("background-color", "#ff0000")],
+            vec![el("div", &[("height", "100px")], vec![])],
+        )],
+        500.0,
+    );
+    let outer = &bg_boxes(&root)[0];
+    assert!((outer.height - 10.0).abs() < 0.5, "got h={}", outer.height);
+}
+
+#[test]
+fn shrink_float_with_inline_block_measures_content() {
+    // An auto-width float shrinks to its content (shrink-to-fit float sizing); its
+    // inline content includes an inline-block, so the natural-width measurement
+    // walks a Lines box that mixes text and a non-text (atomic) item.
+    let root = lay(
+        &[el(
+            "div",
+            &[],
+            vec![
+                el(
+                    "div",
+                    &[("float", "left"), ("background-color", "#ff0000")],
+                    vec![
+                        txt("Hi"),
+                        ib(
+                            &[
+                                ("width", "20px"),
+                                ("height", "10px"),
+                                ("background-color", "#00ff00"),
+                            ],
+                            "",
+                        ),
+                    ],
+                ),
+                el("p", &[], vec![txt("after the float")]),
+            ],
+        )],
+        500.0,
+    );
+    let floatbox = &bg_boxes(&root)[0];
+    assert!(
+        floatbox.width > 0.0 && floatbox.width < 400.0,
+        "shrink-to-fit float width {}",
+        floatbox.width
+    );
+}
+
+#[test]
+fn floats_narrow_region_and_clear_drops_below() {
+    // Text flows in the region narrowed by BOTH a left and a right float, then
+    // `clear:left`/`clear:right`/`clear:both` blocks drop below the cleared floats.
+    let root = lay(
+        &[el(
+            "div",
+            &[],
+            vec![
+                fl("left", "80px", "#ff0000"),
+                fl("right", "80px", "#00ff00"),
+                el(
+                    "p",
+                    &[],
+                    vec![txt("text flows between the two floats in the narrow band")],
+                ),
+                el(
+                    "div",
+                    &[("clear", "left"), ("background-color", "#0000ff")],
+                    vec![txt("cl")],
+                ),
+                el(
+                    "div",
+                    &[("clear", "right"), ("background-color", "#ff00ff")],
+                    vec![txt("cr")],
+                ),
+                el(
+                    "div",
+                    &[("clear", "both"), ("background-color", "#00ffff")],
+                    vec![txt("cb")],
+                ),
+            ],
+        )],
+        300.0,
+    );
+    let line = all(&root)
+        .into_iter()
+        .find(|f| matches!(f.content, FragmentContent::TextLine { .. }))
+        .expect("paragraph line");
+    // left float (80px) pushes the text region's start to x>=80 (right float pulls
+    // its end in — the right-float branch of `inline_region_from`).
+    assert!(
+        line.x >= 80.0 - 1.0,
+        "text right of left float, x={}",
+        line.x
+    );
+    // clear:left box is bg_boxes[2] (after the two floats); it drops to the left
+    // float's bottom (y=30).
+    let cleared = &bg_boxes(&root)[2];
+    assert!(
+        cleared.y >= 30.0 - 0.5,
+        "clear:left dropped below float, y={}",
+        cleared.y
+    );
+}
+
+#[test]
+fn floats_drop_below_when_row_full() {
+    // Three 120px floats in a 300px box: two fit on row 1, the third can't so it
+    // drops past the nearest float bottom (`float_drop_y`'s finite-drop retry).
+    let root = lay(
+        &[el(
+            "div",
+            &[],
+            vec![
+                fl("left", "120px", "#ff0000"),
+                fl("left", "120px", "#00ff00"),
+                fl("left", "120px", "#0000ff"),
+            ],
+        )],
+        300.0,
+    );
+    let bx = bg_boxes(&root);
+    assert_eq!(bx.len(), 3);
+    assert!(
+        bx[0].y.abs() < 0.5 && bx[1].y.abs() < 0.5,
+        "first two on row 1"
+    );
+    assert!((bx[2].y - 30.0).abs() < 0.5, "third dropped, y={}", bx[2].y);
+}
+
+#[test]
+fn oversized_float_stays_put_no_finite_drop() {
+    // A float wider than the whole container never fits any row, so `float_drop_y`
+    // finds no lower float to drop past (`next` is infinite) and leaves it at y0.
+    let root = lay(
+        &[el(
+            "div",
+            &[],
+            vec![el(
+                "div",
+                &[
+                    ("float", "left"),
+                    ("width", "400px"),
+                    ("height", "20px"),
+                    ("background-color", "#ff0000"),
+                ],
+                vec![],
+            )],
+        )],
+        200.0,
+    );
+    let bx = &bg_boxes(&root)[0];
+    assert!(bx.y.abs() < 0.5, "oversized float stays at y0, y={}", bx.y);
+    assert!((bx.width - 400.0).abs() < 1.0, "width={}", bx.width);
+}
+
+#[test]
+fn text_align_right_pushes_block_child_to_right() {
+    // A `text-align:right` container right-aligns a width-constrained block child
+    // (`block_h_offset`'s Align::Right arm).
+    let root = lay(
+        &[el(
+            "div",
+            &[("text-align", "right")],
+            vec![el(
+                "div",
+                &[("width", "100px"), ("background-color", "#ff0000")],
+                vec![],
+            )],
+        )],
+        500.0,
+    );
+    let inner = &bg_boxes(&root)[0];
+    assert!(
+        (inner.x - 400.0).abs() < 1.0,
+        "100px block right-aligned in 500, got x={}",
+        inner.x
+    );
+}
+
+#[test]
+fn right_float_table_reanchors_to_right_edge() {
+    // A right-floated table declared narrower than its content grows past the
+    // reserved width during layout; `reanchor_right_float` re-pins its right edge
+    // to the container's right edge.
+    let root = lay(
+        &[el(
+            "div",
+            &[],
+            vec![el(
+                "table",
+                &[
+                    ("float", "right"),
+                    ("display", "table"),
+                    ("width", "20px"),
+                    ("background-color", "#ff0000"),
+                ],
+                vec![el(
+                    "tr",
+                    &[("display", "table-row")],
+                    vec![el(
+                        "td",
+                        &[("display", "table-cell")],
+                        vec![txt("this is wide table content")],
+                    )],
+                )],
+            )],
+        )],
+        400.0,
+    );
+    let t = &bg_boxes(&root)[0];
+    assert!(
+        t.width > 20.0,
+        "table grew to its content, width={}",
+        t.width
+    );
+    assert!(
+        (t.x + t.width - 400.0).abs() < 2.0,
+        "right edge pinned to container right, right={}",
+        t.x + t.width
+    );
+}
+
+#[test]
+fn mask_image_without_resolver_skips_tint() {
+    // A `mask-image` box laid with no image resolver: the mask source can't be
+    // probed, so no tinted image fragment is prepended (the probe-fail return).
+    let root = lay(
+        &[el(
+            "div",
+            &[
+                ("mask-image", "url(icon.svg)"),
+                ("width", "20px"),
+                ("height", "20px"),
+                ("background-color", "#ff0000"),
+            ],
+            vec![],
+        )],
+        200.0,
+    );
+    let div = &root.children[0];
+    assert!((div.height - 20.0).abs() < 0.5, "h={}", div.height);
+    assert!(div.children.is_empty(), "no mask tint fragment inserted");
+}
+
+#[test]
+fn percent_border_radius_resolves_against_box() {
+    // `border-radius:50%` resolves against the shorter box side and clamps to half
+    // (a 40px square → a 20px radius circle).
+    let root = lay(
+        &[el(
+            "div",
+            &[
+                ("width", "40px"),
+                ("height", "40px"),
+                ("border-radius", "50%"),
+                ("background-color", "#ff0000"),
+            ],
+            vec![],
+        )],
+        200.0,
+    );
+    let r = box_radius(&root.children[0]).expect("box");
+    assert!((r - 20.0).abs() < 0.5, "50% of 40 → 20, got {}", r);
+}
+
+#[test]
+fn tall_float_forces_clear_block_to_drop_below() {
+    // A 100px-tall left float with only a tiny sibling before the `clear:left`
+    // block: the cursor is still near the top when the clear is reached, so the
+    // clear actually drops it past the float bottom (the `cleared > base` arm).
+    let root = lay(
+        &[el(
+            "div",
+            &[],
+            vec![
+                el(
+                    "div",
+                    &[
+                        ("float", "left"),
+                        ("width", "60px"),
+                        ("height", "100px"),
+                        ("background-color", "#ff0000"),
+                    ],
+                    vec![],
+                ),
+                el(
+                    "div",
+                    &[("clear", "left"), ("background-color", "#0000ff")],
+                    vec![txt("after")],
+                ),
+            ],
+        )],
+        300.0,
+    );
+    // The cleared block must sit below the 100px float, not beside it near y=0.
+    let cleared = all(&root)
+        .into_iter()
+        .filter(|f| matches!(f.content, FragmentContent::Box { .. }))
+        .find(|f| f.y >= 100.0);
+    assert!(
+        cleared.is_some(),
+        "clear:left block should drop below the 100px float"
+    );
+}
+
+#[test]
+fn right_float_narrows_line_region_from_the_right() {
+    // A tall `float:right` overlapping the paragraph's first line: the line's
+    // region end is pulled in from the right (the `Float::Right` region arm).
+    let root = lay(
+        &[el(
+            "div",
+            &[],
+            vec![
+                el(
+                    "div",
+                    &[
+                        ("float", "right"),
+                        ("width", "120px"),
+                        ("height", "80px"),
+                        ("background-color", "#00ff00"),
+                    ],
+                    vec![],
+                ),
+                el("p", &[], vec![txt("x")]),
+            ],
+        )],
+        300.0,
+    );
+    let line = all(&root)
+        .into_iter()
+        .find(|f| matches!(f.content, FragmentContent::TextLine { .. }))
+        .expect("paragraph line");
+    // The 120px right float (x0=180) pulls the line's usable width below the full
+    // 300px container width.
+    assert!(
+        line.width <= 180.5,
+        "right float should narrow the line, got {}",
+        line.width
+    );
+}
+
+#[test]
+fn border_radius_auto_resolves_to_zero() {
+    // `border-radius:auto` (parsed to `LengthPct::Auto`) resolves to a 0 radius.
+    let root = lay(
+        &[el(
+            "div",
+            &[
+                ("width", "40px"),
+                ("height", "40px"),
+                ("border-radius", "auto"),
+                ("background-color", "#ff0000"),
+            ],
+            vec![],
+        )],
+        200.0,
+    );
+    let r = box_radius(&root.children[0]).expect("box");
+    assert_eq!(r, 0.0, "border-radius:auto → 0");
+}

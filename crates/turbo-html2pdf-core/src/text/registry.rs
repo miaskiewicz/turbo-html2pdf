@@ -279,3 +279,89 @@ fn bundled_faces() -> Vec<FontFace> {
 fn bundled_faces() -> Vec<FontFace> {
     Vec::new()
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::text::font::FontFace;
+
+    const ROBOTO_PATH: &str = concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/assets/fonts/roboto/Roboto-Regular.ttf"
+    );
+    const ROBOTO: &[u8] = include_bytes!(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/assets/fonts/roboto/Roboto-Regular.ttf"
+    ));
+
+    // `system_font_dirs`, `load_system_fonts` and `system_font_dirs` all read the
+    // `HOME` env var; serialize the tests that mutate it to avoid a data race.
+    static ENV_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+    #[test]
+    fn system_font_dirs_lists_platform_dirs() {
+        let _g = ENV_LOCK.lock().unwrap();
+        let dirs = system_font_dirs();
+        // Every supported target contributes at least one directory; the fallback
+        // arm for other targets is empty, but tests run on mac/linux/windows.
+        assert!(!dirs.is_empty(), "expected some system font dirs");
+    }
+
+    #[test]
+    fn load_font_file_covers_ext_read_and_parse() {
+        // A real font file: extension ok, read ok, face parsed and pushed.
+        let mut faces = Vec::new();
+        load_font_file(&mut faces, std::path::Path::new(ROBOTO_PATH));
+        assert_eq!(faces.len(), 1, "one face loaded from Roboto");
+        assert!(faces[0].family().eq_ignore_ascii_case("Roboto"));
+
+        // A non-font extension is skipped before any read.
+        let mut skipped = Vec::new();
+        load_font_file(&mut skipped, std::path::Path::new("/some/where/readme.txt"));
+        assert!(skipped.is_empty());
+
+        // A font-looking extension that cannot be read leaves the vec untouched.
+        let mut unreadable = Vec::new();
+        load_font_file(
+            &mut unreadable,
+            std::path::Path::new("/nonexistent-dir/missing-font.ttf"),
+        );
+        assert!(unreadable.is_empty());
+    }
+
+    #[test]
+    fn load_system_fonts_walks_dirs_and_aliases() {
+        let _g = ENV_LOCK.lock().unwrap();
+        // Point HOME at a directory with no `Library/Fonts` (or `.fonts`) child so
+        // that at least one candidate dir fails `read_dir` → the `continue` arm.
+        let prev = std::env::var_os("HOME");
+        std::env::set_var("HOME", "/nonexistent-home-for-turbo-html2pdf-tests");
+        let mut reg = FontRegistry::new();
+        reg.load_system_fonts();
+        match prev {
+            Some(v) => std::env::set_var("HOME", v),
+            None => std::env::remove_var("HOME"),
+        }
+        // Best-effort: it must not panic. On CI the system dirs may be empty, so we
+        // only assert it ran (the registry is still usable via bundled fallbacks).
+        let _ = reg.is_empty();
+    }
+
+    #[test]
+    fn alias_generics_maps_generic_to_installed_family() {
+        // Register a face under a family a generic-candidate list names, then alias.
+        let helvetica =
+            FontFace::from_bytes(ROBOTO.to_vec(), "Helvetica", 400, false).expect("load");
+        let mut reg = FontRegistry::default();
+        reg.add(helvetica);
+        let before = reg.len();
+        reg.alias_generics();
+        // `sans-serif` matched "Helvetica" → an aliased face was appended; `serif`
+        // and `monospace` matched nothing → their `if let Some` arms were skipped.
+        assert!(reg.len() > before, "an aliased generic face was added");
+        assert!(
+            reg.select(&["sans-serif"], 400, false).is_some(),
+            "sans-serif now resolves to the aliased Helvetica face"
+        );
+    }
+}

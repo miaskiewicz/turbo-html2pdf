@@ -1478,6 +1478,50 @@ mod gradient_tests {
         assert!(grad("radial-gradient(red, blue)").is_none());
         assert!(grad("#ffffff").is_none());
     }
+
+    #[test]
+    fn every_side_and_corner_direction_maps_to_its_angle() {
+        let angle = |dir: &str| {
+            grad(&format!("linear-gradient({dir}, red, blue)"))
+                .unwrap()
+                .angle_deg
+        };
+        assert_eq!(angle("to bottom"), 180.0);
+        assert_eq!(angle("to left"), 270.0);
+        assert_eq!(angle("to top right"), 45.0);
+        assert_eq!(angle("to bottom right"), 135.0);
+        assert_eq!(angle("to bottom left"), 225.0);
+        assert_eq!(angle("to top left"), 315.0);
+    }
+
+    #[test]
+    fn unknown_direction_keyword_is_not_a_direction() {
+        // `to nowhere` is not a recognized direction, so it's treated as the first
+        // colour stop — which names no colour, so the gradient fails to parse.
+        assert!(grad("linear-gradient(to nowhere, red, blue)").is_none());
+    }
+
+    #[test]
+    fn unbalanced_parens_yield_no_gradient() {
+        // No closing paren -> the balanced-slice scan finds no end -> None.
+        assert!(grad("linear-gradient(red, blue").is_none());
+    }
+}
+
+#[cfg(test)]
+mod border_longhand_tests {
+    use super::*;
+
+    #[test]
+    fn border_width_longhand_overrides_shorthand_width() {
+        // `border: 1px solid` gives width 1; the `border-width: 4px` longhand wins.
+        let s = ComputedStyle::from_pairs([
+            ("border".to_string(), "1px solid #000".to_string()),
+            ("border-width".to_string(), "4px".to_string()),
+        ]);
+        let side = resolve_border_side(&s, "top", 16.0);
+        assert_eq!(side.width, 4);
+    }
 }
 
 #[cfg(test)]
@@ -1525,5 +1569,46 @@ mod transform_tests {
         assert_eq!((t.tx, t.ty), (LengthPct::Px(12.0), LengthPct::Px(34.0)));
         assert!(xf("none").is_none());
         assert!(xf("").is_none());
+    }
+
+    #[test]
+    fn skew_functions_shear_the_linear_part() {
+        // skewX puts tan(angle) in the `c` slot; skewY in the `b` slot.
+        let t = xf("skewX(45deg)").unwrap();
+        assert!((t.linear[2] - 1.0).abs() < 1e-3, "tan45 in c: {t:?}");
+        let t = xf("skewY(45deg)").unwrap();
+        assert!((t.linear[1] - 1.0).abs() < 1e-3, "tan45 in b: {t:?}");
+    }
+
+    #[test]
+    fn angle_units_radians_and_bare_number() {
+        // `rad` is converted to degrees before rotation; cos(pi) = -1.
+        let t = xf("rotate(3.14159265rad)").unwrap();
+        assert!((t.linear[0] + 1.0).abs() < 1e-2, "cos(pi): {t:?}");
+        // A bare number is treated as degrees.
+        let t = xf("rotate(180)").unwrap();
+        assert!((t.linear[0] + 1.0).abs() < 1e-2, "180 == 180deg: {t:?}");
+    }
+
+    #[test]
+    fn unknown_function_contributes_nothing() {
+        // An unrecognized function alone yields no transform...
+        assert!(xf("perspective(500px)").is_none());
+        // ...but a recognized function alongside it still parses.
+        assert!(xf("rotate(10deg) perspective(1px)").is_some());
+    }
+
+    #[test]
+    fn zero_translate_arg_and_trailing_token() {
+        // A `0` translate arg resolves to zero length (the non-length arm).
+        let t = xf("translate(0, 12px)").unwrap();
+        assert_eq!(t.tx, LengthPct::Px(0.0));
+        assert_eq!(t.ty, LengthPct::Px(12.0));
+        // A trailing name with no `(` ends function scanning cleanly.
+        let t = xf("rotate(90deg) trailing").unwrap();
+        assert!(
+            (t.linear[1] - 1.0).abs() < 1e-3,
+            "rotate still applied: {t:?}"
+        );
     }
 }
