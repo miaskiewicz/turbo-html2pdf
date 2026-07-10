@@ -151,4 +151,50 @@ mod tests {
         let nodes = parse_html("<body><div>plain</div></body>").expect("parse");
         assert_eq!(collect_style_css(&nodes), "");
     }
+
+    #[test]
+    fn box_sizing_inherit_chains_from_the_html_root() {
+        // The classic reset `html{box-sizing:border-box}` + `*{box-sizing:inherit}`.
+        // The `<html>`/`<body>` shells are match-only, so their computed style must be
+        // threaded as the inheritance parent — else `box-sizing:inherit` resolves to
+        // nothing and each `width:50%` card becomes content-box + padding (320px), so
+        // two no longer fit their 600px row and the second wraps (nike's half-width
+        // hero stacking). With the border-box chain each card is 300px and both fit.
+        use crate::layout::fragment::FragmentContent;
+        use crate::text::FontRegistry;
+        let html = r#"<html><body><div class="row"><span class="c">a</span><span class="c">b</span></div></body></html>"#;
+        // `.c` also declares `margin-top:inherit` — a NON-inherited property whose
+        // parent has no value, exercising the `inherit`-keyword drop path.
+        let css = "html{box-sizing:border-box} *{box-sizing:inherit} \
+                   .row{width:600px} \
+                   .c{display:inline-block;width:50%;padding:0 10px;background:#f00;margin-top:inherit}";
+        let mut diags = crate::Diagnostics::default();
+        let root =
+            super::layout_html(html, css, 600.0, &FontRegistry::new(), &mut diags).expect("layout");
+        let mut boxes = Vec::new();
+        let mut stack = vec![&root];
+        while let Some(f) = stack.pop() {
+            if matches!(
+                f.content,
+                FragmentContent::Box {
+                    background: Some(_),
+                    ..
+                }
+            ) {
+                boxes.push((f.width, f.y));
+            }
+            stack.extend(f.children.iter());
+        }
+        assert_eq!(boxes.len(), 2, "two card boxes");
+        for (w, _) in &boxes {
+            assert!(
+                (*w - 300.0).abs() < 1.0,
+                "50% card is border-box (300px), got {w}"
+            );
+        }
+        assert!(
+            (boxes[0].1 - boxes[1].1).abs() < 1.0,
+            "both cards share a row (border-box let them fit)"
+        );
+    }
 }

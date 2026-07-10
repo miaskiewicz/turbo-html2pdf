@@ -616,9 +616,29 @@ fn inherit(own: BTreeMap<String, String>, parent: &ComputedStyle) -> ComputedSty
         }
     }
     map.extend(own);
+    resolve_explicit_inherit(&mut map, parent);
     resolve_var_refs(&mut map);
     resolve_font_size(&mut map, parent);
     ComputedStyle { map }
+}
+
+/// Resolve the explicit `inherit` keyword: a property declared `inherit` takes the
+/// parent's computed value (or drops if the parent has none). Nike's editorial cards
+/// set `box-sizing:inherit`, inheriting the global `*{box-sizing:border-box}` —
+/// without this their `width:50%` resolved as a content width plus padding, so two
+/// cards no longer fit a row and every hero image stacked into a half-width column.
+fn resolve_explicit_inherit(map: &mut BTreeMap<String, String>, parent: &ComputedStyle) {
+    let keys: Vec<String> = map
+        .iter()
+        .filter(|(_, v)| v.trim() == "inherit")
+        .map(|(k, _)| k.clone())
+        .collect();
+    for k in keys {
+        match parent.get(&k) {
+            Some(pv) => drop(map.insert(k, pv.to_string())),
+            None => drop(map.remove(&k)),
+        }
+    }
 }
 
 /// Substitute every `var(--name, fallback)` in the map's values with the resolved
@@ -806,7 +826,16 @@ pub fn style_tree_with_roots(
         .iter()
         .map(|e| ctx_of(e, root_pos(), Vec::new()))
         .collect();
-    style_siblings(nodes, &ancestors, &ComputedStyle::default(), cascade)
+    // Resolve each shell's own style down the chain so the content inherits from the
+    // real `<body>` computed style — not a blank default. Without this an inherited
+    // root declaration (nike's `html{box-sizing:border-box}`, plus font/color) never
+    // reached the page: `*{box-sizing:inherit}` resolved to nothing, so `width:50%`
+    // cards were content-box + padding, overflowed their row, and stacked half-width.
+    let mut parent = ComputedStyle::default();
+    for (i, e) in roots.iter().enumerate() {
+        parent = resolve_style(e, &ancestors[..=i], &parent, cascade);
+    }
+    style_siblings(nodes, &ancestors, &parent, cascade)
 }
 
 /// The position for a match-only root shell (a lone only-child); the structural
