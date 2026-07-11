@@ -184,17 +184,25 @@ fn definite_content_height(bs: &BoxStyle, outer_cb_h: f32) -> f32 {
 }
 
 fn content_box_height(bs: &BoxStyle, content_h: f32) -> f32 {
-    let mut h = match bs.height {
-        LengthPct::Px(h) => h,
-        _ => content_h,
+    // A `px` `height`/`min-height`/`max-height` is a BORDER-box length under
+    // `box-sizing:border-box`, so recover the content height by subtracting the
+    // padding+border. Google's header "Sign in" pill is `min-height:40px;padding:10px
+    // 12px;border:1px` under the reset's border-box: 40 is the whole pill, so its
+    // content is 18 and the box is 40 tall — treating 40 as content made a 62px oval.
+    // (A `%` height stays deferred to the measured content, as before.)
+    let inset = match bs.box_sizing {
+        BoxSizing::BorderBox => bs.padding.vertical() + bs.border.widths().vertical(),
+        BoxSizing::ContentBox => 0.0,
     };
-    // Honor `min-height`/`max-height` (px; `%` needs the CB height we don't track).
-    // Without this an empty box with only `min-height` collapsed to 0 — e.g. the
-    // Codex radio's `.cdx-radio__icon` (an empty span sized by min/height) vanished.
-    if let LengthPct::Px(min) = bs.min_height {
+    let to_content = |lp: LengthPct| match lp {
+        LengthPct::Px(v) => Some((v - inset).max(0.0)),
+        _ => None,
+    };
+    let mut h = to_content(bs.height).unwrap_or(content_h);
+    if let Some(min) = to_content(bs.min_height) {
         h = h.max(min);
     }
-    if let LengthPct::Px(max) = bs.max_height {
+    if let Some(max) = to_content(bs.max_height) {
         h = h.min(max);
     }
     h

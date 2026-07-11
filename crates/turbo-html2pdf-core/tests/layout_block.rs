@@ -138,6 +138,49 @@ fn explicit_height_is_honored() {
 }
 
 #[test]
+fn border_box_min_height_includes_padding_and_border() {
+    // Under `box-sizing:border-box` a `min-height` is the BORDER-box height, so the
+    // padding+border live inside it (google's "Sign in" pill:
+    // min-height:40;padding:10px;border:1px). The box is 40px tall — not 40 + 20 + 2.
+    let root = lay(
+        &[el(
+            "div",
+            &[
+                ("min-height", "40px"),
+                ("padding", "10px"),
+                ("border", "1px solid black"),
+                ("box-sizing", "border-box"),
+            ],
+            vec![],
+        )],
+        500.0,
+    );
+    assert!(
+        (root.children[0].height - 40.0).abs() < 1.0,
+        "border-box min-height 40 -> 40px tall, got {}",
+        root.children[0].height
+    );
+    // The same box as content-box grows by the padding+border (40 + 20 + 2 = 62).
+    let cbox = lay(
+        &[el(
+            "div",
+            &[
+                ("min-height", "40px"),
+                ("padding", "10px"),
+                ("border", "1px solid black"),
+            ],
+            vec![],
+        )],
+        500.0,
+    );
+    assert!(
+        (cbox.children[0].height - 62.0).abs() < 1.0,
+        "content-box min-height 40 -> 62px tall, got {}",
+        cbox.children[0].height
+    );
+}
+
+#[test]
 fn background_and_border_become_box_content() {
     let root = lay(
         &[el(
