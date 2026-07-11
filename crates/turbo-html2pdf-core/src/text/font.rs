@@ -93,6 +93,12 @@ pub struct ShapedGlyph {
 pub struct FontFace {
     /// The font bytes parsed once into reusable `ttf-parser`/`rustybuzz` faces.
     faces: Arc<OwnedFaces>,
+    /// The face index within the font program — `0` for a single-face `.ttf`/`.otf`,
+    /// `> 0` for a face inside a `.ttc` collection (macOS ships Arial, Helvetica, …
+    /// as collections). A consumer that re-parses `data()` to trace glyph outlines
+    /// MUST parse at this index, else the glyph ids (which index the selected face's
+    /// tables) draw the wrong sub-font's glyphs.
+    index: u32,
     family: String,
     weight: u16,
     italic: bool,
@@ -143,6 +149,7 @@ impl FontFace {
         let (units_per_em, ascent, descent, line_gap) = metrics(faces.borrow_dependent());
         Some(FontFace {
             faces: Arc::new(faces),
+            index,
             family: family.into(),
             weight,
             italic,
@@ -172,6 +179,12 @@ impl FontFace {
     /// (Phase 9, §7) needs these to subset and embed the font program.
     pub fn data(&self) -> &[u8] {
         self.faces.borrow_owner()
+    }
+
+    /// The face index within [`data()`](Self::data) — pass to `ttf-parser`/`rustybuzz`
+    /// when re-parsing the program, so a `.ttc` collection face traces its own glyphs.
+    pub fn index(&self) -> u32 {
+        self.index
     }
 
     /// Design units per em, for scaling glyph metrics into PDF text space.
@@ -412,5 +425,9 @@ mod tests {
         assert_eq!(retagged.family(), "sans-serif");
         // Same underlying program bytes are shared.
         assert_eq!(retagged.data(), face.data());
+        // The face index (0 for a single-face .ttf) survives the retag, so a consumer
+        // re-parsing the shared bytes selects the same face.
+        assert_eq!(face.index(), 0);
+        assert_eq!(retagged.index(), face.index());
     }
 }
