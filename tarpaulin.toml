@@ -91,6 +91,12 @@ exclude-files = [
     # file-excluded; they are simply not compiled by default and never enter the
     # report.)
     "crates/turbo-html2pdf-core/src/emit/ua.rs",
+    # The `/ToUnicode` CMap builder is shared between `pdf-ua` (which requires
+    # the CMap per ISO 14289-1 §7.21.7) and the standalone `to-unicode` feature
+    # (which exposes the same builder without the tagged-PDF machinery). It is
+    # gated behind `#[cfg(any(feature = "to-unicode", feature = "pdf-ua"))]` and
+    # is not compiled under default features. Covered by tests/pdf_ua.rs and
+    # tests/to_unicode.rs. Listed defensively.
     "crates/turbo-html2pdf-core/src/emit/tounicode.rs",
     # `pdf-ua` role derivation from the semantic HTML tag lives in this gated-only
     # sibling of boxgen.rs (declared `#[cfg(feature = "pdf-ua")] #[path =

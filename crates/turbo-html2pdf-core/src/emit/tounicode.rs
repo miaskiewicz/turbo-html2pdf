@@ -1,9 +1,12 @@
-//! `/ToUnicode` CMap construction (`pdf-ua`, ISO 14289-1 §7.21.7). A tagged PDF
-//! must let assistive tech recover the text behind each shown glyph; this builds
-//! a CMap mapping each 2-byte subset glyph code (what the content stream shows
-//! under `Identity-H`) to its Unicode scalar.
+//! `/ToUnicode` CMap construction (ISO 32000-1 §9.10.3; required by tagged PDFs
+//! per ISO 14289-1 §7.21.7). Extracts the text behind each shown glyph by
+//! mapping the 2-byte subset glyph code (what the content stream shows under
+//! `Identity-H`) to its Unicode scalar, so viewer search, copy-paste,
+//! text-extraction pipelines, and assistive tech can all recover the source
+//! text.
 //!
-//! Only compiled under the `pdf-ua` feature.
+//! Compiled under the `to-unicode` feature (standalone searchable text) or
+//! the `pdf-ua` feature (a tagged PDF is required to carry the CMap).
 
 use std::collections::BTreeMap;
 

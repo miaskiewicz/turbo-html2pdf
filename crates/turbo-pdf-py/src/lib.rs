@@ -72,7 +72,7 @@ impl Program {
     /// on a fatal compile/render fault; lints come back via [`Program::render`]'s
     /// companion — here only the PDF bytes are returned to match the N-API
     /// `program.render(...) -> bytes` shape. See [`render_full`] for diagnostics.
-    #[pyo3(signature = (data=None, css=String::new(), fonts=None, images=None, meta=None, now=None, pdf_a=false, pdf_ua=false, lang=None, cmyk=false, encryption=None, append_pdfs=None))]
+    #[pyo3(signature = (data=None, css=String::new(), fonts=None, images=None, meta=None, now=None, pdf_a=false, pdf_ua=false, to_unicode=false, lang=None, cmyk=false, encryption=None, append_pdfs=None))]
     #[allow(clippy::too_many_arguments)]
     pub fn render(
         &self,
@@ -85,12 +85,13 @@ impl Program {
         now: Option<i64>,
         pdf_a: bool,
         pdf_ua: bool,
+        to_unicode: bool,
         lang: Option<String>,
         cmyk: bool,
         encryption: Option<Bound<'_, PyDict>>,
         append_pdfs: Option<Vec<Vec<u8>>>,
     ) -> PyResult<Py<PyBytes>> {
-        let conf = Conformance::new(pdf_a, pdf_ua, lang, cmyk, encryption)?;
+        let conf = Conformance::new(pdf_a, pdf_ua, to_unicode, lang, cmyk, encryption)?;
         let opts = RenderArgs::new(py, data, css, fonts_handle(fonts), images, meta, now, conf)?;
         let out = run_pipeline(py, &self.inner, opts, append_pdfs)?;
         Ok(out.pdf)
@@ -98,7 +99,7 @@ impl Program {
 
     /// Like [`Program::render`] but returns `(pdf_bytes, diagnostics, page_count)`
     /// so callers can inspect the non-fatal lints and page total.
-    #[pyo3(signature = (data=None, css=String::new(), fonts=None, images=None, meta=None, now=None, pdf_a=false, pdf_ua=false, lang=None, cmyk=false, encryption=None, append_pdfs=None))]
+    #[pyo3(signature = (data=None, css=String::new(), fonts=None, images=None, meta=None, now=None, pdf_a=false, pdf_ua=false, to_unicode=false, lang=None, cmyk=false, encryption=None, append_pdfs=None))]
     #[allow(clippy::too_many_arguments)]
     pub fn render_full<'py>(
         &self,
@@ -111,12 +112,13 @@ impl Program {
         now: Option<i64>,
         pdf_a: bool,
         pdf_ua: bool,
+        to_unicode: bool,
         lang: Option<String>,
         cmyk: bool,
         encryption: Option<Bound<'py, PyDict>>,
         append_pdfs: Option<Vec<Vec<u8>>>,
     ) -> PyResult<Bound<'py, PyAny>> {
-        let conf = Conformance::new(pdf_a, pdf_ua, lang, cmyk, encryption)?;
+        let conf = Conformance::new(pdf_a, pdf_ua, to_unicode, lang, cmyk, encryption)?;
         let opts = RenderArgs::new(py, data, css, fonts_handle(fonts), images, meta, now, conf)?;
         let out = run_pipeline(py, &self.inner, opts, append_pdfs)?;
         out.into_py_tuple(py)
@@ -152,7 +154,7 @@ pub fn compile(
 /// One-shot convenience: compile `template_html` and render it in a single call,
 /// returning the PDF `bytes`.
 #[pyfunction]
-#[pyo3(signature = (template_html, data=None, css=String::new(), fonts=None, images=None, meta=None, now=None, pdf_a=false, pdf_ua=false, lang=None, cmyk=false, encryption=None, append_pdfs=None))]
+#[pyo3(signature = (template_html, data=None, css=String::new(), fonts=None, images=None, meta=None, now=None, pdf_a=false, pdf_ua=false, to_unicode=false, lang=None, cmyk=false, encryption=None, append_pdfs=None))]
 #[allow(clippy::too_many_arguments)]
 pub fn render(
     py: Python<'_>,
@@ -165,6 +167,7 @@ pub fn render(
     now: Option<i64>,
     pdf_a: bool,
     pdf_ua: bool,
+    to_unicode: bool,
     lang: Option<String>,
     cmyk: bool,
     encryption: Option<Bound<'_, PyDict>>,
@@ -172,7 +175,7 @@ pub fn render(
 ) -> PyResult<Py<PyBytes>> {
     let (program, _diags) = core_compile(template_html, &CompileOptions::default())
         .map_err(|e| errors::from_compile(py, e))?;
-    let conf = Conformance::new(pdf_a, pdf_ua, lang, cmyk, encryption)?;
+    let conf = Conformance::new(pdf_a, pdf_ua, to_unicode, lang, cmyk, encryption)?;
     let opts = RenderArgs::new(py, data, css, fonts_handle(fonts), images, meta, now, conf)?;
     let out = run_pipeline(py, &program, opts, append_pdfs)?;
     Ok(out.pdf)
@@ -193,6 +196,7 @@ pub fn append_pdf(py: Python<'_>, base: Vec<u8>, extras: Vec<Vec<u8>>) -> PyResu
 struct Conformance {
     pdf_a: bool,
     pdf_ua: bool,
+    to_unicode: bool,
     lang: Option<String>,
     cmyk: bool,
     encryption: Option<Encryption>,
@@ -204,6 +208,7 @@ impl Conformance {
     fn new(
         pdf_a: bool,
         pdf_ua: bool,
+        to_unicode: bool,
         lang: Option<String>,
         cmyk: bool,
         encryption: Option<Bound<'_, PyDict>>,
@@ -211,6 +216,7 @@ impl Conformance {
         Ok(Conformance {
             pdf_a,
             pdf_ua,
+            to_unicode,
             lang,
             cmyk,
             encryption: encryption.map(|d| encryption_dict(&d)).transpose()?,
@@ -222,6 +228,7 @@ impl Conformance {
         opts.cmyk = self.cmyk;
         opts.pdf_a = self.pdf_a;
         opts.pdf_ua = self.pdf_ua;
+        opts.to_unicode = self.to_unicode;
         opts.lang = self.lang;
         opts.encryption = self.encryption;
     }

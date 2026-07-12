@@ -30,7 +30,7 @@ mod page;
 #[cfg(feature = "pdf-a")]
 mod pdfa;
 mod text;
-#[cfg(feature = "pdf-ua")]
+#[cfg(any(feature = "to-unicode", feature = "pdf-ua"))]
 pub(crate) mod tounicode;
 #[cfg(feature = "pdf-ua")]
 mod ua;
@@ -78,6 +78,16 @@ pub struct EmitOptions {
     /// DeviceRGB) in a build without that feature — it stays a plain `bool`, not
     /// `#[cfg]`-gated, so the napi/wasm/py bindings keep compiling unchanged.
     pub cmyk: bool,
+    /// Emit a `/ToUnicode` CMap on every embedded font so viewer search,
+    /// copy-paste, and text-extraction tools can recover the Unicode behind
+    /// each shown glyph (the `to-unicode` feature, ISO 32000-1 §9.10.3). A
+    /// per-render runtime toggle: `false` (the default) is byte-for-byte the
+    /// no-CMap output, one fewer object per embedded font. When `pdf_ua` is
+    /// on the CMap is emitted regardless (a tagged PDF requires it per ISO
+    /// 14289-1 §7.21.7), so this flag is only meaningful for callers who want
+    /// searchable text without the full tagged / accessible PDF machinery.
+    #[cfg(feature = "to-unicode")]
+    pub to_unicode: bool,
     /// The document's natural-language tag (RFC 3066, e.g. `en-US`), written as
     /// the catalog `/Lang` for tagged PDF (`pdf-ua`). `None` falls back to a
     /// default so a UA document always carries a language (AC-11.1).

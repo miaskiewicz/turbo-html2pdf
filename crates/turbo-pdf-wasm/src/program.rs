@@ -42,9 +42,9 @@ struct JsRenderArgs {
     watermark: Option<JsWatermark>,
     /// Render-clock override (Unix seconds). Omit for the deterministic default.
     now: Option<i64>,
-    /// Per-render conformance / encryption toggles: `{ pdfA?, pdfUa?, lang?,
-    /// cmyk?, encryption? }`. Flattened so the toggles live at the top level of
-    /// the render-args object alongside `meta`/`watermark`.
+    /// Per-render conformance / encryption toggles: `{ pdfA?, pdfUa?,
+    /// toUnicode?, lang?, cmyk?, encryption? }`. Flattened so the toggles live
+    /// at the top level of the render-args object alongside `meta`/`watermark`.
     #[serde(flatten)]
     conformance: JsConformance,
     /// Foreign PDF documents (each a `Uint8Array`) glued page-by-page AFTER the

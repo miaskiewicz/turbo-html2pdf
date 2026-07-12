@@ -71,6 +71,12 @@ pub struct RenderOptions {
     /// (`/StructTreeRoot`, `/MarkInfo`, per-face `/ToUnicode`, `/Lang`).
     /// Defaults to `false`.
     pub pdf_ua: Option<bool>,
+    /// Emit a `/ToUnicode` CMap on every embedded font so viewer search,
+    /// copy-paste, and text-extraction tools can recover the Unicode behind
+    /// each shown glyph (ISO 32000-1 §9.10.3). A subset of what `pdfUa` does:
+    /// the CMap without the accessibility tag tree. Defaults to `false`.
+    /// Implied by `pdfUa`.
+    pub to_unicode: Option<bool>,
     /// The document's natural-language tag (RFC 3066, e.g. `en-US`), written as
     /// the catalog `/Lang` for tagged PDF. Only meaningful with `pdfUa`.
     pub lang: Option<String>,
@@ -340,6 +346,7 @@ fn run_pipeline(
     let conformance = Conformance {
         pdf_a: opts.pdf_a.unwrap_or(false),
         pdf_ua: opts.pdf_ua.unwrap_or(false),
+        to_unicode: opts.to_unicode.unwrap_or(false),
         lang: opts.lang,
         cmyk: opts.cmyk.unwrap_or(false),
         encryption: opts.encryption.map(JsEncryption::into_core),
@@ -375,6 +382,7 @@ fn run_pipeline(
 struct Conformance {
     pdf_a: bool,
     pdf_ua: bool,
+    to_unicode: bool,
     lang: Option<String>,
     cmyk: bool,
     encryption: Option<Encryption>,
@@ -422,6 +430,7 @@ fn emit_options(
     opts.cmyk = conformance.cmyk;
     opts.pdf_a = conformance.pdf_a;
     opts.pdf_ua = conformance.pdf_ua;
+    opts.to_unicode = conformance.to_unicode;
     opts.lang = conformance.lang;
     opts.encryption = conformance.encryption;
     opts

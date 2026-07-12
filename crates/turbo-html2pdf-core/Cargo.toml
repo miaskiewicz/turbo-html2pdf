@@ -72,12 +72,26 @@ xref = []
 # embedded. Validated with veraPDF (`--flavour 2b`) in tests/pdf_a.rs.
 pdf-a = []
 
+# Emit a `/ToUnicode` CMap on every embedded font so viewer search, copy-paste,
+# and text-extraction tools (`pdftotext`, `pypdf`, `PyMuPDF`, screen readers)
+# can recover the Unicode behind each shown glyph. The CMap generator is the
+# same one used by `pdf-ua` (§14.3.9, ISO 32000-1 §9.10.3); this feature exposes
+# it as a standalone opt-in so callers who need standards-compliant searchable
+# text can get it without pulling in the full tagged / accessible PDF machinery.
+# Off by default: the default build is byte-for-byte unchanged, one fewer
+# object per embedded font. Runtime toggle: `EmitOptions::to_unicode` (default
+# `false`) — a flag-off render under a `--features to-unicode` build is still
+# byte-identical to the default build.
+to-unicode = []
+
 # Tagged / accessible PDF (PDF/UA-1, AC-11.1): carries a structure role + alt
 # text from the semantic HTML down to each fragment, wraps painted content in
 # marked-content (`BDC`/`EMC`) with per-page MCIDs, and builds a `StructTreeRoot`
 # + `ParentTree` in the catalog, with `/MarkInfo`, `/Lang`, an XMP packet and the
 # `DisplayDocTitle` viewer preference. Validated with veraPDF `--flavour ua1`.
-pdf-ua = []
+# Implies `to-unicode`: a tagged PDF is required to carry `/ToUnicode` CMaps
+# per ISO 14289-1 §7.21.7, and this feature has always shipped them.
+pdf-ua = ["to-unicode"]
 
 # AES-256 password protection (PDF 2.0 Standard Security Handler, V=5/R=6,
 # AESV3). Off by default: the default build is byte-for-byte unchanged and pulls

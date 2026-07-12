@@ -237,6 +237,7 @@ impl JsEncryption {
 pub struct JsConformance {
     pub pdf_a: bool,
     pub pdf_ua: bool,
+    pub to_unicode: bool,
     pub lang: Option<String>,
     pub cmyk: bool,
     pub encryption: Option<JsEncryption>,
@@ -249,6 +250,7 @@ impl JsConformance {
         opts.cmyk = self.cmyk;
         opts.pdf_a = self.pdf_a;
         opts.pdf_ua = self.pdf_ua;
+        opts.to_unicode = self.to_unicode;
         opts.lang = self.lang;
         opts.encryption = self.encryption.map(JsEncryption::into_core);
     }
