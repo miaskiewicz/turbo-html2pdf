@@ -76,12 +76,24 @@ impl<'a> Walker<'a> {
     }
 
     /// Start a fresh page, re-emitting `headers` at its top.
+    ///
+    /// After re-emitting the headers, `prev_bottom` is cleared: the first
+    /// continued-body fragment on the new page must not inherit the galley
+    /// gap between its original position and the header's — the header was
+    /// laid out atop the table in the galley, but the body content this page
+    /// resumes with may be dozens of rows later, so [`gap_before`] would
+    /// compute a huge phantom gap that pushes the row toward the bottom of
+    /// the page (or off it). Treating the row as the page's first fragment
+    /// (zero leading gap) restores the invariant of a fresh page.
     fn new_page(&mut self, headers: &[Fragment]) {
         self.pages.push(Vec::new());
         self.cursor = 0.0;
         self.prev_bottom = None;
         for h in headers {
             self.emit(h);
+        }
+        if !headers.is_empty() {
+            self.prev_bottom = None;
         }
     }
 

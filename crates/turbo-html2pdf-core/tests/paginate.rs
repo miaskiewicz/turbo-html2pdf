@@ -320,6 +320,54 @@ fn ac_6_3_repeatable_header_reemitted() {
     // Header (height 20) is present on both pages.
     assert!(close(pages[0].body[0].height, 20.0));
     assert!(close(pages[1].body[0].height, 20.0));
+    // The continued row on page 2 sits directly below the re-emitted header,
+    // not carrying a phantom galley gap from its original y=120 position.
+    // Body layout on page 2: [header @ y=0, h=20; row @ y=20, h=50].
+    assert_eq!(pages[1].body.len(), 2);
+    assert!(close(pages[1].body[1].y, 20.0));
+    assert!(close(pages[1].body[1].height, 50.0));
+}
+
+#[test]
+fn ac_6_3_repeatable_header_does_not_bloat_page_count() {
+    // A regression for the phantom-gap bug: when a table with a repeatable
+    // header spans many pages, each continued page should be packed with as
+    // many rows as fit — not just one row placed near the bottom because
+    // `prev_bottom` was left pointing at the header's galley bottom.
+    // 40 rows of height 20 = 800 total. Capacity 120 fits 6 rows per page
+    // (header 20 + 5 rows × 20 = 120). Expect ⌈40/5⌉ = 8 continued pages
+    // after page 1 which fits (header + 5 rows), so 8 pages total.
+    let mut header = boxf(0.0, 20.0);
+    header.break_meta.repeatable = Some(turbo_html2pdf_core::RepeatKind::Header);
+    let mut items = vec![header];
+    for i in 0..40 {
+        items.push(boxf(20.0 + f32::from(i) * 20.0, 20.0));
+    }
+    let (pages, _) = run(&root(vec![container(0.0, items)]), &cap120());
+    // Not tightly asserting an exact count — the point is it stays in the
+    // single digits, not ~40 (one row per page under the phantom-gap bug).
+    assert!(
+        pages.len() <= 10,
+        "40 rows split into too many pages: {} (phantom-gap regression?)",
+        pages.len()
+    );
+    // Every continued page must have at least ONE body row after the header,
+    // not sit half-empty with the row at the bottom edge.
+    for (i, page) in pages.iter().enumerate().skip(1) {
+        assert!(
+            page.body.len() >= 2,
+            "continued page {i} has {} body fragment(s); the row is either missing or wasn't packed after the header",
+            page.body.len()
+        );
+        // First body fragment is the re-emitted header.
+        assert!(close(page.body[0].y, 0.0), "header on page {i} is not at page top");
+        // Second body fragment (first data row) sits directly below.
+        assert!(
+            close(page.body[1].y, 20.0),
+            "row on page {i} is at y={} instead of directly below the header (y=20)",
+            page.body[1].y
+        );
+    }
 }
 
 // --------------------------------------------------------------------------
