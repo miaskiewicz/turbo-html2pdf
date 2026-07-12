@@ -73,6 +73,34 @@ fn third_item_wraps_to_second_row() {
 }
 
 #[test]
+fn grid_column_and_row_span_widen_items() {
+    // `grid-column:span N` (nike's header logo/nav each span 6 of 12) must place the
+    // item across N tracks, not auto-place it one column wide. A 4-col grid: item A
+    // spans 3 columns (3/4 width), item B spans the last column (also `grid-row:span
+    // 1`, exercising the row placement path).
+    let root = grid(
+        &[("grid-template-columns", "repeat(4, 1fr)")],
+        vec![
+            item(&[("grid-column", "span 3")], "a"),
+            item(&[("grid-column", "span 1"), ("grid-row", "span 1")], "b"),
+        ],
+        400.0,
+    );
+    let its = items_of(&root);
+    assert!(
+        (its[0].width - 300.0).abs() < 2.0,
+        "span 3 -> 3/4 width, got {}",
+        its[0].width
+    );
+    assert!(
+        (its[1].width - 100.0).abs() < 2.0,
+        "span 1 -> 1/4 width, got {}",
+        its[1].width
+    );
+    assert_eq!(its[0].y, its[1].y, "both on row 1");
+}
+
+#[test]
 fn fixed_px_and_fr_columns_mix() {
     // `200px 1fr` in a 500px grid: col1 = 200px, col2 = remaining 300px.
     let root = grid(

@@ -12,7 +12,7 @@
 use std::collections::HashMap;
 
 use taffy::prelude::{FromLength, FromPercent, TaffyAuto};
-use taffy::style_helpers::{fr, line, minmax, percent};
+use taffy::style_helpers::{fr, line, minmax, percent, span};
 use taffy::{
     AlignItems, AvailableSpace, Dimension, Display, FlexDirection, FlexWrap, GridPlacement,
     JustifyContent, Layout, LengthPercentage, LengthPercentageAuto, Line, MaxTrackSizingFunction,
@@ -330,8 +330,13 @@ fn atomics_natural(items: &[InlineItem], fonts: &FontRegistry) -> f32 {
 fn lines_natural(items: &[InlineItem], fs: f32, fonts: &FontRegistry) -> f32 {
     let runs = block::build_runs(items, fs, 0.0, fonts);
     let mut scratch = Diagnostics::default();
+    // Round the max-content width UP: a box shrink-wrapped to a fractional text width
+    // and then re-laid at that width can't fit the fractional last glyph, so the run
+    // wraps a word onto a second line even though it "fit" the measurement (nike's
+    // "Find a Store" utility links, google's footer). A whole-pixel max-content leaves
+    // room for the rounding.
     let text = inline::layout_runs(&runs, fonts, f32::MAX, Align::Left, &mut scratch).width;
-    text + atomics_natural(items, fonts)
+    text.ceil() + atomics_natural(items, fonts)
 }
 
 fn kids_natural(kids: &[LayoutBox], fonts: &FontRegistry) -> f32 {
@@ -916,10 +921,49 @@ fn build_grid_leaves(
             if let Some((row, col)) = area_placement(it, areas) {
                 style.grid_row = row;
                 style.grid_column = col;
+            } else {
+                // Explicit line placement (`grid-column`/`grid-row`) when the grid uses
+                // no named areas — `span N` in particular: nike's header items are
+                // `grid-column:span 6` in a 12-col grid, so each should fill half the
+                // bar; unparsed, taffy auto-placed them one column wide and the utility
+                // nav collapsed to ~99px.
+                if let Some(col) = grid_line(it.style.get("grid-column")) {
+                    style.grid_column = col;
+                }
+                if let Some(row) = grid_line(it.style.get("grid-row")) {
+                    style.grid_row = row;
+                }
             }
             tree.new_leaf_with_context(style, i).expect("grid leaf")
         })
         .collect()
+}
+
+/// A CSS `grid-column`/`grid-row` value → taffy line placement. Handles `span N`,
+/// a single line index, and the `start / end` two-value form. `None` for `auto` or
+/// an unparseable value (taffy keeps its auto-placement default).
+fn grid_line(value: Option<&str>) -> Option<Line<GridPlacement>> {
+    let v = value?.trim();
+    if v.is_empty() || v.eq_ignore_ascii_case("auto") {
+        return None;
+    }
+    let (start, end) = v
+        .split_once('/')
+        .map_or((v, ""), |(a, b)| (a.trim(), b.trim()));
+    Some(Line {
+        start: grid_placement(start),
+        end: grid_placement(end),
+    })
+}
+
+fn grid_placement(tok: &str) -> GridPlacement {
+    if let Some(n) = tok
+        .strip_prefix("span")
+        .and_then(|r| r.trim().parse::<u16>().ok())
+    {
+        return span(n);
+    }
+    tok.parse::<i16>().map(line).unwrap_or(GridPlacement::Auto)
 }
 
 /// Lay out a grid container's items into the content box at `(cx, cy)` of width
@@ -989,6 +1033,41 @@ mod coverage_tests {
 
     fn cs(pairs: &[(&str, &str)]) -> ComputedStyle {
         ComputedStyle::from_pairs(pairs.iter().map(|(k, v)| (k.to_string(), v.to_string())))
+    }
+
+    #[test]
+    fn grid_line_parses_span_index_and_pair() {
+        use taffy::style_helpers::{line, span};
+        // unset / `auto` -> None (taffy keeps auto-placement).
+        assert_eq!(grid_line(None), None);
+        assert_eq!(grid_line(Some("auto")), None);
+        assert_eq!(grid_line(Some("  ")), None);
+        // `span N` -> a span end, auto start (nike's `grid-column:span 6`).
+        assert_eq!(
+            grid_line(Some("span 6")),
+            Some(Line {
+                start: span(6),
+                end: GridPlacement::Auto
+            })
+        );
+        // a bare line index.
+        assert_eq!(
+            grid_line(Some("2")),
+            Some(Line {
+                start: line(2),
+                end: GridPlacement::Auto
+            })
+        );
+        // the `start / end` two-value form (`3 / span 2`).
+        assert_eq!(
+            grid_line(Some("3 / span 2")),
+            Some(Line {
+                start: line(3),
+                end: span(2)
+            })
+        );
+        // an unparseable token -> Auto.
+        assert_eq!(grid_placement("wat"), GridPlacement::Auto);
     }
 
     #[test]
