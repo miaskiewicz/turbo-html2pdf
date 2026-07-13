@@ -1,6 +1,6 @@
 {
   "name": "turbo-html2pdf-template",
-  "version": "0.2.12",
+  "version": "0.2.13",
   "description": "Author turbo-html2pdf PDF templates with plain functions (no React) — HTML/CSS + Jinja to PDF.",
   "license": "MIT",
   "type": "module",

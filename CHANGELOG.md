@@ -4,6 +4,43 @@ All notable changes to turbo-html2pdf are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/); versions follow SemVer. The npm,
 PyPI, and crates.io packages release in lockstep from a `v*` tag (PyPI on `pyv*`).
 
+## [0.2.13] — real-site rendering (google.com / nike.com home pages)
+
+A batch of layout + paint fixes that make production home pages render faithfully.
+
+### Added
+- **`flex` shorthand** grow/shrink expansion, so a `flex:1` item grows without an
+  explicit `flex-grow` longhand (google's search box no longer crams its icons left).
+- **Button `<input>` value as a text label** — `<input type="submit|button|reset">`
+  renders its `value` (google's "Google Search" / "I'm Feeling Lucky" were blank).
+- **Viewport units** `vw`/`vh`/`vmin`/`vmax` in length resolution.
+- **Lazy `<img>`** reads a `data-*-url`/`srcset` when it has no `src` (nike's hero
+  images ship the URL only in `data-landscape-url`).
+- **CSS Grid `grid-column`/`grid-row` line placement** including `span N` — nike's
+  12-column header (`grid-column:span 6`) no longer collapses each item to one track.
+
+### Fixed
+- **CSS Grid alignment**: `justify-items` is mapped, and a grid's `justify-content`
+  defers to taffy's `normal`=stretch default so a single auto column fills the
+  container — google's home logo now centers instead of pinning to the left padding.
+- **`box-sizing:inherit`** is resolved (the explicit keyword), and the `<html>`/`<body>`
+  shell styles are threaded as the inheritance parent, so the reset
+  `html{box-sizing:border-box}` + `*{box-sizing:inherit}` reaches the page — nike's
+  `width:50%` editorial cards now sit two-up instead of stacking half-width.
+- **`box-sizing` for `px` `height`/`min-height`/`max-height`** — a border-box length
+  includes its padding+border, so google's "Sign in" pill is a 40px pill, not a 62px oval.
+- **`.ttc` face index** is carried through subsetting and outline tracing, so a glyph
+  traces from its selected sub-font (macOS Arial/Helvetica are collections) instead of
+  a shifted one.
+- **Inline-block/atomic width** counts toward a line's natural + min-content, and
+  **`align-self`** + a shrink-to-fit box's **`min`/`max-width`** are honored — google's
+  footer "Settings", the header "Sign in", and the search-bar buttons no longer clip.
+- **Text max-content is rounded up** so a shrink-wrapped box doesn't drop its last
+  glyph to a second line (nike utility links, google's "How Search works").
+- **Replaced `<img>`** flex/grid items and a `<div>` wrapping an `<img>` size to the
+  image's intrinsic width; `align-items:center` items size to content, not the offer.
+- **In-flow `%` height** resolves against a definite parent height.
+
 ## [0.2.12] — `@media` height conditions (min-height/max-height)
 
 ### Fixed
