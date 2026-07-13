@@ -1196,13 +1196,13 @@ mod coverage_tests {
         // `flex-basis: 50%` -> a percentage dimension (the `strip_suffix('%')` arm).
         let s = cs(&[("flex-basis", "50%")]);
         let bs = bs_of(&[("flex-basis", "50%")]);
-        assert_eq!(item_basis(&s, &bs, 16.0), Dimension::percent(0.5));
+        assert_eq!(item_basis(&s, &bs, 16.0), Dimension::percent(0.5_f32));
 
         // A basis that is neither a length nor a percentage (`min-content`) falls back
         // to the item's own `width`.
         let s = cs(&[("flex-basis", "min-content"), ("width", "77px")]);
         let bs = bs_of(&[("flex-basis", "min-content"), ("width", "77px")]);
-        assert_eq!(item_basis(&s, &bs, 16.0), Dimension::length(77.0));
+        assert_eq!(item_basis(&s, &bs, 16.0), Dimension::length(77.0_f32));
     }
 
     // --- item_inset: a percentage inset edge on an out-of-flow flex child ---
@@ -1210,8 +1210,8 @@ mod coverage_tests {
     fn item_inset_percentage_edge() {
         let bs = bs_of(&[("top", "25%"), ("left", "10%")]);
         let inset = item_inset(&bs);
-        assert_eq!(inset.top, LengthPercentageAuto::percent(0.25));
-        assert_eq!(inset.left, LengthPercentageAuto::percent(0.10));
+        assert_eq!(inset.top, LengthPercentageAuto::percent(0.25_f32));
+        assert_eq!(inset.left, LengthPercentageAuto::percent(0.10_f32));
     }
 
     // --- flex_natural: row sums items, column takes the widest ---
@@ -1298,17 +1298,23 @@ mod coverage_tests {
     #[test]
     fn track_parsers_percent_and_auto_branches() {
         // An explicit percentage track.
-        assert_eq!(track_of("50%"), percent(0.5));
+        assert_eq!(track_of("50%"), percent(0.5_f32));
         // minmax() min side: percentage, and `fr` (not a valid min) -> AUTO.
-        assert_eq!(min_track("50%"), MinTrackSizingFunction::from_percent(0.5));
+        assert_eq!(
+            min_track("50%"),
+            MinTrackSizingFunction::from_percent(0.5_f32)
+        );
         assert_eq!(min_track("1fr"), MinTrackSizingFunction::AUTO);
         // minmax() max side: percentage, and a non-length (`auto`) -> AUTO.
-        assert_eq!(max_track("50%"), MaxTrackSizingFunction::from_percent(0.5));
+        assert_eq!(
+            max_track("50%"),
+            MaxTrackSizingFunction::from_percent(0.5_f32)
+        );
         assert_eq!(max_track("auto"), MaxTrackSizingFunction::AUTO);
         // A full minmax() track round-trips both sides.
         assert_eq!(
             track_of("minmax(50%, 1fr)"),
-            minmax(MinTrackSizingFunction::from_percent(0.5), fr(1.0))
+            minmax(MinTrackSizingFunction::from_percent(0.5_f32), fr(1.0_f32))
         );
     }
 
