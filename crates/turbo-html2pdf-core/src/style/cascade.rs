@@ -119,6 +119,7 @@ const INHERITED: &[&str] = &[
 struct ElemPos {
     index: usize,
     of_type_index: usize,
+    of_type_total: usize,
     siblings: usize,
 }
 
@@ -129,6 +130,12 @@ struct Ctx<'a> {
     classes: Vec<&'a str>,
     attrs: &'a [Attr],
     pos: ElemPos,
+    /// Whether the element has no element/text children (`:empty`).
+    empty: bool,
+    /// Preceding element siblings in document order (for the `+`/`~` combinators).
+    /// Each carries an empty `prev`; the matcher re-slices this list when it steps
+    /// left across a sibling combinator.
+    prev: Vec<Ctx<'a>>,
 }
 
 fn html_name(element: &Element) -> Option<&str> {
@@ -145,7 +152,7 @@ fn tag_key(element: &Element) -> String {
     }
 }
 
-fn ctx_of<'a>(element: &'a Element, pos: ElemPos) -> Ctx<'a> {
+fn ctx_of<'a>(element: &'a Element, pos: ElemPos, prev: Vec<Ctx<'a>>) -> Ctx<'a> {
     Ctx {
         tag: html_name(element),
         id: element.attr("id"),
@@ -156,6 +163,8 @@ fn ctx_of<'a>(element: &'a Element, pos: ElemPos) -> Ctx<'a> {
             .unwrap_or_default(),
         attrs: &element.attrs,
         pos,
+        empty: element.children.is_empty(),
+        prev,
     }
 }
 
@@ -175,9 +184,11 @@ fn element_positions(nodes: &[Node]) -> Vec<Option<ElemPos>> {
 
 fn position_for(order: usize, key: &str, elems: &[(usize, String)], siblings: usize) -> ElemPos {
     let of_type_index = elems[..=order].iter().filter(|(_, k)| k == key).count();
+    let of_type_total = elems.iter().filter(|(_, k)| k == key).count();
     ElemPos {
         index: order + 1,
         of_type_index,
+        of_type_total,
         siblings,
     }
 }
@@ -225,13 +236,40 @@ fn nth_match(a: i32, b: i32, index: usize) -> bool {
     n % a == 0 && n / a >= 0
 }
 
-fn pseudo_matches(pseudo: &Pseudo, pos: ElemPos) -> bool {
+fn pseudo_matches(pseudo: &Pseudo, ctx: &Ctx) -> bool {
+    let pos = ctx.pos;
     match pseudo {
         Pseudo::FirstChild => pos.index == 1,
         Pseudo::LastChild => pos.index == pos.siblings,
+        Pseudo::OnlyChild => pos.siblings == 1,
+        Pseudo::FirstOfType => pos.of_type_index == 1,
+        Pseudo::LastOfType => pos.of_type_index == pos.of_type_total,
+        Pseudo::OnlyOfType => pos.of_type_total == 1,
         Pseudo::NthChild(a, b) => nth_match(*a, *b, pos.index),
         Pseudo::NthOfType(a, b) => nth_match(*a, *b, pos.of_type_index),
+        Pseudo::Root => ctx.tag == Some("html"),
+        Pseudo::Empty => ctx.empty,
+        Pseudo::Checked => has_attr(ctx.attrs, "checked"),
+        Pseudo::Disabled => has_attr(ctx.attrs, "disabled"),
+        Pseudo::Enabled => is_form_control(ctx.tag) && !has_attr(ctx.attrs, "disabled"),
+        Pseudo::Link => {
+            matches!(ctx.tag, Some("a" | "area" | "link")) && has_attr(ctx.attrs, "href")
+        }
+        Pseudo::Not(compounds) => !compounds.iter().any(|c| compound_matches(c, ctx)),
+        Pseudo::Is(compounds) => compounds.iter().any(|c| compound_matches(c, ctx)),
+        Pseudo::NeverMatch => false,
     }
+}
+
+fn has_attr(attrs: &[Attr], name: &str) -> bool {
+    attrs.iter().any(|a| a.name.eq_ignore_ascii_case(name))
+}
+
+fn is_form_control(tag: Option<&str>) -> bool {
+    matches!(
+        tag,
+        Some("input" | "button" | "select" | "textarea" | "option")
+    )
 }
 
 fn tag_ok(compound: &Compound, ctx: &Ctx) -> bool {
@@ -260,7 +298,7 @@ fn compound_matches(compound: &Compound, ctx: &Ctx) -> bool {
         && id_ok(compound, ctx)
         && classes_ok(compound, ctx)
         && compound.attrs.iter().all(|a| attr_matches(a, ctx.attrs))
-        && compound.pseudos.iter().all(|p| pseudo_matches(p, ctx.pos))
+        && compound.pseudos.iter().all(|p| pseudo_matches(p, ctx))
 }
 
 fn match_child(sel: &Selector, ci: usize, path: &[Ctx], pi: usize) -> bool {
@@ -276,6 +314,31 @@ fn match_descendant(sel: &Selector, ci: usize, path: &[Ctx], pi: usize) -> bool 
     })
 }
 
+/// Match compound `ci-1` against a preceding sibling of the element at `path[pi]`,
+/// then continue the selector from that sibling. `immediate` restricts to the
+/// directly-preceding sibling (`+`); otherwise any earlier sibling (`~`).
+fn match_sibling(sel: &Selector, ci: usize, path: &[Ctx], pi: usize, immediate: bool) -> bool {
+    let sibs = &path[pi].prev;
+    let range = if immediate {
+        sibs.len().saturating_sub(1)..sibs.len()
+    } else {
+        0..sibs.len()
+    };
+    range.rev().any(|k| {
+        if !compound_matches(&sel.compounds[ci - 1], &sibs[k]) {
+            return false;
+        }
+        // Continue the match from the sibling at the same depth: reuse the shared
+        // ancestors, and give the sibling its own preceding siblings so chained
+        // sibling combinators (`a ~ b + c`) keep working.
+        let mut sp = path[..pi].to_vec();
+        let mut sib = sibs[k].clone();
+        sib.prev = sibs[..k].to_vec();
+        sp.push(sib);
+        match_ancestors(sel, ci - 1, &sp, pi)
+    })
+}
+
 fn match_ancestors(sel: &Selector, ci: usize, path: &[Ctx], pi: usize) -> bool {
     if ci == 0 {
         return true;
@@ -283,6 +346,8 @@ fn match_ancestors(sel: &Selector, ci: usize, path: &[Ctx], pi: usize) -> bool {
     match sel.combinators[ci - 1] {
         Combinator::Child => match_child(sel, ci, path, pi),
         Combinator::Descendant => match_descendant(sel, ci, path, pi),
+        Combinator::NextSibling => match_sibling(sel, ci, path, pi, true),
+        Combinator::SubsequentSibling => match_sibling(sel, ci, path, pi, false),
     }
 }
 
@@ -352,6 +417,110 @@ fn collect_inline(element: &Element, out: &mut Vec<Cand>) {
     }
 }
 
+/// Legacy presentational attributes mapped to CSS declarations (`bgcolor`,
+/// `width`/`height`, `<font color>`). These are "presentational hints": they sit
+/// just above the UA sheet and below any real author rule (level 1, specificity
+/// 0), so an author stylesheet always overrides them. Old table-layout sites
+/// (Hacker News' orange header `<td bgcolor>`, sized `<img>`) depend on them.
+fn collect_presentational(element: &Element, out: &mut Vec<Cand>) {
+    // Order matters (bgcolor, width, height, then `<font color>`); each entry is
+    // present only when its attribute is set and usable.
+    let decls: Vec<Declaration> = [
+        bgcolor_decl(element),
+        element.attr("width").and_then(attr_length).map(width_decl),
+        element
+            .attr("height")
+            .and_then(attr_length)
+            .map(height_decl),
+        font_color_decl(element),
+    ]
+    .into_iter()
+    .flatten()
+    .collect();
+    if !decls.is_empty() {
+        push_decls(&decls, 1, (0, 0, 0), 0, out);
+    }
+}
+
+/// A presentational-hint declaration (level 1, never `important`).
+fn pres_decl(property: &str, value: String) -> Declaration {
+    Declaration {
+        property: property.to_string(),
+        value,
+        important: false,
+    }
+}
+
+fn width_decl(value: String) -> Declaration {
+    pres_decl("width", value)
+}
+
+fn height_decl(value: String) -> Declaration {
+    pres_decl("height", value)
+}
+
+/// `bgcolor="..."` → `background-color`, when non-empty.
+fn bgcolor_decl(element: &Element) -> Option<Declaration> {
+    let bg = element
+        .attr("bgcolor")
+        .map(str::trim)
+        .filter(|v| !v.is_empty())?;
+    Some(pres_decl("background-color", bg.to_string()))
+}
+
+/// `<font color="...">` → `color`, when non-empty (only on the `<font>` tag).
+fn font_color_decl(element: &Element) -> Option<Declaration> {
+    if !is_tag(element, "font") {
+        return None;
+    }
+    let c = element
+        .attr("color")
+        .map(str::trim)
+        .filter(|v| !v.is_empty())?;
+    Some(pres_decl("color", c.to_string()))
+}
+
+/// A presentational length attribute → a CSS length value: a bare number is `px`,
+/// a `N%` passes through; anything else (e.g. `width="*"`) is ignored.
+fn attr_length(v: &str) -> Option<String> {
+    let v = v.trim();
+    if let Some(pct) = v.strip_suffix('%') {
+        return pct.trim().parse::<f32>().ok().map(|_| v.to_string());
+    }
+    v.parse::<f32>().ok().map(|n| format!("{n}px"))
+}
+
+fn is_tag(element: &Element, name: &str) -> bool {
+    matches!(&element.tag, Tag::Html(t) if t.eq_ignore_ascii_case(name))
+}
+
+/// The `cellpadding` (px) of the nearest ancestor `<table>` — a legacy table
+/// attribute that pads every cell (e.g. HN's `cellpadding="1"` divider bar, an
+/// empty coloured `<td>` that must reserve its padding to show as a line).
+fn ancestor_cellpadding(path: &[Ctx]) -> Option<f32> {
+    let table = path.iter().rev().skip(1).find(|c| c.tag == Some("table"))?;
+    let attr = table
+        .attrs
+        .iter()
+        .find(|a| a.name.eq_ignore_ascii_case("cellpadding"))?;
+    attr.value.trim().parse::<f32>().ok()
+}
+
+/// Apply a table's `cellpadding` to its cells as a presentational padding hint.
+fn collect_cellpadding(element: &Element, path: &[Ctx], out: &mut Vec<Cand>) {
+    if !(is_tag(element, "td") || is_tag(element, "th")) {
+        return;
+    }
+    if let Some(pad) = ancestor_cellpadding(path) {
+        let decl = Declaration {
+            property: "padding".to_string(),
+            value: format!("{pad}px"),
+            important: false,
+        };
+        push_decls(&[decl], 1, (0, 0, 0), 0, out);
+    }
+}
+
 fn pick_winners(cands: Vec<Cand>) -> BTreeMap<String, String> {
     let mut best: BTreeMap<String, (Key, String)> = BTreeMap::new();
     for cand in cands {
@@ -363,6 +532,76 @@ fn pick_winners(cands: Vec<Cand>) -> BTreeMap<String, String> {
     best.into_iter().map(|(k, (_, v))| (k, v)).collect()
 }
 
+/// The document root font size (px). CSS `rem` and the initial `font-size` both
+/// resolve against it; turbo does not honor an `html { font-size }` override.
+const ROOT_FONT_PX: f32 = 16.0;
+
+/// Resolve `font-size` to an absolute px value against the parent's (already
+/// absolute) font size, then store it back as `"<n>px"`. Font-relative units
+/// resolve at the element that *declares* them (§4.2): if we left `em`/`%` as a
+/// string, every descendant that inherits it would re-multiply against the
+/// parent's px — e.g. `h1{font-size:1.8em}` compounding to 1.8²·16 on its text.
+fn resolve_font_size(map: &mut BTreeMap<String, String>, parent: &ComputedStyle) {
+    let parent_px = parent
+        .get("font-size")
+        .and_then(parse_abs_px)
+        .unwrap_or(ROOT_FONT_PX);
+    let Some(raw) = map.get("font-size") else {
+        return;
+    };
+    let px = font_size_px(raw, parent_px);
+    map.insert("font-size".to_string(), format!("{px}px"));
+}
+
+/// Parse an already-absolute px string (`"28.8px"` / `"16"`); `None` for anything
+/// still carrying a relative unit.
+fn parse_abs_px(v: &str) -> Option<f32> {
+    let t = v.trim();
+    t.strip_suffix("px").unwrap_or(t).trim().parse::<f32>().ok()
+}
+
+/// Resolve one `font-size` value to px against `parent_px`: `px`/`pt`/`pc`/`in`/
+/// `cm`/`mm` absolute, `em`/`%` parent-relative, `rem` root-relative, and the
+/// `larger`/`smaller`/`xx-small…xx-large` keywords (coarse steps).
+fn font_size_px(value: &str, parent_px: f32) -> f32 {
+    let t = value.trim();
+    let kw = match t {
+        "larger" => Some(parent_px * 1.2),
+        "smaller" => Some(parent_px / 1.2),
+        "xx-small" => Some(ROOT_FONT_PX * 0.6),
+        "x-small" => Some(ROOT_FONT_PX * 0.75),
+        "small" => Some(ROOT_FONT_PX * 0.89),
+        "medium" => Some(ROOT_FONT_PX),
+        "large" => Some(ROOT_FONT_PX * 1.2),
+        "x-large" => Some(ROOT_FONT_PX * 1.5),
+        "xx-large" => Some(ROOT_FONT_PX * 2.0),
+        _ => None,
+    };
+    if let Some(px) = kw {
+        return px;
+    }
+    let split = t
+        .char_indices()
+        .find(|(_, c)| c.is_ascii_alphabetic() || *c == '%')
+        .map(|(i, _)| i)
+        .unwrap_or(t.len());
+    let Ok(n) = t[..split].parse::<f32>() else {
+        return parent_px;
+    };
+    match t[split..].trim() {
+        "" | "px" => n,
+        "pt" => n * 96.0 / 72.0,
+        "pc" => n * 16.0,
+        "in" => n * 96.0,
+        "cm" => n * 96.0 / 2.54,
+        "mm" => n * 96.0 / 25.4,
+        "em" => n * parent_px,
+        "rem" => n * ROOT_FONT_PX,
+        "%" => n / 100.0 * parent_px,
+        _ => parent_px,
+    }
+}
+
 fn inherit(own: BTreeMap<String, String>, parent: &ComputedStyle) -> ComputedStyle {
     let mut map = BTreeMap::new();
     for prop in INHERITED {
@@ -370,8 +609,134 @@ fn inherit(own: BTreeMap<String, String>, parent: &ComputedStyle) -> ComputedSty
             map.insert((*prop).to_string(), v.to_string());
         }
     }
+    // Custom properties (`--*`) inherit by default (they're how `var()` cascades).
+    for (k, v) in &parent.map {
+        if k.starts_with("--") {
+            map.insert(k.clone(), v.clone());
+        }
+    }
     map.extend(own);
+    resolve_explicit_inherit(&mut map, parent);
+    resolve_var_refs(&mut map);
+    resolve_font_size(&mut map, parent);
     ComputedStyle { map }
+}
+
+/// Resolve the explicit `inherit` keyword: a property declared `inherit` takes the
+/// parent's computed value (or drops if the parent has none). Nike's editorial cards
+/// set `box-sizing:inherit`, inheriting the global `*{box-sizing:border-box}` —
+/// without this their `width:50%` resolved as a content width plus padding, so two
+/// cards no longer fit a row and every hero image stacked into a half-width column.
+fn resolve_explicit_inherit(map: &mut BTreeMap<String, String>, parent: &ComputedStyle) {
+    let keys: Vec<String> = map
+        .iter()
+        .filter(|(_, v)| v.trim() == "inherit")
+        .map(|(k, _)| k.clone())
+        .collect();
+    for k in keys {
+        match parent.get(&k) {
+            Some(pv) => drop(map.insert(k, pv.to_string())),
+            None => drop(map.remove(&k)),
+        }
+    }
+}
+
+/// Substitute every `var(--name, fallback)` in the map's values with the resolved
+/// custom-property value (or the fallback). Custom properties are read from the
+/// same map (already inherited), so `var()` sees the cascaded value. Runs after
+/// inheritance so a child's `var()` picks up an ancestor's custom property.
+fn resolve_var_refs(map: &mut BTreeMap<String, String>) {
+    let vars: BTreeMap<String, String> = map
+        .iter()
+        .filter(|(k, _)| k.starts_with("--"))
+        .map(|(k, v)| (k.clone(), v.clone()))
+        .collect();
+    for (key, value) in map.iter_mut() {
+        if value.contains("var(") {
+            *value = substitute_vars(value, &vars, 0, &[]);
+            let _ = key;
+        }
+    }
+}
+
+/// Replace `var(--name[, fallback])` references in `value` using `vars`. Balanced
+/// parens (a fallback may itself contain `var()` / functions); a missing or empty
+/// custom property falls back. Depth-limited against a cyclic `--a: var(--a)`.
+fn substitute_vars(
+    value: &str,
+    vars: &BTreeMap<String, String>,
+    depth: u8,
+    chain: &[&str],
+) -> String {
+    if depth > 16 || !value.contains("var(") {
+        return value.to_string();
+    }
+    let bytes = value.as_bytes();
+    let mut out = String::with_capacity(value.len());
+    let mut i = 0;
+    while i < bytes.len() {
+        if value[i..].starts_with("var(") {
+            let inner_start = i + 4;
+            let Some(close) = matching_paren(value, inner_start) else {
+                out.push_str(&value[i..]);
+                break;
+            };
+            let inner = &value[inner_start..close];
+            out.push_str(&resolve_one_var(inner, vars, depth, chain));
+            i = close + 1;
+        } else {
+            let ch = value[i..].chars().next().unwrap();
+            out.push(ch);
+            i += ch.len_utf8();
+        }
+    }
+    out
+}
+
+/// The index of the `)` matching the `(` that opened just before `open` (i.e. the
+/// close of the `var(` at `open-4`), accounting for nested parens.
+fn matching_paren(s: &str, open: usize) -> Option<usize> {
+    let mut depth = 1i32;
+    for (rel, ch) in s[open..].char_indices() {
+        match ch {
+            '(' => depth += 1,
+            ')' => {
+                depth -= 1;
+                if depth == 0 {
+                    return Some(open + rel);
+                }
+            }
+            _ => {}
+        }
+    }
+    None
+}
+
+/// Resolve one `var()` body (`--name` or `--name, fallback`) to its value. `chain`
+/// is the stack of custom properties currently being resolved: a name that appears
+/// again is a reference cycle (`--a: var(--a, 1rem)` — Codex's "redefine a token
+/// from its inherited value" idiom, which we flatten and so cannot follow up the
+/// tree), so it resolves to the fallback instead of spinning to the depth cap and
+/// leaving an unresolved `var()` that breaks the surrounding `calc()`.
+fn resolve_one_var(
+    inner: &str,
+    vars: &BTreeMap<String, String>,
+    depth: u8,
+    chain: &[&str],
+) -> String {
+    let (name, fallback) = match inner.find(',') {
+        Some(c) => (inner[..c].trim(), inner[c + 1..].trim()),
+        None => (inner.trim(), ""),
+    };
+    let cyclic = chain.contains(&name);
+    match vars.get(name).map(|v| v.trim()).filter(|v| !v.is_empty()) {
+        Some(v) if !cyclic => {
+            let mut next: Vec<&str> = chain.to_vec();
+            next.push(name);
+            substitute_vars(v, vars, depth + 1, &next)
+        }
+        _ => substitute_vars(fallback, vars, depth + 1, chain),
+    }
 }
 
 fn resolve_style(
@@ -381,6 +746,8 @@ fn resolve_style(
     cascade: &Cascade,
 ) -> ComputedStyle {
     let mut cands = Vec::new();
+    collect_presentational(element, &mut cands);
+    collect_cellpadding(element, path, &mut cands);
     collect_rules(cascade, path, &mut cands);
     collect_tokens(element, cascade, &mut cands);
     collect_inline(element, &mut cands);
@@ -395,11 +762,12 @@ fn style_element<'a>(
     element: &'a Element,
     pos: ElemPos,
     ancestors: &[Ctx<'a>],
+    prev: Vec<Ctx<'a>>,
     parent: &ComputedStyle,
     cascade: &Cascade,
 ) -> StyledNode {
     let mut path = ancestors.to_vec();
-    path.push(ctx_of(element, pos));
+    path.push(ctx_of(element, pos, prev));
     let style = resolve_style(element, &path, parent, cascade);
     let children = style_siblings(&element.children, &path, &style, cascade);
     StyledNode::Element(StyledElement {
@@ -410,25 +778,6 @@ fn style_element<'a>(
     })
 }
 
-fn style_one<'a>(
-    node: &'a Node,
-    pos: Option<ElemPos>,
-    ancestors: &[Ctx<'a>],
-    parent: &ComputedStyle,
-    cascade: &Cascade,
-) -> StyledNode {
-    match node {
-        Node::Text(t) => StyledNode::Text(t.clone()),
-        Node::Element(e) => style_element(
-            e,
-            pos.expect("element has a position"),
-            ancestors,
-            parent,
-            cascade,
-        ),
-    }
-}
-
 fn style_siblings<'a>(
     nodes: &'a [Node],
     ancestors: &[Ctx<'a>],
@@ -436,14 +785,66 @@ fn style_siblings<'a>(
     cascade: &Cascade,
 ) -> Vec<StyledNode> {
     let positions = element_positions(nodes);
-    nodes
-        .iter()
-        .enumerate()
-        .map(|(i, n)| style_one(n, positions[i], ancestors, parent, cascade))
-        .collect()
+    // Accumulate each preceding element sibling's (prev-less) context so a later
+    // sibling can be matched against it by the `+`/`~` combinators.
+    let mut prev: Vec<Ctx<'a>> = Vec::new();
+    let mut out = Vec::with_capacity(nodes.len());
+    for (i, node) in nodes.iter().enumerate() {
+        match node {
+            Node::Text(t) => out.push(StyledNode::Text(t.clone())),
+            Node::Element(e) => {
+                let pos = positions[i].expect("element has a position");
+                out.push(style_element(
+                    e,
+                    pos,
+                    ancestors,
+                    prev.clone(),
+                    parent,
+                    cascade,
+                ));
+                prev.push(ctx_of(e, pos, Vec::new()));
+            }
+        }
+    }
+    out
 }
 
 /// Build the styled tree for a flow of nodes under the given cascade.
 pub fn style_tree(nodes: &[Node], cascade: &Cascade) -> Vec<StyledNode> {
     style_siblings(nodes, &[], &ComputedStyle::default(), cascade)
+}
+
+/// [`style_tree`] with `<html>`/`<body>` ancestor shells seeded as match-only
+/// contexts, so descendant selectors gated on their classes resolve. The shells
+/// are not laid out; they only participate in selector matching.
+pub fn style_tree_with_roots(
+    nodes: &[Node],
+    cascade: &Cascade,
+    roots: &[Element],
+) -> Vec<StyledNode> {
+    let ancestors: Vec<Ctx> = roots
+        .iter()
+        .map(|e| ctx_of(e, root_pos(), Vec::new()))
+        .collect();
+    // Resolve each shell's own style down the chain so the content inherits from the
+    // real `<body>` computed style — not a blank default. Without this an inherited
+    // root declaration (nike's `html{box-sizing:border-box}`, plus font/color) never
+    // reached the page: `*{box-sizing:inherit}` resolved to nothing, so `width:50%`
+    // cards were content-box + padding, overflowed their row, and stacked half-width.
+    let mut parent = ComputedStyle::default();
+    for (i, e) in roots.iter().enumerate() {
+        parent = resolve_style(e, &ancestors[..=i], &parent, cascade);
+    }
+    style_siblings(nodes, &ancestors, &parent, cascade)
+}
+
+/// The position for a match-only root shell (a lone only-child); the structural
+/// pseudos on `<html>`/`<body>` don't affect real page layout.
+fn root_pos() -> ElemPos {
+    ElemPos {
+        index: 0,
+        of_type_index: 0,
+        of_type_total: 1,
+        siblings: 1,
+    }
 }

@@ -209,19 +209,40 @@ fn universal_selector_matches_all() {
 
 #[test]
 fn unknown_pseudo_class_is_ignored() {
+    // A genuinely unknown pseudo-class is dropped, and the rest of the compound
+    // still matches (lenient parsing).
     let tree = styled(
         r#"<a id="e">x</a><p id="p">y</p>"#,
-        "a:hover { color: red }",
+        "a:totallyunknown { color: red }",
     );
     assert_eq!(prop(&tree, "e", "color").as_deref(), Some("red"));
     assert_eq!(prop(&tree, "p", "color"), None);
 }
 
 #[test]
-fn unrecognized_selector_chars_are_skipped() {
-    // Sibling combinators are deferred; stray chars are tolerated, not fatal.
-    let tree = styled(r#"<div id="e">x</div>"#, "div+span { color: red }");
-    assert_eq!(prop(&tree, "e", "color").as_deref(), Some("red"));
+fn pseudo_element_rule_does_not_style_the_element() {
+    // A `::before`/`::after` (and legacy single-colon) selector targets generated
+    // content turbo does not create, so its declarations must NOT fall onto the
+    // originating element. Regression: `.bar::after{height:1px}` was collapsing to
+    // `.bar` and applying `height:1px` to the real element (Wikipedia's page-title
+    // bar shrank to 1px, overlapping the `<h1>`).
+    let tree = styled(
+        r#"<div id="e" class="bar">x</div>"#,
+        ".bar::after { height: 1px } .bar:before { color: red } .bar::first-line { color: lime }",
+    );
+    assert_eq!(prop(&tree, "e", "height"), None);
+    assert_eq!(prop(&tree, "e", "color"), None);
+}
+
+#[test]
+fn next_sibling_combinator_tight() {
+    // `div+span` (no spaces) matches a span immediately after a div.
+    let tree = styled(
+        r#"<div id="d">x</div><span id="s">y</span>"#,
+        "div+span { color: red }",
+    );
+    assert_eq!(prop(&tree, "d", "color"), None);
+    assert_eq!(prop(&tree, "s", "color").as_deref(), Some("red"));
 }
 
 // --------------------------------------------------------------------------
@@ -300,7 +321,10 @@ fn tokens_extends_and_later_token_wins() {
     );
     assert_eq!(prop(&tree, "e", "color").as_deref(), Some("#666"));
     assert_eq!(prop(&tree, "e", "font-weight").as_deref(), Some("700"));
-    assert_eq!(prop(&tree, "e", "font-size").as_deref(), Some("14pt"));
+    // font-size is a computed absolute value: 14pt = 14·96/72 ≈ 18.67px.
+    let fs = prop(&tree, "e", "font-size").unwrap();
+    let px: f32 = fs.strip_suffix("px").unwrap().parse().unwrap();
+    assert!((px - 18.6667).abs() < 0.01, "14pt -> {px}px");
 }
 
 #[test]
@@ -371,4 +395,640 @@ fn directive_elements_are_styled_too() {
         "#e { color: red }",
     );
     assert_eq!(prop(&tree, "e", "color").as_deref(), Some("red"));
+}
+
+// ---------------------------------------------------------------- presentational hints
+
+#[test]
+fn bgcolor_attribute_maps_to_background() {
+    // Legacy `bgcolor` (Hacker News' orange header) is honored as a presentational
+    // hint on the box's `background-color`.
+    let tree = styled(
+        r##"<table bgcolor="#ff6600"><tr><td>hi</td></tr></table>"##,
+        "",
+    );
+    let table = find(
+        &tree,
+        &|e| matches!(&e.tag, turbo_html2pdf_core::Tag::Html(t) if t == "table"),
+    )
+    .expect("table");
+    assert_eq!(table.style.get("background-color"), Some("#ff6600"));
+}
+
+#[test]
+fn author_css_overrides_presentational_hint() {
+    // A real author rule must beat the presentational hint (hints sit just above UA).
+    let tree = styled(
+        r##"<table bgcolor="#ff6600"><tr><td>hi</td></tr></table>"##,
+        "table { background-color: #00ff00 }",
+    );
+    let table = find(
+        &tree,
+        &|e| matches!(&e.tag, turbo_html2pdf_core::Tag::Html(t) if t == "table"),
+    )
+    .expect("table");
+    assert_eq!(table.style.get("background-color"), Some("#00ff00"));
+}
+
+#[test]
+fn width_height_attributes_map_to_lengths() {
+    let tree = styled(r#"<img width="200" height="50%">"#, "");
+    let img = find(
+        &tree,
+        &|e| matches!(&e.tag, turbo_html2pdf_core::Tag::Html(t) if t == "img"),
+    )
+    .expect("img");
+    assert_eq!(img.style.get("width"), Some("200px"));
+    assert_eq!(img.style.get("height"), Some("50%"));
+}
+
+// ---------------------------------------------------------------- @media queries
+
+fn styled_at_width(tpl: &str, css: &str, width: f32) -> Vec<StyledNode> {
+    use turbo_html2pdf_core::build_cascade_with_width;
+    let nodes = render_nodes(tpl);
+    let cascade = build_cascade_with_width(css, "", TokenSet::new(), width);
+    style_tree(&nodes, &cascade)
+}
+
+#[test]
+fn media_min_width_applies_above_breakpoint() {
+    let css = "div { color: red } @media (min-width: 1000px) { div { color: green } }";
+    // Wide viewport: the @media rule wins.
+    let wide = styled_at_width("<div>x</div>", css, 1280.0);
+    let d = find(
+        &wide,
+        &|e| matches!(&e.tag, turbo_html2pdf_core::Tag::Html(t) if t == "div"),
+    )
+    .unwrap();
+    assert_eq!(d.style.get("color"), Some("green"));
+    // Narrow viewport: the @media block is dropped, base rule stands.
+    let narrow = styled_at_width("<div>x</div>", css, 500.0);
+    let d = find(
+        &narrow,
+        &|e| matches!(&e.tag, turbo_html2pdf_core::Tag::Html(t) if t == "div"),
+    )
+    .unwrap();
+    assert_eq!(d.style.get("color"), Some("red"));
+}
+
+#[test]
+fn media_height_gates_rules() {
+    // Google's homepage hides its tall search box below `max-height:575px`. The
+    // cascade must evaluate height features (not silently ignore them, which left
+    // the rule always applied → the box always `display:none`).
+    use turbo_html2pdf_core::{build_cascade_with_width, set_media_viewport_height};
+    let css = "div { display: block } @media (max-height: 575px) { div { display: none } }";
+    let styled = |vh: f32| {
+        set_media_viewport_height(vh);
+        let cascade = build_cascade_with_width(css, "", TokenSet::new(), 1280.0);
+        let nodes = render_nodes("<div>x</div>");
+        style_tree(&nodes, &cascade)
+    };
+    // Short viewport: the `max-height:575px` rule applies → hidden.
+    let short = styled(500.0);
+    let d = find(
+        &short,
+        &|e| matches!(&e.tag, turbo_html2pdf_core::Tag::Html(t) if t == "div"),
+    )
+    .unwrap();
+    assert_eq!(d.style.get("display"), Some("none"));
+    // Tall viewport: the rule is dropped, base `display:block` stands.
+    let tall = styled(800.0);
+    let d = find(
+        &tall,
+        &|e| matches!(&e.tag, turbo_html2pdf_core::Tag::Html(t) if t == "div"),
+    )
+    .unwrap();
+    assert_eq!(d.style.get("display"), Some("block"));
+    set_media_viewport_height(800.0); // restore the default for other tests
+}
+
+#[test]
+fn media_print_is_dropped_for_screen() {
+    let css = "@media print { div { color: red } }";
+    let tree = styled_at_width("<div>x</div>", css, 1280.0);
+    let d = find(
+        &tree,
+        &|e| matches!(&e.tag, turbo_html2pdf_core::Tag::Html(t) if t == "div"),
+    )
+    .unwrap();
+    assert_eq!(
+        d.style.get("color"),
+        None,
+        "print-only rules never match screen"
+    );
+}
+
+#[test]
+fn media_em_breakpoint_uses_16px_root() {
+    // 66.5em = 1064px; matches at 1280, not at 1000.
+    let css = "@media (min-width: 66.5em) { div { color: green } }";
+    let at1280 = styled_at_width("<div>x</div>", css, 1280.0);
+    let d = find(
+        &at1280,
+        &|e| matches!(&e.tag, turbo_html2pdf_core::Tag::Html(t) if t == "div"),
+    )
+    .unwrap();
+    assert_eq!(d.style.get("color"), Some("green"));
+    let at1000 = styled_at_width("<div>x</div>", css, 1000.0);
+    let d = find(
+        &at1000,
+        &|e| matches!(&e.tag, turbo_html2pdf_core::Tag::Html(t) if t == "div"),
+    )
+    .unwrap();
+    assert_eq!(d.style.get("color"), None);
+}
+
+#[test]
+fn table_cellpadding_pads_its_cells() {
+    // Legacy `cellpadding` on a table applies to its cells (HN's divider bar +
+    // list spacing rely on it); `cellpadding="0"` yields 0.
+    let padded = styled(
+        "<table cellpadding='2'><tr><td id='c'>x</td></tr></table>",
+        "",
+    );
+    assert_eq!(prop(&padded, "c", "padding").as_deref(), Some("2px"));
+    let zero = styled(
+        "<table cellpadding='0'><tr><td id='c'>x</td></tr></table>",
+        "",
+    );
+    assert_eq!(prop(&zero, "c", "padding").as_deref(), Some("0px"));
+}
+
+#[test]
+fn next_sibling_combinator() {
+    let css = "p + p { color: red }";
+    let n = styled("<div><p id='a'>1</p><p id='b'>2</p></div>", css);
+    assert_eq!(prop(&n, "a", "color"), None, "first p has no preceding p");
+    assert_eq!(prop(&n, "b", "color").as_deref(), Some("red"));
+}
+
+#[test]
+fn subsequent_sibling_combinator() {
+    let css = ".x ~ p { color: red }";
+    let n = styled(
+        "<div><p id='a'>1</p><span class='x'></span><p id='b'>2</p><p id='c'>3</p></div>",
+        css,
+    );
+    assert_eq!(prop(&n, "a", "color"), None, "p before .x unaffected");
+    assert_eq!(prop(&n, "b", "color").as_deref(), Some("red"));
+    assert_eq!(prop(&n, "c", "color").as_deref(), Some("red"));
+}
+
+#[test]
+fn not_pseudo_excludes() {
+    let css = "p:not(.skip) { color: red }";
+    let n = styled(
+        "<div><p id='a'>1</p><p id='b' class='skip'>2</p></div>",
+        css,
+    );
+    assert_eq!(prop(&n, "a", "color").as_deref(), Some("red"));
+    assert_eq!(prop(&n, "b", "color"), None, "skipped p not matched");
+}
+
+#[test]
+fn where_pseudo_matches_only_its_argument() {
+    // `:where(...)` / `:is(...)` must honor their argument list. Wikipedia colours
+    // broken links with `a:where(.new){color:var(--color-destructive)}`; treating
+    // `:where` as always-matching (dropping its arg) reddened EVERY link. A plain
+    // `<a>` keeps the base colour; only `a.new` gets the `:where(.new)` rule.
+    let css = "a { color: blue } a:where(.new) { color: red } a:is(.stub) { color: green }";
+    let n = styled(
+        "<div><a id='p'>plain</a><a id='n' class='new'>new</a><a id='s' class='stub'>stub</a></div>",
+        css,
+    );
+    assert_eq!(
+        prop(&n, "p", "color").as_deref(),
+        Some("blue"),
+        "plain link unaffected"
+    );
+    assert_eq!(
+        prop(&n, "n", "color").as_deref(),
+        Some("red"),
+        ":where(.new) matches a.new"
+    );
+    assert_eq!(
+        prop(&n, "s", "color").as_deref(),
+        Some("green"),
+        ":is(.stub) matches a.stub"
+    );
+}
+
+#[test]
+fn where_with_nested_not_matches() {
+    // The exact Wikipedia shape: `a:where(.new:not([role='button']))`.
+    let css = "a { color: blue } a:where(.new:not([role='button'])) { color: red }";
+    let n = styled(
+        "<div><a id='p'>plain</a><a id='n' class='new'>new</a><a id='b' class='new' role='button'>btn</a></div>",
+        css,
+    );
+    assert_eq!(
+        prop(&n, "p", "color").as_deref(),
+        Some("blue"),
+        "plain link unaffected"
+    );
+    assert_eq!(
+        prop(&n, "n", "color").as_deref(),
+        Some("red"),
+        "new link matched"
+    );
+    assert_eq!(
+        prop(&n, "b", "color").as_deref(),
+        Some("blue"),
+        "role=button excluded by nested :not"
+    );
+}
+
+#[test]
+fn em_font_size_does_not_compound_on_inheritance() {
+    // `font-size` computes to an absolute px at the element that declares the `em`,
+    // so descendants inherit the resolved value — they must NOT re-multiply. A
+    // Wikipedia `h1{font-size:1.8em}` whose text re-applied 1.8em rendered at
+    // 1.8²·16 = 51.8px instead of 28.8px.
+    let css = ".big { font-size: 1.8em }";
+    let n = styled(
+        "<div class='big' id='h'>Cat<span id='c'>inner</span></div>",
+        css,
+    );
+    let px = |id| {
+        prop(&n, id, "font-size")
+            .unwrap()
+            .strip_suffix("px")
+            .unwrap()
+            .parse::<f32>()
+            .unwrap()
+    };
+    assert!(
+        (px("h") - 28.8).abs() < 0.01,
+        "1.8em of 16px root = 28.8, got {}",
+        px("h")
+    );
+    assert!(
+        (px("c") - 28.8).abs() < 0.01,
+        "child inherits the resolved 28.8px, not 1.8em again (got {})",
+        px("c")
+    );
+}
+
+#[test]
+fn superscript_ua_is_smaller_and_raised() {
+    // A footnote marker `<sup>[4]</sup>` must render small + raised, not full-size
+    // at the baseline. The UA sheet gives `sub,sup` `font-size:0.83em` on top of
+    // their `vertical-align`.
+    let n = styled("<p>t<sup id='s'>[4]</sup></p>", "");
+    // font-size is a computed (absolute) value: 0.83em of the 16px root = 13.28px.
+    assert_eq!(prop(&n, "s", "font-size").as_deref(), Some("13.28px"));
+    assert_eq!(prop(&n, "s", "vertical-align").as_deref(), Some("super"));
+}
+
+#[test]
+fn hover_never_matches_in_static_render() {
+    let css = "a:hover { color: red }";
+    let n = styled("<div><a id='a' href='#'>x</a></div>", css);
+    // `a` keeps its UA blue — the hover rule is inert at rest, not applied.
+    assert_ne!(prop(&n, "a", "color").as_deref(), Some("red"));
+}
+
+#[test]
+fn checked_gates_sibling_reveal_like_wikipedia_dropdowns() {
+    // Wikipedia's dropdowns: hidden by default, revealed by
+    // `input:checked ~ .content`. An unchecked checkbox must leave them hidden.
+    let css = ".c { visibility: hidden } input:checked ~ .c { visibility: visible }";
+    let closed = styled(
+        "<div><input type='checkbox'><span id='s' class='c'>menu</span></div>",
+        css,
+    );
+    assert_eq!(prop(&closed, "s", "visibility").as_deref(), Some("hidden"));
+    let open = styled(
+        "<div><input type='checkbox' checked><span id='s' class='c'>menu</span></div>",
+        css,
+    );
+    assert_eq!(prop(&open, "s", "visibility").as_deref(), Some("visible"));
+}
+
+#[test]
+fn nth_child_still_parses_with_paren_arg() {
+    // `2n+1` — the `+` inside the pseudo arg must not lex as a combinator.
+    let css = "li:nth-child(2n+1) { color: red }";
+    let n = styled(
+        "<ul><li id='a'>1</li><li id='b'>2</li><li id='c'>3</li></ul>",
+        css,
+    );
+    assert_eq!(prop(&n, "a", "color").as_deref(), Some("red"));
+    assert_eq!(prop(&n, "b", "color"), None);
+    assert_eq!(prop(&n, "c", "color").as_deref(), Some("red"));
+}
+
+#[test]
+fn media_query_without_space_after_at_media_applies() {
+    // Minified CSS writes `@media(min-width:640px){…}` with no space; the rule
+    // inside must still apply at a matching viewport (name parsed as `media`, not
+    // `media(min-width:640px)`). Wikipedia floats its infobox this way.
+    let css = "@media(min-width:640px){ .x { color: red } }";
+    let tree = styled(r#"<p id="e" class="x">y</p>"#, css);
+    assert_eq!(prop(&tree, "e", "color").as_deref(), Some("red"));
+}
+
+#[test]
+fn var_resolves_inherited_custom_property() {
+    // Custom properties inherit; `var(--x)` resolves to the inherited value.
+    let n = styled(
+        r#"<div class="p"><div id="e" class="c">x</div></div>"#,
+        ".p{--w:200px} .c{width:var(--w)}",
+    );
+    assert_eq!(prop(&n, "e", "width").as_deref(), Some("200px"));
+}
+
+#[test]
+fn var_uses_fallback_when_undefined() {
+    let n = styled(
+        r#"<div id="e" style="width:var(--missing, 50px)">x</div>"#,
+        "",
+    );
+    assert_eq!(prop(&n, "e", "width").as_deref(), Some("50px"));
+}
+
+#[test]
+fn var_multiple_in_one_value() {
+    let n = styled(
+        r#"<div class="p"><div id="e" class="c">x</div></div>"#,
+        ".p{--a:10px;--b:20px} .c{padding:var(--a) var(--b)}",
+    );
+    assert_eq!(prop(&n, "e", "padding").as_deref(), Some("10px 20px"));
+}
+
+#[test]
+fn var_nested_reference() {
+    // A custom property whose value is itself a var().
+    let n = styled(
+        r#"<div class="p"><div id="e" class="c">x</div></div>"#,
+        ".p{--base:15px;--w:var(--base)} .c{width:var(--w)}",
+    );
+    assert_eq!(prop(&n, "e", "width").as_deref(), Some("15px"));
+}
+
+#[test]
+fn self_referential_var_uses_fallback() {
+    // Codex redefines a design token from its inherited value:
+    // `--font-size-medium: var(--font-size-medium, 1rem)`. turbo flattens the
+    // cascade so it can't follow the reference up the tree; a self-cycle must
+    // resolve to the fallback (not spin to the depth cap and leave an unresolved
+    // `var()` that breaks the surrounding `calc()` — which zeroed every icon box).
+    let n = styled(
+        r#"<div id="e" class="ic">x</div>"#,
+        ".ic{--fsm:var(--fsm,1rem);width:calc(var(--fsm,1rem) + 4px)}",
+    );
+    assert_eq!(prop(&n, "e", "width").as_deref(), Some("calc(1rem + 4px)"));
+}
+
+#[test]
+fn declaration_semicolon_inside_url_is_not_a_separator() {
+    // A `data:image/svg+xml;utf8,<svg…>` mask URL contains a `;` and commas; the
+    // declaration splitter must not cut the value there (it zeroed Wikipedia's
+    // search icon into a solid box). The whole url() survives, plus the trailing
+    // declaration still parses.
+    let n = styled(
+        r#"<div id="e" class="ic">x</div>"#,
+        ".ic{-webkit-mask-image:url('data:image/svg+xml;utf8,<svg width=\"20\">a,b;c</svg>');color:red}",
+    );
+    let mask = prop(&n, "e", "-webkit-mask-image").unwrap_or_default();
+    assert!(
+        mask.contains("<svg") && mask.contains("a,b;c"),
+        "url() kept whole: {mask}"
+    );
+    assert_eq!(
+        prop(&n, "e", "color").as_deref(),
+        Some("red"),
+        "trailing decl parses"
+    );
+}
+
+#[test]
+fn hidden_input_is_not_rendered() {
+    // `<input type=hidden>` must not paint a default input box (Wikipedia's search
+    // form has one, which overlapped the visible field).
+    let n = styled(
+        r#"<input id="e" type="hidden"><input id="v" type="text">"#,
+        "",
+    );
+    assert_eq!(prop(&n, "e", "display").as_deref(), Some("none"));
+    assert_ne!(prop(&n, "v", "display").as_deref(), Some("none"));
+}
+
+// -------------------------------------------------- structural pseudo-classes
+
+#[test]
+fn only_child_pseudo_matches_lone_child() {
+    // `:only-child` (cascade.rs OnlyChild → pos.siblings == 1).
+    let css = "p:only-child { color: red }";
+    let lone = styled("<div><p id='a'>x</p></div>", css);
+    assert_eq!(prop(&lone, "a", "color").as_deref(), Some("red"));
+    let pair = styled("<div><p id='a'>x</p><p id='b'>y</p></div>", css);
+    assert_eq!(prop(&pair, "a", "color"), None, "not an only child");
+}
+
+#[test]
+fn of_type_pseudos_count_per_tag() {
+    // first/last/only-of-type (cascade.rs of_type_index / of_type_total branches).
+    let css = "p:first-of-type { color: red } \
+               p:last-of-type { background-color: blue } \
+               span:only-of-type { font-weight: bold }";
+    let n = styled(
+        "<div><p id='a'>1</p><span id='s'>2</span><p id='b'>3</p></div>",
+        css,
+    );
+    assert_eq!(prop(&n, "a", "color").as_deref(), Some("red"), "first p");
+    assert_eq!(prop(&n, "a", "background-color"), None);
+    assert_eq!(
+        prop(&n, "b", "background-color").as_deref(),
+        Some("blue"),
+        "last p"
+    );
+    assert_eq!(
+        prop(&n, "s", "font-weight").as_deref(),
+        Some("bold"),
+        "sole span of its type"
+    );
+}
+
+#[test]
+fn root_pseudo_matches_html_element() {
+    // `:root` (cascade.rs Root → ctx.tag == Some("html")). The compiler strips the
+    // `<html>` wrapper before render, so build a tree with a top-level html element
+    // by hand and style it directly.
+    use turbo_html2pdf_core::{Attr, Element, Node, Tag};
+    let html = Node::Element(Element {
+        tag: Tag::Html("html".to_string()),
+        attrs: vec![Attr {
+            name: "id".to_string(),
+            value: "r".to_string(),
+        }],
+        children: vec![Node::Text("x".to_string())],
+    });
+    let cascade = build_cascade(":root { color: teal }", "", TokenSet::new());
+    let styled = style_tree(&[html], &cascade);
+    assert_eq!(prop(&styled, "r", "color").as_deref(), Some("teal"));
+}
+
+#[test]
+fn empty_pseudo_matches_childless_element() {
+    // `:empty` (cascade.rs Empty → ctx.empty).
+    let css = "div:empty { color: red }";
+    let n = styled("<div id='a'></div><div id='b'>text</div>", css);
+    assert_eq!(prop(&n, "a", "color").as_deref(), Some("red"));
+    assert_eq!(prop(&n, "b", "color"), None, "has a text child");
+}
+
+#[test]
+fn enabled_and_disabled_pseudos_on_form_controls() {
+    // `:enabled` (is_form_control && !disabled) and `:disabled` (cascade.rs).
+    let css = "input:enabled { color: green } input:disabled { color: gray }";
+    let n = styled(
+        "<input id='on' type='text'><input id='off' type='text' disabled>",
+        css,
+    );
+    assert_eq!(prop(&n, "on", "color").as_deref(), Some("green"), "enabled");
+    assert_eq!(
+        prop(&n, "off", "color").as_deref(),
+        Some("gray"),
+        "disabled"
+    );
+}
+
+// -------------------------------------------------- presentational <font color>
+
+#[test]
+fn font_color_attribute_maps_to_color() {
+    // `<font color="...">` → `color` (cascade.rs font_color_decl non-empty path).
+    let n = styled("<font id='a' color='#ff0000'>x</font>", "");
+    assert_eq!(prop(&n, "a", "color").as_deref(), Some("#ff0000"));
+    // A blank color attribute contributes nothing (the filter drops it).
+    let blank = styled("<font id='b' color='  '>x</font>", "");
+    assert_ne!(prop(&blank, "b", "color").as_deref(), Some(""));
+    // The attribute is honored only on <font>, not other tags.
+    let other = styled("<span id='c' color='#ff0000'>x</span>", "");
+    assert_ne!(prop(&other, "c", "color").as_deref(), Some("#ff0000"));
+}
+
+// -------------------------------------------------- font-size unit resolution
+
+#[test]
+fn font_size_keyword_resolves_to_px() {
+    // `large` keyword → ROOT_FONT_PX * 1.2 = 19.2px (font_size_px keyword arm).
+    let n = styled("<div id='e' style='font-size: large'>x</div>", "");
+    assert_eq!(prop(&n, "e", "font-size").as_deref(), Some("19.2px"));
+}
+
+#[test]
+fn font_size_rem_and_percent_and_unknown_units() {
+    // rem (root-relative), % (parent-relative), and an unknown unit → parent px.
+    let rem = styled("<div id='e' style='font-size: 2rem'>x</div>", "");
+    assert_eq!(
+        prop(&rem, "e", "font-size").as_deref(),
+        Some("32px"),
+        "2rem"
+    );
+    let pct = styled("<div id='e' style='font-size: 150%'>x</div>", "");
+    assert_eq!(
+        prop(&pct, "e", "font-size").as_deref(),
+        Some("24px"),
+        "150%"
+    );
+    // `10zz` parses the number but the unknown unit falls back to parent px (16).
+    let unk = styled("<div id='e' style='font-size: 10zz'>x</div>", "");
+    assert_eq!(
+        prop(&unk, "e", "font-size").as_deref(),
+        Some("16px"),
+        "unit"
+    );
+    // A value whose numeric prefix does not parse falls back to parent px too.
+    let bad = styled("<div id='e' style='font-size: auto'>x</div>", "");
+    assert_eq!(
+        prop(&bad, "e", "font-size").as_deref(),
+        Some("16px"),
+        "prefix"
+    );
+}
+
+// -------------------------------------------------- @supports condition eval
+
+#[test]
+fn supports_or_applies_when_either_holds() {
+    let css = "@supports (color: red) or (display: grid) { div { color: green } }";
+    let n = styled("<div id='e'>x</div>", css);
+    assert_eq!(prop(&n, "e", "color").as_deref(), Some("green"));
+}
+
+#[test]
+fn supports_and_applies_when_both_hold() {
+    let css = "@supports (color: red) and (display: grid) { div { color: green } }";
+    let n = styled("<div id='e'>x</div>", css);
+    assert_eq!(prop(&n, "e", "color").as_deref(), Some("green"));
+}
+
+#[test]
+fn supports_nested_group_recurses() {
+    // A parenthesised group holding a group → is_group_expr → recurse (strip_group
+    // nested-paren depth arms).
+    let css = "@supports ((color: red)) { div { color: green } }";
+    let n = styled("<div id='e'>x</div>", css);
+    assert_eq!(prop(&n, "e", "color").as_deref(), Some("green"));
+}
+
+#[test]
+fn supports_not_negates() {
+    // `not (feature)` → the block is dropped (a supported feature negated to false).
+    let css = "div { color: red } @supports not (display: grid) { div { color: green } }";
+    let n = styled("<div id='e'>x</div>", css);
+    assert_eq!(
+        prop(&n, "e", "color").as_deref(),
+        Some("red"),
+        "not() → dropped"
+    );
+}
+
+#[test]
+fn supports_unmatched_paren_group_is_treated_as_supported() {
+    // A group whose first paren does not close at the end (strip_group returns None
+    // via its depth-0 close arm) is treated as a bare/unrecognised → supported.
+    let css = "@supports (color: red) (display: grid) { div { color: green } }";
+    let n = styled("<div id='e'>x</div>", css);
+    assert_eq!(prop(&n, "e", "color").as_deref(), Some("green"));
+}
+
+// -------------------------------------------------- @media calc() breakpoint
+
+#[test]
+fn media_calc_single_term_breakpoint() {
+    // `calc(1000px)` with no operator → eval_calc's bare-parse fallback.
+    let css = "@media (min-width: calc(1000px)) { div { color: green } }";
+    let wide = styled_at_width("<div>x</div>", css, 1280.0);
+    let d = find(
+        &wide,
+        &|e| matches!(&e.tag, turbo_html2pdf_core::Tag::Html(t) if t == "div"),
+    )
+    .unwrap();
+    assert_eq!(d.style.get("color"), Some("green"));
+}
+
+// -------------------------------------------------- var() paren scanning
+
+#[test]
+fn var_with_nested_function_fallback() {
+    // The fallback holds a nested `calc(...)` — matching_paren must balance the
+    // inner parens (its `'(' => depth += 1` arm) to find the var()'s own close.
+    let n = styled(
+        r#"<div id="e" style="width:var(--missing, calc(1px))">x</div>"#,
+        "",
+    );
+    assert_eq!(prop(&n, "e", "width").as_deref(), Some("calc(1px)"));
+}
+
+#[test]
+fn var_with_unclosed_paren_passes_through() {
+    // An unterminated `var(` (no matching `)`) — matching_paren returns None, so the
+    // remainder is copied through verbatim rather than dropped.
+    let n = styled(r#"<div id="e" style="width:var(--x">x</div>"#, "");
+    assert_eq!(prop(&n, "e", "width").as_deref(), Some("var(--x"));
 }

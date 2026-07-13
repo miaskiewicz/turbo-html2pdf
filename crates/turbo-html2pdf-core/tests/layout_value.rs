@@ -64,6 +64,34 @@ fn parse_px_units() {
 }
 
 #[test]
+fn rem_is_root_relative_not_parent_relative() {
+    // `em` scales with the (parent) font size; `rem` is fixed to the 16px root, so
+    // a `1rem` label inside a shrunk-font ancestor stays 16px instead of compounding
+    // down to unreadable (the Wikipedia appearance-panel radio labels).
+    approx(parse_px("1rem", 8.0).unwrap(), 16.0);
+    approx(parse_px("1rem", 40.0).unwrap(), 16.0);
+    approx(parse_px("2em", 8.0).unwrap(), 16.0);
+    assert_eq!(parse_length_pct("1.5rem", 8.0), Some(LengthPct::Px(24.0)));
+}
+
+#[test]
+fn parse_calc_additive_lengths() {
+    // Additive calc() of px/em terms (Codex component sizing, Vector breakpoints).
+    approx(parse_px("calc(100px + 20px)", 16.0).unwrap(), 120.0);
+    approx(parse_px("calc(1rem + 10px)", 16.0).unwrap(), 26.0);
+    approx(parse_px("calc(1120px - 1px)", 16.0).unwrap(), 1119.0);
+    approx(parse_px("calc(2em - 8px)", 16.0).unwrap(), 24.0);
+    // As a length-percentage too (width/padding/etc.).
+    assert_eq!(
+        parse_length_pct("calc(1rem + 4px)", 16.0),
+        Some(LengthPct::Px(20.0))
+    );
+    // Multiplicative / percentage calc isn't handled here → None (caller defaults).
+    assert_eq!(parse_px("calc(2 * 10px)", 16.0), None);
+    assert_eq!(parse_px("calc(100% - 20px)", 16.0), None);
+}
+
+#[test]
 fn parse_px_rejects_pct_and_garbage() {
     assert_eq!(parse_px("50%", 16.0), None);
     assert_eq!(parse_px("5xx", 16.0), None);
@@ -155,8 +183,29 @@ fn box_sizing_and_position() {
         resolve(&[("box-sizing", "content-box")]).box_sizing,
         BoxSizing::ContentBox
     );
-    assert!(resolve(&[("position", "relative")]).position_relative);
-    assert!(!resolve(&[("position", "static")]).position_relative);
+    assert_eq!(
+        resolve(&[("position", "relative")]).position,
+        Position::Relative
+    );
+    assert_eq!(
+        resolve(&[("position", "static")]).position,
+        Position::Static
+    );
+    assert_eq!(
+        resolve(&[("position", "absolute")]).position,
+        Position::Absolute
+    );
+    // Inset offsets + z-index parse into the box model.
+    let s = resolve(&[
+        ("position", "absolute"),
+        ("top", "10px"),
+        ("left", "20px"),
+        ("z-index", "5"),
+    ]);
+    assert_eq!(s.inset_top, LengthPct::Px(10.0));
+    assert_eq!(s.inset_left, LengthPct::Px(20.0));
+    assert_eq!(s.z_index, Some(5));
+    assert!(s.position.is_out_of_flow());
 }
 
 #[test]
@@ -211,6 +260,21 @@ fn borders_shorthand_side_and_longhand() {
     assert_eq!(b.left.width, 3);
     assert_eq!(b.left.color, Some(Rgba::new(0, 128, 0, 255)));
     approx(b.widths().top, 4.0);
+}
+
+#[test]
+fn all_sides_border_color_longhand_overrides_shorthand() {
+    // `border:1px solid transparent` + `border-color:#72777d` (Codex radio icon):
+    // the all-sides `border-color` longhand must override the shorthand's colour, or
+    // the circle outline is invisible.
+    let b = resolve(&[
+        ("border", "1px solid transparent"),
+        ("border-color", "#72777d"),
+    ])
+    .border;
+    assert_eq!(b.top.color, Some(Rgba::new(0x72, 0x77, 0x7d, 255)));
+    assert_eq!(b.left.color, Some(Rgba::new(0x72, 0x77, 0x7d, 255)));
+    assert_eq!(b.top.width, 1);
 }
 
 #[test]
@@ -378,4 +442,60 @@ fn from_pairs_get_roundtrip() {
     let s = ComputedStyle::from_pairs([("color", "red"), ("display", "flex")]);
     assert_eq!(s.get("color"), Some("red"));
     assert_eq!(s.get("missing"), None);
+}
+
+// ---------------------------------------------------------------- background shorthand
+
+#[test]
+fn background_shorthand_resolves_color() {
+    // The `background` shorthand (not just the `background-color` longhand) must
+    // set the box's background — real stylesheets use the shorthand pervasively.
+    let green = Rgba {
+        r: 0,
+        g: 255,
+        b: 0,
+        a: 255,
+    };
+    assert_eq!(
+        resolve(&[("background-color", "#00ff00")]).background,
+        Some(green)
+    );
+    assert_eq!(
+        resolve(&[("background", "#00ff00")]).background,
+        Some(green)
+    );
+    // A full shorthand with an image + keywords still yields the colour token.
+    assert_eq!(
+        resolve(&[("background", "#00ff00 url(x.png) no-repeat center")]).background,
+        Some(green)
+    );
+    // rgb() functional colour inside the shorthand (kept whole despite spaces).
+    assert_eq!(
+        resolve(&[("background", "rgb(0, 255, 0) url(x.png)")]).background,
+        Some(green)
+    );
+    // The longhand still wins when both are present.
+    assert_eq!(
+        resolve(&[("background", "#ff0000"), ("background-color", "#00ff00")]).background,
+        Some(green)
+    );
+    // No colour token → no background (an image-only shorthand).
+    assert_eq!(
+        resolve(&[("background", "url(x.png) no-repeat")]).background,
+        None
+    );
+}
+
+#[test]
+fn parse_viewport_units_resolve_against_layout_viewport() {
+    use turbo_html2pdf_core::style::TokenSet;
+    use turbo_html2pdf_core::{build_cascade_with_width, set_media_viewport_height};
+    // Set the layout viewport: width 1000 (via the cascade), height 900.
+    set_media_viewport_height(900.0);
+    let _ = build_cascade_with_width("", "", TokenSet::new(), 1000.0);
+    approx(parse_px("100vh", 16.0).unwrap(), 900.0);
+    approx(parse_px("50vw", 16.0).unwrap(), 500.0);
+    approx(parse_px("10vmin", 16.0).unwrap(), 90.0); // min(1000,900)=900 → 90
+    approx(parse_px("10vmax", 16.0).unwrap(), 100.0); // max(1000,900)=1000 → 100
+    set_media_viewport_height(800.0); // restore the default for other tests
 }

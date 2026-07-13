@@ -144,7 +144,7 @@ fn collect_box_ids(b: &turbo_html2pdf_core::layout::boxgen::LayoutBox, out: &mut
     use turbo_html2pdf_core::layout::boxgen::BoxKind;
     out.insert(b.node_id);
     match &b.kind {
-        BoxKind::Block(kids) | BoxKind::Flex(kids) | BoxKind::Table(kids) => {
+        BoxKind::Block(kids) | BoxKind::Flex(kids) | BoxKind::Grid(kids) | BoxKind::Table(kids) => {
             for k in kids {
                 collect_box_ids(k, out);
             }

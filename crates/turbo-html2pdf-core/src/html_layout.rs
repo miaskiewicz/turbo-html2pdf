@@ -13,8 +13,9 @@
 //! UA defaults), then cascades and lays out at the caller's content width.
 
 use crate::layout::fragment::Fragment;
-use crate::node::{Node, Tag};
-use crate::style::{build_cascade, style_tree, TokenSet};
+use crate::layout::ImageCtx;
+use crate::node::{Element, Node, Tag};
+use crate::style::{build_cascade_with_width, style_tree_with_roots, TokenSet};
 use crate::text::FontRegistry;
 use crate::{Diagnostics, RenderError};
 
@@ -23,6 +24,40 @@ use crate::{Diagnostics, RenderError};
 /// callers that already have final HTML (see the module docs).
 pub fn parse_html(html: &str) -> Result<Vec<Node>, RenderError> {
     crate::template::markup::parse(html)
+}
+
+/// Parse `html`, returning the body flow nodes plus the `<html>`/`<body>` ancestor
+/// shells the cascade seeds for selector matching (see [`parse_with_roots`]).
+pub fn parse_html_with_roots(html: &str) -> Result<(Vec<Node>, Vec<Element>), RenderError> {
+    crate::template::markup::parse_with_roots(html)
+}
+
+/// Elements whose text content is *not* visible page content and must not be laid
+/// out as text (their bodies are CSS/JS/metadata, collected separately or dropped).
+fn is_non_visual(name: &str) -> bool {
+    matches!(
+        name.to_ascii_lowercase().as_str(),
+        "style" | "script" | "head" | "title" | "meta" | "link" | "noscript" | "template"
+    )
+}
+
+/// Drop non-visual element subtrees (`<style>`/`<script>`/…) so their bodies don't
+/// render as visible text. Author CSS is collected *before* this, so styles still
+/// apply; only their raw text is removed from the flow.
+fn strip_non_visual(nodes: Vec<Node>) -> Vec<Node> {
+    nodes
+        .into_iter()
+        .filter_map(|node| match node {
+            Node::Element(mut el) => {
+                if matches!(&el.tag, Tag::Html(name) if is_non_visual(name)) {
+                    return None;
+                }
+                el.children = strip_non_visual(el.children);
+                Some(Node::Element(el))
+            }
+            other => Some(other),
+        })
+        .collect()
 }
 
 /// Concatenate the text of every `<style>` element in a node forest, in
@@ -64,12 +99,36 @@ pub fn layout_html(
     fonts: &FontRegistry,
     diags: &mut Diagnostics,
 ) -> Result<Fragment, RenderError> {
-    let nodes = parse_html(html)?;
+    let (nodes, roots) = parse_html_with_roots(html)?;
     let mut author_css = collect_style_css(&nodes);
     author_css.push_str(extra_css);
-    let cascade = build_cascade(&author_css, "", TokenSet::default());
-    let styled = style_tree(&nodes, &cascade);
+    let cascade = build_cascade_with_width(&author_css, "", TokenSet::default(), cb_width);
+    let styled = style_tree_with_roots(&strip_non_visual(nodes), &cascade, &roots);
     Ok(crate::layout(&styled, cb_width, fonts, diags))
+}
+
+/// Like [`layout_html`] but sizes `<img>`/`background-image` boxes against the
+/// caller-supplied `images` resolver (see [`crate::layout_with_images`]). For a
+/// caller (e.g. turbo-surf's screenshots) that holds final HTML *and* the fetched
+/// image bytes: an image is probed for its intrinsic size and laid out as an
+/// `Image` fragment the caller then paints. Images the resolver can't supply fall
+/// back to the image-free box, exactly as [`layout_html`].
+pub fn layout_html_with_images(
+    html: &str,
+    extra_css: &str,
+    cb_width: f32,
+    fonts: &FontRegistry,
+    images: &ImageCtx,
+    diags: &mut Diagnostics,
+) -> Result<Fragment, RenderError> {
+    let (nodes, roots) = parse_html_with_roots(html)?;
+    let mut author_css = collect_style_css(&nodes);
+    author_css.push_str(extra_css);
+    let cascade = build_cascade_with_width(&author_css, "", TokenSet::default(), cb_width);
+    let styled = style_tree_with_roots(&strip_non_visual(nodes), &cascade, &roots);
+    Ok(crate::layout_with_images(
+        &styled, cb_width, fonts, images, diags,
+    ))
 }
 
 #[cfg(test)]
@@ -91,5 +150,51 @@ mod tests {
     fn collect_style_css_empty_without_styles() {
         let nodes = parse_html("<body><div>plain</div></body>").expect("parse");
         assert_eq!(collect_style_css(&nodes), "");
+    }
+
+    #[test]
+    fn box_sizing_inherit_chains_from_the_html_root() {
+        // The classic reset `html{box-sizing:border-box}` + `*{box-sizing:inherit}`.
+        // The `<html>`/`<body>` shells are match-only, so their computed style must be
+        // threaded as the inheritance parent — else `box-sizing:inherit` resolves to
+        // nothing and each `width:50%` card becomes content-box + padding (320px), so
+        // two no longer fit their 600px row and the second wraps (nike's half-width
+        // hero stacking). With the border-box chain each card is 300px and both fit.
+        use crate::layout::fragment::FragmentContent;
+        use crate::text::FontRegistry;
+        let html = r#"<html><body><div class="row"><span class="c">a</span><span class="c">b</span></div></body></html>"#;
+        // `.c` also declares `margin-top:inherit` — a NON-inherited property whose
+        // parent has no value, exercising the `inherit`-keyword drop path.
+        let css = "html{box-sizing:border-box} *{box-sizing:inherit} \
+                   .row{width:600px} \
+                   .c{display:inline-block;width:50%;padding:0 10px;background:#f00;margin-top:inherit}";
+        let mut diags = crate::Diagnostics::default();
+        let root =
+            super::layout_html(html, css, 600.0, &FontRegistry::new(), &mut diags).expect("layout");
+        let mut boxes = Vec::new();
+        let mut stack = vec![&root];
+        while let Some(f) = stack.pop() {
+            if matches!(
+                f.content,
+                FragmentContent::Box {
+                    background: Some(_),
+                    ..
+                }
+            ) {
+                boxes.push((f.width, f.y));
+            }
+            stack.extend(f.children.iter());
+        }
+        assert_eq!(boxes.len(), 2, "two card boxes");
+        for (w, _) in &boxes {
+            assert!(
+                (*w - 300.0).abs() < 1.0,
+                "50% card is border-box (300px), got {w}"
+            );
+        }
+        assert!(
+            (boxes[0].1 - boxes[1].1).abs() < 1.0,
+            "both cards share a row (border-box let them fit)"
+        );
     }
 }

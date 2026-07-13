@@ -29,6 +29,36 @@ pub struct InlineRun {
     pub letter_spacing: f32,
     pub color: Rgba,
     pub valign: VAlign,
+    /// `white-space:nowrap`/`pre` — the run's inter-word spaces are not line-break
+    /// opportunities, so its text stays on one line (menu tabs, buttons, nowrap
+    /// labels). Modeled by folding those spaces into the word rather than emitting a
+    /// breakable gap.
+    pub nowrap: bool,
+}
+
+/// An atomic inline box (an `inline-block` or replaced `<img>`) that flows within
+/// the line as one unbreakable unit of the given border-box size. The caller lays
+/// the box out itself; `id` maps a placement back to that laid fragment.
+#[derive(Debug, Clone, Copy)]
+pub struct InlineAtom {
+    pub id: usize,
+    pub width: f32,
+    pub height: f32,
+}
+
+/// One inline-level piece in document order: a styled text run or an atomic box.
+#[derive(Debug, Clone)]
+pub enum Piece {
+    Run(InlineRun),
+    Atom(InlineAtom),
+}
+
+/// Where an atom landed: its `id` and top-left relative to the line's top-left.
+#[derive(Debug, Clone, Copy)]
+pub struct PlacedAtom {
+    pub id: usize,
+    pub x: f32,
+    pub y: f32,
 }
 
 /// A contiguous run of glyphs sharing a face/size/color, positioned relative to
@@ -42,13 +72,19 @@ pub struct GlyphRun {
     pub color: Rgba,
 }
 
-/// One laid-out line: its glyph runs, used width, top offset, and box height.
+/// One laid-out line: its glyph runs, atom placements, used width, top offset,
+/// and box height.
 #[derive(Debug, Clone)]
 pub struct InlineLine {
     pub runs: Vec<GlyphRun>,
+    pub atoms: Vec<PlacedAtom>,
     pub width: f32,
     pub top: f32,
     pub height: f32,
+    /// Horizontal offset of the line box from the paragraph's left edge — nonzero
+    /// when a `float:left` (or the free region between floats) pushes this line's
+    /// start to the right. Its available width shrinks by the same floats.
+    pub indent: f32,
 }
 
 /// The result of laying out a paragraph of runs into a column of `max_width`.
@@ -120,6 +156,8 @@ struct Word {
     segs: Vec<Seg>,
     width: f32,
     space_after: f32,
+    /// An atomic inline box occupying this word's slot (its `segs` are empty).
+    atom: Option<InlineAtom>,
 }
 
 fn seg_key(c: &CharInfo) -> (usize, String, u16, bool) {
@@ -165,6 +203,7 @@ fn make_word(chars: &[CharInfo], runs: &[InlineRun], space_after: f32) -> Word {
         segs,
         width,
         space_after,
+        atom: None,
     }
 }
 
@@ -174,15 +213,18 @@ fn space_width(c: &CharInfo, runs: &[InlineRun]) -> f32 {
 }
 
 fn build_words(chars: &[CharInfo], runs: &[InlineRun]) -> Vec<Word> {
+    // A space is a line-break opportunity only when its run wraps; a `nowrap` run's
+    // spaces stay inside the word so its whole text is one unbreakable unit.
+    let breakable = |c: &CharInfo| c.ch.is_whitespace() && !runs[c.run].nowrap;
     let mut words = Vec::new();
     let mut i = 0;
     while i < chars.len() {
-        if chars[i].ch.is_whitespace() {
+        if breakable(&chars[i]) {
             i += 1;
             continue;
         }
         let start = i;
-        while i < chars.len() && !chars[i].ch.is_whitespace() {
+        while i < chars.len() && !breakable(&chars[i]) {
             i += 1;
         }
         let space_after = chars.get(i).map_or(0.0, |c| space_width(c, runs));
@@ -191,26 +233,83 @@ fn build_words(chars: &[CharInfo], runs: &[InlineRun]) -> Vec<Word> {
     words
 }
 
+/// Build the word list from inline pieces in document order: consecutive text
+/// runs are grouped (so a word may still span adjacent runs, e.g. `<b>x</b>y`),
+/// and each atom becomes an unbreakable atom-word at its position.
+fn build_pieces(pieces: &[Piece], reg: &FontRegistry, diags: &mut Diagnostics) -> Vec<Word> {
+    let mut words = Vec::new();
+    let mut group: Vec<InlineRun> = Vec::new();
+    for piece in pieces {
+        match piece {
+            Piece::Run(run) => group.push(run.clone()),
+            Piece::Atom(atom) => {
+                flush_run_group(&mut group, reg, diags, &mut words);
+                words.push(Word {
+                    segs: Vec::new(),
+                    width: atom.width,
+                    space_after: 0.0,
+                    atom: Some(*atom),
+                });
+            }
+        }
+    }
+    flush_run_group(&mut group, reg, diags, &mut words);
+    words
+}
+
+/// Flush a run of consecutive text pieces into words (itemize + word-break),
+/// clearing the group.
+fn flush_run_group(
+    group: &mut Vec<InlineRun>,
+    reg: &FontRegistry,
+    diags: &mut Diagnostics,
+    out: &mut Vec<Word>,
+) {
+    if !group.is_empty() {
+        let chars = flatten_chars(group, reg, diags);
+        out.extend(build_words(&chars, group));
+        group.clear();
+    }
+}
+
 // --------------------------------------------------------------------------
 // line breaking
 // --------------------------------------------------------------------------
 
-fn wrap_words(words: Vec<Word>, max_width: f32) -> Vec<Vec<Word>> {
-    let mut lines = Vec::new();
+/// A line region query: given a line's top (relative to the paragraph origin),
+/// return the `(indent, available_width)` the floats in the current BFC leave
+/// free for that line. The default (no floats) is `(0, max_width)` for every y.
+pub type LineRegion<'a> = &'a dyn Fn(f32) -> (f32, f32);
+
+/// Break `words` into placed lines, threading `y` top-down so each line's
+/// available width is queried from `region` at its own vertical position — text
+/// wraps in the narrow column beside a float, then widens once past its bottom.
+fn wrap_and_place(words: Vec<Word>, align: Align, region: LineRegion) -> Vec<InlineLine> {
+    let mut out: Vec<InlineLine> = Vec::new();
     let mut cur: Vec<Word> = Vec::new();
-    let mut x = 0.0;
+    let mut y = 0.0_f32;
+    let (mut indent, mut lw) = region(y);
+    let mut x = 0.0_f32;
     for word in words {
-        if !cur.is_empty() && x + word.width > max_width {
-            lines.push(std::mem::take(&mut cur));
+        if !cur.is_empty() && x + word.width > lw {
+            let mut line = place_line(std::mem::take(&mut cur), lw, align);
+            line.top = y;
+            line.indent = indent;
+            y += line.height;
+            out.push(line);
+            (indent, lw) = region(y);
             x = 0.0;
         }
         x += word.width + word.space_after;
         cur.push(word);
     }
     if !cur.is_empty() {
-        lines.push(cur);
+        let mut line = place_line(cur, lw, align);
+        line.top = y;
+        line.indent = indent;
+        out.push(line);
     }
-    lines
+    out
 }
 
 // --------------------------------------------------------------------------
@@ -258,6 +357,12 @@ fn line_metrics(words: &[Word]) -> Metrics {
     for word in words {
         for seg in &word.segs {
             fold_seg_metrics(seg, &mut m);
+        }
+        // An atom sits with its bottom on the baseline (the CSS default for a
+        // replaced/empty inline-block), so it contributes its full height as ascent.
+        if let Some(atom) = word.atom {
+            m.ascent = m.ascent.max(atom.height);
+            m.height = m.height.max(atom.height);
         }
     }
     m.height = m.height.max(m.ascent + m.descent);
@@ -325,50 +430,84 @@ fn place_line(words: Vec<Word>, max_width: f32, align: Align) -> InlineLine {
     let width = line_used_width(&words);
     let mut pen = align_offset(align, width, max_width);
     let mut runs = Vec::new();
+    let mut atoms = Vec::new();
     for word in &words {
-        for seg in &word.segs {
-            runs.push(shape_seg(seg, pen, baseline));
-            pen += seg.width;
+        if let Some(atom) = word.atom {
+            // Bottom-align the atom to the baseline.
+            atoms.push(PlacedAtom {
+                id: atom.id,
+                x: pen,
+                y: baseline - atom.height,
+            });
+            pen += atom.width;
+        } else {
+            for seg in &word.segs {
+                runs.push(shape_seg(seg, pen, baseline));
+                pen += seg.width;
+            }
         }
         pen += word.space_after;
     }
     InlineLine {
         runs: merge_runs(runs),
+        atoms,
         width,
         top: 0.0,
         height: m.height,
+        indent: 0.0,
     }
 }
 
-fn finalize(mut lines: Vec<InlineLine>) -> ParagraphLayout {
-    let mut y = 0.0;
+fn finalize(lines: Vec<InlineLine>) -> ParagraphLayout {
+    let mut height = 0.0_f32;
     let mut width = 0.0_f32;
-    for line in &mut lines {
-        line.top = y;
-        y += line.height;
-        width = width.max(line.width);
+    for line in &lines {
+        height = height.max(line.top + line.height);
+        width = width.max(line.indent + line.width);
     }
     ParagraphLayout {
         lines,
         width,
-        height: y,
+        height,
     }
 }
 
-/// Lay out a paragraph of styled runs into lines fitting `max_width` px.
+/// Lay out a paragraph of inline pieces (text runs + atomic boxes, in document
+/// order) into lines fitting `max_width` px. Atoms flow within the line and their
+/// placements come back on each [`InlineLine::atoms`].
 pub fn layout_paragraph(
+    pieces: &[Piece],
+    reg: &FontRegistry,
+    max_width: f32,
+    align: Align,
+    diags: &mut Diagnostics,
+) -> ParagraphLayout {
+    layout_paragraph_in(pieces, reg, align, diags, &|_| (0.0, max_width))
+}
+
+/// [`layout_paragraph`] with a per-line float region — each line's `(indent,
+/// width)` comes from `region` at the line's own top, so text wraps beside a
+/// float and widens below it. `layout_paragraph` passes a full-width region.
+pub fn layout_paragraph_in(
+    pieces: &[Piece],
+    reg: &FontRegistry,
+    align: Align,
+    diags: &mut Diagnostics,
+    region: LineRegion,
+) -> ParagraphLayout {
+    let words = build_pieces(pieces, reg, diags);
+    finalize(wrap_and_place(words, align, region))
+}
+
+/// Lay out a paragraph of text runs only (no atoms) — a convenience for callers
+/// that measure text width (e.g. flex/grid content sizing).
+pub fn layout_runs(
     runs: &[InlineRun],
     reg: &FontRegistry,
     max_width: f32,
     align: Align,
     diags: &mut Diagnostics,
 ) -> ParagraphLayout {
-    let chars = flatten_chars(runs, reg, diags);
-    let words = build_words(&chars, runs);
-    let lines = wrap_words(words, max_width);
-    let placed = lines
-        .into_iter()
-        .map(|w| place_line(w, max_width, align))
-        .collect();
-    finalize(placed)
+    let pieces: Vec<Piece> = runs.iter().cloned().map(Piece::Run).collect();
+    layout_paragraph(&pieces, reg, max_width, align, diags)
 }

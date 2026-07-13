@@ -223,7 +223,10 @@ fn write_to_unicode(chunk: &mut Chunk, to_unicode: Ref, font: &UsedFont, remappe
 /// Run the subsetter, falling back to the original bytes if it declines the
 /// font (still valid: a full embed, just larger).
 fn subset_bytes(face: &FontFace, remapper: &GlyphRemapper) -> Vec<u8> {
-    match subsetter::subset(face.data(), 0, remapper) {
+    // Subset the SELECTED face of the program — `face.index()`, not a blind 0. A
+    // `.ttc` collection face (macOS Arial/Helvetica) would otherwise subset a
+    // different sub-font's glyf, so the embedded glyphs mismatch the ids.
+    match subsetter::subset(face.data(), face.index(), remapper) {
         Ok(bytes) => bytes,
         Err(_) => face.data().to_vec(),
     }

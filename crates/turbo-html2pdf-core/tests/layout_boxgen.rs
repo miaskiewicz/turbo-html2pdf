@@ -231,3 +231,113 @@ fn node_ids_are_preorder() {
         _ => panic!("expected text"),
     }
 }
+
+#[test]
+fn background_shorthand_url_becomes_image_source() {
+    // No `background-image` longhand: the url is scanned out of the `background`
+    // shorthand's tokens (a non-replaced image source painted behind the box).
+    let root = build_box_tree(&[el(
+        "div",
+        &[("background", "url(bg.png) no-repeat")],
+        vec![],
+    )]);
+    let div = &as_block(&root.kind)[0];
+    let img = div.image.as_ref().expect("background image source");
+    assert_eq!(img.name, "bg.png");
+    assert!(!img.replaced, "background image is not replaced content");
+}
+
+#[test]
+fn mask_shorthand_url_is_extracted_via_token_scan() {
+    // A `mask` shorthand whose value is not a bare `url(...)` (it has trailing
+    // keywords) falls to the token-scan path to pull the url out.
+    let root = build_box_tree(&[el(
+        "div",
+        &[("mask", "url(icon.svg) no-repeat center")],
+        vec![],
+    )]);
+    let div = &as_block(&root.kind)[0];
+    assert_eq!(div.mask.as_deref(), Some("icon.svg"));
+}
+
+#[test]
+fn img_lazy_data_url_and_srcset_become_replaced_source() {
+    use turbo_html2pdf_core::node::Attr;
+    let img = |attrs: &[(&str, &str)]| {
+        StyledNode::Element(StyledElement {
+            tag: Tag::Html("img".into()),
+            attrs: attrs
+                .iter()
+                .map(|(n, v)| Attr {
+                    name: n.to_string(),
+                    value: v.to_string(),
+                })
+                .collect(),
+            style: cs(&[("display", "block")]),
+            children: vec![],
+        })
+    };
+    let src_of = |node: StyledNode| {
+        let root = build_box_tree(&[node]);
+        let b = as_block(&root.kind)[0].clone();
+        let s = b.image.as_ref().expect("img -> replaced source");
+        assert!(s.replaced, "an <img> source is replaced content");
+        s.name.clone()
+    };
+    // No `src`: fall back to the lazy `data-landscape-url` (nike's hero pattern).
+    assert_eq!(
+        src_of(img(&[("data-landscape-url", "hero.jpg")])),
+        "hero.jpg"
+    );
+    // No `src`/data-*: take the first `srcset` candidate's url.
+    assert_eq!(src_of(img(&[("srcset", "a.jpg 1x, b.jpg 2x")])), "a.jpg");
+    // An empty `src` is skipped in favor of the lazy attribute.
+    assert_eq!(
+        src_of(img(&[("src", "  "), ("data-src", "lazy.jpg")])),
+        "lazy.jpg"
+    );
+    // A real `src` still wins over any lazy attribute.
+    assert_eq!(
+        src_of(img(&[("src", "real.jpg"), ("data-src", "lazy.jpg")])),
+        "real.jpg"
+    );
+}
+
+#[test]
+fn input_button_value_renders_as_text() {
+    use turbo_html2pdf_core::node::Attr;
+    let input = |ty: &str| {
+        StyledNode::Element(StyledElement {
+            tag: Tag::Html("input".into()),
+            attrs: vec![
+                Attr {
+                    name: "type".into(),
+                    value: ty.into(),
+                },
+                Attr {
+                    name: "value".into(),
+                    value: "Go".into(),
+                },
+            ],
+            style: cs(&[]),
+            children: vec![],
+        })
+    };
+    // submit/button/reset → the value becomes the box's text.
+    for ty in ["submit", "button", "reset"] {
+        let root = build_box_tree(&[input(ty)]);
+        let inner = as_block(&root.kind);
+        let lines = as_lines(&inner[0].kind);
+        let has_go = lines
+            .iter()
+            .any(|it| matches!(it, InlineItem::Text { text, .. } if text.contains("Go")));
+        assert!(has_go, "{ty} input value should render as text");
+    }
+    // a text input's value is NOT drawn as content (it's an editable field).
+    let root = build_box_tree(&[input("text")]);
+    let lines = as_lines(&as_block(&root.kind)[0].kind);
+    assert!(
+        lines.is_empty(),
+        "text input value is not flowed as content"
+    );
+}

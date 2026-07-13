@@ -377,6 +377,7 @@ fn intrinsic_size_used_when_it_fits() {
     let ctx = SizeCtx {
         style: &bs,
         cb_width: 500.0,
+        cb_height: None,
         body_height: Some(1000.0),
     };
     let intrinsic = probe(&png_rgb_2x2()).unwrap();
@@ -392,6 +393,7 @@ fn width_cap_clamps_to_containing_block_and_preserves_aspect() {
     let ctx = SizeCtx {
         style: &bs,
         cb_width: 200.0,
+        cb_height: None,
         body_height: None, // height cap inactive: only the width cap applies
     };
     let intrinsic = probe(&png_wide()).unwrap(); // 400x100
@@ -405,6 +407,55 @@ fn width_cap_clamps_to_containing_block_and_preserves_aspect() {
 }
 
 #[test]
+fn percent_width_resolves_against_containing_block_not_zero() {
+    // Regression: `width:100%` used to resolve against a 0 basis, collapsing every
+    // responsive image to a 0-size box. It must size against `cb_width`, with an
+    // `auto` height filled from the intrinsic aspect ratio.
+    let style = ComputedStyle::from_pairs([("width", "100%")]);
+    let bs = box_style(&style);
+    let ctx = SizeCtx {
+        style: &bs,
+        cb_width: 300.0,
+        cb_height: None,
+        body_height: None,
+    };
+    let intrinsic = probe(&png_wide()).unwrap(); // 400x100, ratio 4:1
+    let sized = size_replaced("x".into(), intrinsic, &ctx);
+    assert_eq!(sized.width, 300.0, "100% -> cb_width");
+    assert!(
+        (sized.height - 75.0).abs() < 1e-3,
+        "aspect preserved: 300/4 = 75, got {}",
+        sized.height
+    );
+}
+
+#[test]
+fn percent_height_resolves_against_cb_height_when_known() {
+    // `height:100%` fills a definite containing-block height (a hero card), with an
+    // `auto` width filled from the intrinsic aspect ratio.
+    let style = ComputedStyle::from_pairs([("height", "100%")]);
+    let bs = box_style(&style);
+    let ctx = SizeCtx {
+        style: &bs,
+        cb_width: 2000.0, // width never binds
+        cb_height: Some(200.0),
+        body_height: None,
+    };
+    let intrinsic = probe(&png_wide()).unwrap(); // 400x100, ratio 4:1
+    let sized = size_replaced("x".into(), intrinsic, &ctx);
+    assert!(
+        (sized.height - 200.0).abs() < 1e-3,
+        "height 100% -> cb_height 200, got {}",
+        sized.height
+    );
+    assert!(
+        (sized.width - 800.0).abs() < 1e-3,
+        "aspect: 200 * 4 = 800, got {}",
+        sized.width
+    );
+}
+
+#[test]
 fn height_cap_clamps_to_60_percent_of_body_height() {
     let style = empty_style();
     let bs = box_style(&style);
@@ -412,6 +463,7 @@ fn height_cap_clamps_to_60_percent_of_body_height() {
     let ctx = SizeCtx {
         style: &bs,
         cb_width: 10_000.0, // width never binds
+        cb_height: None,
         body_height: Some(body_height),
     };
     let intrinsic = probe(&png_tall()).unwrap(); // 100x4000
@@ -433,6 +485,7 @@ fn explicit_width_fills_height_from_aspect_ratio() {
     let ctx = SizeCtx {
         style: &bs,
         cb_width: 500.0,
+        cb_height: None,
         body_height: Some(10_000.0),
     };
     let intrinsic = probe(&png_wide()).unwrap(); // 400x100, ratio 4:1
@@ -448,6 +501,7 @@ fn explicit_width_and_height_are_used_verbatim() {
     let ctx = SizeCtx {
         style: &bs,
         cb_width: 1000.0,
+        cb_height: None,
         body_height: Some(10_000.0),
     };
     let intrinsic = probe(&png_rgb_2x2()).unwrap();
@@ -462,6 +516,7 @@ fn explicit_height_fills_width_from_aspect_ratio() {
     let ctx = SizeCtx {
         style: &bs,
         cb_width: 1000.0,
+        cb_height: None,
         body_height: Some(10_000.0),
     };
     let intrinsic = probe(&png_wide()).unwrap(); // 400x100, ratio 4:1
@@ -480,6 +535,7 @@ fn degenerate_zero_dimension_falls_back_to_given() {
     let ctx = SizeCtx {
         style: &bs,
         cb_width: 1000.0,
+        cb_height: None,
         body_height: None,
     };
     let intrinsic = Intrinsic {
@@ -499,6 +555,7 @@ fn height_cap_inactive_without_body_height() {
     let ctx = SizeCtx {
         style: &bs,
         cb_width: 10_000.0,
+        cb_height: None,
         body_height: None,
     };
     let intrinsic = probe(&png_tall()).unwrap(); // 100x4000
@@ -612,6 +669,7 @@ fn no_image_default_path_skips_image_fragments() {
         intrinsic_w: 2,
         intrinsic_h: 2,
         has_alpha: false,
+        tint: None,
     };
     let frag = turbo_html2pdf_core::Fragment::new(
         turbo_html2pdf_core::NodeId(1),
@@ -637,6 +695,7 @@ fn image_frag(name: &str) -> turbo_html2pdf_core::Fragment {
         intrinsic_w: 2,
         intrinsic_h: 2,
         has_alpha: false,
+        tint: None,
     };
     let mut frag = turbo_html2pdf_core::Fragment::new(
         turbo_html2pdf_core::NodeId(1),
@@ -647,6 +706,10 @@ fn image_frag(name: &str) -> turbo_html2pdf_core::Fragment {
         FragmentContent::Box {
             background: None,
             border: Default::default(),
+            border_radius: 0.0,
+            shadow: None,
+            gradient: None,
+            transform: None,
         },
     );
     // Carry the image as a child so collect recurses into it too.
@@ -806,5 +869,312 @@ fn assert_qpdf_clean(name: &str, pdf: &[u8]) {
         out.status.success(),
         "{name}: qpdf --check failed: {}",
         String::from_utf8_lossy(&out.stdout)
+    );
+}
+
+// --------------------------------------------------------------------------
+// html_layout::layout_html_with_images (Jinja-free HTML → sized image galley)
+// --------------------------------------------------------------------------
+
+/// Count the `Image` fragments in a galley subtree.
+fn count_images(f: &FragmentContent, kids: &[turbo_html2pdf_core::Fragment]) -> usize {
+    let here = usize::from(matches!(f, FragmentContent::Image(_)));
+    here + kids
+        .iter()
+        .map(|c| count_images(&c.content, &c.children))
+        .sum::<usize>()
+}
+
+#[test]
+fn layout_html_with_images_sizes_a_resolvable_img() {
+    // A raw HTML string with an `<img>` whose bytes the resolver supplies is laid
+    // out as an `Image` fragment (the caller then paints it); an unresolvable
+    // `<img>` produces none.
+    use turbo_html2pdf_core::{layout_html_with_images, FontRegistry};
+    let resolver = MapResolver::new(vec![("pic.png", png_rgb_2x2())]);
+    let images = ImageCtx {
+        resolver: &resolver,
+        body_height: Some(800.0),
+    };
+    let mut diags = Diagnostics::default();
+    let g = layout_html_with_images(
+        "<body><img src=\"pic.png\"><img src=\"missing.png\"></body>",
+        "",
+        600.0,
+        &FontRegistry::new(),
+        &images,
+        &mut diags,
+    )
+    .expect("layout");
+    assert_eq!(
+        count_images(&g.content, &g.children),
+        1,
+        "only the resolvable <img> becomes an Image fragment"
+    );
+}
+
+#[test]
+fn mask_image_box_emits_tinted_image_and_no_solid_background() {
+    // A `mask-image` box paints its `background-color` THROUGH the mask (a tinted
+    // Image fragment), and must NOT also paint a solid rectangle — otherwise the
+    // icon glyph shows as a filled square. The tinted image fills the box even with
+    // no flow content (an empty icon span sized only by width/height).
+    fn find_tinted(f: &turbo_html2pdf_core::Fragment) -> Option<(String, [u8; 4], f32, f32)> {
+        if let FragmentContent::Image(p) = &f.content {
+            if let Some(t) = p.tint {
+                return Some((p.name.clone(), [t.r, t.g, t.b, t.a], f.width, f.height));
+            }
+        }
+        f.children.iter().find_map(find_tinted)
+    }
+    fn any_solid_bg(f: &turbo_html2pdf_core::Fragment) -> bool {
+        (matches!(
+            &f.content,
+            FragmentContent::Box {
+                background: Some(_),
+                ..
+            }
+        )) || f.children.iter().any(any_solid_bg)
+    }
+    let style = ComputedStyle::from_pairs([
+        ("-webkit-mask-image", "url('caret.svg')"),
+        ("background-color", "#2244dd"),
+        ("width", "20px"),
+        ("height", "20px"),
+        ("display", "block"),
+    ]);
+    let el = StyledElement {
+        tag: Tag::Html("span".into()),
+        attrs: Vec::new(),
+        style,
+        children: vec![],
+    };
+    let styled = vec![StyledNode::Element(el)];
+    let resolver = MapResolver::new(vec![("caret.svg", png_rgb_2x2())]);
+    let ctx = ImageCtx {
+        resolver: &resolver,
+        body_height: Some(700.0),
+    };
+    let mut diags = Diagnostics::default();
+    let galley = layout_with_images(&styled, 540.0, &common::registry(), &ctx, &mut diags);
+    let (name, tint, w, h) = find_tinted(&galley).expect("masked box must emit a tinted image");
+    assert_eq!(name, "caret.svg");
+    assert_eq!(
+        tint,
+        [0x22, 0x44, 0xdd, 0xff],
+        "tint is the background-color"
+    );
+    assert_eq!((w, h), (20.0, 20.0), "mask fills the (empty) box's size");
+    assert!(
+        !any_solid_bg(&galley),
+        "a masked box must not paint a solid rectangle"
+    );
+}
+
+/// Depth-first: the width of the first fragment whose content is a raster image.
+fn first_image_frag(f: &turbo_html2pdf_core::Fragment) -> Option<(f32, f32)> {
+    if matches!(f.content, FragmentContent::Image(_)) {
+        return Some((f.width, f.height));
+    }
+    f.children.iter().find_map(first_image_frag)
+}
+
+#[test]
+fn flex_row_img_item_sizes_to_intrinsic_not_zero() {
+    // A `max-width:100%` `<img>` with `width:auto` as a flex item must reach its
+    // intrinsic size (2x2 here). The flex scratch measurement used to size the item
+    // against a 0-width containing block (its `max-width:100%` clamping to 0) AND the
+    // item placement flowed it as an empty container, so a logo / hero image
+    // collapsed to nothing.
+    let nodes = vec![Node::Element(turbo_html2pdf_core::Element {
+        tag: Tag::Html("div".into()),
+        attrs: vec![],
+        children: img_node("logo"),
+    })];
+    let cascade = build_cascade(
+        "div{display:flex} img{max-width:100%;width:auto}",
+        "",
+        TokenSet::default(),
+    );
+    let styled = style_tree(&nodes, &cascade);
+    let resolver = MapResolver::new(vec![("logo", png_rgb_2x2())]);
+    let ctx = ImageCtx {
+        resolver: &resolver,
+        body_height: None,
+    };
+    let mut diags = Diagnostics::default();
+    let galley = layout_with_images(&styled, 540.0, &common::registry(), &ctx, &mut diags);
+    let (w, h) = first_image_frag(&galley).expect("an image fragment");
+    assert!(
+        w >= 2.0 && h >= 2.0,
+        "flex img should size to intrinsic 2x2, got {w}x{h}"
+    );
+}
+
+#[test]
+fn flex_img_item_with_explicit_width_uses_it() {
+    // An `<img width="8">` flex item takes its explicit width (the `LengthPct::Px`
+    // arm of the replaced-image probe), not the intrinsic 2px.
+    let nodes = vec![Node::Element(turbo_html2pdf_core::Element {
+        tag: Tag::Html("div".into()),
+        attrs: vec![],
+        children: img_node("logo"),
+    })];
+    let cascade = build_cascade("div{display:flex} img{width:8px}", "", TokenSet::default());
+    let styled = style_tree(&nodes, &cascade);
+    let resolver = MapResolver::new(vec![("logo", png_rgb_2x2())]);
+    let ctx = ImageCtx {
+        resolver: &resolver,
+        body_height: None,
+    };
+    let mut diags = Diagnostics::default();
+    let galley = layout_with_images(&styled, 540.0, &common::registry(), &ctx, &mut diags);
+    let (w, _h) = first_image_frag(&galley).expect("an image fragment");
+    assert!((w - 8.0).abs() < 0.5, "explicit width:8 wins, got {w}");
+}
+
+#[test]
+fn percent_height_img_resolves_against_definite_parent() {
+    // `<img height:100%>` in a fixed-height parent takes the parent's content height
+    // (200px) — its `%` now resolves against the parent's definite height instead of
+    // falling back to the 2px intrinsic. Width follows the 1:1 aspect ratio.
+    let nodes = vec![Node::Element(turbo_html2pdf_core::Element {
+        tag: Tag::Html("div".into()),
+        attrs: vec![],
+        children: img_node("logo"),
+    })];
+    let cascade = build_cascade(
+        "div{height:200px} img{height:100%;width:auto}",
+        "",
+        TokenSet::default(),
+    );
+    let styled = style_tree(&nodes, &cascade);
+    let resolver = MapResolver::new(vec![("logo", png_rgb_2x2())]);
+    let ctx = ImageCtx {
+        resolver: &resolver,
+        body_height: None,
+    };
+    let mut diags = Diagnostics::default();
+    let galley = layout_with_images(&styled, 540.0, &common::registry(), &ctx, &mut diags);
+    let (w, h) = first_image_frag(&galley).expect("an image fragment");
+    assert!(
+        (h - 200.0).abs() < 1.0 && (w - 200.0).abs() < 1.0,
+        "img height:100% of a 200px parent → 200x200 (1:1 aspect), got {w}x{h}"
+    );
+}
+
+#[test]
+fn percent_height_absolute_img_resolves_against_positioned_ancestor() {
+    // A `position:absolute` `<img height:100%>` resolves against its nearest
+    // positioned ancestor's definite height (`abs_cb_h`), not its parent's `cb_h`.
+    let nodes = vec![Node::Element(turbo_html2pdf_core::Element {
+        tag: Tag::Html("div".into()),
+        attrs: vec![],
+        children: img_node("logo"),
+    })];
+    let cascade = build_cascade(
+        "div{position:relative;height:120px} img{position:absolute;height:100%;width:auto}",
+        "",
+        TokenSet::default(),
+    );
+    let styled = style_tree(&nodes, &cascade);
+    let resolver = MapResolver::new(vec![("logo", png_rgb_2x2())]);
+    let ctx = ImageCtx {
+        resolver: &resolver,
+        body_height: None,
+    };
+    let mut diags = Diagnostics::default();
+    let galley = layout_with_images(&styled, 540.0, &common::registry(), &ctx, &mut diags);
+    let (_w, h) = first_image_frag(&galley).expect("an image fragment");
+    assert!(
+        (h - 120.0).abs() < 1.0,
+        "absolute img height:100% → 120 (ancestor), got {h}"
+    );
+}
+
+#[test]
+fn flex_item_wrapping_img_sizes_to_img_intrinsic() {
+    // The flex ITEM is a <div> wrapping the <img> (google's logo:
+    // <div.k1zIA><img.lnXdpd>). The item's max-content width must come from the
+    // nested image's intrinsic width (2px) — not collapse to 0, which clamped the
+    // logo to nothing.
+    let img = Node::Element(turbo_html2pdf_core::Element {
+        tag: Tag::Html("img".into()),
+        attrs: vec![Attr {
+            name: "src".into(),
+            value: "logo".into(),
+        }],
+        children: Vec::new(),
+    });
+    let wrap = turbo_html2pdf_core::Element {
+        tag: Tag::Html("div".into()),
+        attrs: vec![],
+        children: vec![img],
+    };
+    let nodes = vec![Node::Element(turbo_html2pdf_core::Element {
+        tag: Tag::Html("div".into()),
+        attrs: vec![],
+        children: vec![Node::Element(wrap)],
+    })];
+    let cascade = build_cascade(
+        "div{display:flex;flex-direction:column;align-items:center} img{max-width:100%;max-height:100%;width:auto}",
+        "",
+        TokenSet::default(),
+    );
+    let styled = style_tree(&nodes, &cascade);
+    let resolver = MapResolver::new(vec![("logo", png_rgb_2x2())]);
+    let ctx = ImageCtx {
+        resolver: &resolver,
+        body_height: None,
+    };
+    let mut diags = Diagnostics::default();
+    let galley = layout_with_images(&styled, 1280.0, &common::registry(), &ctx, &mut diags);
+    let (w, h) = first_image_frag(&galley).expect("an image fragment");
+    assert!(
+        w >= 2.0 && h >= 2.0,
+        "nested img should keep intrinsic 2x2, got {w}x{h}"
+    );
+}
+
+#[test]
+fn flex_row_item_wrapping_img_natural_width_uses_intrinsic() {
+    // A flex ROW measures each item's max-content via `natural_width`; a `<div>`
+    // wrapping an `<img>` must contribute the image's intrinsic width (2px), else the
+    // row (and the item) collapses. Exercises the replaced-image `natural_width` path.
+    let img = Node::Element(turbo_html2pdf_core::Element {
+        tag: Tag::Html("img".into()),
+        attrs: vec![Attr {
+            name: "src".into(),
+            value: "logo".into(),
+        }],
+        children: Vec::new(),
+    });
+    let wrap = Node::Element(turbo_html2pdf_core::Element {
+        tag: Tag::Html("div".into()),
+        attrs: vec![],
+        children: vec![img],
+    });
+    let nodes = vec![Node::Element(turbo_html2pdf_core::Element {
+        tag: Tag::Html("div".into()),
+        attrs: vec![],
+        children: vec![wrap],
+    })];
+    let cascade = build_cascade(
+        "div{display:flex;flex-direction:row} img{width:auto}",
+        "",
+        TokenSet::default(),
+    );
+    let styled = style_tree(&nodes, &cascade);
+    let resolver = MapResolver::new(vec![("logo", png_rgb_2x2())]);
+    let ctx = ImageCtx {
+        resolver: &resolver,
+        body_height: None,
+    };
+    let mut diags = Diagnostics::default();
+    let galley = layout_with_images(&styled, 1280.0, &common::registry(), &ctx, &mut diags);
+    let (w, _h) = first_image_frag(&galley).expect("an image fragment");
+    assert!(
+        w >= 2.0,
+        "row-flex wrapped img should keep intrinsic width, got {w}"
     );
 }

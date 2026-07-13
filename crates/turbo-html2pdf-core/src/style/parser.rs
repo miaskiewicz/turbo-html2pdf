@@ -75,9 +75,58 @@ fn split_important(value: &str) -> (String, bool) {
     }
 }
 
-/// Parse a `;`-separated declaration block body.
+/// Parse a `;`-separated declaration block body. Splits on top-level `;` only —
+/// a `;` inside `url(...)` (a `data:image/svg+xml;utf8,<svg…>` mask) or a quoted
+/// string is part of the value, not a declaration separator.
 pub fn parse_declarations(body: &str) -> Vec<Declaration> {
-    body.split(';').filter_map(parse_declaration).collect()
+    split_top_level(body, ';')
+        .into_iter()
+        .filter_map(parse_declaration)
+        .collect()
+}
+
+/// Split `s` on `sep` at the top level, skipping any `sep` nested inside parentheses
+/// or a `'`/`"` string.
+fn split_top_level(s: &str, sep: char) -> Vec<&str> {
+    let mut out = Vec::new();
+    let (mut depth, mut quote, mut start) = (0i32, None::<char>, 0usize);
+    for (i, c) in s.char_indices() {
+        if top_level_sep(c, sep, &mut depth, &mut quote) {
+            out.push(&s[start..i]);
+            start = i + c.len_utf8();
+        }
+    }
+    out.push(&s[start..]);
+    out
+}
+
+/// Advance the quote/paren nesting state by one char; returns `true` when `c` is
+/// a top-level `sep` — outside any `'`/`"` string and any parentheses — i.e. a
+/// real split point.
+fn top_level_sep(c: char, sep: char, depth: &mut i32, quote: &mut Option<char>) -> bool {
+    match *quote {
+        Some(q) => {
+            if c == q {
+                *quote = None;
+            }
+            false
+        }
+        None => match c {
+            '\'' | '"' => {
+                *quote = Some(c);
+                false
+            }
+            '(' => {
+                *depth += 1;
+                false
+            }
+            ')' => {
+                *depth = (*depth - 1).max(0);
+                false
+            }
+            _ => c == sep && *depth == 0,
+        },
+    }
 }
 
 /// A top-level chunk of the stylesheet: either a qualified rule or an at-rule.
@@ -150,9 +199,13 @@ impl Scan {
 
 fn at_rule_from(chunk: &Chunk) -> AtRule {
     let prelude = chunk.prelude.trim_start_matches('@');
-    let (name, rest) = prelude
-        .split_once(char::is_whitespace)
-        .unwrap_or((prelude, ""));
+    // The name ends at the first whitespace *or* `(` — `@media(min-width:640px)`
+    // (no space, common in minified CSS) must still yield name `media`, not
+    // `media(min-width:640px)`, or the whole media block is dropped.
+    let (name, rest) = match prelude.find(|c: char| c.is_whitespace() || c == '(') {
+        Some(i) => (&prelude[..i], &prelude[i..]),
+        None => (prelude, ""),
+    };
     AtRule {
         name: name.trim().to_ascii_lowercase(),
         prelude: rest.trim().to_string(),

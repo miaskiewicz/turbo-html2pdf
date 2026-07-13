@@ -13,7 +13,7 @@
 use crate::image::Intrinsic;
 
 use super::fragment::ImagePlacement;
-use super::value::BoxStyle;
+use super::value::{BoxStyle, LengthPct};
 
 /// The fraction of the page body height an image may occupy (user spec).
 const MAX_HEIGHT_FRACTION: f32 = 0.6;
@@ -29,8 +29,13 @@ pub struct SizedImage {
 pub struct SizeCtx<'a> {
     /// The box's resolved style (explicit `width`/`height` override intrinsic).
     pub style: &'a BoxStyle,
-    /// Containing-block width (the 100% width cap basis).
+    /// Containing-block width — the basis for a `%` `width`/`max-width` and the
+    /// 100% width cap.
     pub cb_width: f32,
+    /// Containing-block height, if a definite one is known — the basis for a `%`
+    /// `height` (e.g. an `<img height:100%>` filling a sized hero card). `None`
+    /// leaves a `%` height to fall back to the intrinsic aspect ratio.
+    pub cb_height: Option<f32>,
     /// Page body height, if known (the 60% height cap basis).
     pub body_height: Option<f32>,
 }
@@ -39,7 +44,7 @@ pub struct SizeCtx<'a> {
 /// overflow caps, returning the painted box plus the placement to emit.
 pub fn size_replaced(name: String, intrinsic: Intrinsic, ctx: &SizeCtx) -> SizedImage {
     let (iw, ih) = (intrinsic.width as f32, intrinsic.height as f32);
-    let (base_w, base_h) = base_size(iw, ih, ctx.style);
+    let (base_w, base_h) = base_size(iw, ih, ctx);
     let (width, height) = apply_caps(base_w, base_h, ctx);
     SizedImage {
         width,
@@ -56,19 +61,36 @@ pub fn placement_of(name: String, intrinsic: Intrinsic) -> ImagePlacement {
         intrinsic_w: intrinsic.width,
         intrinsic_h: intrinsic.height,
         has_alpha: intrinsic.has_alpha,
+        tint: None,
     }
 }
 
 /// The pre-cap box size: explicit `width`/`height` when set (filling the missing
 /// axis from the intrinsic aspect ratio), else the intrinsic pixel size.
-fn base_size(iw: f32, ih: f32, style: &BoxStyle) -> (f32, f32) {
-    let w = style.width.resolve(0.0);
-    let h = style.height.resolve(0.0);
+fn base_size(iw: f32, ih: f32, ctx: &SizeCtx) -> (f32, f32) {
+    // Resolve an explicit `width`/`height` against the containing block (a `%`
+    // `width` against `cb_width`, a `%` `height` against `cb_height` when a
+    // definite one is known). A `%` with no basis, or `auto`, stays unresolved so
+    // the intrinsic aspect ratio fills it in. Previously `%` resolved against 0,
+    // collapsing every `width:100%` responsive image to a 0-size box.
+    let w = resolve_dim(ctx.style.width, Some(ctx.cb_width));
+    let h = resolve_dim(ctx.style.height, ctx.cb_height);
     match (w, h) {
         (Some(w), Some(h)) => (w, h),
         (Some(w), None) => (w, scale_other(w, iw, ih)),
         (None, Some(h)) => (scale_other(h, ih, iw), h),
         (None, None) => (iw, ih),
+    }
+}
+
+/// A `<length-percentage>`/`auto` image dimension resolved against a basis: a px
+/// length is itself, a `%` needs a (definite) basis, and `auto`/an unresolvable
+/// `%` yields `None` (the caller falls back to the intrinsic aspect ratio).
+fn resolve_dim(v: LengthPct, basis: Option<f32>) -> Option<f32> {
+    match v {
+        LengthPct::Px(px) => Some(px),
+        LengthPct::Pct(p) => basis.map(|b| p / 100.0 * b),
+        LengthPct::Auto => None,
     }
 }
 

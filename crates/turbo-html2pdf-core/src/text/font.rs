@@ -29,10 +29,42 @@ self_cell::self_cell!(
 /// Parse the metric and shaping faces from font `bytes`; `Err` if the bytes are
 /// not a valid font. `rustybuzz` accepts exactly what `ttf-parser` validated, so
 /// once the metric face parses the shaping face is infallible.
-fn build_parsed(bytes: &[u8]) -> Result<Parsed<'_>, ()> {
-    let ttf = TtfFace::parse(bytes, 0).map_err(|_| ())?;
-    let rb = RbFace::from_slice(bytes, 0).expect("rustybuzz parses what ttf-parser validated");
+/// Parse one face of a font (index `> 0` selects a face in a `.ttc` collection).
+fn build_parsed_index(bytes: &[u8], index: u32) -> Result<Parsed<'_>, ()> {
+    let ttf = TtfFace::parse(bytes, index).map_err(|_| ())?;
+    let rb = RbFace::from_slice(bytes, index).expect("rustybuzz parses what ttf-parser validated");
     Ok(Parsed { ttf, rb })
+}
+
+/// Number of faces in a font file (`> 1` for a `.ttc` TrueType collection).
+pub fn face_count(bytes: &[u8]) -> u32 {
+    rustybuzz::ttf_parser::fonts_in_collection(bytes).unwrap_or(1)
+}
+
+/// Read a font face's own `(family, weight, italic)` from its name/OS-2 tables —
+/// used to register installed system fonts under their real family. `None` if the
+/// face (at `index`) doesn't parse or names no family.
+pub fn describe(bytes: &[u8], index: u32) -> Option<(String, u16, bool)> {
+    let face = TtfFace::parse(bytes, index).ok()?;
+    let family = family_name(&face)?;
+    Some((family, face.weight().to_number(), face.is_italic()))
+}
+
+/// The face's English family name: the typographic family (name id 16) if
+/// present, else the legacy font family (name id 1).
+fn family_name(face: &TtfFace) -> Option<String> {
+    let mut legacy = None;
+    for name in face.names() {
+        if !name.is_unicode() {
+            continue;
+        }
+        match (name.name_id, name.to_string()) {
+            (16, Some(s)) => return Some(s),
+            (1, Some(s)) => legacy = legacy.or(Some(s)),
+            _ => {}
+        }
+    }
+    legacy
 }
 
 /// Read the cached metrics `(units_per_em, ascent, descent, line_gap)`.
@@ -61,6 +93,12 @@ pub struct ShapedGlyph {
 pub struct FontFace {
     /// The font bytes parsed once into reusable `ttf-parser`/`rustybuzz` faces.
     faces: Arc<OwnedFaces>,
+    /// The face index within the font program — `0` for a single-face `.ttf`/`.otf`,
+    /// `> 0` for a face inside a `.ttc` collection (macOS ships Arial, Helvetica, …
+    /// as collections). A consumer that re-parses `data()` to trace glyph outlines
+    /// MUST parse at this index, else the glyph ids (which index the selected face's
+    /// tables) draw the wrong sub-font's glyphs.
+    index: u32,
     family: String,
     weight: u16,
     italic: bool,
@@ -94,11 +132,24 @@ impl FontFace {
         weight: u16,
         italic: bool,
     ) -> Option<FontFace> {
+        FontFace::from_bytes_index(data, 0, family, weight, italic)
+    }
+
+    /// Like [`FontFace::from_bytes`] but selects face `index` of a `.ttc`
+    /// collection (0 for a single-face `.ttf`/`.otf`).
+    pub fn from_bytes_index(
+        data: Vec<u8>,
+        index: u32,
+        family: impl Into<String>,
+        weight: u16,
+        italic: bool,
+    ) -> Option<FontFace> {
         crate::hot!("font.face.build");
-        let faces = OwnedFaces::try_new(data, |bytes| build_parsed(bytes)).ok()?;
+        let faces = OwnedFaces::try_new(data, |bytes| build_parsed_index(bytes, index)).ok()?;
         let (units_per_em, ascent, descent, line_gap) = metrics(faces.borrow_dependent());
         Some(FontFace {
             faces: Arc::new(faces),
+            index,
             family: family.into(),
             weight,
             italic,
@@ -114,10 +165,26 @@ impl FontFace {
         &self.family
     }
 
+    /// This face re-tagged with a different family name (cheap — the parsed font
+    /// and shape cache are shared via `Arc`). Used to register a system font under
+    /// a CSS generic (`sans-serif` → Helvetica).
+    pub fn with_family(&self, family: impl Into<String>) -> FontFace {
+        FontFace {
+            family: family.into(),
+            ..self.clone()
+        }
+    }
+
     /// The raw font program bytes (the OpenType/TrueType file). The PDF emitter
     /// (Phase 9, §7) needs these to subset and embed the font program.
     pub fn data(&self) -> &[u8] {
         self.faces.borrow_owner()
+    }
+
+    /// The face index within [`data()`](Self::data) — pass to `ttf-parser`/`rustybuzz`
+    /// when re-parsing the program, so a `.ttc` collection face traces its own glyphs.
+    pub fn index(&self) -> u32 {
+        self.index
     }
 
     /// Design units per em, for scaling glyph metrics into PDF text space.
@@ -273,4 +340,94 @@ fn collect_glyphs(shaped: &rustybuzz::GlyphBuffer) -> Vec<ShapedGlyph> {
             cluster: info.cluster,
         })
         .collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const ROBOTO: &[u8] = include_bytes!(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/assets/fonts/roboto/Roboto-Regular.ttf"
+    ));
+    // Liberation Serif carries non-Unicode (Macintosh) name records, so it drives
+    // the `!name.is_unicode()` skip branch in `family_name`.
+    const LIBERATION: &[u8] = include_bytes!(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/assets/fonts/liberation-serif/LiberationSerif-Regular.ttf"
+    ));
+
+    /// Relabel the first Unicode `name id 1` (legacy family) record to `name id
+    /// 16` (typographic family), so `family_name` takes its `(16, Some(_))` arm.
+    /// None of the bundled faces ship a name id 16, so we synthesize one.
+    fn relabel_family_to_typographic(mut bytes: Vec<u8>) -> Vec<u8> {
+        let num_tables = u16::from_be_bytes([bytes[4], bytes[5]]) as usize;
+        let name_off = (0..num_tables)
+            .map(|i| 12 + i * 16)
+            .find(|&rec| &bytes[rec..rec + 4] == b"name")
+            .map(|rec| {
+                u32::from_be_bytes([
+                    bytes[rec + 8],
+                    bytes[rec + 9],
+                    bytes[rec + 10],
+                    bytes[rec + 11],
+                ]) as usize
+            })
+            .expect("font has a name table");
+        let count = u16::from_be_bytes([bytes[name_off + 2], bytes[name_off + 3]]) as usize;
+        // The first Unicode(0)/Windows(3)-platform name-id-1 (family) record.
+        let rec = (0..count)
+            .map(|r| name_off + 6 + r * 12)
+            .find(|&rec| {
+                let platform = u16::from_be_bytes([bytes[rec], bytes[rec + 1]]);
+                let name_id = u16::from_be_bytes([bytes[rec + 6], bytes[rec + 7]]);
+                name_id == 1 && (platform == 0 || platform == 3)
+            })
+            .expect("no Unicode name id 1 record to relabel");
+        bytes[rec + 6] = 0x00;
+        bytes[rec + 7] = 16; // relabel name-id 1 → 16 (typographic family)
+        bytes
+    }
+
+    #[test]
+    fn face_count_valid_and_garbage() {
+        // A single-face .ttf reports one face.
+        assert_eq!(face_count(ROBOTO), 1);
+        // Non-font bytes: `fonts_in_collection` yields None → the `unwrap_or(1)`.
+        assert_eq!(face_count(b"not a font"), 1);
+    }
+
+    #[test]
+    fn describe_reads_family_weight_italic() {
+        let (family, weight, italic) = describe(ROBOTO, 0).expect("Roboto describes");
+        assert!(family.eq_ignore_ascii_case("Roboto"), "family = {family}");
+        assert!(weight > 0);
+        assert!(!italic);
+        // Liberation Serif exercises the non-Unicode name-record skip.
+        let (lib_family, _, _) = describe(LIBERATION, 0).expect("Liberation describes");
+        assert!(lib_family.to_ascii_lowercase().contains("liberation"));
+        // Garbage bytes: parse fails → None (the `?` short-circuit).
+        assert!(describe(b"still not a font", 0).is_none());
+    }
+
+    #[test]
+    fn describe_prefers_typographic_family_name_id_16() {
+        // With a synthesized name id 16, `family_name` returns via its (16, _) arm.
+        let patched = relabel_family_to_typographic(ROBOTO.to_vec());
+        let (family, _, _) = describe(&patched, 0).expect("patched font describes");
+        assert!(family.eq_ignore_ascii_case("Roboto"), "family = {family}");
+    }
+
+    #[test]
+    fn with_family_retags_same_program() {
+        let face = FontFace::from_bytes(ROBOTO.to_vec(), "Roboto", 400, false).expect("load");
+        let retagged = face.with_family("sans-serif");
+        assert_eq!(retagged.family(), "sans-serif");
+        // Same underlying program bytes are shared.
+        assert_eq!(retagged.data(), face.data());
+        // The face index (0 for a single-face .ttf) survives the retag, so a consumer
+        // re-parsing the shared bytes selects the same face.
+        assert_eq!(face.index(), 0);
+        assert_eq!(retagged.index(), face.index());
+    }
 }

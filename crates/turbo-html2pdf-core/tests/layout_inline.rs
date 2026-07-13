@@ -23,13 +23,14 @@ fn run(text: &str, face: &FontFace) -> InlineRun {
         letter_spacing: 0.0,
         color: Rgba::BLACK,
         valign: VAlign::Baseline,
+        nowrap: false,
     }
 }
 
 fn lay(runs: &[InlineRun], max_width: f32, align: Align) -> (ParagraphLayout, Diagnostics) {
     let reg = common::registry();
     let mut diags = Diagnostics::default();
-    let p = layout_paragraph(runs, &reg, max_width, align, &mut diags);
+    let p = layout_runs(runs, &reg, max_width, align, &mut diags);
     (p, diags)
 }
 
@@ -197,7 +198,24 @@ fn per_glyph_fallback_finds_another_face() {
         reg
     };
     let mut diags = Diagnostics::default();
-    let p = layout_paragraph(&[r], &reg, 1000.0, Align::Left, &mut diags);
+    let p = layout_runs(&[r], &reg, 1000.0, Align::Left, &mut diags);
     assert!(diags.is_empty()); // fallback found, no notdef
     assert_eq!(p.lines[0].runs[0].face.family(), "Evolventa");
+}
+
+#[test]
+fn nowrap_run_stays_on_one_line() {
+    // `white-space:nowrap` folds inter-word spaces into the word so the text never
+    // wraps, even when the column is far too narrow (menu tabs, buttons).
+    let mut r = run("View source history", &common::evolventa());
+    r.nowrap = true;
+    // A width of 10px would wrap every word without nowrap.
+    let (layout, _) = lay(&[r], 10.0, Align::Left);
+    assert_eq!(layout.lines.len(), 1, "nowrap text must not wrap");
+    let wrapping = run("View source history", &common::evolventa());
+    let (wl, _) = lay(&[wrapping], 10.0, Align::Left);
+    assert!(
+        wl.lines.len() > 1,
+        "control: wrapping text does wrap at 10px"
+    );
 }

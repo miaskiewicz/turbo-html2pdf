@@ -57,6 +57,15 @@ fn expand_self_closing(markup: &str) -> String {
 
 /// Parse `markup` into the top-level flow nodes (the `<body>` children).
 pub fn parse(markup: &str) -> Result<Vec<Node>, RenderError> {
+    parse_with_roots(markup).map(|(nodes, _)| nodes)
+}
+
+/// Like [`parse`], but also returns the `<html>` and `<body>` ancestor shells
+/// (their attributes only — no children). The cascade seeds these as match-only
+/// ancestors so selectors gated on `<html>`/`<body>` classes (Wikipedia's
+/// `vector-feature-*`, `client-js`, theme classes, …) match, even though those
+/// elements are not themselves laid out as boxes.
+pub fn parse_with_roots(markup: &str) -> Result<(Vec<Node>, Vec<Element>), RenderError> {
     let expanded = expand_self_closing(markup);
     let dom = parse_document(RcDom::default(), ParseOpts::default())
         .from_utf8()
@@ -66,7 +75,25 @@ pub fn parse(markup: &str) -> Result<Vec<Node>, RenderError> {
         find_element(&dom.document, "body").expect("the HTML parser always produces a <body>");
     let mut out = Vec::new();
     convert_children(&body, &mut out)?;
-    Ok(out)
+    let mut roots = Vec::new();
+    if let Some(html) = find_element(&dom.document, "html") {
+        roots.push(shell(&html));
+    }
+    roots.push(shell(&body));
+    Ok((out, roots))
+}
+
+/// A childless [`Element`] carrying a DOM element's tag + attributes — used as a
+/// match-only ancestor shell for `<html>`/`<body>`.
+fn shell(handle: &Handle) -> Element {
+    match &handle.data {
+        NodeData::Element { name, attrs, .. } => Element {
+            tag: Tag::Html(name.local.to_string()),
+            attrs: collect_attrs(attrs),
+            children: Vec::new(),
+        },
+        _ => unreachable!("find_element only returns element handles"),
+    }
 }
 
 /// Depth-first search for the first element with the given local name.

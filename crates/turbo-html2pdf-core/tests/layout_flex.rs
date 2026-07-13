@@ -59,6 +59,31 @@ fn grow_splits_free_space_equally() {
 }
 
 #[test]
+fn container_min_height_prevents_collapse() {
+    // A flex container whose height is only a `min-height` (a search bar,
+    // `min-height:50px`) must not collapse to its near-zero content height — the
+    // regression that left google.com's flex search box (and the page) blank.
+    let root = flex(&[("min-height", "50px")], vec![item(&[], "")], 300.0);
+    assert!(
+        root.height >= 50.0,
+        "min-height:50px flex container should be >=50px tall, got {}",
+        root.height
+    );
+}
+
+#[test]
+fn item_min_height_applies() {
+    // A flex item's own `min-height` reaches taffy too.
+    let root = flex(&[], vec![item(&[("min-height", "40px")], "")], 300.0);
+    let its = items_of(&root);
+    assert!(
+        its[0].height >= 40.0,
+        "item min-height:40px should be >=40px, got {}",
+        its[0].height
+    );
+}
+
+#[test]
 fn explicit_basis_sizes_items() {
     let root = flex(
         &[],
@@ -94,6 +119,20 @@ fn content_sized_item_uses_natural_width() {
     let root = flex(&[], vec![item(&[], "hello world")], 500.0);
     let w = items_of(&root)[0].width;
     assert!(w > 0.0 && w < 500.0); // shrink-to-content, not filling
+}
+
+#[test]
+fn percent_width_item_fills_via_flex_basis() {
+    // `flex-basis:auto` (initial) defers to `width`, so a `width:100%` flex item
+    // fills the row instead of shrink-wrapping. Wikipedia's `.mw-header` is a
+    // `width:100%` grid that is itself a flex child; without this it collapsed to
+    // its content width and the whole top bar was narrow + centered.
+    let root = flex(
+        &[],
+        vec![item(&[("width", "100%"), ("flex-shrink", "0")], "hi")],
+        500.0,
+    );
+    assert!((items_of(&root)[0].width - 500.0).abs() < 1.0);
 }
 
 #[test]
@@ -229,4 +268,46 @@ fn empty_flex_container_has_no_items() {
     let root = flex(&[], vec![StyledNode::Text("   ".into())], 500.0);
     assert!(items_of(&root).is_empty());
     assert_eq!(root.children[0].height, 0.0);
+}
+
+#[test]
+fn deeply_nested_flex_is_not_exponential() {
+    // Each flex container's items are probed by taffy several times per solve, and
+    // each probe recurses a full sub-layout, so nested flex was exponential in depth
+    // (~8 levels stopped completing). The per-box measure cache collapses the repeat
+    // probes; a depth-7 tree must lay out — this test completing is the assertion.
+    use turbo_html2pdf_core::{layout_html, Diagnostics, FontRegistry};
+    let mut html = String::from("<span>leaf</span>");
+    for _ in 0..7 {
+        html = format!("<div style=\"display:flex\"><div>a</div>{html}<div>b</div></div>");
+    }
+    let mut d = Diagnostics::default();
+    let f = layout_html(
+        &format!("<body>{html}</body>"),
+        "",
+        800.0,
+        &FontRegistry::new(),
+        &mut d,
+    )
+    .expect("layout");
+    assert!(f.height > 0.0);
+}
+
+#[test]
+fn row_flex_fits_margin_spaced_items() {
+    // A row flex's max-content must include the items' horizontal margins, else the
+    // container measures short and margin-spaced children overflow it (Wikipedia's
+    // page-action tabs spilled "View history" past the toolbar).
+    let mk = |m: &str| item(&[("margin-left", m), ("flex-shrink", "0")], "tab");
+    let root = flex(&[], vec![mk("0"), mk("20px"), mk("20px")], 1000.0);
+    let its = items_of(&root);
+    // last item's right edge stays within the (content-sized) container width.
+    let container_w = root.children[0].width;
+    let last_right = its[2].x + its[2].width;
+    assert!(
+        last_right <= container_w + 0.5,
+        "items (right {last_right}) must fit the container ({container_w})"
+    );
+    // the 40px of margins are present between the three tabs.
+    assert!(its[2].x - (its[0].x + its[0].width) >= 40.0 - 1.0);
 }

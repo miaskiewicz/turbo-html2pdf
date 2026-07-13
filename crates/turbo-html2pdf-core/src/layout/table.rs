@@ -18,7 +18,8 @@ use super::boxgen::{BoxKind, LayoutBox};
 use super::flex::natural_width;
 use super::fragment::{Fragment, FragmentContent, NodeId, RepeatKind};
 use super::value::{
-    resolve_box_style, BorderEdges, Display, LengthPct, ResolveCtx, VAlign, DEFAULT_FONT_SIZE,
+    parse_px, resolve_box_style, BorderEdges, Display, LengthPct, ResolveCtx, VAlign,
+    DEFAULT_FONT_SIZE,
 };
 
 // --------------------------------------------------------------------------
@@ -28,6 +29,10 @@ use super::value::{
 struct RowRef<'a> {
     node_id: NodeId,
     cells: Vec<&'a LayoutBox>,
+    /// The row's explicit `height` in px (0 if none) — a floor on the row height,
+    /// so an empty spacer row (`<tr style="height:5px">`, common in table layouts
+    /// like Hacker News) reserves its space instead of collapsing to zero.
+    min_height: f32,
     repeat: Option<RepeatKind>,
     /// The row's PDF/UA structure role (`pdf-ua`), so the synthetic row fragment
     /// can carry `TableRow` for the tagged-PDF struct tree (AC-11.1).
@@ -61,10 +66,21 @@ fn row_ref<'a>(row: &'a LayoutBox, repeat: Option<RepeatKind>) -> RowRef<'a> {
     RowRef {
         node_id: row.node_id,
         cells: cells_of(row),
+        min_height: row_min_height(row),
         repeat,
         #[cfg(feature = "pdf-ua")]
         ua_role: row.ua_role,
     }
+}
+
+/// A table row's explicit `height` in px (0 if unset/relative) — used as a floor
+/// on the computed row height.
+fn row_min_height(row: &LayoutBox) -> f32 {
+    row.style
+        .get("height")
+        .and_then(|v| parse_px(v, DEFAULT_FONT_SIZE))
+        .unwrap_or(0.0_f32)
+        .max(0.0)
 }
 
 fn collect_rows<'a>(items: &'a [LayoutBox]) -> Vec<RowRef<'a>> {
@@ -236,13 +252,50 @@ fn fixed_columns(placed: &[Placed], ncols: usize, table_width: f32) -> Vec<f32> 
     w.iter().map(|x| x.unwrap_or(each)).collect()
 }
 
-fn scale_to(cols: &mut [f32], target: f32) {
-    let sum: f32 = cols.iter().sum();
-    if sum > 0.0 && (sum - target).abs() > f32::EPSILON {
-        let k = target / sum;
-        for c in cols.iter_mut() {
-            *c *= k;
+/// Each column's min-content width (widest single-column cell that can't shrink).
+fn min_columns(placed: &[Placed], ncols: usize, fonts: &FontRegistry) -> Vec<f32> {
+    let mut w = vec![0.0_f32; ncols];
+    for p in placed {
+        if p.colspan == 1 {
+            w[p.col] = w[p.col].max(super::flex::min_content_width(p.lb, fonts));
         }
+    }
+    w
+}
+
+/// Fit `cols` to `target`. Growing scales up proportionally; shrinking takes only
+/// from each column's slack above its min-content, so a column never clips its
+/// content (the infobox label column kept clipping "Infraclass:" when the whole
+/// row was scaled down uniformly). If even the minima don't fit, columns sit at
+/// their min-content and the table overflows.
+fn scale_to(cols: &mut [f32], target: f32, mins: &[f32]) {
+    let sum: f32 = cols.iter().sum();
+    if sum <= 0.0 || (sum - target).abs() <= f32::EPSILON {
+        return;
+    }
+    if target >= sum {
+        grow_columns(cols, target / sum);
+    } else {
+        shrink_columns(cols, mins, sum - target);
+    }
+}
+
+/// Scale every column up by factor `k` (grow-to-fit distributes slack evenly).
+fn grow_columns(cols: &mut [f32], k: f32) {
+    for c in cols.iter_mut() {
+        *c *= k;
+    }
+}
+
+/// Remove `reduce` px total, taking only from each column's slack above its
+/// min-content so no column clips its content; a column never drops below `mins`.
+fn shrink_columns(cols: &mut [f32], mins: &[f32], reduce: f32) {
+    let slack: f32 = cols.iter().zip(mins).map(|(c, m)| (c - m).max(0.0)).sum();
+    for (c, m) in cols.iter_mut().zip(mins) {
+        if slack > 0.0 {
+            *c -= reduce * (*c - *m).max(0.0) / slack;
+        }
+        *c = c.max(*m);
     }
 }
 
@@ -264,13 +317,22 @@ fn column_widths(
     cw: f32,
     fonts: &FontRegistry,
 ) -> Vec<f32> {
-    let explicit = explicit_table_width(style, cw);
+    // `cw` is the table's already-resolved content width (its box was sized from
+    // the `width` declaration upstream), so a table with an explicit width fills
+    // `cw`. Re-resolving the `width` value here would apply a percentage twice
+    // (e.g. an 85%-wide table's columns collapsing to 85% of 85%).
+    let has_width = explicit_table_width(style, cw).is_some();
     if is_fixed(style) {
-        return fixed_columns(placed, ncols, explicit.unwrap_or(cw));
+        return fixed_columns(placed, ncols, cw);
     }
     let mut cols = auto_columns(placed, ncols, fonts);
-    let target = explicit.unwrap_or_else(|| cols.iter().sum::<f32>().min(cw));
-    scale_to(&mut cols, target);
+    let target = if has_width {
+        cw
+    } else {
+        cols.iter().sum::<f32>().min(cw)
+    };
+    let mins = min_columns(placed, ncols, fonts);
+    scale_to(&mut cols, target, &mins);
     cols
 }
 
@@ -291,7 +353,7 @@ fn layout_one<'a>(p: &'a Placed<'a>, cols: &[f32], fs: f32, ctx: &mut Ctx) -> La
         parent_font_size: fs,
         cb_width: w,
     });
-    let frag = block::layout_box_sized(p.lb, &bs, 0.0, 0.0, w, ctx);
+    let frag = block::layout_box_sized_isolated(p.lb, &bs, 0.0, 0.0, w, ctx);
     let content_h = frag.height;
     LaidCell {
         p,
@@ -321,8 +383,10 @@ fn expand_rows(h: &mut [f32], c: &LaidCell) {
     }
 }
 
-fn row_heights(laid: &[LaidCell], nrows: usize) -> Vec<f32> {
-    let mut h = vec![0.0_f32; nrows];
+fn row_heights(laid: &[LaidCell], rows: &[RowRef]) -> Vec<f32> {
+    // Seed each row at its explicit `height` floor (empty spacer rows), then grow
+    // to fit content.
+    let mut h: Vec<f32> = rows.iter().map(|r| r.min_height).collect();
     for c in laid {
         if c.p.rowspan == 1 {
             h[c.p.row] = h[c.p.row].max(c.content_h);
@@ -334,16 +398,6 @@ fn row_heights(laid: &[LaidCell], nrows: usize) -> Vec<f32> {
         }
     }
     h
-}
-
-fn prefix(vals: &[f32]) -> Vec<f32> {
-    let mut out = Vec::with_capacity(vals.len());
-    let mut acc = 0.0;
-    for v in vals {
-        out.push(acc);
-        acc += v;
-    }
-    out
 }
 
 struct Geom {
@@ -382,6 +436,10 @@ fn make_row_frag(row: &RowRef, r: usize, geom: &Geom, cx: f32, cy: f32) -> Fragm
     let content = FragmentContent::Box {
         background: None,
         border: BorderEdges::default(),
+        border_radius: 0.0,
+        shadow: None,
+        gradient: None,
+        transform: None,
     };
     let mut f = Fragment::new(
         row.node_id,
@@ -413,6 +471,71 @@ fn finalize(rows: &[RowRef], laid: Vec<LaidCell>, geom: &Geom, cx: f32, cy: f32)
 }
 
 /// Lay out a table's rows into the content box at `(cx, cy)` of width `cw`.
+/// The table's min-content width: the sum of its columns' natural widths (each the
+/// widest cell in the column, colspans distributed). A table never shrinks below
+/// this — an explicit `width` narrower than the content is overridden (CSS auto
+/// table layout), so a fixed-width infobox still grows to fit a wide image row
+/// instead of overflowing it.
+/// `(horizontal, vertical)` `border-spacing` in px — the gap around/between cells
+/// in the default `separate` model (`2px` per CSS UA); `border-collapse:collapse`
+/// removes it. Without it a table's cells butt together (the infobox label ran
+/// straight into its value: "SpeciesF. catus").
+fn border_spacing(style: &ComputedStyle) -> (f32, f32) {
+    if style.get("border-collapse").map(str::trim) == Some("collapse") {
+        return (0.0, 0.0);
+    }
+    let mut it = style
+        .get("border-spacing")
+        .map(str::split_whitespace)
+        .into_iter()
+        .flatten();
+    let h = it.next().and_then(|t| parse_px(t, DEFAULT_FONT_SIZE));
+    let v = it.next().and_then(|t| parse_px(t, DEFAULT_FONT_SIZE));
+    (h.unwrap_or(2.0), v.or(h).unwrap_or(2.0))
+}
+
+/// Prefix offsets for `n` tracks separated (and bracketed) by `gap`: track `i`
+/// starts at `gap*(i+1) + sum(tracks[..i])`.
+fn spaced_offsets(tracks: &[f32], gap: f32) -> Vec<f32> {
+    let mut out = Vec::with_capacity(tracks.len());
+    let mut acc = gap;
+    for t in tracks {
+        out.push(acc);
+        acc += t + gap;
+    }
+    out
+}
+
+pub(crate) fn min_content_width(
+    items: &[LayoutBox],
+    style: &ComputedStyle,
+    fonts: &FontRegistry,
+) -> f32 {
+    let rows = collect_rows(items);
+    let (placed, ncols) = build_grid(&rows);
+    if ncols == 0 {
+        return 0.0;
+    }
+    let (hs, _) = border_spacing(style);
+    // Each column's min-content is the widest single-column cell (text wraps to its
+    // longest word; a fixed-width cell keeps its size). The table is at least the sum
+    // of those, and at least any spanning cell's own min-content (e.g. the infobox's
+    // 267px cat-image row that spans both columns).
+    let mut w = vec![0.0_f32; ncols];
+    for p in &placed {
+        if p.colspan == 1 {
+            w[p.col] = w[p.col].max(super::flex::min_content_width(p.lb, fonts));
+        }
+    }
+    let base: f32 = w.iter().sum();
+    let span_max = placed
+        .iter()
+        .filter(|p| p.colspan > 1)
+        .map(|p| super::flex::min_content_width(p.lb, fonts))
+        .fold(0.0_f32, f32::max);
+    base.max(span_max) + hs * (ncols as f32 + 1.0)
+}
+
 /// Returns the row fragments (galley-absolute) and the table content height.
 pub(crate) fn layout_table(
     table: &LayoutBox,
@@ -428,15 +551,20 @@ pub(crate) fn layout_table(
     if ncols == 0 {
         return (Vec::new(), 0.0);
     }
-    let cols = column_widths(&table.style, &placed, ncols, cw, ctx.fonts);
+    let (hs, vs) = border_spacing(&table.style);
+    // Reserve the horizontal spacing (gaps + edges) out of the content width so the
+    // columns + gaps still fit the table box.
+    let inner = (cw - hs * (ncols as f32 + 1.0)).max(1.0);
+    let cols = column_widths(&table.style, &placed, ncols, inner, ctx.fonts);
     let laid = layout_cells(&placed, &cols, fs, ctx);
-    let row_h = row_heights(&laid, rows.len());
+    let row_h = row_heights(&laid, &rows);
+    let nrows = row_h.len();
     let geom = Geom {
-        col_x: prefix(&cols),
-        row_y: prefix(&row_h),
-        table_w: cols.iter().sum(),
+        col_x: spaced_offsets(&cols, hs),
+        row_y: spaced_offsets(&row_h, vs),
+        table_w: cols.iter().sum::<f32>() + hs * (ncols as f32 + 1.0),
         row_h,
     };
-    let height = geom.row_h.iter().sum();
+    let height = geom.row_h.iter().sum::<f32>() + vs * (nrows as f32 + 1.0);
     (finalize(&rows, laid, &geom, cx, cy), height)
 }

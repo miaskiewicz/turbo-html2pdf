@@ -78,6 +78,20 @@ pub enum FragmentContent {
     Box {
         background: Option<Rgba>,
         border: BorderEdges,
+        /// `border-radius` resolved to px (0 = square corners). Clamped to half the
+        /// box's shorter side at layout, so `50%` on a square is a full circle.
+        border_radius: f32,
+        /// `box-shadow` (first/topmost layer), painted behind the box by the raster
+        /// so overlay cards/modals read as raised chrome. `None` = no shadow.
+        shadow: Option<BoxShadow>,
+        /// A `linear-gradient(...)` background image, painted over the box (a
+        /// gradient hides the `background` colour). `None` = solid/absent background.
+        gradient: Option<LinearGradient>,
+        /// A CSS `transform` (translate/rotate/scale/matrix): the raster paints this
+        /// box AND its whole subtree through the affine matrix, about the box's
+        /// `transform-origin`. `None` = untransformed. Carousels/slide decks position
+        /// slides via `translate`, so without this they pile up at one spot.
+        transform: Option<Transform2D>,
     },
     /// One laid-out line of shaped text.
     TextLine {
@@ -97,6 +111,50 @@ pub enum FragmentContent {
     Image(ImagePlacement),
 }
 
+/// A resolved `box-shadow` layer (§CSS backgrounds §7). Geometry is px in the
+/// galley's coordinate space; the raster stamps a rounded rect of `color` at the
+/// box's outline, offset by `(offset_x, offset_y)`, grown by `spread`, blurred by
+/// `blur`. `inset` shadows paint inside the box (v1 paints outer only).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct BoxShadow {
+    pub offset_x: i32,
+    pub offset_y: i32,
+    pub blur: u32,
+    pub spread: i32,
+    pub color: Rgba,
+    pub inset: bool,
+}
+
+/// A resolved CSS 2D `transform`. `matrix` is the CSS `matrix(a,b,c,d,e,f)` the
+/// `transform` list multiplies out to (mapping a point `(x,y)` to
+/// `(a·x + c·y + e, b·x + d·y + f)`), applied about `(origin_x, origin_y)` — the
+/// `transform-origin` as a px offset from the box's own top-left. The raster
+/// composes it about the box's absolute position.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Transform2D {
+    pub matrix: [f32; 6],
+    pub origin_x: f32,
+    pub origin_y: f32,
+}
+
+/// A CSS `linear-gradient(...)` background (§CSS images §3.1). `angle_deg` is the
+/// CSS gradient-line angle (0 = to top, 90 = to right, clockwise); `stops` are the
+/// colour stops with positions resolved to a 0..1 fraction of the gradient line,
+/// in order. The raster maps this to its own gradient shader.
+#[derive(Debug, Clone, PartialEq)]
+pub struct LinearGradient {
+    pub angle_deg: f32,
+    pub stops: Vec<GradientStop>,
+}
+
+/// One colour stop of a [`LinearGradient`]: a colour at a 0..1 position along the
+/// gradient line.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct GradientStop {
+    pub color: Rgba,
+    pub pos: f32,
+}
+
 /// A placed raster image: the resolver key plus its intrinsic pixel size and
 /// alpha flag (§7.4). The pixels themselves are re-resolved at emit time so the
 /// galley stays small and the same bytes feed both layout sizing and embedding.
@@ -111,6 +169,10 @@ pub struct ImagePlacement {
     pub intrinsic_h: u32,
     /// Whether the source had transparency (drives SMask emission).
     pub has_alpha: bool,
+    /// When set, the image is a CSS `mask-image`: paint this solid colour everywhere
+    /// the source is opaque (using the source's alpha as a stencil) rather than
+    /// blitting the source pixels. Tints Wikipedia's monochrome SVG UI glyphs.
+    pub tint: Option<Rgba>,
 }
 
 /// Break hints attached to a fragment, consumed by the fragmenter.
@@ -154,6 +216,14 @@ pub struct Fragment {
     pub content: FragmentContent,
     pub break_meta: BreakMeta,
     pub children: Vec<Fragment>,
+    /// The box's used `z-index` (`None` = `auto`), meaningful only when
+    /// [`Fragment::is_positioned`]. Drives stacking-context paint order (§9.9);
+    /// see [`Fragment::paint_z`]/[`Fragment::paint_order`].
+    pub z_index: Option<i32>,
+    /// Whether this fragment's box is positioned (`position` != `static`). A
+    /// positioned box paints above its in-flow siblings within the same stacking
+    /// context, and (with a `z-index`) participates in z ordering.
+    pub is_positioned: bool,
     /// Cross-reference payload (`xref` feature, AC-3.25): the destination name
     /// of a `<t:anchor name>` that landed here, and/or the `#fragment` target of
     /// an `<a href>` whose box this is. Only present under `--features xref`; the
@@ -202,6 +272,8 @@ impl Fragment {
             content,
             break_meta: BreakMeta::default(),
             children: Vec::new(),
+            z_index: None,
+            is_positioned: false,
             #[cfg(feature = "xref")]
             xref: XrefMeta::default(),
             #[cfg(feature = "pdf-ua")]
@@ -214,6 +286,33 @@ impl Fragment {
     /// The bottom edge of this fragment (`y + height`).
     pub fn bottom(&self) -> f32 {
         self.y + self.height
+    }
+
+    /// The effective stacking level used to order this fragment against its
+    /// siblings when painting: the used `z-index` for a positioned box, else `0`
+    /// (an in-flow box stacks at level 0, ignoring any stray `z-index`).
+    pub fn paint_z(&self) -> i32 {
+        if self.is_positioned {
+            self.z_index.unwrap_or(0)
+        } else {
+            0
+        }
+    }
+
+    /// This fragment's child indices in back-to-front paint order (CSS 2.2 §9.9,
+    /// a pragmatic subset): a *stable* sort by `(paint_z, is_positioned)`, so
+    /// within one stacking context negative-`z` boxes paint first, then in-flow
+    /// non-positioned boxes, then `z:auto`/`0` positioned boxes, then positive-`z`
+    /// — with source (DOM) order breaking ties. The children `Vec` itself keeps
+    /// its layout (top-down galley) order so the paginator's flow walk is
+    /// unaffected; only painters reorder via this view.
+    pub fn paint_order(&self) -> Vec<usize> {
+        let mut order: Vec<usize> = (0..self.children.len()).collect();
+        order.sort_by_key(|&i| {
+            let c = &self.children[i];
+            (c.paint_z(), c.is_positioned)
+        });
+        order
     }
 
     /// Shift this fragment and its whole subtree by `(dx, dy)`.

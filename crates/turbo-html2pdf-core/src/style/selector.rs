@@ -1,7 +1,12 @@
 //! CSS selectors for the v1 subset (§4.2): type, universal, `.class`, `#id`,
-//! attribute selectors, `:first-child`/`:last-child`/`:nth-child`/`:nth-of-type`,
-//! and the descendant/child combinators. Sibling combinators (`+`, `~`) and
-//! pseudo-elements are deferred to a later refinement.
+//! attribute selectors, structural + stateful pseudo-classes
+//! (`:first-child`/`:last-child`/`:nth-child`/`:nth-of-type`/`:only-child`/
+//! `:first-of-type`/`:last-of-type`/`:only-of-type`/`:root`/`:empty`/`:not()`/
+//! `:checked`/`:enabled`/`:disabled`), and all four combinators
+//! (descendant, child `>`, next-sibling `+`, subsequent-sibling `~`). Interactive
+//! pseudo-classes (`:hover`/`:focus`/`:active`/`:target`/`:visited`/…) parse but
+//! never match — a static screenshot is the resting state, so styles they gate
+//! (e.g. hover-revealed menus) stay in their default (hidden) state.
 
 /// CSS specificity as (ids, classes+attrs+pseudo-classes, type/element).
 pub type Specificity = (u32, u32, u32);
@@ -10,6 +15,8 @@ pub type Specificity = (u32, u32, u32);
 pub enum Combinator {
     Descendant,
     Child,
+    NextSibling,
+    SubsequentSibling,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -30,12 +37,36 @@ pub struct AttrSel {
     pub value: String,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Pseudo {
     FirstChild,
     LastChild,
+    OnlyChild,
+    FirstOfType,
+    LastOfType,
+    OnlyOfType,
     NthChild(i32, i32),
     NthOfType(i32, i32),
+    Root,
+    Empty,
+    Checked,
+    Enabled,
+    Disabled,
+    /// `:link` / `:any-link` — an unvisited hyperlink (an `<a>`/`<area>`/`<link>`
+    /// with `href`). In a static render every link is unvisited, so this matches
+    /// all of them (and `:visited` never does).
+    Link,
+    /// `:not(...)` — matches when the element matches none of the inner compound
+    /// selectors (a simple selector list; combinators inside `:not` are not split).
+    Not(Vec<Compound>),
+    /// `:is(...)` / `:where(...)` (+ `:matches`/`-webkit-any`) — matches when the
+    /// element matches ANY inner compound. Without this the arg is dropped and the
+    /// bare compound matches everything (e.g. `a:where(.new)` reddening every link).
+    /// Specificity differences between `:is`/`:where` are not modeled.
+    Is(Vec<Compound>),
+    /// An interactive/dynamic pseudo-class (`:hover`/`:focus`/`:active`/`:target`/
+    /// `:visited`/…) — never matches in a static render (resting state).
+    NeverMatch,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
@@ -69,6 +100,9 @@ struct Lexer {
     buf: String,
     tokens: Vec<Token>,
     in_attr: bool,
+    /// Paren depth — a combinator/space char inside `:nth-child(2n+1)` or
+    /// `:not(a + b)` is part of the argument, not a top-level combinator.
+    parens: u32,
 }
 
 impl Lexer {
@@ -79,18 +113,33 @@ impl Lexer {
         }
     }
 
+    /// Whether combinator/whitespace chars are structural here (not inside an
+    /// attribute selector or a pseudo-class argument).
+    fn top_level(&self) -> bool {
+        !self.in_attr && self.parens == 0
+    }
+
     fn feed(&mut self, ch: char) {
         match ch {
             '[' => self.attr(ch, true),
             ']' => self.attr(ch, false),
-            '>' if !self.in_attr => self.combinator(Combinator::Child),
-            c if c.is_whitespace() && !self.in_attr => self.space(),
+            '(' => self.paren(ch, 1),
+            ')' => self.paren(ch, -1),
+            '>' if self.top_level() => self.combinator(Combinator::Child),
+            '+' if self.top_level() => self.combinator(Combinator::NextSibling),
+            '~' if self.top_level() => self.combinator(Combinator::SubsequentSibling),
+            c if c.is_whitespace() && self.top_level() => self.space(),
             c => self.buf.push(c),
         }
     }
 
     fn attr(&mut self, ch: char, opening: bool) {
         self.in_attr = opening;
+        self.buf.push(ch);
+    }
+
+    fn paren(&mut self, ch: char, delta: i32) {
+        self.parens = self.parens.saturating_add_signed(delta);
         self.buf.push(ch);
     }
 
@@ -313,10 +362,59 @@ fn parse_pseudo(name: &str, arg: &str) -> Option<Pseudo> {
     match name {
         "first-child" => Some(Pseudo::FirstChild),
         "last-child" => Some(Pseudo::LastChild),
+        "only-child" => Some(Pseudo::OnlyChild),
+        "first-of-type" => Some(Pseudo::FirstOfType),
+        "last-of-type" => Some(Pseudo::LastOfType),
+        "only-of-type" => Some(Pseudo::OnlyOfType),
         "nth-child" => Some(nth(arg, Pseudo::NthChild)),
         "nth-of-type" => Some(nth(arg, Pseudo::NthOfType)),
+        "root" => Some(Pseudo::Root),
+        "empty" => Some(Pseudo::Empty),
+        "checked" => Some(Pseudo::Checked),
+        "enabled" => Some(Pseudo::Enabled),
+        "disabled" => Some(Pseudo::Disabled),
+        "not" => Some(Pseudo::Not(parse_not(arg))),
+        "is" | "where" | "matches" | "-webkit-any" | "-moz-any" => Some(Pseudo::Is(parse_not(arg))),
+        "link" | "any-link" => Some(Pseudo::Link),
+        // Interactive / dynamic pseudo-classes: valid but never active in a
+        // static render, so they never match (their gated styles stay off).
+        "hover" | "focus" | "focus-within" | "focus-visible" | "active" | "target" | "visited"
+        | "autofocus" | "default" | "placeholder-shown" => Some(Pseudo::NeverMatch),
+        // A pseudo-*ELEMENT* (`::before`/`::after`/`::first-line`/…, whether written
+        // with `::` or the legacy single `:`). turbo generates no pseudo-elements, so
+        // their declared styles must NOT fall onto the originating element — the
+        // selector matches nothing. (Wikipedia's `.vector-page-titlebar::after` sets
+        // `height:1px;position:absolute`; leaking that onto the real titlebar collapsed
+        // it to 1px so the `<h1>` overlapped the tabs below.)
+        "before"
+        | "after"
+        | "first-line"
+        | "first-letter"
+        | "marker"
+        | "selection"
+        | "placeholder"
+        | "backdrop"
+        | "cue"
+        | "file-selector-button"
+        | "target-text"
+        | "grammar-error"
+        | "spelling-error"
+        | "highlight" => Some(Pseudo::NeverMatch),
+        // The empty extra `:` segment of a `::pseudo` (first colon parses as an empty
+        // name), or any unknown pseudo: ignored (matches nothing extra).
         _ => None,
     }
+}
+
+/// Parse a `:not(...)` argument (a comma-separated simple-selector list) into the
+/// compounds it forbids. Combinators inside `:not` are not supported (each clause
+/// is treated as a single compound).
+fn parse_not(arg: &str) -> Vec<Compound> {
+    arg.split(',')
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .map(parse_compound)
+        .collect()
 }
 
 fn nth(arg: &str, make: fn(i32, i32) -> Pseudo) -> Pseudo {
