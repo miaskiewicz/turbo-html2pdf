@@ -82,14 +82,8 @@ fn opt_in_emits_the_to_unicode_cmap() {
         contains(&pdf, b"beginbfchar"),
         "the CMap uses bfchar entries to map glyph codes to Unicode scalars"
     );
-    assert!(
-        contains(&pdf, b"endbfchar"),
-        "each bfchar block is closed"
-    );
-    assert!(
-        contains(&pdf, b"endcmap"),
-        "the CMap stream is terminated"
-    );
+    assert!(contains(&pdf, b"endbfchar"), "each bfchar block is closed");
+    assert!(contains(&pdf, b"endcmap"), "the CMap stream is terminated");
 }
 
 #[test]

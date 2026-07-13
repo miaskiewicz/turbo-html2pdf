@@ -182,7 +182,7 @@ impl RefAlloc {
 /// build with neither feature, this compiles down to a `false` so the branch
 /// (and the extra object) folds away.
 #[cfg(any(feature = "to-unicode", feature = "pdf-ua"))]
-fn to_unicode_on(opts: &super::EmitOptions) -> bool {
+pub(super) fn to_unicode_on(opts: &super::EmitOptions) -> bool {
     #[cfg(feature = "pdf-ua")]
     if opts.pdf_ua {
         return true;
@@ -193,7 +193,7 @@ fn to_unicode_on(opts: &super::EmitOptions) -> bool {
     false
 }
 #[cfg(not(any(feature = "to-unicode", feature = "pdf-ua")))]
-fn to_unicode_on(_opts: &super::EmitOptions) -> bool {
+pub(super) fn to_unicode_on(_opts: &super::EmitOptions) -> bool {
     false
 }
 

@@ -217,11 +217,12 @@ impl FontFace {
     }
 
     /// Reverse the font's Unicode `cmap` into a glyph-id → codepoint map for the
-    /// given used glyphs, for the `/ToUnicode` CMap a tagged PDF needs so screen
-    /// readers can extract text (`pdf-ua`, ISO 14289-1 §7.21.7). The first
-    /// codepoint mapping to a glyph wins (deterministic: subtables and codepoints
-    /// are iterated in table order). Glyphs with no Unicode mapping are omitted.
-    #[cfg(feature = "pdf-ua")]
+    /// given used glyphs, for the `/ToUnicode` CMap emission required by
+    /// ISO 32000-1 §9.10.3 (searchable text via `to-unicode`; also required by
+    /// tagged PDFs per ISO 14289-1 §7.21.7 under `pdf-ua`). The first codepoint
+    /// mapping to a glyph wins (deterministic: subtables and codepoints are
+    /// iterated in table order). Glyphs with no Unicode mapping are omitted.
+    #[cfg(any(feature = "to-unicode", feature = "pdf-ua"))]
     pub fn glyph_to_unicode(&self, glyphs: &[u16]) -> Vec<(u16, u32)> {
         let map = crate::emit::tounicode::reverse_cmap(self.ttf());
         glyphs

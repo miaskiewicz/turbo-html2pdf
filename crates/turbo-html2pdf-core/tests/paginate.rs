@@ -341,7 +341,7 @@ fn ac_6_3_repeatable_header_does_not_bloat_page_count() {
     header.break_meta.repeatable = Some(turbo_html2pdf_core::RepeatKind::Header);
     let mut items = vec![header];
     for i in 0..40 {
-        items.push(boxf(20.0 + f32::from(i) * 20.0, 20.0));
+        items.push(boxf(20.0 + i as f32 * 20.0, 20.0));
     }
     let (pages, _) = run(&root(vec![container(0.0, items)]), &cap120());
     // Not tightly asserting an exact count — the point is it stays in the
@@ -360,7 +360,10 @@ fn ac_6_3_repeatable_header_does_not_bloat_page_count() {
             page.body.len()
         );
         // First body fragment is the re-emitted header.
-        assert!(close(page.body[0].y, 0.0), "header on page {i} is not at page top");
+        assert!(
+            close(page.body[0].y, 0.0),
+            "header on page {i} is not at page top"
+        );
         // Second body fragment (first data row) sits directly below.
         assert!(
             close(page.body[1].y, 20.0),
