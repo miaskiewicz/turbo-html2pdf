@@ -1276,3 +1276,100 @@ fn in_flow_percent_height_stays_content_derived() {
         root.children[0].height
     );
 }
+
+#[test]
+fn aspect_ratio_sizes_auto_height_from_width() {
+    // A `aspect-ratio:1` box 200px wide with auto height (and no in-flow content)
+    // is a 200px square, not collapsed — overriding a smaller `min-height`.
+    let root = lay(
+        &[el(
+            "div",
+            &[
+                ("width", "200px"),
+                ("aspect-ratio", "1"),
+                ("min-height", "40px"),
+            ],
+            vec![],
+        )],
+        400.0,
+    );
+    assert!(
+        (root.children[0].height - 200.0).abs() < 1.0,
+        "square 200, got {}",
+        root.children[0].height
+    );
+}
+
+#[test]
+fn aspect_ratio_ignored_when_height_is_explicit() {
+    // An explicit height wins; the ratio does not override it.
+    let root = lay(
+        &[el(
+            "div",
+            &[
+                ("width", "200px"),
+                ("height", "60px"),
+                ("aspect-ratio", "1"),
+            ],
+            vec![],
+        )],
+        400.0,
+    );
+    assert!(
+        (root.children[0].height - 60.0).abs() < 1.0,
+        "explicit 60, got {}",
+        root.children[0].height
+    );
+}
+
+#[test]
+fn absolute_calc_percent_minus_px_top_positions_inside_parent() {
+    // A `top: calc(50% - 10px)` absolute box in a 200px-tall relative parent sits at
+    // y = 100 - 10 = 90 (calc mixing `%` and px must resolve, not fall to `auto`).
+    let root = lay(
+        &[el(
+            "div",
+            &[("position", "relative"), ("height", "200px")],
+            vec![el(
+                "div",
+                &[
+                    ("position", "absolute"),
+                    ("top", "calc(50% - 10px)"),
+                    ("height", "20px"),
+                    ("background-color", "#f00"),
+                ],
+                vec![],
+            )],
+        )],
+        400.0,
+    );
+    let overlay = &root.children[0].children[0];
+    assert!(
+        (overlay.y - 90.0).abs() < 1.0,
+        "calc(50% - 10px) of 200 = 90, got {}",
+        overlay.y
+    );
+}
+
+#[test]
+fn margin_inline_start_maps_to_left_offset() {
+    // A flow-relative `margin-inline-start` (LTR) offsets the box from the left, so
+    // Google's search-bar "AI Mode" label clears its icon instead of overprinting it.
+    let root = lay(
+        &[el(
+            "div",
+            &[
+                ("margin-inline-start", "20px"),
+                ("width", "50px"),
+                ("height", "10px"),
+            ],
+            vec![],
+        )],
+        400.0,
+    );
+    assert!(
+        (root.children[0].x - 20.0).abs() < 0.5,
+        "margin-inline-start:20px -> x=20, got {}",
+        root.children[0].x
+    );
+}

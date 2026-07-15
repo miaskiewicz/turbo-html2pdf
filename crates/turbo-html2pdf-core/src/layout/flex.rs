@@ -279,6 +279,9 @@ fn dim(lp: LengthPct) -> Dimension {
     match lp {
         LengthPct::Px(v) => Dimension::length(v),
         LengthPct::Pct(p) => Dimension::percent(p / 100.0),
+        // taffy has no mixed `%`+px length; approximate a `calc(% ± px)` flex-item
+        // size by its percentage (the block path resolves the offset exactly).
+        LengthPct::Calc { pct, .. } => Dimension::percent(pct / 100.0),
         LengthPct::Auto => Dimension::auto(),
     }
 }
@@ -297,6 +300,8 @@ fn item_inset(bs: &BoxStyle) -> Rect<LengthPercentageAuto> {
     let edge = |lp: LengthPct| match lp {
         LengthPct::Px(v) => LengthPercentageAuto::length(v),
         LengthPct::Pct(p) => LengthPercentageAuto::percent(p / 100.0),
+        // No mixed `%`+px inset in taffy; approximate by the percentage.
+        LengthPct::Calc { pct, .. } => LengthPercentageAuto::percent(pct / 100.0),
         LengthPct::Auto => LengthPercentageAuto::auto(),
     };
     Rect {
@@ -1033,6 +1038,28 @@ mod coverage_tests {
 
     fn cs(pairs: &[(&str, &str)]) -> ComputedStyle {
         ComputedStyle::from_pairs(pairs.iter().map(|(k, v)| (k.to_string(), v.to_string())))
+    }
+
+    #[test]
+    fn dim_and_edge_approximate_calc_by_its_percentage() {
+        use crate::layout::value::{resolve_box_style, ResolveCtx};
+        // taffy has no mixed `%`+px length; a `calc(% ± px)` size/inset uses the `%`.
+        assert_eq!(
+            dim(LengthPct::Calc {
+                pct: 50.0,
+                px: -20.0
+            }),
+            Dimension::percent(0.5)
+        );
+        let bs = resolve_box_style(
+            &cs(&[("left", "calc(25% + 8px)")]),
+            ResolveCtx {
+                parent_font_size: 16.0,
+                cb_width: 400.0,
+            },
+        );
+        assert_eq!(bs.inset_left, LengthPct::Calc { pct: 25.0, px: 8.0 });
+        assert_eq!(item_inset(&bs).left, LengthPercentageAuto::percent(0.25));
     }
 
     #[test]

@@ -101,10 +101,15 @@ fn out_of_flow_origin(
         (None, Some(r)) => cbx + cbw - bbw - r,
         (None, None) => static_pos.0,
     };
-    let y = match (bs.inset_top.resolve(cbw), bs.inset_bottom.resolve(cbw)) {
+    // `top`/`bottom` resolve against the CB *height* (`abs_cb_h`), not its width —
+    // a `top:calc(66% - 48px)` overlay on a card must land at that fraction of the
+    // card's height. When the CB height is still indefinite the box is deferred
+    // (`place_deferred_abs`), so `abs_cb_h` here is definite.
+    let cbh = ctx.abs_cb_h;
+    let y = match (bs.inset_top.resolve(cbh), bs.inset_bottom.resolve(cbh)) {
         (Some(t), _) => cby + t,
-        // The CB height is unknown mid-layout; anchor `bottom`-only boxes from the
-        // static position too (a documented approximation).
+        // A `bottom`-only box needs its own (laid) height to anchor; the caller's
+        // `anchor_bottom` corrects it once known. Until then keep its static y.
         (None, Some(_)) | (None, None) => static_pos.1,
     };
     (x + bs.margin.left, y + bs.margin.top)
@@ -171,7 +176,9 @@ fn border_box_width(bs: &BoxStyle, cb_width: f32) -> f32 {
 fn definite_content_height(bs: &BoxStyle, outer_cb_h: f32) -> f32 {
     let h = match bs.height {
         LengthPct::Px(px) => px,
-        LengthPct::Pct(p) if outer_cb_h > 0.0 => p / 100.0 * outer_cb_h,
+        LengthPct::Auto => return 0.0,
+        // `%` / `calc(% ± px)` need a definite outer height to resolve against.
+        pct_or_calc if outer_cb_h > 0.0 => pct_or_calc.resolve(outer_cb_h).unwrap_or(0.0),
         _ => return 0.0,
     };
     // A content-box height excludes padding/border; a border-box height includes
@@ -189,9 +196,12 @@ fn definite_content_height(bs: &BoxStyle, outer_cb_h: f32) -> f32 {
 /// `bottom:0; height:33%` overlay fill its band on a card sized by its content,
 /// instead of collapsing to its own text.
 fn positioned_pct_height(bs: &BoxStyle, inset: f32, pos_cb_h: f32) -> Option<f32> {
+    if bs.position == Position::Static || pos_cb_h <= 0.0 {
+        return None;
+    }
     match bs.height {
-        LengthPct::Pct(p) if bs.position != Position::Static && pos_cb_h > 0.0 => {
-            Some((p / 100.0 * pos_cb_h - inset).max(0.0))
+        LengthPct::Pct(_) | LengthPct::Calc { .. } => {
+            bs.height.resolve(pos_cb_h).map(|h| (h - inset).max(0.0))
         }
         _ => None,
     }
@@ -951,11 +961,7 @@ fn prepend_mask_image(
 /// Resolve `border-radius` to px against the border box, clamped to half the
 /// shorter side (so `50%` on a square is a circle, and no corner over-rounds).
 fn resolve_radius(r: LengthPct, bbw: f32, bbh: f32) -> f32 {
-    let px = match r {
-        LengthPct::Px(v) => v,
-        LengthPct::Pct(p) => p / 100.0 * bbw.min(bbh),
-        LengthPct::Auto => 0.0,
-    };
+    let px = r.resolve(bbw.min(bbh)).unwrap_or(0.0);
     px.clamp(0.0, (bbw.min(bbh) / 2.0).max(0.0))
 }
 
@@ -1048,7 +1054,13 @@ fn layout_box_sized_impl(
     // span sized only by `height`, whose measured `content_h` is 0).
     // `abs_cb_h` is restored above to the CONTAINING block's height — the basis a
     // `%` height on this (positioned) box resolves against.
-    let fill_h = content_box_height(bs, content_h, positioned_cb_height(bs, ctx));
+    // An `aspect-ratio` box with an auto height derives it from the content width
+    // (`width / ratio`); content can still expand it. Used as the auto-height basis
+    // so a square media tile is sized by ratio, not by a `min-height` fallback.
+    let auto_h = aspect_auto_height(bs, content_w)
+        .map(|a| a.max(content_h))
+        .unwrap_or(content_h);
+    let fill_h = content_box_height(bs, auto_h, positioned_cb_height(bs, ctx));
     let bbh = fill_h + bs.padding.vertical() + bw.vertical();
     prepend_mask_image(
         lb,
@@ -1163,6 +1175,16 @@ fn layout_box(
         bbw = bbw.max(super::table::min_content_width(items, &lb.style, ctx.fonts) + frame);
     }
     layout_box_sized(lb, &bs, bx, by, bbw, ctx)
+}
+
+/// The height an `aspect-ratio` box derives from its content width when its own
+/// height is `auto` (`content_w / ratio`). `None` for no ratio or an explicit
+/// height — a set height wins and the ratio would instead constrain the width.
+fn aspect_auto_height(bs: &BoxStyle, content_w: f32) -> Option<f32> {
+    if bs.height != LengthPct::Auto {
+        return None;
+    }
+    bs.aspect_ratio.map(|r| content_w / r)
 }
 
 /// Stamp every replaced `<img>` box's intrinsic pixel width from the resolver,

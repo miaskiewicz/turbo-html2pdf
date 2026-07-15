@@ -90,6 +90,7 @@ fn resolve_dim(v: LengthPct, basis: Option<f32>) -> Option<f32> {
     match v {
         LengthPct::Px(px) => Some(px),
         LengthPct::Pct(p) => basis.map(|b| p / 100.0 * b),
+        LengthPct::Calc { pct, px } => basis.map(|b| pct / 100.0 * b + px),
         LengthPct::Auto => None,
     }
 }
@@ -129,5 +130,39 @@ fn axis_scale(value: f32, cap: f32) -> f32 {
         cap / value
     } else {
         1.0
+    }
+}
+
+#[cfg(test)]
+mod coverage_tests {
+    use super::*;
+
+    #[test]
+    fn resolve_dim_handles_px_percent_calc_and_auto() {
+        assert_eq!(resolve_dim(LengthPct::Px(40.0), None), Some(40.0));
+        assert_eq!(resolve_dim(LengthPct::Pct(50.0), Some(200.0)), Some(100.0));
+        // calc(50% + 10px) against a 200px basis = 110.
+        assert_eq!(
+            resolve_dim(
+                LengthPct::Calc {
+                    pct: 50.0,
+                    px: 10.0
+                },
+                Some(200.0)
+            ),
+            Some(110.0)
+        );
+        // A calc with no basis (indefinite CB) can't resolve → None.
+        assert_eq!(
+            resolve_dim(
+                LengthPct::Calc {
+                    pct: 50.0,
+                    px: 10.0
+                },
+                None
+            ),
+            None
+        );
+        assert_eq!(resolve_dim(LengthPct::Auto, Some(200.0)), None);
     }
 }

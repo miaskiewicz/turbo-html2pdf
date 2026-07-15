@@ -50,6 +50,15 @@ pub enum LengthPct {
     Auto,
     Px(f32),
     Pct(f32),
+    /// A `calc()` that mixes a percentage and an absolute offset — `pct`% + `px`px,
+    /// e.g. `calc(100% - 616px)` → `{ pct: 100, px: -616 }`. Resolves once the
+    /// percentage basis is known. Nike's header width and its editorial-card overlay
+    /// `top`/`height` are all `calc(% ± px)`; without this they fell to `auto` and
+    /// the box collapsed to the wrong size/position.
+    Calc {
+        pct: f32,
+        px: f32,
+    },
 }
 
 impl LengthPct {
@@ -59,6 +68,7 @@ impl LengthPct {
             LengthPct::Auto => None,
             LengthPct::Px(v) => Some(*v),
             LengthPct::Pct(p) => Some(p / 100.0 * basis),
+            LengthPct::Calc { pct, px } => Some(pct / 100.0 * basis + px),
         }
     }
 }
@@ -296,14 +306,78 @@ pub fn parse_px(s: &str, font_size: f32) -> Option<f32> {
     }
 }
 
+/// Evaluate an additive `calc(A ± B ± …)` that may MIX `%` and absolute terms into a
+/// [`LengthPct`]: `%` terms sum into the percentage, absolute/font-relative terms into
+/// the px offset. `calc(100% - 616px)` → `Calc{100,-616}`; a pure-px calc stays `Px`,
+/// a pure-`%` calc `Pct`. Only `+`/`-` (CSS mandates surrounding spaces).
+fn eval_calc_length(s: &str, font_size: f32) -> Option<LengthPct> {
+    let toks: Vec<&str> = strip_calc(s)?.split_whitespace().collect();
+    let (first, rest) = toks.split_first()?;
+    let init = calc_term_parts(first, font_size)?;
+    let (pct, px) = rest.chunks_exact(2).try_fold(init, |(pct, px), pair| {
+        let sign = calc_sign(pair[0])?;
+        let (tp, tx) = calc_term_parts(pair[1], font_size)?;
+        Some((pct + sign * tp, px + sign * tx))
+    })?;
+    Some(length_pct_from_parts(pct, px))
+}
+
+/// One `calc()` term split into its (`%`, px) contributions — a `%` term is
+/// `(value, 0)`, any absolute/font-relative length `(0, px)`.
+fn calc_term_parts(t: &str, font_size: f32) -> Option<(f32, f32)> {
+    match parse_raw(t)? {
+        RawLength::Pct(p) => Some((p, 0.0)),
+        raw => Some((0.0, raw_to_px(raw, font_size, 0.0))),
+    }
+}
+
+fn calc_sign(op: &str) -> Option<f32> {
+    match op {
+        "+" => Some(1.0),
+        "-" => Some(-1.0),
+        _ => None,
+    }
+}
+
+/// Collapse summed (`%`, px) parts to the narrowest [`LengthPct`]: pure-px → `Px`,
+/// pure-`%` → `Pct`, otherwise the mixed `Calc`.
+fn length_pct_from_parts(pct: f32, px: f32) -> LengthPct {
+    if pct == 0.0 {
+        LengthPct::Px(px)
+    } else if px == 0.0 {
+        LengthPct::Pct(pct)
+    } else {
+        LengthPct::Calc { pct, px }
+    }
+}
+
+/// Parse `aspect-ratio` (the `<ratio>` form) to width÷height. Accepts `W`, `W/H`,
+/// or `W / H` (spaces optional); `auto`, `0`, or a non-positive ratio yield `None`.
+/// The optional `auto` keyword alongside a ratio (`auto 16/9`) keeps the ratio.
+fn parse_aspect_ratio(s: &str) -> Option<f32> {
+    let t = s.trim().to_ascii_lowercase();
+    let body = t.strip_prefix("auto").unwrap_or(&t).trim();
+    let (w, h) = ratio_terms(body)?;
+    (w > 0.0 && h > 0.0).then_some(w / h)
+}
+
+/// The `(width, height)` of an `aspect-ratio` `<ratio>`: `W/H`, or a lone `W`
+/// (height defaults to 1). `None` if either side isn't a number.
+fn ratio_terms(t: &str) -> Option<(f32, f32)> {
+    match t.split_once('/') {
+        Some((w, h)) => Some((w.trim().parse::<f32>().ok()?, h.trim().parse::<f32>().ok()?)),
+        None => Some((t.parse::<f32>().ok()?, 1.0)),
+    }
+}
+
 /// Parse a `<length-percentage>`/`auto` into a [`LengthPct`].
 pub fn parse_length_pct(s: &str, font_size: f32) -> Option<LengthPct> {
     let t = s.trim();
     if t.eq_ignore_ascii_case("auto") {
         return Some(LengthPct::Auto);
     }
-    if let Some(px) = eval_calc_px(t, font_size) {
-        return Some(LengthPct::Px(px));
+    if let Some(lp) = eval_calc_length(t, font_size) {
+        return Some(lp);
     }
     match parse_raw(t)? {
         RawLength::Pct(p) => Some(LengthPct::Pct(p)),
@@ -526,6 +600,11 @@ pub struct BoxStyle {
     pub max_width: LengthPct,
     pub min_height: LengthPct,
     pub max_height: LengthPct,
+    /// `aspect-ratio` as width÷height (e.g. `16/9` → 1.777, `1` → 1.0), `None` for
+    /// `auto`. When the height is auto, the box derives it from its content width so
+    /// a padding-boxed media tile (Nike's square editorial cards) is sized by ratio
+    /// instead of collapsing to a `min-height` fallback.
+    pub aspect_ratio: Option<f32>,
     /// `border-radius` (first value; `%` against the box size at layout).
     pub border_radius: LengthPct,
     pub box_sizing: BoxSizing,
@@ -671,18 +750,26 @@ fn resolve_edges(s: &ComputedStyle, prefix: &str, fs: f32, basis: f32) -> Edges 
         .get(prefix)
         .map(|v| parse_edge_shorthand(v, fs, basis))
         .unwrap_or_default();
-    let sides = [
-        ("top", &mut e.top),
-        ("right", &mut e.right),
-        ("bottom", &mut e.bottom),
-        ("left", &mut e.left),
-    ];
-    for (name, slot) in sides {
-        if let Some(v) = side_value(s, &format!("{prefix}-{name}"), fs, basis) {
-            *slot = v;
-        }
-    }
+    apply_side(s, prefix, "top", fs, basis, &mut e.top);
+    apply_side(s, prefix, "right", fs, basis, &mut e.right);
+    apply_side(s, prefix, "bottom", fs, basis, &mut e.bottom);
+    apply_side(s, prefix, "left", fs, basis, &mut e.left);
+    // Flow-relative longhands map to physical sides (assuming the LTR /
+    // `horizontal-tb` default): `*-inline-start` → left, `*-inline-end` → right.
+    // Google's search-bar "AI Mode" label uses `margin-inline-start` to clear its
+    // icon; without this it printed over the icon.
+    apply_side(s, prefix, "block-start", fs, basis, &mut e.top);
+    apply_side(s, prefix, "block-end", fs, basis, &mut e.bottom);
+    apply_side(s, prefix, "inline-start", fs, basis, &mut e.left);
+    apply_side(s, prefix, "inline-end", fs, basis, &mut e.right);
     e
+}
+
+/// Overwrite one edge slot from `{prefix}-{name}` when that longhand is set.
+fn apply_side(s: &ComputedStyle, prefix: &str, name: &str, fs: f32, basis: f32, slot: &mut f32) {
+    if let Some(v) = side_value(s, &format!("{prefix}-{name}"), fs, basis) {
+        *slot = v;
+    }
 }
 
 fn length_prop(s: &ComputedStyle, prop: &str, fs: f32, default: LengthPct) -> LengthPct {
@@ -862,6 +949,7 @@ fn resolve_box_metrics(s: &ComputedStyle, fs: f32, ctx: ResolveCtx) -> BoxStyle 
         max_width: length_prop(s, "max-width", fs, LengthPct::Auto),
         min_height: length_prop(s, "min-height", fs, LengthPct::Px(0.0)),
         max_height: length_prop(s, "max-height", fs, LengthPct::Auto),
+        aspect_ratio: s.get("aspect-ratio").and_then(parse_aspect_ratio),
         border_radius: border_radius_of(s, fs),
         box_sizing: box_sizing_of(s),
         font_families: font_families(s),
@@ -1394,6 +1482,75 @@ fn font_size_absolute(s: &ComputedStyle) -> bool {
         s.get("font-size").and_then(parse_raw),
         Some(RawLength::Abs(_))
     )
+}
+
+#[cfg(test)]
+mod calc_aspect_tests {
+    use super::*;
+
+    #[test]
+    fn calc_mixing_percent_and_px_becomes_calc_and_resolves() {
+        let lp = parse_length_pct("calc(100% - 616px)", 16.0).expect("calc");
+        assert_eq!(
+            lp,
+            LengthPct::Calc {
+                pct: 100.0,
+                px: -616.0
+            }
+        );
+        // 100% of 1280 minus 616 = 664.
+        assert_eq!(lp.resolve(1280.0), Some(664.0));
+    }
+
+    #[test]
+    fn calc_addition_and_leading_percent_offset() {
+        let lp = parse_length_pct("calc(66.66667% - 48px)", 16.0).expect("calc");
+        match lp {
+            LengthPct::Calc { pct, px } => {
+                assert!((pct - 66.66667).abs() < 1e-3);
+                assert_eq!(px, -48.0);
+            }
+            other => panic!("expected Calc, got {other:?}"),
+        }
+        // `+` path (and an em term folded into px against the 16px font).
+        assert_eq!(
+            parse_length_pct("calc(50% + 1em)", 16.0),
+            Some(LengthPct::Calc {
+                pct: 50.0,
+                px: 16.0
+            })
+        );
+    }
+
+    #[test]
+    fn pure_px_calc_stays_px_pure_percent_stays_pct() {
+        assert_eq!(
+            parse_length_pct("calc(10px + 5px)", 16.0),
+            Some(LengthPct::Px(15.0))
+        );
+        assert_eq!(
+            parse_length_pct("calc(30% + 20%)", 16.0),
+            Some(LengthPct::Pct(50.0))
+        );
+    }
+
+    #[test]
+    fn calc_with_unsupported_operator_or_bad_term_is_none() {
+        assert_eq!(parse_length_pct("calc(100% * 2)", 16.0), None); // `*` unsupported
+        assert_eq!(parse_length_pct("calc(100% - foo)", 16.0), None); // bad term
+        assert_eq!(parse_length_pct("calc()", 16.0), None); // empty
+    }
+
+    #[test]
+    fn aspect_ratio_forms() {
+        assert_eq!(parse_aspect_ratio("1"), Some(1.0));
+        assert_eq!(parse_aspect_ratio("16 / 9"), Some(16.0 / 9.0));
+        assert_eq!(parse_aspect_ratio("auto 16/9"), Some(16.0 / 9.0));
+        assert_eq!(parse_aspect_ratio("auto"), None);
+        assert_eq!(parse_aspect_ratio("0"), None); // non-positive
+        assert_eq!(parse_aspect_ratio("1/0"), None); // zero denominator
+        assert_eq!(parse_aspect_ratio("wide"), None); // not a number
+    }
 }
 
 #[cfg(test)]
