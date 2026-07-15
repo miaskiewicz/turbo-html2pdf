@@ -183,13 +183,36 @@ fn definite_content_height(bs: &BoxStyle, outer_cb_h: f32) -> f32 {
     (h - inset).max(0.0)
 }
 
-fn content_box_height(bs: &BoxStyle, content_h: f32) -> f32 {
+/// The content-box height a `%` `height` yields for a POSITIONED box, resolved
+/// against its containing block's definite height (`pos_cb_h`) — or `None` when it
+/// doesn't apply (in-flow box, non-`%` height, or an indefinite CB). Lets a
+/// `bottom:0; height:33%` overlay fill its band on a card sized by its content,
+/// instead of collapsing to its own text.
+fn positioned_pct_height(bs: &BoxStyle, inset: f32, pos_cb_h: f32) -> Option<f32> {
+    match bs.height {
+        LengthPct::Pct(p) if bs.position != Position::Static && pos_cb_h > 0.0 => {
+            Some((p / 100.0 * pos_cb_h - inset).max(0.0))
+        }
+        _ => None,
+    }
+}
+
+/// The CB height a positioned box resolves its `%` height against (`abs_cb_h`),
+/// or 0 for an in-flow box (whose `%` height stays deferred to measured content).
+fn positioned_cb_height(bs: &BoxStyle, ctx: &Ctx) -> f32 {
+    if bs.position != Position::Static {
+        ctx.abs_cb_h
+    } else {
+        0.0
+    }
+}
+
+fn content_box_height(bs: &BoxStyle, content_h: f32, pos_cb_h: f32) -> f32 {
     // A `px` `height`/`min-height`/`max-height` is a BORDER-box length under
     // `box-sizing:border-box`, so recover the content height by subtracting the
     // padding+border. Google's header "Sign in" pill is `min-height:40px;padding:10px
     // 12px;border:1px` under the reset's border-box: 40 is the whole pill, so its
     // content is 18 and the box is 40 tall — treating 40 as content made a 62px oval.
-    // (A `%` height stays deferred to the measured content, as before.)
     let inset = match bs.box_sizing {
         BoxSizing::BorderBox => bs.padding.vertical() + bs.border.widths().vertical(),
         BoxSizing::ContentBox => 0.0,
@@ -198,7 +221,9 @@ fn content_box_height(bs: &BoxStyle, content_h: f32) -> f32 {
         LengthPct::Px(v) => Some((v - inset).max(0.0)),
         _ => None,
     };
-    let mut h = to_content(bs.height).unwrap_or(content_h);
+    let mut h = to_content(bs.height)
+        .or_else(|| positioned_pct_height(bs, inset, pos_cb_h))
+        .unwrap_or(content_h);
     if let Some(min) = to_content(bs.min_height) {
         h = h.max(min);
     }
@@ -426,18 +451,32 @@ fn layout_block_flow(
     cx: f32,
     cy: f32,
     cw: f32,
-    fs: f32,
-    align: Align,
+    bs: &BoxStyle,
     ctx: &mut Ctx,
 ) -> (Vec<Fragment>, f32) {
+    let fs = bs.font_size;
     let mut frags = Vec::new();
     let mut flow = FlowRun {
         cursor: cy,
         pending: 0.0,
-        align,
+        align: bs.text_align,
     };
+    let mut deferred: Vec<(&LayoutBox, (f32, f32))> = Vec::new();
     for kid in kids {
         let kbs = resolve(kid, cw, fs);
+        // When this box is the containing block for an `absolute` child but its own
+        // height is still indefinite (auto — driven by in-flow content), the child's
+        // `%`-height / `bottom` inset has no basis yet. Defer it to a second pass and
+        // resolve it against the measured content height, so a `bottom:0; height:33%`
+        // overlay lands inside its card instead of collapsing and dropping below it.
+        if defer_this_kid(bs, &kbs, ctx) {
+            let static_pos = (
+                cx + kbs.margin.left,
+                flow.cursor + flow.pending.max(kbs.margin.top),
+            );
+            deferred.push((kid, static_pos));
+            continue;
+        }
         // `absolute`/`fixed`/`float`: taken out of normal flow, placed on the side
         // without advancing the cursor or margin run (handled by `place_special_kid`).
         if let Some(f) = place_special_kid(kid, &kbs, cx, cw, fs, &flow, ctx) {
@@ -449,7 +488,55 @@ fn layout_block_flow(
     // Height is the in-flow content only. Floats are contained by their BFC (see
     // `layout_box_sized`), not by every block they pass through — a non-BFC block
     // does not grow to enclose a float, so following content wraps beside it.
-    (frags, flow.cursor - cy)
+    let content_h = flow.cursor - cy;
+    place_deferred_abs(&deferred, cw, fs, content_h, &mut frags, ctx);
+    (frags, content_h)
+}
+
+/// Whether an `absolute` child must wait for its CB's content height: the parent
+/// IS its containing block (positioned) but that block's height is still
+/// indefinite (`abs_cb_h == 0`), so a `%`-height / `bottom` inset can't resolve.
+fn defer_this_kid(parent: &BoxStyle, kbs: &BoxStyle, ctx: &Ctx) -> bool {
+    kbs.position == Position::Absolute && parent.position != Position::Static && ctx.abs_cb_h == 0.0
+}
+
+/// Second pass for a positioned CB's own `absolute` children, now that its in-flow
+/// content height (`content_h`) — the basis for their `%`-height and `bottom`
+/// inset — is known. Exposes `content_h` as the CB height for the duration; the
+/// enclosing box's frame restores `abs_cb_h` afterwards.
+fn place_deferred_abs(
+    deferred: &[(&LayoutBox, (f32, f32))],
+    cw: f32,
+    fs: f32,
+    content_h: f32,
+    frags: &mut Vec<Fragment>,
+    ctx: &mut Ctx,
+) {
+    if deferred.is_empty() {
+        return;
+    }
+    ctx.abs_cb_h = content_h;
+    for (kid, static_pos) in deferred {
+        let kbs = resolve(kid, cw, fs);
+        let (bx, by) = out_of_flow_origin(&kbs, cw, ctx, *static_pos);
+        let mut frag = layout_box(kid, bx, by, cw, fs, ctx);
+        anchor_bottom(&mut frag, &kbs, content_h, ctx);
+        frags.push(frag);
+    }
+}
+
+/// Pull a `bottom`-anchored absolute box (auto `top`) to the CB's bottom edge now
+/// that the CB height is known — `out_of_flow_origin` could only leave it at its
+/// static y while the height was indefinite.
+fn anchor_bottom(frag: &mut Fragment, kbs: &BoxStyle, content_h: f32, ctx: &Ctx) {
+    if kbs.inset_top != LengthPct::Auto {
+        return; // `top` wins; the box is already anchored from the top.
+    }
+    let Some(bottom) = kbs.inset_bottom.resolve(content_h) else {
+        return;
+    };
+    let target_y = ctx.abs_cb_y + content_h - bottom - frag.height - kbs.margin.bottom;
+    frag.translate(0.0, target_y - frag.y);
 }
 
 /// Place a child that sits outside normal block flow, returning its fragment if
@@ -769,9 +856,7 @@ fn layout_content(
     ctx: &mut Ctx,
 ) -> (Vec<Fragment>, f32) {
     match &lb.kind {
-        BoxKind::Block(kids) => {
-            layout_block_flow(kids, cx, cy, cw, bs.font_size, bs.text_align, ctx)
-        }
+        BoxKind::Block(kids) => layout_block_flow(kids, cx, cy, cw, bs, ctx),
         BoxKind::Flex(kids) => super::flex::layout_flex(lb, kids, cx, cy, cw, bs.font_size, ctx),
         BoxKind::Grid(kids) => super::flex::layout_grid(lb, kids, cx, cy, cw, bs.font_size, ctx),
         BoxKind::Table(kids) => super::table::layout_table(lb, kids, cx, cy, cw, bs.font_size, ctx),
@@ -961,7 +1046,9 @@ fn layout_box_sized_impl(
     // The content-box height honoring an explicit/min/max `height` — a `background`
     // or `mask` image fills the box even when it has no flow content (an empty icon
     // span sized only by `height`, whose measured `content_h` is 0).
-    let fill_h = content_box_height(bs, content_h);
+    // `abs_cb_h` is restored above to the CONTAINING block's height — the basis a
+    // `%` height on this (positioned) box resolves against.
+    let fill_h = content_box_height(bs, content_h, positioned_cb_height(bs, ctx));
     let bbh = fill_h + bs.padding.vertical() + bw.vertical();
     prepend_mask_image(
         lb,

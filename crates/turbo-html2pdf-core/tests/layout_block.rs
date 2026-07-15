@@ -1111,3 +1111,168 @@ fn border_radius_auto_resolves_to_zero() {
     let r = box_radius(&root.children[0]).expect("box");
     assert_eq!(r, 0.0, "border-radius:auto → 0");
 }
+
+/// The bg overlay is the first child of the `relative` card whose `background`
+/// paints — i.e. the second card child (index 1). Return its fragment.
+fn overlay_of(root: &Fragment) -> &Fragment {
+    &root.children[0].children[1]
+}
+
+#[test]
+fn absolute_percent_height_child_uses_relative_parent_content_height() {
+    // A `relative` card sized by a 300px in-flow block; a `bottom:0; height:50%`
+    // overlay must be 150px tall (half the card) and sit in the card's lower half
+    // (y 150..300), NOT collapse to its text and drop below the card.
+    let root = lay(
+        &[el(
+            "div",
+            &[("position", "relative")],
+            vec![
+                el("div", &[("height", "300px")], vec![]),
+                el(
+                    "div",
+                    &[
+                        ("position", "absolute"),
+                        ("height", "50%"),
+                        ("bottom", "0"),
+                        ("background-color", "#f00"),
+                    ],
+                    vec![],
+                ),
+            ],
+        )],
+        400.0,
+    );
+    let overlay = overlay_of(&root);
+    assert!(
+        (overlay.height - 150.0).abs() < 1.0,
+        "50% of 300, got {}",
+        overlay.height
+    );
+    assert!(
+        (overlay.y - 150.0).abs() < 1.0,
+        "bottom:0 anchors to card bottom (y=150), got {}",
+        overlay.y
+    );
+}
+
+#[test]
+fn absolute_flex_overlay_fills_its_band_at_card_bottom() {
+    // The nike editorial-card shape: a flex overlay with `bottom:0; height:33.33%`
+    // over an auto-height card. It must occupy the card's bottom third with its
+    // text un-clipped inside, not render below the card image.
+    let root = lay(
+        &[el(
+            "div",
+            &[("position", "relative")],
+            vec![
+                el("div", &[("height", "300px")], vec![]),
+                el(
+                    "div",
+                    &[
+                        ("position", "absolute"),
+                        ("display", "flex"),
+                        ("height", "33.33333%"),
+                        ("bottom", "0"),
+                        ("background-color", "#f00"),
+                    ],
+                    vec![el("div", &[], vec![txt("Fast Sprints?")])],
+                ),
+            ],
+        )],
+        400.0,
+    );
+    let overlay = overlay_of(&root);
+    assert!(
+        (overlay.height - 100.0).abs() < 1.0,
+        "33.33% of 300, got {}",
+        overlay.height
+    );
+    assert!(
+        (overlay.y - 200.0).abs() < 1.0,
+        "sits at card bottom (y=200), got {}",
+        overlay.y
+    );
+}
+
+#[test]
+fn deferred_absolute_with_top_inset_anchors_from_the_top() {
+    // A deferred `absolute` child with an explicit `top` (no `bottom`) keeps its
+    // top anchor — `anchor_bottom` must leave it alone.
+    let root = lay(
+        &[el(
+            "div",
+            &[("position", "relative")],
+            vec![
+                el("div", &[("height", "300px")], vec![]),
+                el(
+                    "div",
+                    &[
+                        ("position", "absolute"),
+                        ("top", "40px"),
+                        ("background-color", "#0f0"),
+                    ],
+                    vec![el("div", &[("height", "20px")], vec![])],
+                ),
+            ],
+        )],
+        400.0,
+    );
+    let overlay = overlay_of(&root);
+    assert!(
+        (overlay.y - 40.0).abs() < 1.0,
+        "top:40px anchors from the top, got {}",
+        overlay.y
+    );
+}
+
+#[test]
+fn deferred_absolute_without_vertical_inset_keeps_static_y() {
+    // A deferred `absolute` child with neither `top` nor `bottom` stays at its
+    // static y — `anchor_bottom` sees no `bottom` and does not move it.
+    let root = lay(
+        &[el(
+            "div",
+            &[("position", "relative")],
+            vec![
+                el("div", &[("height", "80px")], vec![]),
+                el(
+                    "div",
+                    &[
+                        ("position", "absolute"),
+                        ("left", "0"),
+                        ("background-color", "#00f"),
+                    ],
+                    vec![el("div", &[("height", "10px")], vec![])],
+                ),
+            ],
+        )],
+        400.0,
+    );
+    let overlay = overlay_of(&root);
+    assert!(
+        (overlay.y - 80.0).abs() < 1.0,
+        "no top/bottom → static y (after the 80px block), got {}",
+        overlay.y
+    );
+}
+
+#[test]
+fn in_flow_percent_height_stays_content_derived() {
+    // An in-flow `%` height has no definite basis in the flow model, so the box
+    // still sizes to its content (the `positioned_pct_height` guard is in-flow →
+    // `None`), not to the percentage.
+    let root = lay(
+        &[el(
+            "div",
+            &[("height", "50%")],
+            vec![el("div", &[("height", "30px")], vec![])],
+        )],
+        400.0,
+    );
+    assert!(
+        (root.children[0].height - 30.0).abs() < 1.0,
+        "in-flow 50% → content height (30), got {}",
+        root.children[0].height
+    );
+}
