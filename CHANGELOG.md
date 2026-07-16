@@ -4,6 +4,32 @@ All notable changes to turbo-html2pdf are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/); versions follow SemVer. The npm,
 PyPI, and crates.io packages release in lockstep from a `v*` tag (PyPI on `pyv*`).
 
+## [0.2.14] — real-site rendering, round 2 (nike.com cards / google.com search bar)
+
+More layout fixes found rendering production home pages faithfully.
+
+### Added
+- **`calc(% ± px)`** length support (a new mixed `LengthPct::Calc { pct, px }`), so
+  `width:calc(100% - 616px)` and `top:calc(66.6% - 48px)` resolve instead of falling
+  to `auto` — Nike's nav width and its editorial-card text overlays.
+- **`aspect-ratio`**: an auto-height box derives its height from the content width
+  (`width / ratio`), so a square media tile is sized by ratio rather than collapsing
+  to a `min-height` fallback (Nike's editorial cards were too short, and the image +
+  overlay overflowed and were covered by the next card).
+- **Flow-relative margins/padding**: `*-inline-start/-end` and `*-block-start/-end`
+  longhands map to the physical sides (LTR / `horizontal-tb`), so Google's search-bar
+  labels honor their `margin-inline-start`.
+
+### Fixed
+- An `absolute` overlay with a `%`-height / `bottom` inset inside an **auto-height
+  positioned** card now resolves against the card's measured content height (a
+  deferred second pass) instead of collapsing and dropping below the card.
+- `top`/`bottom` insets on an out-of-flow box resolve against the containing block's
+  **height**, not its width (only square containing blocks landed right before).
+- An auto-inset **absolute flex child** sits at its static start position instead of
+  being centered by the container's `justify-content` (Google's "AI Mode" sparkle
+  icon was printing over the label).
+
 ## [0.2.13] — real-site rendering (google.com / nike.com home pages)
 
 A batch of layout + paint fixes that make production home pages render faithfully.
