@@ -242,7 +242,7 @@ fn item_style(item: &LayoutBox, fs: f32) -> Style {
     if bs.position.is_out_of_flow() {
         return Style {
             position: Position::Absolute,
-            inset: item_inset(&bs),
+            inset: abs_item_inset(&bs),
             size: item_size(&bs),
             margin: item_margins(&bs),
             ..Default::default()
@@ -310,6 +310,20 @@ fn item_inset(bs: &BoxStyle) -> Rect<LengthPercentageAuto> {
         top: edge(bs.inset_top),
         bottom: edge(bs.inset_bottom),
     }
+}
+
+/// The inset for an absolutely-positioned flex child, but with a fully-`auto`
+/// horizontal axis anchored to the start (`left: 0`) — its STATIC in-flow origin —
+/// instead of letting taffy CENTER it via the container's `justify-content`. Google's
+/// "AI Mode" pill absolutely-positions its sparkle icon with no insets; centered on
+/// the main axis it printed over the label. The (cross) vertical axis is left `auto`
+/// so `align-items` still centers it; an explicit inset on either edge is kept.
+fn abs_item_inset(bs: &BoxStyle) -> Rect<LengthPercentageAuto> {
+    let mut inset = item_inset(bs);
+    if bs.inset_left == LengthPct::Auto && bs.inset_right == LengthPct::Auto {
+        inset.left = LengthPercentageAuto::length(0.0);
+    }
+    inset
 }
 
 // --------------------------------------------------------------------------
@@ -1038,6 +1052,30 @@ mod coverage_tests {
 
     fn cs(pairs: &[(&str, &str)]) -> ComputedStyle {
         ComputedStyle::from_pairs(pairs.iter().map(|(k, v)| (k.to_string(), v.to_string())))
+    }
+
+    #[test]
+    fn abs_item_inset_anchors_fully_auto_horizontal_axis_to_start() {
+        use crate::layout::value::{resolve_box_style, ResolveCtx};
+        let ctx = ResolveCtx {
+            parent_font_size: 16.0,
+            cb_width: 200.0,
+        };
+        // No horizontal inset → `left` anchors to 0 (static start), not centered.
+        let none = resolve_box_style(&cs(&[("position", "absolute")]), ctx);
+        assert_eq!(
+            abs_item_inset(&none).left,
+            LengthPercentageAuto::length(0.0)
+        );
+        // Vertical stays `auto` so `align-items` can still center it.
+        assert_eq!(abs_item_inset(&none).top, LengthPercentageAuto::auto());
+        // An explicit horizontal inset is preserved (no start-anchor).
+        let right = resolve_box_style(&cs(&[("position", "absolute"), ("right", "4px")]), ctx);
+        assert_eq!(abs_item_inset(&right).left, LengthPercentageAuto::auto());
+        assert_eq!(
+            abs_item_inset(&right).right,
+            LengthPercentageAuto::length(4.0)
+        );
     }
 
     #[test]
