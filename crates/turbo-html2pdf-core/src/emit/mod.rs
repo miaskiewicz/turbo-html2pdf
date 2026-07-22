@@ -46,6 +46,18 @@ pub use fonts::FontStore;
 pub use image::ImageStore;
 pub use watermark::{ImageWatermark, TextWatermark, Watermark};
 
+// Reused by the post-emit `stamp` overlay so the CSS-px→pt scale, the
+// rotate-about-center geometry, the fill-colour operator and the fade
+// `ExtGState` name have a single source of truth.
+#[cfg(feature = "stamp")]
+pub(crate) use color::set_fill;
+#[cfg(feature = "stamp")]
+pub(crate) use unit::px_to_pt;
+#[cfg(feature = "stamp")]
+pub(crate) use watermark::rotation_about;
+#[cfg(feature = "stamp")]
+pub(crate) use watermark::FADE_GS_NAME;
+
 #[cfg(feature = "encrypt")]
 pub use encrypt::{Encryption, Permissions};
 

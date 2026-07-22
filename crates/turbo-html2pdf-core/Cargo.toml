@@ -50,6 +50,14 @@ print-color = []
 # enabled — the default build never compiles it. (AC: append.)
 append = ["dep:lopdf"]
 
+# Overlay a faded diagonal text watermark onto every page of an already-existing
+# (plaintext) PDF, post-emit. `pdf-writer` is write-only and cannot parse a
+# finished PDF, so this parses with `lopdf` (like `append`) and injects an
+# additive Form XObject per page. A distinct gate from `append` (it is a
+# different capability) that also pulls `lopdf`; the default build compiles
+# neither. Encryption round-trip is a later task. (AC: stamp.)
+stamp = ["dep:lopdf"]
+
 # Vector (SVG) image support (Phase 15b, §7.4). Off by default: the rasterizer
 # (`resvg`/`usvg`/`tiny-skia`) pulls a large transitive tree pinned for a stable
 # MSRV (well under the workspace's 1.88 floor) and audited for determinism (no
