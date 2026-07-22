@@ -56,7 +56,7 @@ pub use paginate::{
 };
 pub use render::{render_pages, PageContext, RenderInputs};
 #[cfg(feature = "stamp")]
-pub use stamp::{stamp, StampError, WATERMARK_XOBJECT_NAME};
+pub use stamp::{stamp, StampError, StampWatermark, WATERMARK_XOBJECT_NAME};
 pub use style::{
     build_cascade, build_cascade_with_width, set_media_viewport_height, style_tree, Cascade,
     ComputedStyle, StyledElement, StyledNode,

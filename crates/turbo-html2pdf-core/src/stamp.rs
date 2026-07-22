@@ -1,4 +1,5 @@
-//! Overlay a watermark onto every page of an existing PLAINTEXT PDF (`stamp`
+//! Overlay a watermark onto every page of an existing PDF — plaintext, or
+//! password-protected via the optional decrypt/re-encrypt round-trip (`stamp`
 //! feature).
 //!
 //! turbo's emitter paints a watermark *during* the render pass (see
@@ -25,15 +26,29 @@
 //! the emitter ([`rotation_about`](crate::emit) / `px_to_pt`), so the render-
 //! time mark and this post-emit mark rotate and scale identically.
 //!
-//! Encryption is deliberately out of scope here: this task stamps plaintext
-//! PDFs. Opening/re-sealing an encrypted PDF around a stamp is a later task.
+//! **Encryption (Task 3).** [`stamp`] can also open a PASSWORD-PROTECTED input
+//! and hand back a still-protected result: `password` decrypts the input
+//! before the overlay runs, `encryption` re-encrypts the result afterwards.
+//! Both are independently optional, so plaintext in/out is unchanged. The
+//! decrypt/encrypt calls reuse exactly what the Task 1 spike
+//! (`tests/encryption_roundtrip.rs`) proved against turbo's own V5/R6/AESV3
+//! `encrypt` feature output: `lopdf::Document::decrypt`/`encrypt` against an
+//! `lopdf::EncryptionState::V5`. See [`normalize_encrypt_length`] for the one
+//! byte-level workaround that reuse needed.
 
-use lopdf::{Dictionary, Document, Object, ObjectId, Stream};
+use std::collections::BTreeMap;
+use std::sync::Arc;
+
+use lopdf::encryption::crypt_filters::{Aes256CryptFilter, CryptFilter};
+use lopdf::{
+    Dictionary, Document, EncryptionState, EncryptionVersion, Object, ObjectId,
+    Permissions as LopdfPermissions, Stream,
+};
 use pdf_writer::{Content, Name, Str};
 use thiserror::Error;
 
-use crate::emit::{px_to_pt, rotation_about, set_fill, FADE_GS_NAME};
-use crate::{TextWatermark, Watermark};
+use crate::emit::{px_to_pt, rotation_about, set_fill, Encryption, Permissions, FADE_GS_NAME};
+use crate::layout::value::Rgba;
 
 /// The `/XObject` resource name the per-page overlay is registered under. Chosen
 /// to be distinct from any name turbo's emitter (or a foreign PDF) uses, so
@@ -42,6 +57,26 @@ pub const WATERMARK_XOBJECT_NAME: &str = "TurboWmStamp";
 
 /// The base-14 font resource name used inside the overlay's own `/Resources`.
 const FONT_NAME: &str = "F1";
+
+/// A text watermark for the post-emit overlay. Face-less on purpose: the
+/// overlay draws base-14 Helvetica (never shapes or embeds a font), unlike the
+/// render-time [`crate::TextWatermark`], whose mark carries a [`crate::FontFace`]
+/// for the emitter's glyph-subsetting path.
+#[derive(Debug, Clone)]
+pub struct StampWatermark {
+    /// The word to stamp.
+    pub text: String,
+    /// Font size in CSS px (96 dpi), scaled to points via [`px_to_pt`] like the
+    /// render-time mark.
+    pub font_size: f32,
+    /// Fill color (the alpha channel is ignored here; fade is via `opacity`).
+    pub color: Rgba,
+    /// Fill opacity `0.0..=1.0`, applied through the overlay's `/ca`+`/CA`
+    /// `ExtGState`.
+    pub opacity: f32,
+    /// Rotation about the page center, in degrees (counter-clockwise).
+    pub angle_deg: f32,
+}
 
 /// A4 dimensions in points, used only as a fallback when a page carries no
 /// `/MediaBox` at all (turbo always writes one per page).
@@ -61,45 +96,174 @@ pub enum StampError {
     /// The input parsed but contains no pages, so there is nothing to stamp.
     #[error("no pages to stamp: input contains no pages")]
     NoPages,
-    /// An image watermark was requested. Only text watermarks are supported by
-    /// the post-emit overlay (an image mark needs the emit-time raster pipeline).
-    #[error("unsupported watermark: an image watermark cannot be stamped post-emit")]
-    UnsupportedWatermark,
+    /// `password` was `Some` but did not open the input (wrong password, or the
+    /// input was not actually encrypted under the handler lopdf supports).
+    #[error("failed to decrypt input PDF: {0}")]
+    Decrypt(lopdf::Error),
+    /// `encryption` was `Some` but lopdf could not re-encrypt the stamped
+    /// document under it.
+    #[error("failed to encrypt output PDF: {0}")]
+    Encrypt(lopdf::Error),
 }
 
-/// Overlay `watermark` on EVERY page of a PLAINTEXT `pdf`, returning new bytes.
+/// Overlay `watermark` on EVERY page of `pdf`, returning new bytes.
 ///
 /// The page count and every page's existing content are preserved; each page
-/// gains an additive, faded, diagonal text overlay. Output is deterministic
-/// (no clock, no entropy).
+/// gains an additive, faded, diagonal text overlay.
+///
+/// `password` and `encryption` are independently optional:
+/// - `password` is `Some` to open a PASSWORD-PROTECTED `pdf` first; `None` reads
+///   `pdf` as plaintext, unchanged from before.
+/// - `encryption` is `Some` to re-seal the stamped result under a (possibly new)
+///   password; `None` saves plaintext, unchanged from before.
+///
+/// With both `None` the output is deterministic (no clock, no entropy), exactly
+/// as before this parameter was added; encrypting introduces the random
+/// salts/IVs/file key encryption legitimately needs.
 ///
 /// Returns [`StampError::Malformed`] if `pdf` does not parse, [`StampError::NoPages`]
-/// if it has no pages, and [`StampError::UnsupportedWatermark`] for an image
-/// watermark (only text is supported post-emit).
-pub fn stamp(pdf: &[u8], watermark: &Watermark) -> Result<Vec<u8>, StampError> {
-    let text = match watermark {
-        Watermark::Text(text) => text.as_ref(),
-        Watermark::Image(_) => return Err(StampError::UnsupportedWatermark),
-    };
-
-    let mut doc = Document::load_mem(pdf)?;
-    let page_ids: Vec<ObjectId> = doc.get_pages().into_values().collect();
-    if page_ids.is_empty() {
-        return Err(StampError::NoPages);
-    }
-
-    for page_id in page_ids {
-        overlay_page(&mut doc, page_id, text);
-    }
+/// if it has no pages, [`StampError::Decrypt`] if `password` does not open an
+/// encrypted `pdf`, and [`StampError::Encrypt`] if re-encrypting the stamped
+/// result fails.
+pub fn stamp(
+    pdf: &[u8],
+    watermark: &StampWatermark,
+    password: Option<&str>,
+    encryption: Option<&Encryption>,
+) -> Result<Vec<u8>, StampError> {
+    let mut doc = load_document(pdf, password)?;
+    stamp_all_pages(&mut doc, watermark)?;
+    reencrypt_if_requested(&mut doc, encryption)?;
 
     let mut out = Vec::new();
     doc.save_to(&mut out).expect("lopdf save to Vec");
     Ok(out)
 }
 
+/// Overlay `text` on every page of `doc`, or [`StampError::NoPages`] if it has
+/// none.
+fn stamp_all_pages(doc: &mut Document, text: &StampWatermark) -> Result<(), StampError> {
+    let page_ids: Vec<ObjectId> = doc.get_pages().into_values().collect();
+    if page_ids.is_empty() {
+        return Err(StampError::NoPages);
+    }
+    for page_id in page_ids {
+        overlay_page(doc, page_id, text);
+    }
+    Ok(())
+}
+
+/// Re-encrypt `doc` under `encryption` when given; a no-op when `None`, so
+/// plaintext output is unchanged.
+fn reencrypt_if_requested(
+    doc: &mut Document,
+    encryption: Option<&Encryption>,
+) -> Result<(), StampError> {
+    let Some(enc) = encryption else {
+        return Ok(());
+    };
+    let state = v5_encryption_state(enc);
+    doc.encrypt(&state).map_err(StampError::Encrypt)
+}
+
+/// Parse `pdf`, decrypting it with `password` first when given.
+///
+/// A parse failure (either before or after decrypting) is [`StampError::Malformed`];
+/// a decrypt failure (wrong password, or not actually encrypted) is
+/// [`StampError::Decrypt`] — the same split the Task 1 spike proved, now the
+/// permanent shape of `stamp`'s input path.
+fn load_document(pdf: &[u8], password: Option<&str>) -> Result<Document, StampError> {
+    let Some(password) = password else {
+        return Ok(Document::load_mem(pdf)?);
+    };
+    let normalized = normalize_encrypt_length(pdf);
+    let mut doc = Document::load_mem(&normalized)?;
+    doc.decrypt(password).map_err(StampError::Decrypt)?;
+    Ok(doc)
+}
+
+/// Work around a confirmed lopdf 0.36 bug (not a missing capability, see the
+/// Task 1 spike's module doc for the full root-cause trace): `PasswordAlgorithm
+/// ::try_from` unconditionally rejects any `/Encrypt` dict whose top-level
+/// `/Length` falls outside `40..=128`, even though that field is read only by
+/// the legacy R2-R4 key derivation and is dead for R6/AESV3. turbo's own
+/// `encrypt` feature writes `/Length 256` for spec/Acrobat compatibility (ISO
+/// 32000-2 Table 20 does not require it for V5, but real-world V5 encoders
+/// commonly still write it), which trips lopdf's over-strict check.
+///
+/// Rewriting the ASCII digits after that exact, unique `/Length 256` substring
+/// to any in-range value is offset-preserving (same byte length, so no xref
+/// offset in the file shifts) and provably inert for R6 (the field is unused by
+/// the AESV3 key derivation lopdf actually runs) — general input tolerance, not
+/// a test-only patch. When the substring is absent (plaintext input, or an
+/// encrypted input that doesn't carry the quirk), the bytes pass through
+/// unchanged.
+fn normalize_encrypt_length(pdf: &[u8]) -> std::borrow::Cow<'_, [u8]> {
+    let needle = b"/Length 256";
+    match pdf.windows(needle.len()).position(|w| w == needle) {
+        Some(at) => {
+            let mut patched = pdf.to_vec();
+            patched[at..at + needle.len()].copy_from_slice(b"/Length 128");
+            std::borrow::Cow::Owned(patched)
+        }
+        None => std::borrow::Cow::Borrowed(pdf),
+    }
+}
+
+/// Build a fresh V5/AES-256 `EncryptionState` from turbo's `Encryption`
+/// settings, mirroring the Task 1 spike's `v5_state` exactly (same crypt
+/// filter, same fresh random file-encryption key from the OS CSPRNG).
+///
+/// An absent `owner_password` falls back to the user password, matching
+/// `emit::encrypt`'s own semantics (a valid `/O`/`/OE` pair is required either
+/// way).
+fn v5_encryption_state(enc: &Encryption) -> EncryptionState {
+    let mut file_encryption_key = [0u8; 32];
+    getrandom::getrandom(&mut file_encryption_key).expect("OS CSPRNG must be available to encrypt");
+    let crypt_filter: Arc<dyn CryptFilter> = Arc::new(Aes256CryptFilter);
+    let owner_password = enc.owner_password.as_deref().unwrap_or(&enc.user_password);
+    let version = EncryptionVersion::V5 {
+        encrypt_metadata: true,
+        crypt_filters: BTreeMap::from([(b"StdCF".to_vec(), crypt_filter)]),
+        file_encryption_key: &file_encryption_key,
+        stream_filter: b"StdCF".to_vec(),
+        string_filter: b"StdCF".to_vec(),
+        owner_password,
+        user_password: &enc.user_password,
+        permissions: lopdf_permissions(enc.permissions),
+    };
+    EncryptionState::try_from(version).expect("V5 crypt filter/state is always constructible")
+}
+
+/// Map `emit::Permissions` onto `lopdf::Permissions` field for field (every bit
+/// lines up 1:1 with an ISO 32000-2 Table 22 permission), so re-encrypting a
+/// stamped document carries forward exactly the restrictions the caller set
+/// rather than silently widening or dropping any of them.
+fn lopdf_permissions(permissions: Permissions) -> LopdfPermissions {
+    [
+        (permissions.print, LopdfPermissions::PRINTABLE),
+        (permissions.modify, LopdfPermissions::MODIFIABLE),
+        (permissions.copy, LopdfPermissions::COPYABLE),
+        (permissions.annotate, LopdfPermissions::ANNOTABLE),
+        (permissions.fill_forms, LopdfPermissions::FILLABLE),
+        (
+            permissions.accessibility,
+            LopdfPermissions::COPYABLE_FOR_ACCESSIBILITY,
+        ),
+        (permissions.assemble, LopdfPermissions::ASSEMBLABLE),
+        (
+            permissions.high_quality_print,
+            LopdfPermissions::PRINTABLE_IN_HIGH_QUALITY,
+        ),
+    ]
+    .into_iter()
+    .filter(|(granted, _)| *granted)
+    .fold(LopdfPermissions::empty(), |acc, (_, flag)| acc | flag)
+}
+
 /// Add the watermark Form XObject to one page and invoke it from that page's
 /// content, leaving the page's original streams untouched.
-fn overlay_page(doc: &mut Document, page_id: ObjectId, text: &TextWatermark) {
+fn overlay_page(doc: &mut Document, page_id: ObjectId, text: &StampWatermark) {
     let (width, height) = media_box_size(doc, page_id);
     let form = watermark_form(text, width, height);
     let form_id = doc.add_object(Object::Stream(form));
@@ -137,7 +301,7 @@ fn rect_size(obj: &Object) -> Option<(f32, f32)> {
 /// Build the watermark's Form XObject: a page-sized bounding box, an identity
 /// matrix, self-contained `/Resources` (Helvetica + the fade `/ExtGState`) and
 /// the rotated, faded, centered text as its content stream.
-fn watermark_form(text: &TextWatermark, width: f32, height: f32) -> Stream {
+fn watermark_form(text: &StampWatermark, width: f32, height: f32) -> Stream {
     let mut dict = Dictionary::new();
     dict.set("Type", Object::Name(b"XObject".to_vec()));
     dict.set("Subtype", Object::Name(b"Form".to_vec()));
@@ -179,7 +343,7 @@ fn form_resources(opacity: f32) -> Dictionary {
 /// same [`pdf_writer::Content`] builder the render-time emitter uses (see
 /// `emit::watermark::paint_text`, this overlay's render-time twin) so operator
 /// formatting and text-string escaping have one implementation.
-fn form_content(text: &TextWatermark, width: f32, height: f32) -> Vec<u8> {
+fn form_content(text: &StampWatermark, width: f32, height: f32) -> Vec<u8> {
     let size_pt = px_to_pt(text.font_size);
     let advance = text_advance_pt(&text.text, size_pt);
     let (cx, cy) = (width / 2.0, height / 2.0);

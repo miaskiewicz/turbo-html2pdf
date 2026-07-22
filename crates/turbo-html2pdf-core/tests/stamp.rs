@@ -1,5 +1,5 @@
-//! `stamp` feature tests (Task 2 of the `stamp()` design). Only compiled with
-//! `--features stamp`. Builds a real, multi-page PLAINTEXT PDF with turbo's own
+//! `stamp` feature tests (Tasks 2-3 of the `stamp()` design). Only compiled
+//! with `--features stamp`. Builds a real, multi-page PDF with turbo's own
 //! emitter, then exercises [`stamp`]: every page keeps its original content and
 //! the document keeps its page count, while EACH page gains a faded diagonal
 //! watermark overlay carrying the requested text.
@@ -11,6 +11,15 @@
 //! body operators (`BT`), and the referenced Form XObject's stream must carry
 //! the watermark's shown text (`(CANCELLED) Tj`), its fade (`gs`) and its
 //! rotation (`cm`).
+//!
+//! Task 3 widens [`stamp`] with `password`/`encryption` parameters: the
+//! plaintext-only tests below now pass `None, None` (unchanged behaviour), and
+//! a second block of tests exercises the encrypted round trip (decrypt with
+//! `password`, overlay, re-encrypt with `encryption`) against a REAL encrypted
+//! fixture built through turbo's own `emit_pdf` + `Encryption`, mirroring the
+//! Task 1 spike (`tests/encryption_roundtrip.rs`) but through `stamp` itself —
+//! including feeding turbo's raw encrypted bytes with NO test-side `/Length`
+//! patch, proving that normalization now lives inside `stamp`.
 
 #![cfg(feature = "stamp")]
 
@@ -22,11 +31,14 @@ use turbo_html2pdf_core::layout::fragment::{Fragment, FragmentContent, NodeId, P
 use turbo_html2pdf_core::layout::value::Rgba;
 use turbo_html2pdf_core::paginate::{Page, PageGeometry};
 use turbo_html2pdf_core::{
-    emit_pdf, stamp, EmitOptions, FontFace, ImageWatermark, PageKind, StampError, TextWatermark,
-    Watermark, WATERMARK_XOBJECT_NAME,
+    emit_pdf, stamp, EmitOptions, Encryption, FontFace, PageKind, Permissions, StampError,
+    StampWatermark, WATERMARK_XOBJECT_NAME,
 };
 
 const WATERMARK_TEXT: &str = "CANCELLED";
+const ORIGINAL_USER_PW: &str = "s3cret-user-pw";
+const NEW_USER_PW: &str = "brand-new-user-pw";
+const NEW_OWNER_PW: &str = "brand-new-owner-pw";
 
 // --------------------------------------------------------------------------
 // fixture: a real, multi-page plaintext PDF from turbo's own emitter
@@ -80,16 +92,43 @@ fn two_page_pdf() -> Vec<u8> {
     emit_pdf(&pages, &EmitOptions::default())
 }
 
+/// A two-page PDF protected under `ORIGINAL_USER_PW`, built through turbo's own
+/// `emit_pdf` + `Encryption` path (the same real fixture shape as the Task 1
+/// spike) — turbo's raw output, no test-side byte patching.
+fn two_page_encrypted_pdf() -> Vec<u8> {
+    let pages = vec![
+        page_with(vec![body_text(common::evolventa())], 1),
+        page_with(vec![body_text(common::evolventa())], 2),
+    ];
+    let opts = EmitOptions {
+        encryption: Some(Encryption {
+            user_password: ORIGINAL_USER_PW.to_string(),
+            owner_password: None,
+            permissions: Permissions::all(),
+        }),
+        ..EmitOptions::default()
+    };
+    emit_pdf(&pages, &opts)
+}
+
+/// The `Encryption` `stamp` should re-encrypt the stamped output under.
+fn new_encryption() -> Encryption {
+    Encryption {
+        user_password: NEW_USER_PW.to_string(),
+        owner_password: Some(NEW_OWNER_PW.to_string()),
+        permissions: Permissions::all(),
+    }
+}
+
 /// A cancelled/faded diagonal text watermark.
-fn cancelled_watermark() -> Watermark {
-    Watermark::Text(Box::new(TextWatermark {
+fn cancelled_watermark() -> StampWatermark {
+    StampWatermark {
         text: WATERMARK_TEXT.to_string(),
-        face: common::evolventa(),
         font_size: 64.0,
         color: Rgba::new(128, 128, 128, 255),
         opacity: 0.15,
         angle_deg: 45.0,
-    }))
+    }
 }
 
 // --------------------------------------------------------------------------
@@ -141,7 +180,8 @@ fn stamps_a_watermark_onto_every_page_preserving_content_and_page_count() {
         .len();
     assert_eq!(original_pages, 2, "fixture must start with two pages");
 
-    let stamped = stamp(&pdf, &cancelled_watermark()).expect("stamp succeeds on a plaintext PDF");
+    let stamped =
+        stamp(&pdf, &cancelled_watermark(), None, None).expect("stamp succeeds on a plaintext PDF");
 
     let doc = Document::load_mem(&stamped).expect("stamped bytes are a well-formed PDF");
     let page_ids: Vec<ObjectId> = doc.get_pages().into_values().collect();
@@ -184,14 +224,14 @@ fn stamps_a_watermark_onto_every_page_preserving_content_and_page_count() {
 #[test]
 fn stamp_is_deterministic() {
     let pdf = two_page_pdf();
-    let a = stamp(&pdf, &cancelled_watermark()).expect("stamp a");
-    let b = stamp(&pdf, &cancelled_watermark()).expect("stamp b");
+    let a = stamp(&pdf, &cancelled_watermark(), None, None).expect("stamp a");
+    let b = stamp(&pdf, &cancelled_watermark(), None, None).expect("stamp b");
     assert_eq!(a, b, "same inputs must yield byte-identical output");
 }
 
 #[test]
 fn malformed_input_is_error() {
-    let err = stamp(b"not a pdf at all", &cancelled_watermark()).unwrap_err();
+    let err = stamp(b"not a pdf at all", &cancelled_watermark(), None, None).unwrap_err();
     assert!(matches!(err, StampError::Malformed(_)), "got {err:?}");
     assert!(err.to_string().contains("malformed PDF"));
 }
@@ -199,25 +239,9 @@ fn malformed_input_is_error() {
 #[test]
 fn no_pages_is_error() {
     let empty = include_bytes!("fixtures/append/empty_tree.pdf");
-    let err = stamp(empty, &cancelled_watermark()).unwrap_err();
+    let err = stamp(empty, &cancelled_watermark(), None, None).unwrap_err();
     assert!(matches!(err, StampError::NoPages), "got {err:?}");
     assert!(err.to_string().contains("no pages"));
-}
-
-#[test]
-fn image_watermark_is_unsupported() {
-    let pdf = two_page_pdf();
-    let image = Watermark::Image(ImageWatermark {
-        name: "logo".to_string(),
-        opacity: 0.15,
-        tiled: false,
-    });
-    let err = stamp(&pdf, &image).unwrap_err();
-    assert!(
-        matches!(err, StampError::UnsupportedWatermark),
-        "got {err:?}"
-    );
-    assert!(err.to_string().contains("image watermark"));
 }
 
 #[test]
@@ -226,7 +250,7 @@ fn stamped_output_passes_qpdf_check() {
         return;
     }
     let pdf = two_page_pdf();
-    let stamped = stamp(&pdf, &cancelled_watermark()).expect("stamp");
+    let stamped = stamp(&pdf, &cancelled_watermark(), None, None).expect("stamp");
 
     let path = std::env::temp_dir().join("turbo-pdf-stamp-check.pdf");
     std::fs::write(&path, &stamped).expect("write temp pdf");
@@ -250,4 +274,102 @@ fn qpdf_available() -> bool {
         .output()
         .map(|o| o.status.success())
         .unwrap_or(false)
+}
+
+// --------------------------------------------------------------------------
+// stamp: encrypted round trip (Task 3) — decrypt, overlay, re-encrypt
+// --------------------------------------------------------------------------
+
+#[test]
+fn stamps_an_encrypted_pdf_and_only_the_new_password_opens_the_result() {
+    let pdf = two_page_encrypted_pdf();
+
+    let stamped = stamp(
+        &pdf,
+        &cancelled_watermark(),
+        Some(ORIGINAL_USER_PW),
+        Some(&new_encryption()),
+    )
+    .expect("stamp decrypts, overlays and re-encrypts");
+
+    let mut wrong_password_attempt =
+        Document::load_mem(&stamped).expect("re-encrypted bytes are a well-formed PDF");
+    assert!(
+        wrong_password_attempt.is_encrypted(),
+        "stamped output must still be encrypted"
+    );
+    assert!(
+        wrong_password_attempt.decrypt(ORIGINAL_USER_PW).is_err(),
+        "the OLD password must no longer open the re-encrypted document"
+    );
+
+    let mut doc = Document::load_mem(&stamped).expect("re-encrypted bytes are a well-formed PDF");
+    doc.decrypt(NEW_USER_PW)
+        .expect("the NEW password opens the re-encrypted document");
+
+    let page_ids: Vec<ObjectId> = doc.get_pages().into_values().collect();
+    assert_eq!(page_ids.len(), 2, "stamping must not change the page count");
+
+    for page_id in page_ids {
+        let page_content = doc
+            .get_page_content(page_id)
+            .expect("page content stream is readable once decrypted");
+        assert!(
+            contains(&page_content, b"BT"),
+            "original body content (its BT operator) must survive on the page"
+        );
+        assert!(
+            contains(
+                &page_content,
+                format!("/{WATERMARK_XOBJECT_NAME} Do").as_bytes()
+            ),
+            "the page must invoke the watermark overlay XObject"
+        );
+
+        let overlay = overlay_form_content(&doc, page_id);
+        assert!(
+            contains(&overlay, format!("({WATERMARK_TEXT}) Tj").as_bytes()),
+            "every page's overlay must show the watermark text: got {:?}",
+            String::from_utf8_lossy(&overlay)
+        );
+    }
+}
+
+#[test]
+fn wrong_password_on_an_encrypted_input_is_a_decrypt_error() {
+    let pdf = two_page_encrypted_pdf();
+
+    let err = stamp(
+        &pdf,
+        &cancelled_watermark(),
+        Some("definitely-not-it"),
+        Some(&new_encryption()),
+    )
+    .unwrap_err();
+
+    assert!(matches!(err, StampError::Decrypt(_)), "got {err:?}");
+    assert!(
+        err.to_string().contains("decrypt"),
+        "error message should name the failed step: got {err}"
+    );
+}
+
+#[test]
+fn stamp_accepts_turbos_raw_encrypted_bytes_with_no_test_side_length_patch() {
+    let pdf = two_page_encrypted_pdf();
+
+    let stamped = stamp(
+        &pdf,
+        &cancelled_watermark(),
+        Some(ORIGINAL_USER_PW),
+        Some(&new_encryption()),
+    )
+    .expect(
+        "stamp must accept turbo's raw V5/R6 /Encrypt bytes directly \
+         (the /Length normalization lives inside stamp, not in the caller)",
+    );
+
+    let mut doc = Document::load_mem(&stamped).expect("re-encrypted bytes are a well-formed PDF");
+    doc.decrypt(NEW_USER_PW)
+        .expect("the NEW password opens the re-encrypted document");
 }

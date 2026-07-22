@@ -51,12 +51,16 @@ print-color = []
 append = ["dep:lopdf"]
 
 # Overlay a faded diagonal text watermark onto every page of an already-existing
-# (plaintext) PDF, post-emit. `pdf-writer` is write-only and cannot parse a
-# finished PDF, so this parses with `lopdf` (like `append`) and injects an
-# additive Form XObject per page. A distinct gate from `append` (it is a
-# different capability) that also pulls `lopdf`; the default build compiles
-# neither. Encryption round-trip is a later task. (AC: stamp.)
-stamp = ["dep:lopdf"]
+# PDF, post-emit, optionally decrypting the input first and re-encrypting the
+# output. `pdf-writer` is write-only and cannot parse a finished PDF, so this
+# parses with `lopdf` (like `append`) and injects an additive Form XObject per
+# page. A distinct gate from `append` (it is a different capability) that also
+# pulls `lopdf`; the default build compiles neither. `stamp` pulls in `encrypt`
+# too: the decrypt/re-encrypt round trip reuses `emit::Encryption`/`Permissions`
+# (the `encrypt` feature's public types) rather than forking a parallel
+# password-settings type, so a caller who turns on `stamp` gets one consistent
+# `Encryption` shape for both emitting and stamping. (AC: stamp.)
+stamp = ["dep:lopdf", "encrypt"]
 
 # Vector (SVG) image support (Phase 15b, §7.4). Off by default: the rasterizer
 # (`resvg`/`usvg`/`tiny-skia`) pulls a large transitive tree pinned for a stable
