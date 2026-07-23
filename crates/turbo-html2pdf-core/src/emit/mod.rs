@@ -60,6 +60,11 @@ pub(crate) use watermark::FADE_GS_NAME;
 
 #[cfg(feature = "encrypt")]
 pub use encrypt::{Encryption, Permissions};
+// Reused by the post-emit `stamp` overlay to re-encrypt its output (Task 1);
+// gated on `stamp`, not `encrypt`, since `stamp` is its only consumer — an
+// `encrypt`-only build (no `stamp`) never calls it.
+#[cfg(feature = "stamp")]
+pub(crate) use encrypt::encrypt_pdf;
 
 /// Document metadata plus the determinism knob for the creation date (§7, §14)
 /// and an optional page [`Watermark`].

@@ -394,6 +394,28 @@ fn stamped_output_passes_qpdf_check() {
     );
 }
 
+/// lopdf 0.36's own `decrypt` rejects the top-level `/Length 256` turbo's
+/// V5/R6/AESV3 `/Encrypt` dict carries (a confirmed lopdf bug, root-caused in
+/// full in `tests/encryption_roundtrip.rs`'s module doc: `PasswordAlgorithm
+/// ::try_from` rejects any `/Length` outside `40..=128`, even though the field
+/// is dead for R6). `stamp`'s own re-encrypted OUTPUT now goes through
+/// turbo's `encrypt_pdf` (the same encoder `emit_pdf`'s `encrypt` feature
+/// uses), which writes that same `/Length 256` — so verifying the round trip
+/// with `lopdf::Document::decrypt` here needs the identical, offset-preserving
+/// workaround `stamp` already applies to its INPUT side
+/// (`normalize_encrypt_length`). This is a test-only patch for verification;
+/// `stamp` itself never calls `lopdf::Document::decrypt` on its own output.
+fn patched_for_lopdf_decrypt(pdf: &[u8]) -> Vec<u8> {
+    let needle = b"/Length 256";
+    let at = pdf
+        .windows(needle.len())
+        .position(|w| w == needle)
+        .expect("turbo's V5/R6 /Encrypt dict carries a top-level /Length 256");
+    let mut out = pdf.to_vec();
+    out[at..at + needle.len()].copy_from_slice(b"/Length 128");
+    out
+}
+
 /// Whether the `qpdf` binary is on `PATH`.
 fn qpdf_available() -> bool {
     std::process::Command::new("which")
@@ -401,6 +423,45 @@ fn qpdf_available() -> bool {
         .output()
         .map(|o| o.status.success())
         .unwrap_or(false)
+}
+
+/// A counter so parallel `#[test]` threads never collide on the temp filenames
+/// [`qpdf_decrypt`] writes.
+static QPDF_TMP_COUNTER: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+
+/// Decrypt `pdf` under `password` via `qpdf --decrypt`, returning the resulting
+/// PLAINTEXT bytes.
+///
+/// Used instead of `lopdf::Document::decrypt` to verify `stamp`'s re-encrypted
+/// output: lopdf 0.36 has a SEPARATE, confirmed bug (reproduced directly
+/// against `emit_pdf`'s own `encrypt` feature output, with no `stamp`
+/// involved) authenticating a distinct owner-vs-user password pair against a
+/// THIRD PARTY's V5/R6/AESV3 handler — it rejects the correct password with
+/// `Decryption(IncorrectPassword)`. That gap is orthogonal to this file's
+/// fix (routing `stamp`'s re-encryption through `encrypt_pdf`) and unrelated
+/// to whether the output is actually valid, which `qpdf` — the real-world
+/// validator this file's fix targets — confirms it is. Panics if `qpdf` is
+/// not on `PATH`; callers must gate on [`qpdf_available`] first.
+fn qpdf_decrypt(pdf: &[u8], password: &str) -> Vec<u8> {
+    let n = QPDF_TMP_COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    let dir = std::env::temp_dir();
+    let input = dir.join(format!("turbo-pdf-stamp-qpdf-decrypt-in-{n}.pdf"));
+    let output = dir.join(format!("turbo-pdf-stamp-qpdf-decrypt-out-{n}.pdf"));
+    std::fs::write(&input, pdf).expect("write temp pdf");
+    let out = std::process::Command::new("qpdf")
+        .arg(format!("--password={password}"))
+        .arg("--decrypt")
+        .arg(&input)
+        .arg(&output)
+        .output()
+        .expect("run qpdf --decrypt");
+    assert!(
+        out.status.success(),
+        "qpdf --decrypt must accept the re-encrypted output under the given password: {}\n{}",
+        String::from_utf8_lossy(&out.stdout),
+        String::from_utf8_lossy(&out.stderr),
+    );
+    std::fs::read(&output).expect("read qpdf-decrypted output")
 }
 
 // --------------------------------------------------------------------------
@@ -419,8 +480,10 @@ fn stamps_an_encrypted_pdf_and_only_the_new_password_opens_the_result() {
     )
     .expect("stamp decrypts, overlays and re-encrypts");
 
+    let for_lopdf = patched_for_lopdf_decrypt(&stamped);
+
     let mut wrong_password_attempt =
-        Document::load_mem(&stamped).expect("re-encrypted bytes are a well-formed PDF");
+        Document::load_mem(&for_lopdf).expect("re-encrypted bytes are a well-formed PDF");
     assert!(
         wrong_password_attempt.is_encrypted(),
         "stamped output must still be encrypted"
@@ -430,34 +493,51 @@ fn stamps_an_encrypted_pdf_and_only_the_new_password_opens_the_result() {
         "the OLD password must no longer open the re-encrypted document"
     );
 
-    let mut doc = Document::load_mem(&stamped).expect("re-encrypted bytes are a well-formed PDF");
-    doc.decrypt(NEW_USER_PW)
-        .expect("the NEW password opens the re-encrypted document");
+    if qpdf_available() {
+        let plaintext = qpdf_decrypt(&stamped, NEW_USER_PW);
+        let doc =
+            Document::load_mem(&plaintext).expect("qpdf-decrypted bytes are a well-formed PDF");
 
-    let page_ids: Vec<ObjectId> = doc.get_pages().into_values().collect();
-    assert_eq!(page_ids.len(), 2, "stamping must not change the page count");
+        let page_ids: Vec<ObjectId> = doc.get_pages().into_values().collect();
+        assert_eq!(page_ids.len(), 2, "stamping must not change the page count");
 
-    for page_id in page_ids {
-        let page_content = doc
-            .get_page_content(page_id)
-            .expect("page content stream is readable once decrypted");
-        assert!(
-            contains(&page_content, b"BT"),
-            "original body content (its BT operator) must survive on the page"
-        );
-        assert!(
-            contains(
-                &page_content,
-                format!("/{WATERMARK_XOBJECT_NAME} Do").as_bytes()
-            ),
-            "the page must invoke the watermark overlay XObject"
-        );
+        for page_id in page_ids {
+            let page_content = doc
+                .get_page_content(page_id)
+                .expect("page content stream is readable once decrypted");
+            assert!(
+                contains(&page_content, b"BT"),
+                "original body content (its BT operator) must survive on the page"
+            );
+            assert!(
+                contains(
+                    &page_content,
+                    format!("/{WATERMARK_XOBJECT_NAME} Do").as_bytes()
+                ),
+                "the page must invoke the watermark overlay XObject"
+            );
 
-        let overlay = overlay_form_content(&doc, page_id);
+            let overlay = overlay_form_content(&doc, page_id);
+            assert!(
+                contains(&overlay, format!("({WATERMARK_TEXT}) Tj").as_bytes()),
+                "every page's overlay must show the watermark text: got {:?}",
+                String::from_utf8_lossy(&overlay)
+            );
+        }
+
+        let path = std::env::temp_dir().join("turbo-pdf-stamp-encrypted-check.pdf");
+        std::fs::write(&path, &stamped).expect("write temp pdf");
+        let ok_new = std::process::Command::new("qpdf")
+            .arg("--check")
+            .arg(format!("--password={NEW_USER_PW}"))
+            .arg(&path)
+            .output()
+            .expect("run qpdf");
         assert!(
-            contains(&overlay, format!("({WATERMARK_TEXT}) Tj").as_bytes()),
-            "every page's overlay must show the watermark text: got {:?}",
-            String::from_utf8_lossy(&overlay)
+            ok_new.status.success(),
+            "qpdf --check must accept the re-encrypted output under the NEW password: {}\n{}",
+            String::from_utf8_lossy(&ok_new.stdout),
+            String::from_utf8_lossy(&ok_new.stderr),
         );
     }
 }
@@ -520,7 +600,10 @@ fn stamp_accepts_turbos_raw_encrypted_bytes_with_no_test_side_length_patch() {
          (the /Length normalization lives inside stamp, not in the caller)",
     );
 
-    let mut doc = Document::load_mem(&stamped).expect("re-encrypted bytes are a well-formed PDF");
-    doc.decrypt(NEW_USER_PW)
-        .expect("the NEW password opens the re-encrypted document");
+    if qpdf_available() {
+        let plaintext = qpdf_decrypt(&stamped, NEW_USER_PW);
+        Document::load_mem(&plaintext).expect(
+            "qpdf-decrypted bytes are a well-formed PDF, proving the NEW password opens it",
+        );
+    }
 }

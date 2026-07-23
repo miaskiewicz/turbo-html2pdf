@@ -26,28 +26,25 @@
 //! the emitter ([`rotation_about`](crate::emit) / `px_to_pt`), so the render-
 //! time mark and this post-emit mark rotate and scale identically.
 //!
-//! **Encryption (Task 3).** [`stamp`] can also open a PASSWORD-PROTECTED input
-//! and hand back a still-protected result: `password` decrypts the input
-//! before the overlay runs, `encryption` re-encrypts the result afterwards.
-//! Both are independently optional, so plaintext in/out is unchanged. The
-//! decrypt/encrypt calls reuse exactly what the Task 1 spike
+//! **Encryption.** [`stamp`] can also open a PASSWORD-PROTECTED input and hand
+//! back a still-protected result: `password` decrypts the input (via
+//! `lopdf::Document::decrypt`) before the overlay runs; `encryption` re-seals
+//! the result afterwards. Both are independently optional, so plaintext in/out
+//! is unchanged. Decrypting reuses exactly what the Task 1 spike
 //! (`tests/encryption_roundtrip.rs`) proved against turbo's own V5/R6/AESV3
-//! `encrypt` feature output: `lopdf::Document::decrypt`/`encrypt` against an
-//! `lopdf::EncryptionState::V5`. See [`normalize_encrypt_length`] for the one
-//! byte-level workaround that reuse needed.
+//! `encrypt` feature output — see [`normalize_encrypt_length`] for the one
+//! byte-level workaround that reuse needed. Re-encrypting does NOT go through
+//! lopdf's own `Document::encrypt` (its `/Encrypt` output fails qpdf
+//! validation — no trailer `/ID`, a miscomputed `/Perms`); instead the stamped
+//! document is serialized to plaintext bytes and handed to turbo's own
+//! qpdf-validated [`emit::encrypt_pdf`](crate::emit), the same encryptor the
+//! render path already relies on.
 
-use std::collections::BTreeMap;
-use std::sync::Arc;
-
-use lopdf::encryption::crypt_filters::{Aes256CryptFilter, CryptFilter};
-use lopdf::{
-    Dictionary, Document, EncryptionState, EncryptionVersion, Object, ObjectId,
-    Permissions as LopdfPermissions, Stream,
-};
+use lopdf::{Dictionary, Document, Object, ObjectId, Stream};
 use pdf_writer::{Content, Name, Str};
 use thiserror::Error;
 
-use crate::emit::{px_to_pt, rotation_about, set_fill, Encryption, Permissions, FADE_GS_NAME};
+use crate::emit::{encrypt_pdf, px_to_pt, rotation_about, set_fill, Encryption, FADE_GS_NAME};
 use crate::layout::value::Rgba;
 
 /// The `/XObject` resource name the per-page overlay is registered under. Chosen
@@ -100,8 +97,9 @@ pub enum StampError {
     /// input was not actually encrypted under the handler lopdf supports).
     #[error("failed to decrypt input PDF: {0}")]
     Decrypt(lopdf::Error),
-    /// `encryption` was `Some` but lopdf could not re-encrypt the stamped
-    /// document under it.
+    /// Retained for API stability; re-encrypting now goes through turbo's own
+    /// [`emit::encrypt_pdf`](crate::emit), which is infallible, so `stamp` no
+    /// longer produces this variant.
     #[error("failed to encrypt output PDF: {0}")]
     Encrypt(lopdf::Error),
 }
@@ -122,9 +120,8 @@ pub enum StampError {
 /// salts/IVs/file key encryption legitimately needs.
 ///
 /// Returns [`StampError::Malformed`] if `pdf` does not parse, [`StampError::NoPages`]
-/// if it has no pages, [`StampError::Decrypt`] if `password` does not open an
-/// encrypted `pdf`, and [`StampError::Encrypt`] if re-encrypting the stamped
-/// result fails.
+/// if it has no pages, and [`StampError::Decrypt`] if `password` does not open
+/// an encrypted `pdf`.
 pub fn stamp(
     pdf: &[u8],
     watermark: &StampWatermark,
@@ -133,11 +130,37 @@ pub fn stamp(
 ) -> Result<Vec<u8>, StampError> {
     let mut doc = load_document(pdf, password)?;
     stamp_all_pages(&mut doc, watermark)?;
-    reencrypt_if_requested(&mut doc, encryption)?;
 
-    let mut out = Vec::new();
-    doc.save_to(&mut out).expect("lopdf save to Vec");
-    Ok(out)
+    if encryption.is_some() {
+        close_object_number_gaps(&mut doc);
+    }
+
+    let mut plaintext = Vec::new();
+    doc.save_to(&mut plaintext).expect("lopdf save to Vec");
+
+    Ok(match encryption {
+        Some(enc) => encrypt_pdf(&plaintext, enc),
+        None => plaintext,
+    })
+}
+
+/// Compact `doc`'s object numbers to a contiguous `1..=N` run, remapping every
+/// reference throughout the graph (`lopdf`'s own [`Document::renumber_objects`]
+/// — reused, not reimplemented).
+///
+/// [`encrypt_pdf`]'s classic-xref writer assumes exactly that shape: one
+/// contiguous run with no holes. `load_document`'s decrypt step removes the
+/// input's `/Encrypt` dictionary object (`lopdf::Document::decrypt` drops it
+/// from both the trailer and the object map, see its source), which otherwise
+/// leaves a gap at that object's old number — invisible to lopdf's own
+/// multi-subsection xref writer (which happily skips gaps), but not to
+/// `encrypt_pdf`'s, which writes one subsection for the whole `0..size` range.
+/// Renumbering before encrypting closes that gap unconditionally, so it also
+/// covers a "foreign" input PDF that already carried a gap of its own.
+/// Skipped for plaintext output so the no-encryption path stays exactly as
+/// before (byte-identical, no gap ever introduced there).
+fn close_object_number_gaps(doc: &mut Document) {
+    doc.renumber_objects();
 }
 
 /// Overlay `text` on every page of `doc`, or [`StampError::NoPages`] if it has
@@ -151,19 +174,6 @@ fn stamp_all_pages(doc: &mut Document, text: &StampWatermark) -> Result<(), Stam
         overlay_page(doc, page_id, text);
     }
     Ok(())
-}
-
-/// Re-encrypt `doc` under `encryption` when given; a no-op when `None`, so
-/// plaintext output is unchanged.
-fn reencrypt_if_requested(
-    doc: &mut Document,
-    encryption: Option<&Encryption>,
-) -> Result<(), StampError> {
-    let Some(enc) = encryption else {
-        return Ok(());
-    };
-    let state = v5_encryption_state(enc);
-    doc.encrypt(&state).map_err(StampError::Encrypt)
 }
 
 /// Parse `pdf`, decrypting it with `password` first when given.
@@ -208,57 +218,6 @@ fn normalize_encrypt_length(pdf: &[u8]) -> std::borrow::Cow<'_, [u8]> {
         }
         None => std::borrow::Cow::Borrowed(pdf),
     }
-}
-
-/// Build a fresh V5/AES-256 `EncryptionState` from turbo's `Encryption`
-/// settings, mirroring the Task 1 spike's `v5_state` exactly (same crypt
-/// filter, same fresh random file-encryption key from the OS CSPRNG).
-///
-/// An absent `owner_password` falls back to the user password, matching
-/// `emit::encrypt`'s own semantics (a valid `/O`/`/OE` pair is required either
-/// way).
-fn v5_encryption_state(enc: &Encryption) -> EncryptionState {
-    let mut file_encryption_key = [0u8; 32];
-    getrandom::getrandom(&mut file_encryption_key).expect("OS CSPRNG must be available to encrypt");
-    let crypt_filter: Arc<dyn CryptFilter> = Arc::new(Aes256CryptFilter);
-    let owner_password = enc.owner_password.as_deref().unwrap_or(&enc.user_password);
-    let version = EncryptionVersion::V5 {
-        encrypt_metadata: true,
-        crypt_filters: BTreeMap::from([(b"StdCF".to_vec(), crypt_filter)]),
-        file_encryption_key: &file_encryption_key,
-        stream_filter: b"StdCF".to_vec(),
-        string_filter: b"StdCF".to_vec(),
-        owner_password,
-        user_password: &enc.user_password,
-        permissions: lopdf_permissions(enc.permissions),
-    };
-    EncryptionState::try_from(version).expect("V5 crypt filter/state is always constructible")
-}
-
-/// Map `emit::Permissions` onto `lopdf::Permissions` field for field (every bit
-/// lines up 1:1 with an ISO 32000-2 Table 22 permission), so re-encrypting a
-/// stamped document carries forward exactly the restrictions the caller set
-/// rather than silently widening or dropping any of them.
-fn lopdf_permissions(permissions: Permissions) -> LopdfPermissions {
-    [
-        (permissions.print, LopdfPermissions::PRINTABLE),
-        (permissions.modify, LopdfPermissions::MODIFIABLE),
-        (permissions.copy, LopdfPermissions::COPYABLE),
-        (permissions.annotate, LopdfPermissions::ANNOTABLE),
-        (permissions.fill_forms, LopdfPermissions::FILLABLE),
-        (
-            permissions.accessibility,
-            LopdfPermissions::COPYABLE_FOR_ACCESSIBILITY,
-        ),
-        (permissions.assemble, LopdfPermissions::ASSEMBLABLE),
-        (
-            permissions.high_quality_print,
-            LopdfPermissions::PRINTABLE_IN_HIGH_QUALITY,
-        ),
-    ]
-    .into_iter()
-    .filter(|(granted, _)| *granted)
-    .fold(LopdfPermissions::empty(), |acc, (_, flag)| acc | flag)
 }
 
 /// Add the watermark Form XObject to one page and invoke it from that page's
