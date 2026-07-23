@@ -54,7 +54,8 @@ const lib = tryLoad();
 // by default, so the default sans face is enough to lay out plain ASCII text.
 const CSS =
   "@page { size: 300px 200px; margin: 16px } p { font-size: 14px } .p2 { break-before: page; }";
-const TEMPLATE = "<h1>Title</h1><p>Body text on page one.</p><p class=\"p2\">Body text on page two.</p>";
+const TEMPLATE =
+  '<h1>Title</h1><p>Body text on page one.</p><p class="p2">Body text on page two.</p>';
 
 const WATERMARK_TEXT = "CANCELLED";
 const ORIGINAL_PASSWORD = "orig-stamp-pw";
@@ -98,7 +99,12 @@ function qpdfPageCount(path, password) {
   const args = password
     ? [`--password=${password}`, "--show-npages", path]
     : ["--show-npages", path];
-  return parseInt(execFileSync("qpdf", args, { stdio: ["ignore", "pipe", "ignore"] }).toString("utf8").trim(), 10);
+  return parseInt(
+    execFileSync("qpdf", args, { stdio: ["ignore", "pipe", "ignore"] })
+      .toString("utf8")
+      .trim(),
+    10,
+  );
 }
 
 test("addon is built (otherwise the suite is skipped)", (t) => {
@@ -129,7 +135,11 @@ test("stamps a plaintext PDF: valid multi-page PDF, page count preserved", { ski
   if (qpdfAvailable()) {
     const path = writeTemp("turbo-pdf-napi-stamp-plain.pdf", stamped);
     execFileSync("qpdf", ["--check", path], { stdio: "ignore" }); // throws on any structural fault
-    assert.equal(qpdfPageCount(path), base.pageCount, "qpdf page count matches the input's pageCount");
+    assert.equal(
+      qpdfPageCount(path),
+      base.pageCount,
+      "qpdf page count matches the input's pageCount",
+    );
   }
 });
 
@@ -147,7 +157,11 @@ test("plaintext in -> encrypted out requires the password", { skip: !lib }, () =
 
   if (qpdfAvailable()) {
     const path = writeTemp("turbo-pdf-napi-stamp-encrypt.pdf", stamped);
-    assert.equal(qpdfChecks(path), false, "qpdf --check with no password fails on encrypted output");
+    assert.equal(
+      qpdfChecks(path),
+      false,
+      "qpdf --check with no password fails on encrypted output",
+    );
     assert.equal(qpdfChecks(path, "pw"), true, "qpdf --check with the right password succeeds");
   }
 });
@@ -163,7 +177,10 @@ test("encrypted in (correct password) -> encrypted out round-trips", { skip: !li
   });
 
   assert.equal(stamped.subarray(0, 5).toString("latin1"), "%PDF-", "PDF magic");
-  assert.ok(stamped.includes(Buffer.from("/Encrypt")), "/Encrypt dictionary present on the re-sealed output");
+  assert.ok(
+    stamped.includes(Buffer.from("/Encrypt")),
+    "/Encrypt dictionary present on the re-sealed output",
+  );
 
   if (qpdfAvailable()) {
     const path = writeTemp("turbo-pdf-napi-stamp-roundtrip.pdf", stamped);
@@ -212,12 +229,18 @@ test("watermark options (color/opacity/angle/fontSize) pass through", { skip: !l
   // rendering didn't throw.
   const text = stamped.toString("latin1");
   assert.ok(text.includes("1 0 0 rg"), "color #ff0000 -> DeviceRGB fill operand '1 0 0 rg'");
-  assert.ok(text.includes("/ca 0.3") && text.includes("/CA 0.3"), "opacity 0.3 on the fade ExtGState");
+  assert.ok(
+    text.includes("/ca 0.3") && text.includes("/CA 0.3"),
+    "opacity 0.3 on the fade ExtGState",
+  );
   assert.ok(
     text.includes("0.8660254 0.5 -0.5 0.8660254"),
     "angle 30deg -> rotation matrix built from cos(30)=0.8660254, sin(30)=0.5",
   );
-  assert.ok(text.includes("/F1 36 Tf"), "fontSize 48 CSS px -> 36pt (px_to_pt: 72/96 ratio) Tf operand");
+  assert.ok(
+    text.includes("/F1 36 Tf"),
+    "fontSize 48 CSS px -> 36pt (px_to_pt: 72/96 ratio) Tf operand",
+  );
 
   if (qpdfAvailable()) {
     const path = writeTemp("turbo-pdf-napi-stamp-options.pdf", stamped);
