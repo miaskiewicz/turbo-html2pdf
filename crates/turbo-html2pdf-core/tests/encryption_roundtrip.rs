@@ -75,7 +75,9 @@ use std::collections::BTreeMap;
 use std::sync::Arc;
 
 use lopdf::encryption::crypt_filters::{Aes256CryptFilter, CryptFilter};
-use lopdf::{Document, EncryptionState, EncryptionVersion, Permissions as LopdfPermissions};
+use lopdf::{
+    Dictionary, Document, EncryptionState, EncryptionVersion, Permissions as LopdfPermissions,
+};
 
 use turbo_html2pdf_core::layout::fragment::{Fragment, FragmentContent, NodeId, PositionedGlyph};
 use turbo_html2pdf_core::layout::value::Rgba;
@@ -177,10 +179,15 @@ fn patched_for_lopdf(pdf: &[u8]) -> Vec<u8> {
     out
 }
 
+/// The `/Info` dictionary referenced by the trailer, if present.
+fn info_dict(doc: &Document) -> Option<&Dictionary> {
+    let info_id = doc.trailer.get(b"Info").ok()?.as_reference().ok()?;
+    doc.get_dictionary(info_id).ok()
+}
+
 /// The decrypted `Info`/`Title` string, read back through lopdf's object graph.
 fn info_title(doc: &Document) -> Option<String> {
-    let info_id = doc.trailer.get(b"Info").ok()?.as_reference().ok()?;
-    let dict = doc.get_dictionary(info_id).ok()?;
+    let dict = info_dict(doc)?;
     let bytes = dict.get(b"Title").ok()?.as_str().ok()?;
     Some(String::from_utf8_lossy(bytes).into_owned())
 }
