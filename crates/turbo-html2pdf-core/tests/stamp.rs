@@ -25,7 +25,7 @@
 
 mod common;
 
-use lopdf::{Document, Object, ObjectId};
+use lopdf::{dictionary, Dictionary, Document, Object, ObjectId, Stream};
 
 use turbo_html2pdf_core::layout::fragment::{Fragment, FragmentContent, NodeId, PositionedGlyph};
 use turbo_html2pdf_core::layout::value::Rgba;
@@ -139,9 +139,10 @@ fn contains(haystack: &[u8], needle: &[u8]) -> bool {
     haystack.windows(needle.len()).any(|w| w == needle)
 }
 
-/// The decompressed bytes of the Form XObject the overlay registered on `page_id`
-/// under [`WATERMARK_XOBJECT_NAME`].
-fn overlay_form_content(doc: &Document, page_id: ObjectId) -> Vec<u8> {
+/// The object ID of the Form XObject the overlay registered on `page_id` under
+/// [`WATERMARK_XOBJECT_NAME`], shared by both the content-stream and `/BBox`
+/// assertions below.
+fn overlay_form_id(doc: &Document, page_id: ObjectId) -> ObjectId {
     let (inline, resource_ids) = doc
         .get_page_resources(page_id)
         .expect("page resources are readable");
@@ -154,10 +155,16 @@ fn overlay_form_content(doc: &Document, page_id: ObjectId) -> Vec<u8> {
         })
         .and_then(|obj| obj.as_dict().ok())
         .expect("page carries an /XObject resource dict after stamping");
-    let form_id = xobjects
+    xobjects
         .get(WATERMARK_XOBJECT_NAME.as_bytes())
         .and_then(Object::as_reference)
-        .expect("the watermark Form XObject is registered under its name");
+        .expect("the watermark Form XObject is registered under its name")
+}
+
+/// The decompressed bytes of the Form XObject the overlay registered on `page_id`
+/// under [`WATERMARK_XOBJECT_NAME`].
+fn overlay_form_content(doc: &Document, page_id: ObjectId) -> Vec<u8> {
+    let form_id = overlay_form_id(doc, page_id);
     let stream = doc
         .get_object(form_id)
         .and_then(Object::as_stream)
@@ -165,6 +172,77 @@ fn overlay_form_content(doc: &Document, page_id: ObjectId) -> Vec<u8> {
     stream
         .decompressed_content()
         .unwrap_or_else(|_| stream.content.clone())
+}
+
+/// The overlay Form XObject's `/BBox` width/height, in points — proves which
+/// page size `stamp`'s internal `media_box_size` resolved to (the page's own
+/// `/MediaBox`, an inherited one, or the A4 fallback).
+fn overlay_form_bbox(doc: &Document, page_id: ObjectId) -> (f32, f32) {
+    let form_id = overlay_form_id(doc, page_id);
+    let stream = doc
+        .get_object(form_id)
+        .and_then(Object::as_stream)
+        .expect("the watermark Form XObject is a stream");
+    let bbox = stream
+        .dict
+        .get(b"BBox")
+        .and_then(Object::as_array)
+        .expect("the Form XObject carries a /BBox array");
+    let n = |i: usize| bbox[i].as_float().expect("BBox operand is numeric");
+    (n(2) - n(0), n(3) - n(1))
+}
+
+/// A single-page PDF built directly with `lopdf`, bypassing turbo's own emitter
+/// entirely, so the page tree can be shaped in ways turbo never produces:
+/// `page_media_box` is the page dictionary's own `/MediaBox` (turbo always
+/// writes one; `None` here models a foreign PDF that omits it), and
+/// `parent_media_box` is the `/MediaBox` on the `/Pages` tree node the page
+/// inherits from when it has none of its own.
+fn minimal_pdf(page_media_box: Option<[f32; 4]>, parent_media_box: Option<[f32; 4]>) -> Vec<u8> {
+    let mut doc = Document::with_version("1.5");
+    let pages_id = doc.new_object_id();
+
+    let content_id = doc.add_object(Stream::new(Dictionary::new(), b"BT ET".to_vec()));
+
+    let mut page_dict = dictionary! {
+        "Type" => "Page",
+        "Parent" => pages_id,
+        "Contents" => content_id,
+    };
+    if let Some([x0, y0, x1, y1]) = page_media_box {
+        page_dict.set("MediaBox", media_box_array(x0, y0, x1, y1));
+    }
+    let page_id = doc.add_object(page_dict);
+
+    let mut pages_dict = dictionary! {
+        "Type" => "Pages",
+        "Kids" => vec![page_id.into()],
+        "Count" => 1,
+    };
+    if let Some([x0, y0, x1, y1]) = parent_media_box {
+        pages_dict.set("MediaBox", media_box_array(x0, y0, x1, y1));
+    }
+    doc.objects.insert(pages_id, Object::Dictionary(pages_dict));
+
+    let catalog_id = doc.add_object(dictionary! {
+        "Type" => "Catalog",
+        "Pages" => pages_id,
+    });
+    doc.trailer.set("Root", catalog_id);
+
+    let mut out = Vec::new();
+    doc.save_to(&mut out).expect("minimal fixture saves");
+    out
+}
+
+/// A PDF `[x0 y0 x1 y1]` rectangle array, e.g. for a `/MediaBox`.
+fn media_box_array(x0: f32, y0: f32, x1: f32, y1: f32) -> Object {
+    Object::Array(vec![
+        Object::Real(x0),
+        Object::Real(y0),
+        Object::Real(x1),
+        Object::Real(y1),
+    ])
 }
 
 // --------------------------------------------------------------------------
@@ -242,6 +320,55 @@ fn no_pages_is_error() {
     let err = stamp(empty, &cancelled_watermark(), None, None).unwrap_err();
     assert!(matches!(err, StampError::NoPages), "got {err:?}");
     assert!(err.to_string().contains("no pages"));
+}
+
+// --------------------------------------------------------------------------
+// stamp: /MediaBox resolution — own box, inherited box, and the A4 fallback
+// --------------------------------------------------------------------------
+//
+// turbo's own emitter always writes a /MediaBox directly on every page, so
+// the fixtures above never exercise the inherited or missing case. These
+// build a foreign-shaped PDF with lopdf directly (a page tree turbo itself
+// never produces) to prove `stamp`'s fallback chain for real.
+
+#[test]
+fn inherited_media_box_from_the_pages_tree_is_used_when_the_page_has_none() {
+    let pdf = minimal_pdf(None, Some([0.0, 0.0, 400.0, 300.0]));
+    let stamped = stamp(&pdf, &cancelled_watermark(), None, None)
+        .expect("stamp succeeds on a page with an inherited /MediaBox");
+
+    let doc = Document::load_mem(&stamped).expect("stamped bytes are a well-formed PDF");
+    let page_id = doc
+        .get_pages()
+        .into_values()
+        .next()
+        .expect("fixture has one page");
+
+    assert_eq!(
+        overlay_form_bbox(&doc, page_id),
+        (400.0, 300.0),
+        "the overlay must size itself to the /Pages tree's inherited /MediaBox, not the A4 fallback"
+    );
+}
+
+#[test]
+fn missing_media_box_everywhere_falls_back_to_a4() {
+    let pdf = minimal_pdf(None, None);
+    let stamped = stamp(&pdf, &cancelled_watermark(), None, None)
+        .expect("stamp succeeds even with no /MediaBox anywhere in the page tree");
+
+    let doc = Document::load_mem(&stamped).expect("stamped bytes are a well-formed PDF");
+    let page_id = doc
+        .get_pages()
+        .into_values()
+        .next()
+        .expect("fixture has one page");
+
+    let (width, height) = overlay_form_bbox(&doc, page_id);
+    assert!(
+        (width - 595.2756).abs() < 0.01 && (height - 841.8898).abs() < 0.01,
+        "with no /MediaBox on the page or its parent, the overlay must fall back to A4: got {width}x{height}"
+    );
 }
 
 #[test]
@@ -344,6 +471,30 @@ fn wrong_password_on_an_encrypted_input_is_a_decrypt_error() {
         &cancelled_watermark(),
         Some("definitely-not-it"),
         Some(&new_encryption()),
+    )
+    .unwrap_err();
+
+    assert!(matches!(err, StampError::Decrypt(_)), "got {err:?}");
+    assert!(
+        err.to_string().contains("decrypt"),
+        "error message should name the failed step: got {err}"
+    );
+}
+
+#[test]
+fn password_given_for_a_plaintext_input_is_a_decrypt_error() {
+    // `two_page_pdf()` is plaintext: it carries no `/Encrypt` dict at all, so
+    // it can never contain the `/Length 256` byte pattern `stamp` patches
+    // around lopdf's over-strict R6 check — this is the one input shape that
+    // exercises `normalize_encrypt_length`'s pass-through (`Cow::Borrowed`)
+    // branch, not its patched (`Cow::Owned`) one.
+    let pdf = two_page_pdf();
+
+    let err = stamp(
+        &pdf,
+        &cancelled_watermark(),
+        Some("irrelevant-password"),
+        None,
     )
     .unwrap_err();
 
