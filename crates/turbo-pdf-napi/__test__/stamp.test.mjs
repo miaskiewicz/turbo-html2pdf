@@ -4,19 +4,25 @@
 // The Rust core's `stamp()` is already covered by
 // crates/turbo-html2pdf-core/tests/stamp.rs. This suite proves the napi
 // wrapper on top of it: option mapping (`StampOptions`/`StampWatermark`/
-// `Encryption`), the decrypt/re-encrypt round trip, and that native faults
-// surface as a typed `TurboPdfError` through `index.js`'s `guard()` (the same
-// sentinel-decoding path `render`/`compile` use), not a bare Error.
+// `Encryption`/the optional `font` override), the decrypt/re-encrypt round
+// trip, and that native faults surface as a typed `TurboPdfError` through
+// `index.js`'s `guard()` (the same sentinel-decoding path `render`/`compile`
+// use), not a bare Error.
 //
 // FINDING (documented, not asserted as a requirement): the watermark's Form
 // XObject stream is written via `lopdf::Stream::new` with no `/Filter` set,
 // and nothing in this codebase ever calls `lopdf::Document::compress()` before
 // `save_to`. So a plaintext-in/plaintext-out `stamp()` call emits the overlay
-// content stream UNCOMPRESSED — `(TEXT) Tj`, the fill/rotation operators, and
-// the `TurboWmStamp` XObject name all appear as literal bytes. Verified by hand
-// against this build (see the byte-grep assertions below); if a future change
-// starts compressing per-object streams, those specific greps will need the
-// qpdf/Rust-test fallback the brief anticipated.
+// content stream UNCOMPRESSED — the fill/rotation operators and the
+// `TurboWmStamp` XObject name all appear as literal bytes. The watermark's
+// SHOWN TEXT itself, however, is NOT literal ASCII: the overlay embeds a real,
+// subsetted font (`/Identity-H` CID encoding, `/FontFile2`/`/FontFile3`
+// program), so the `Tj` operand is 2-byte big-endian subset-local glyph ids,
+// not the word's UTF-8 bytes — hence the structural (not literal-text)
+// assertions below. Verified by hand against this build; if a future change
+// starts compressing per-object streams, the still-literal greps (XObject
+// name, color/opacity/rotation operators) will need the qpdf/Rust-test
+// fallback the brief anticipated.
 //
 // qpdf gating: mirrors e2e.test.mjs / conformance.test.mjs exactly — every
 // `qpdf`-dependent assertion is wrapped in `qpdfAvailable()` and skipped (not
@@ -27,7 +33,7 @@
 
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { writeFileSync } from "node:fs";
+import { readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { test } from "node:test";
@@ -37,6 +43,16 @@ import { createRequire } from "node:module";
 const require = createRequire(import.meta.url);
 const here = dirname(fileURLToPath(import.meta.url));
 const root = join(here, "..");
+const repoRoot = join(root, "..", "..");
+const CUSTOM_FONT = join(
+  repoRoot,
+  "crates",
+  "turbo-html2pdf-core",
+  "assets",
+  "fonts",
+  "roboto",
+  "Roboto-Regular.ttf",
+);
 
 function tryLoad() {
   try {
@@ -95,6 +111,26 @@ function qpdfChecks(path, password) {
   }
 }
 
+/**
+ * Assert `pdfBytes` embeds a real, subsetted font for the watermark overlay
+ * (Identity-H CID encoding + an embedded FontFile2/FontFile3 program) rather
+ * than depending on the reader's own base-14 Helvetica. The shown text is
+ * therefore 2-byte glyph ids, not literal ASCII — see the file-level FINDING
+ * comment — so this checks structure, not the literal watermark word.
+ */
+function assertEmbeddedWatermarkFont(pdfBytes) {
+  const text = pdfBytes.toString("latin1");
+  assert.ok(text.includes("/Identity-H"), "overlay font uses /Identity-H CID encoding");
+  assert.ok(
+    text.includes("/FontFile2") || text.includes("/FontFile3"),
+    "overlay font attaches an embedded /FontFile2 or /FontFile3 program",
+  );
+  assert.ok(
+    !text.includes("/BaseFont /Helvetica"),
+    "overlay must not fall back to base-14 /BaseFont /Helvetica",
+  );
+}
+
 function qpdfPageCount(path, password) {
   const args = password
     ? [`--password=${password}`, "--show-npages", path]
@@ -125,12 +161,10 @@ test("stamps a plaintext PDF: valid multi-page PDF, page count preserved", { ski
   assert.equal(stamped.subarray(0, 5).toString("latin1"), "%PDF-", "PDF magic");
 
   // Uncompressed overlay stream (see the file-level FINDING comment) — the
-  // watermark's XObject name and its shown text are literal bytes.
+  // watermark's XObject name is a literal byte string; its shown text is not
+  // (see assertEmbeddedWatermarkFont).
   assert.ok(stamped.includes(Buffer.from("TurboWmStamp")), "watermark XObject name present");
-  assert.ok(
-    stamped.includes(Buffer.from(`(${WATERMARK_TEXT}) Tj`)),
-    "watermark text-show operator present",
-  );
+  assertEmbeddedWatermarkFont(stamped);
 
   if (qpdfAvailable()) {
     const path = writeTemp("turbo-pdf-napi-stamp-plain.pdf", stamped);
@@ -253,4 +287,22 @@ test("stamp is byte-deterministic for a plaintext watermark", { skip: !lib }, ()
   const a = lib.stamp(base.pdf, { watermark: { text: WATERMARK_TEXT } });
   const b = lib.stamp(base.pdf, { watermark: { text: WATERMARK_TEXT } });
   assert.equal(Buffer.compare(a, b), 0, "same input + no encryption -> byte-identical output");
+});
+
+test("a caller-supplied font embeds and stamps cleanly", { skip: !lib }, () => {
+  const base = twoPagePlaintextPdf();
+  const font = readFileSync(CUSTOM_FONT);
+
+  const stamped = lib.stamp(base.pdf, {
+    watermark: { text: WATERMARK_TEXT, font },
+  });
+
+  assert.equal(stamped.subarray(0, 5).toString("latin1"), "%PDF-", "PDF magic");
+  assert.ok(stamped.includes(Buffer.from("TurboWmStamp")), "watermark XObject name present");
+  assertEmbeddedWatermarkFont(stamped);
+
+  if (qpdfAvailable()) {
+    const path = writeTemp("turbo-pdf-napi-stamp-custom-font.pdf", stamped);
+    execFileSync("qpdf", ["--check", path], { stdio: "ignore" }); // throws on any structural fault
+  }
 });

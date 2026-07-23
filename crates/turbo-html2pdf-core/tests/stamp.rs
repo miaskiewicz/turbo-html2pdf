@@ -31,8 +31,8 @@ use turbo_html2pdf_core::layout::fragment::{Fragment, FragmentContent, NodeId, P
 use turbo_html2pdf_core::layout::value::Rgba;
 use turbo_html2pdf_core::paginate::{Page, PageGeometry};
 use turbo_html2pdf_core::{
-    emit_pdf, stamp, EmitOptions, Encryption, FontFace, PageKind, Permissions, StampError,
-    StampWatermark, WATERMARK_XOBJECT_NAME,
+    emit_pdf, stamp, EmitOptions, Encryption, FontFace, FontRegistry, PageKind, Permissions,
+    StampError, StampWatermark, WATERMARK_XOBJECT_NAME,
 };
 
 const WATERMARK_TEXT: &str = "CANCELLED";
@@ -120,7 +120,9 @@ fn new_encryption() -> Encryption {
     }
 }
 
-/// A cancelled/faded diagonal text watermark.
+/// A cancelled/faded diagonal text watermark, carrying a real bundled font
+/// face (the overlay embeds it via `embed_watermark_font`, no more base-14
+/// Helvetica).
 fn cancelled_watermark() -> StampWatermark {
     StampWatermark {
         text: WATERMARK_TEXT.to_string(),
@@ -128,6 +130,10 @@ fn cancelled_watermark() -> StampWatermark {
         color: Rgba::new(128, 128, 128, 255),
         opacity: 0.15,
         angle_deg: 45.0,
+        face: FontRegistry::new()
+            .select(&[], 400, false)
+            .expect("bundled sans")
+            .clone(),
     }
 }
 
@@ -190,6 +196,155 @@ fn overlay_form_bbox(doc: &Document, page_id: ObjectId) -> (f32, f32) {
         .expect("the Form XObject carries a /BBox array");
     let n = |i: usize| bbox[i].as_float().expect("BBox operand is numeric");
     (n(2) - n(0), n(3) - n(1))
+}
+
+/// The `/F1` font resource `Object` from the overlay Form XObject's own
+/// `/Resources /Font` dict, raw (not yet resolved) — asserted on directly so a
+/// regression back to an inline base-14 `Font` dict (rather than an indirect
+/// reference to a transplanted `Type0`) fails the "is a `Reference`" check
+/// below instead of silently resolving through `as_dict`.
+fn overlay_font_resource(doc: &Document, page_id: ObjectId) -> Object {
+    let form_id = overlay_form_id(doc, page_id);
+    let stream = doc
+        .get_object(form_id)
+        .and_then(Object::as_stream)
+        .expect("the watermark Form XObject is a stream");
+    let resources = stream
+        .dict
+        .get(b"Resources")
+        .and_then(Object::as_dict)
+        .expect("the Form XObject carries a /Resources dict");
+    let fonts = resources
+        .get(b"Font")
+        .and_then(Object::as_dict)
+        .expect("/Resources carries a /Font dict");
+    fonts
+        .get(b"F1")
+        .expect("the overlay's font resource is named F1")
+        .clone()
+}
+
+/// Every object id reachable from `root`, transitively following
+/// `Object::Reference`s within `doc` (dict/stream/array bodies) — mirrors
+/// `stamp_font.rs`'s own `font_closure`/`walk_closure` walker (not reusable
+/// here: this file is a separate integration-test crate, so it can only see
+/// `stamp_font`'s `pub(crate)` items via `stamp`'s public surface, which does
+/// not re-export them).
+fn font_closure(doc: &Document, root: ObjectId) -> Vec<ObjectId> {
+    let mut ids = Vec::new();
+    walk_closure(doc, root, &mut ids);
+    ids
+}
+
+fn walk_closure(doc: &Document, id: ObjectId, seen: &mut Vec<ObjectId>) {
+    if seen.contains(&id) {
+        return;
+    }
+    seen.push(id);
+    let Ok(obj) = doc.get_object(id) else {
+        return;
+    };
+    walk_references(doc, obj, seen);
+}
+
+fn walk_references(doc: &Document, obj: &Object, seen: &mut Vec<ObjectId>) {
+    match obj {
+        Object::Reference(r) => walk_closure(doc, *r, seen),
+        Object::Dictionary(dict) => {
+            for (_, value) in dict.iter() {
+                walk_references(doc, value, seen);
+            }
+        }
+        Object::Stream(stream) => {
+            for (_, value) in stream.dict.iter() {
+                walk_references(doc, value, seen);
+            }
+        }
+        Object::Array(arr) => {
+            for value in arr {
+                walk_references(doc, value, seen);
+            }
+        }
+        _ => {}
+    }
+}
+
+/// Base-14 font names the overlay must never embed under (a regression back
+/// to unbundled Helvetica).
+const BASE14_NAMES: [&[u8]; 5] = [
+    b"Helvetica",
+    b"Courier",
+    b"Times-Roman",
+    b"Symbol",
+    b"ZapfDingbats",
+];
+
+/// Assert that `type0_id` is a real `/Type0` font whose descendant is a
+/// `/CIDFontType0` or `/CIDFontType2` carrying an embedded `/FontFile2` or
+/// `/FontFile3` program stream, and that no object in its closure carries a
+/// base-14 `/BaseFont` name.
+fn assert_embedded_type0_font(doc: &Document, type0_id: ObjectId) {
+    let type0 = doc
+        .get_dictionary(type0_id)
+        .expect("the /F1 font resource resolves to a dictionary in doc");
+    assert_eq!(
+        type0.get(b"Subtype").and_then(Object::as_name).ok(),
+        Some(b"Type0".as_slice()),
+        "the referenced font must be a /Type0 composite font"
+    );
+    let descendants = type0
+        .get(b"DescendantFonts")
+        .and_then(Object::as_array)
+        .expect("/Type0 carries a /DescendantFonts array");
+    let cid_id = descendants[0]
+        .as_reference()
+        .expect("the descendant font is a reference");
+    let cid_dict = doc.get_dictionary(cid_id).expect("descendant resolves");
+    let cid_subtype = cid_dict
+        .get(b"Subtype")
+        .and_then(Object::as_name)
+        .expect("descendant carries a /Subtype");
+    assert!(
+        cid_subtype == b"CIDFontType0" || cid_subtype == b"CIDFontType2",
+        "descendant subtype must be a CIDFont, got {:?}",
+        String::from_utf8_lossy(cid_subtype)
+    );
+
+    let descriptor_id = cid_dict
+        .get(b"FontDescriptor")
+        .and_then(Object::as_reference)
+        .expect("descendant has a /FontDescriptor reference");
+    let descriptor = doc
+        .get_dictionary(descriptor_id)
+        .expect("descriptor resolves");
+    assert!(
+        descriptor.has(b"FontFile2") || descriptor.has(b"FontFile3"),
+        "descriptor must attach a FontFile2 or FontFile3 program stream"
+    );
+
+    for id in font_closure(doc, type0_id) {
+        let Ok(dict) = doc.get_object(id).and_then(Object::as_dict) else {
+            continue;
+        };
+        if let Ok(Object::Name(name)) = dict.get(b"BaseFont") {
+            assert!(
+                !BASE14_NAMES.contains(&name.as_slice()),
+                "must not embed a base-14 font, got {:?}",
+                String::from_utf8_lossy(name)
+            );
+        }
+    }
+}
+
+/// Full structural proof that page `page_id`'s overlay references a real,
+/// embedded font: `/F1` is an INDIRECT reference (not an inline base-14
+/// dict) to a `/Type0` font whose descendant carries an embedded program.
+fn assert_overlay_uses_embedded_font(doc: &Document, page_id: ObjectId) {
+    let font_obj = overlay_font_resource(doc, page_id);
+    let type0_id = font_obj
+        .as_reference()
+        .expect("the overlay's /F1 font resource must be an INDIRECT reference to the transplanted Type0 font, not an inline dict");
+    assert_embedded_type0_font(doc, type0_id);
 }
 
 /// A single-page PDF built directly with `lopdf`, bypassing turbo's own emitter
@@ -284,11 +439,6 @@ fn stamps_a_watermark_onto_every_page_preserving_content_and_page_count() {
 
         let overlay = overlay_form_content(&doc, page_id);
         assert!(
-            contains(&overlay, format!("({WATERMARK_TEXT}) Tj").as_bytes()),
-            "the overlay must show the watermark text: got {:?}",
-            String::from_utf8_lossy(&overlay)
-        );
-        assert!(
             contains(&overlay, b" gs"),
             "the overlay must apply the fade ExtGState (opacity)"
         );
@@ -296,6 +446,8 @@ fn stamps_a_watermark_onto_every_page_preserving_content_and_page_count() {
             contains(&overlay, b" cm"),
             "the overlay must apply the diagonal rotation"
         );
+
+        assert_overlay_uses_embedded_font(&doc, page_id);
     }
 }
 
@@ -517,12 +669,7 @@ fn stamps_an_encrypted_pdf_and_only_the_new_password_opens_the_result() {
                 "the page must invoke the watermark overlay XObject"
             );
 
-            let overlay = overlay_form_content(&doc, page_id);
-            assert!(
-                contains(&overlay, format!("({WATERMARK_TEXT}) Tj").as_bytes()),
-                "every page's overlay must show the watermark text: got {:?}",
-                String::from_utf8_lossy(&overlay)
-            );
+            assert_overlay_uses_embedded_font(&doc, page_id);
         }
 
         let path = std::env::temp_dir().join("turbo-pdf-stamp-encrypted-check.pdf");

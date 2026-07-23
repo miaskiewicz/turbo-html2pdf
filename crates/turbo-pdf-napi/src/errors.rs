@@ -61,3 +61,10 @@ pub fn from_append(e: AppendError) -> napi::Error {
 pub fn from_stamp(e: StampError) -> napi::Error {
     encode(ErrorCode::Render, &e.to_string(), Span::default())
 }
+
+/// Map a caller-supplied stamp watermark font that failed to parse to a typed
+/// N-API error. Mirrors [`from_stamp`]'s shape (generic `Render` code, zeroed
+/// span) since font parsing carries no source span either.
+pub fn from_invalid_font(message: &str) -> napi::Error {
+    encode(ErrorCode::Render, message, Span::default())
+}

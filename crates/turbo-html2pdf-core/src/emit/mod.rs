@@ -57,6 +57,12 @@ pub(crate) use unit::px_to_pt;
 pub(crate) use watermark::rotation_about;
 #[cfg(feature = "stamp")]
 pub(crate) use watermark::FADE_GS_NAME;
+// `RefAlloc` is `fonts`'s object-id allocator; the `fonts` module itself is
+// private to `emit`, so a sibling module (`stamp_font`, Task 1) can't name it
+// via `crate::emit::fonts::RefAlloc` without this re-export. Gated on `stamp`
+// (its only consumer) like the re-exports above.
+#[cfg(feature = "stamp")]
+pub(crate) use fonts::RefAlloc;
 
 #[cfg(feature = "encrypt")]
 pub use encrypt::{Encryption, Permissions};

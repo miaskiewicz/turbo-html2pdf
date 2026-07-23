@@ -89,8 +89,11 @@ export interface Watermark {
 }
 
 /** A text-only watermark for {@link stamp}. Unlike {@link Watermark} (the
- *  render-time mark, which may be text or image), the post-emit overlay only
- *  ever draws base-14 Helvetica text. */
+ *  render-time mark, which may be text or image), the post-emit overlay is
+ *  text-only. Its text is shaped and embedded with a real, subsetted font —
+ *  the bundled sans-serif by default, or {@link StampWatermark.font} when you
+ *  supply one — so the output is self-contained and never depends on a base-14
+ *  font the reader may or may not have installed. */
 export interface StampWatermark {
   /** The word to stamp. */
   text: string;
@@ -102,6 +105,9 @@ export interface StampWatermark {
   angle?: number;
   /** Font size in CSS px. Defaults to `64`. */
   fontSize?: number;
+  /** Font (TrueType/OTF bytes) to shape and embed the stamp text with. Omit
+   *  for the bundled sans-serif. */
+  font?: Buffer;
 }
 
 /** Options for {@link stamp}: the watermark plus the optional decrypt/

@@ -25,6 +25,8 @@ pub mod perf;
 pub mod render;
 #[cfg(feature = "stamp")]
 pub mod stamp;
+#[cfg(feature = "stamp")]
+mod stamp_font;
 pub mod style;
 #[cfg(feature = "svg")]
 pub mod svg;

@@ -17,10 +17,12 @@
 //! `/Resources` self-contained, so the overlay never collides with names the
 //! source PDF already uses.
 //!
-//! **Font.** The mark uses the PDF base-14 `Helvetica` (a standard font every
-//! viewer has), declared inline in the form's `/Resources`. A watermark is a
-//! faint background stamp, not body text, so embedding/subsetting turbo's own
-//! faces just for it would add bytes and complexity for no visible gain.
+//! **Font.** The mark's text is shaped and embedded via
+//! [`embed_watermark_font`](crate::stamp_font::embed_watermark_font) — the SAME
+//! subsetting/Type0/CID/`FontFile` machinery the render path uses (see
+//! [`emit::fonts`](crate::emit)), transplanted into the stamped document — so
+//! the overlay carries a real, embedded font rather than depending on the
+//! reader's own base-14 `Helvetica`.
 //!
 //! **Reuse.** The rotate-about-center matrix and the CSS-px→pt scale come from
 //! the emitter ([`rotation_about`](crate::emit) / `px_to_pt`), so the render-
@@ -46,19 +48,21 @@ use thiserror::Error;
 
 use crate::emit::{encrypt_pdf, px_to_pt, rotation_about, set_fill, Encryption, FADE_GS_NAME};
 use crate::layout::value::Rgba;
+use crate::stamp_font::{embed_watermark_font, EmbeddedWatermarkFont};
+use crate::text::FontFace;
 
 /// The `/XObject` resource name the per-page overlay is registered under. Chosen
 /// to be distinct from any name turbo's emitter (or a foreign PDF) uses, so
 /// adding it never clobbers an existing resource.
 pub const WATERMARK_XOBJECT_NAME: &str = "TurboWmStamp";
 
-/// The base-14 font resource name used inside the overlay's own `/Resources`.
+/// The embedded font's resource name inside the overlay's own `/Resources`.
 const FONT_NAME: &str = "F1";
 
-/// A text watermark for the post-emit overlay. Face-less on purpose: the
-/// overlay draws base-14 Helvetica (never shapes or embeds a font), unlike the
-/// render-time [`crate::TextWatermark`], whose mark carries a [`crate::FontFace`]
-/// for the emitter's glyph-subsetting path.
+/// A text watermark for the post-emit overlay. Carries a [`FontFace`], which
+/// the overlay embeds via [`embed_watermark_font`] — the same real,
+/// glyph-subsetted font the render-time [`crate::TextWatermark`] uses, instead
+/// of the reader's own base-14 Helvetica.
 #[derive(Debug, Clone)]
 pub struct StampWatermark {
     /// The word to stamp.
@@ -73,16 +77,14 @@ pub struct StampWatermark {
     pub opacity: f32,
     /// Rotation about the page center, in degrees (counter-clockwise).
     pub angle_deg: f32,
+    /// The font face to shape and embed the shown text with (caller-chosen —
+    /// callers typically resolve this via [`crate::FontRegistry`]).
+    pub face: FontFace,
 }
 
 /// A4 dimensions in points, used only as a fallback when a page carries no
 /// `/MediaBox` at all (turbo always writes one per page).
 const A4_PT: (f32, f32) = (595.2756, 841.8898);
-
-/// Rough average glyph advance for `Helvetica`, as a fraction of the em. Base-14
-/// fonts ship no metrics through this path, so the mark is centered on this
-/// estimate; a few points of drift is invisible on a faint background stamp.
-const HELVETICA_AVG_ADVANCE_EM: f32 = 0.55;
 
 /// Why a [`stamp`] call failed.
 #[derive(Debug, Error)]
@@ -164,14 +166,16 @@ fn close_object_number_gaps(doc: &mut Document) {
 }
 
 /// Overlay `text` on every page of `doc`, or [`StampError::NoPages`] if it has
-/// none.
+/// none. The font is embedded ONCE, before the page loop, so every page's
+/// overlay references the same transplanted `Type0` font object.
 fn stamp_all_pages(doc: &mut Document, text: &StampWatermark) -> Result<(), StampError> {
     let page_ids: Vec<ObjectId> = doc.get_pages().into_values().collect();
     if page_ids.is_empty() {
         return Err(StampError::NoPages);
     }
+    let embedded = embed_watermark_font(doc, &text.face, &text.text, text.font_size);
     for page_id in page_ids {
-        overlay_page(doc, page_id, text);
+        overlay_page(doc, page_id, text, &embedded);
     }
     Ok(())
 }
@@ -221,10 +225,16 @@ fn normalize_encrypt_length(pdf: &[u8]) -> std::borrow::Cow<'_, [u8]> {
 }
 
 /// Add the watermark Form XObject to one page and invoke it from that page's
-/// content, leaving the page's original streams untouched.
-fn overlay_page(doc: &mut Document, page_id: ObjectId, text: &StampWatermark) {
+/// content, leaving the page's original streams untouched. `embedded` is the
+/// font [`stamp_all_pages`] already embedded once for the whole document.
+fn overlay_page(
+    doc: &mut Document,
+    page_id: ObjectId,
+    text: &StampWatermark,
+    embedded: &EmbeddedWatermarkFont,
+) {
     let (width, height) = media_box_size(doc, page_id);
-    let form = watermark_form(text, width, height);
+    let form = watermark_form(text, embedded, width, height);
     let form_id = doc.add_object(Object::Stream(form));
     let _ = doc.add_xobject(page_id, WATERMARK_XOBJECT_NAME.as_bytes(), form_id);
     let invocation = format!("\nq /{WATERMARK_XOBJECT_NAME} Do Q\n").into_bytes();
@@ -260,9 +270,14 @@ fn rect_size(obj: &Object) -> Option<(f32, f32)> {
 }
 
 /// Build the watermark's Form XObject: a page-sized bounding box, an identity
-/// matrix, self-contained `/Resources` (Helvetica + the fade `/ExtGState`) and
-/// the rotated, faded, centered text as its content stream.
-fn watermark_form(text: &StampWatermark, width: f32, height: f32) -> Stream {
+/// matrix, self-contained `/Resources` (the embedded font + the fade
+/// `/ExtGState`) and the rotated, faded, centered text as its content stream.
+fn watermark_form(
+    text: &StampWatermark,
+    embedded: &EmbeddedWatermarkFont,
+    width: f32,
+    height: f32,
+) -> Stream {
     let mut dict = Dictionary::new();
     dict.set("Type", Object::Name(b"XObject".to_vec()));
     dict.set("Subtype", Object::Name(b"Form".to_vec()));
@@ -271,20 +286,17 @@ fn watermark_form(text: &StampWatermark, width: f32, height: f32) -> Stream {
     dict.set("Matrix", Object::Array(identity_matrix()));
     dict.set(
         "Resources",
-        Object::Dictionary(form_resources(text.opacity)),
+        Object::Dictionary(form_resources(embedded.type0_id, text.opacity)),
     );
-    Stream::new(dict, form_content(text, width, height))
+    Stream::new(dict, form_content(text, embedded, width, height))
 }
 
-/// The overlay's `/Resources`: the base-14 Helvetica font and a `/ca`+`/CA`
-/// transparency state set to the watermark's opacity, both inline.
-fn form_resources(opacity: f32) -> Dictionary {
-    let mut font = Dictionary::new();
-    font.set("Type", Object::Name(b"Font".to_vec()));
-    font.set("Subtype", Object::Name(b"Type1".to_vec()));
-    font.set("BaseFont", Object::Name(b"Helvetica".to_vec()));
+/// The overlay's `/Resources`: an INDIRECT reference to the transplanted
+/// `Type0` font [`stamp_all_pages`] embedded, and a `/ca`+`/CA` transparency
+/// state set to the watermark's opacity.
+fn form_resources(type0_id: ObjectId, opacity: f32) -> Dictionary {
     let mut fonts = Dictionary::new();
-    fonts.set(FONT_NAME, Object::Dictionary(font));
+    fonts.set(FONT_NAME, Object::Reference(type0_id));
 
     let mut gs = Dictionary::new();
     gs.set("Type", Object::Name(b"ExtGState".to_vec()));
@@ -300,13 +312,18 @@ fn form_resources(opacity: f32) -> Dictionary {
 }
 
 /// The overlay content stream: apply the fade, set the fill colour, rotate about
-/// the page centre, then show the word centred on that centre. Built with the
-/// same [`pdf_writer::Content`] builder the render-time emitter uses (see
+/// the page centre, then show the word (as `embedded`'s 2-byte Identity-H
+/// glyph codes) centred on that centre. Built with the same
+/// [`pdf_writer::Content`] builder the render-time emitter uses (see
 /// `emit::watermark::paint_text`, this overlay's render-time twin) so operator
 /// formatting and text-string escaping have one implementation.
-fn form_content(text: &StampWatermark, width: f32, height: f32) -> Vec<u8> {
+fn form_content(
+    text: &StampWatermark,
+    embedded: &EmbeddedWatermarkFont,
+    width: f32,
+    height: f32,
+) -> Vec<u8> {
     let size_pt = px_to_pt(text.font_size);
-    let advance = text_advance_pt(&text.text, size_pt);
     let (cx, cy) = (width / 2.0, height / 2.0);
     let m = rotation_about(cx, cy, text.angle_deg);
 
@@ -317,17 +334,11 @@ fn form_content(text: &StampWatermark, width: f32, height: f32) -> Vec<u8> {
     content.transform(m);
     content.begin_text();
     content.set_font(Name(FONT_NAME.as_bytes()), size_pt);
-    content.next_line(cx - advance / 2.0, cy);
-    content.show(Str(text.text.as_bytes()));
+    content.next_line(cx - embedded.advance_pt / 2.0, cy);
+    content.show(Str(&embedded.codes));
     content.end_text();
     content.restore_state();
     content.finish().to_vec()
-}
-
-/// Estimated shown width of `text` in points at `size_pt`, from the base-14
-/// average advance (no glyph metrics are available on this path).
-fn text_advance_pt(text: &str, size_pt: f32) -> f32 {
-    text.chars().count() as f32 * size_pt * HELVETICA_AVG_ADVANCE_EM
 }
 
 /// A four-number PDF rectangle array.
