@@ -393,7 +393,7 @@ also open a password-protected input and hand back a still-protected result.
 const { stamp } = require('turbo-html2pdf')
 
 const stamped = stamp(existingPdfBytes, {
-  watermark: { text: 'CANCELLED' },   // gray, 15% opacity, 45°, base-14 Helvetica
+  watermark: { text: 'CANCELLED' },   // gray, 15% opacity, 45°, bundled sans-serif (embedded)
 })
 
 // fully custom mark, plus a decrypt/re-encrypt round trip:
@@ -411,16 +411,19 @@ stamp(existingPdfBytes, {
 | **`watermark.opacity`** | Fill opacity `0.0..=1.0`. Defaults to `0.15`. |
 | **`watermark.angle`** | Rotation in degrees. Defaults to `45`. |
 | **`watermark.fontSize`** | Font size in CSS px. Defaults to `64`. |
+| **`watermark.font`** | Font (TrueType/OTF bytes, a `Buffer`) to shape and embed the text with. Omit for the bundled sans-serif. Either way the font is embedded, so the output is self-contained and never relies on a base-14 font the reader may lack. |
 | **`password`** | Opens an encrypted `pdf` input first. Omit for a plaintext input. |
 | **`encryption`** | Re-encrypts the stamped output — same shape as `render`'s `encrypt` above. Omit for a plaintext output. |
 
 Throws `TurboPdfError` if `pdf` doesn't parse or has no pages, or if `password`/
 `encryption` fail to open/re-seal it.
 
-Unlike the render-time mark (text *or* image, shaped from a bundled/caller font),
-`stamp` always draws the base-14 `Helvetica` text mark — no image form, no font to
-supply. In Rust it's `stamp(pdf, &StampWatermark, password, encryption)` behind
-the `stamp` feature (`crates/turbo-html2pdf-core/src/stamp.rs`).
+Unlike the render-time mark (which may be text *or* image), `stamp` is text-only —
+no image form. Like the render mark, its text is shaped and embedded from a real
+font (the bundled sans-serif by default, or a caller-supplied `watermark.font`), so
+the output is self-contained and never relies on a base-14 font the reader may lack.
+In Rust it's `stamp(pdf, &StampWatermark, password, encryption)` behind the `stamp`
+feature (`crates/turbo-html2pdf-core/src/stamp.rs`).
 
 ### Opt-in: SVG images
 
