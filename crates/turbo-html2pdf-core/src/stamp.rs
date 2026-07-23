@@ -294,8 +294,10 @@ fn media_box_of(doc: &Document, dict: &Dictionary) -> Option<(f32, f32)> {
 /// The width/height of a `[x0 y0 x1 y1]` rectangle object.
 fn rect_size(obj: &Object) -> Option<(f32, f32)> {
     let rect = obj.as_array().ok()?;
-    let n = |i: usize| rect.get(i).and_then(|o| o.as_float().ok());
-    Some(((n(2)? - n(0)?).abs(), (n(3)? - n(1)?).abs()))
+    let n: Vec<f32> = (0..4)
+        .map(|i| rect.get(i).and_then(|o| o.as_float().ok()))
+        .collect::<Option<Vec<f32>>>()?;
+    Some(((n[2] - n[0]).abs(), (n[3] - n[1]).abs()))
 }
 
 /// Build the watermark's Form XObject: a page-sized bounding box, an identity
