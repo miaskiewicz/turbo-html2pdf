@@ -205,8 +205,9 @@ fn advance_pt(x_advance: i32, scale: f32) -> f32 {
 }
 
 /// The affine matrix that rotates `angle_deg` degrees counter-clockwise about
-/// the point `(cx, cy)` in PDF user space.
-fn rotation_about(cx: f32, cy: f32, angle_deg: f32) -> [f32; 6] {
+/// the point `(cx, cy)` in PDF user space. Shared with the post-emit
+/// [`stamp`](crate::stamp) overlay so both rotate a watermark identically.
+pub(crate) fn rotation_about(cx: f32, cy: f32, angle_deg: f32) -> [f32; 6] {
     let theta = angle_deg.to_radians();
     let (s, c) = theta.sin_cos();
     // T(cx,cy) * R(theta) * T(-cx,-cy), composed into one matrix.

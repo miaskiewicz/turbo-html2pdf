@@ -34,9 +34,9 @@ use std::collections::HashMap;
 use turbo_html2pdf_core::style::TokenSet;
 use turbo_html2pdf_core::{
     append_pdfs, build_cascade, compile as core_compile, emit_pdf_with_images, render_pages,
-    style::parse_stylesheet, CompileOptions, Diagnostics, EmitOptions, Encryption, FontRegistry,
-    ImageWatermark, MissingPolicy, NoImages, Permissions, RenderInputs, Rgba, TextWatermark,
-    Watermark,
+    stamp as core_stamp, style::parse_stylesheet, CompileOptions, Diagnostics, EmitOptions,
+    Encryption, FontFace, FontRegistry, ImageWatermark, MissingPolicy, NoImages, Permissions,
+    RenderInputs, Rgba, StampWatermark, TextWatermark, Watermark,
 };
 
 use convert::{build_registry, diagnostics_to_js, JsDiagnostic, JsFont, JsImage, MapResolver};
@@ -308,6 +308,96 @@ pub fn append_pdf(base: Buffer, extras: Vec<Buffer>) -> napi::Result<Buffer> {
     let refs: Vec<&[u8]> = extras.iter().map(|b| b.as_ref()).collect();
     let merged = append_pdfs(base.as_ref(), &refs).map_err(errors::from_append)?;
     Ok(merged.into())
+}
+
+/// A text-only watermark for [`stamp`]. Unlike [`JsWatermark`] (the render-time
+/// mark, which may be text or image), the post-emit overlay only ever draws
+/// shaped, embedded text — there is no `image`/`tiled` shape here. The shown
+/// text is embedded via a real, subsetted font: `font` when supplied, else the
+/// bundled sans-serif (the same resolution the render-time watermark uses).
+#[napi(object)]
+pub struct JsStampWatermark {
+    /// The word to stamp.
+    pub text: String,
+    /// Fill color `#rrggbb`. Defaults to gray.
+    pub color: Option<String>,
+    /// Fill opacity `0.0..=1.0`. Defaults to `0.15`.
+    pub opacity: Option<f64>,
+    /// Rotation in degrees. Defaults to `45`.
+    pub angle: Option<f64>,
+    /// Font size in CSS px. Defaults to `64`.
+    pub font_size: Option<f64>,
+    /// Optional font (TrueType/OTF bytes) to shape + embed the watermark text
+    /// with; omit for the bundled sans-serif.
+    pub font: Option<Buffer>,
+}
+
+/// Options for [`stamp`]: the watermark plus the optional decrypt/re-encrypt
+/// round trip.
+#[napi(object)]
+pub struct JsStampOptions {
+    /// The watermark overlaid on every page.
+    pub watermark: JsStampWatermark,
+    /// Opens an encrypted `pdf` input. Omit for a plaintext input.
+    pub password: Option<String>,
+    /// Re-encrypts the stamped output. Omit for plaintext output.
+    pub encryption: Option<JsEncryption>,
+}
+
+/// Overlay a watermark on EVERY page of an existing PDF, optionally decrypting
+/// the input and re-encrypting the output. Throws `TurboPdfError` on failure.
+#[napi]
+pub fn stamp(pdf: Buffer, opts: JsStampOptions) -> napi::Result<Buffer> {
+    let watermark = build_stamp_watermark(opts.watermark)?;
+    let password = opts.password;
+    let encryption = opts.encryption.map(JsEncryption::into_core);
+    let stamped = core_stamp(
+        pdf.as_ref(),
+        &watermark,
+        password.as_deref(),
+        encryption.as_ref(),
+    )
+    .map_err(errors::from_stamp)?;
+    Ok(stamped.into())
+}
+
+/// Lower a [`JsStampWatermark`] into the core [`StampWatermark`], applying the
+/// documented defaults (gray / 0.15 / 45° / 64px) for every omitted field.
+/// Throws a typed `TurboPdfError` if `font` is supplied but is not a valid
+/// TrueType/OTF font.
+fn build_stamp_watermark(w: JsStampWatermark) -> napi::Result<StampWatermark> {
+    let face = resolve_stamp_face(w.font)?;
+    Ok(StampWatermark {
+        text: w.text,
+        font_size: w.font_size.map(|v| v as f32).unwrap_or(64.0),
+        color: w
+            .color
+            .as_deref()
+            .and_then(parse_hex_color)
+            .unwrap_or(Rgba::new(128, 128, 128, 255)),
+        opacity: w.opacity.map(|v| v as f32).unwrap_or(0.15),
+        angle_deg: w.angle.map(|v| v as f32).unwrap_or(45.0),
+        face,
+    })
+}
+
+/// Resolve the [`FontFace`] the stamp overlay shapes/embeds its text with:
+/// the caller's `font` bytes when supplied (parsed the SAME way the render
+/// path parses caller fonts, see [`convert::build_registry`]), else the
+/// bundled sans-serif — the same resolution [`build_watermark`] uses for the
+/// render-time mark (`FontRegistry::new().select(&[], 400, false)`).
+fn resolve_stamp_face(font: Option<Buffer>) -> napi::Result<FontFace> {
+    match font {
+        Some(bytes) => {
+            FontFace::from_bytes(bytes.to_vec(), "watermark", 400, false).ok_or_else(|| {
+                errors::from_invalid_font("stamp watermark font: not a valid TrueType/OTF font")
+            })
+        }
+        None => Ok(FontRegistry::new()
+            .select(&[], 400, false)
+            .expect("bundled sans face")
+            .clone()),
+    }
 }
 
 /// The shared render pipeline: cascade + geometry + fonts -> `render_pages` ->

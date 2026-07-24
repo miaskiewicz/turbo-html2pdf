@@ -327,7 +327,8 @@ program.render({
 - Font subsetting + embedding (TrueType & CFF/OpenType); per-glyph fallback.
 - Raster images (PNG/JPEG, alpha → SMask) with a sane max-size clamp; optional SVG
   via the `turbo-html2pdf-svg` build (resvg).
-- **Internal links & cross-references**, **watermarks**, **append/merge**, and the
+- **Internal links & cross-references**, **watermarks**, **append/merge**,
+  **stamp** (post-emit watermark on an existing PDF), and the
   **PDF/A · PDF/UA · CMYK · AES-256** per-render toggles (above).
 - Deterministic output; `Send + Sync`; no network / no system fonts.
 
@@ -379,6 +380,50 @@ watermark: { image: 'logo', tiled: true, opacity: 0.08 }
 In Rust the watermark lives on `EmitOptions.watermark`
 (`Watermark::Text(TextWatermark)` / `Watermark::Image(ImageWatermark)`;
 `TextWatermark::draft(face)` is the preset).
+
+### Stamp: watermark an existing PDF
+
+`watermark` (above) only paints while pages are freshly emitted. `stamp` is the
+post-emit counterpart: it overlays a faded, rotated text mark onto **every page
+of a PDF you already have** — e.g. a document you `append`ed a certified PDF
+onto, or any foreign PDF — without touching the original content streams. It can
+also open a password-protected input and hand back a still-protected result.
+
+```js
+const { stamp } = require('turbo-html2pdf')
+
+const stamped = stamp(existingPdfBytes, {
+  watermark: { text: 'CANCELLED' },   // gray, 15% opacity, 45°, bundled sans-serif (embedded)
+})
+
+// fully custom mark, plus a decrypt/re-encrypt round trip:
+stamp(existingPdfBytes, {
+  watermark: { text: 'VOID', color: '#cc0000', opacity: 0.2, angle: 30, fontSize: 72 },
+  password: 'open-me',                                       // decrypts the input first
+  encryption: { userPassword: 'new-pw', ownerPassword: 'owner-secret' }, // re-seals the output
+})
+```
+
+| Field | What it does |
+|---|---|
+| **`watermark.text`** | The word to stamp. Required. |
+| **`watermark.color`** | Fill color `#rrggbb`. Defaults to gray. |
+| **`watermark.opacity`** | Fill opacity `0.0..=1.0`. Defaults to `0.15`. |
+| **`watermark.angle`** | Rotation in degrees. Defaults to `45`. |
+| **`watermark.fontSize`** | Font size in CSS px. Defaults to `64`. |
+| **`watermark.font`** | Font (TrueType/OTF bytes, a `Buffer`) to shape and embed the text with. Omit for the bundled sans-serif. Either way the font is embedded, so the output is self-contained and never relies on a base-14 font the reader may lack. |
+| **`password`** | Opens an encrypted `pdf` input first. Omit for a plaintext input. |
+| **`encryption`** | Re-encrypts the stamped output — same shape as `render`'s `encrypt` above. Omit for a plaintext output. |
+
+Throws `TurboPdfError` if `pdf` doesn't parse or has no pages, or if `password`/
+`encryption` fail to open/re-seal it.
+
+Unlike the render-time mark (which may be text *or* image), `stamp` is text-only —
+no image form. Like the render mark, its text is shaped and embedded from a real
+font (the bundled sans-serif by default, or a caller-supplied `watermark.font`), so
+the output is self-contained and never relies on a base-14 font the reader may lack.
+In Rust it's `stamp(pdf, &StampWatermark, password, encryption)` behind the `stamp`
+feature (`crates/turbo-html2pdf-core/src/stamp.rs`).
 
 ### Opt-in: SVG images
 

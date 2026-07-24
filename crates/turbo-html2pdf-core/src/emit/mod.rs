@@ -46,8 +46,31 @@ pub use fonts::FontStore;
 pub use image::ImageStore;
 pub use watermark::{ImageWatermark, TextWatermark, Watermark};
 
+// Reused by the post-emit `stamp` overlay so the CSS-px→pt scale, the
+// rotate-about-center geometry, the fill-colour operator and the fade
+// `ExtGState` name have a single source of truth.
+#[cfg(feature = "stamp")]
+pub(crate) use color::set_fill;
+#[cfg(feature = "stamp")]
+pub(crate) use unit::px_to_pt;
+#[cfg(feature = "stamp")]
+pub(crate) use watermark::rotation_about;
+#[cfg(feature = "stamp")]
+pub(crate) use watermark::FADE_GS_NAME;
+// `RefAlloc` is `fonts`'s object-id allocator; the `fonts` module itself is
+// private to `emit`, so a sibling module (`stamp_font`, Task 1) can't name it
+// via `crate::emit::fonts::RefAlloc` without this re-export. Gated on `stamp`
+// (its only consumer) like the re-exports above.
+#[cfg(feature = "stamp")]
+pub(crate) use fonts::RefAlloc;
+
 #[cfg(feature = "encrypt")]
 pub use encrypt::{Encryption, Permissions};
+// Reused by the post-emit `stamp` overlay to re-encrypt its output (Task 1);
+// gated on `stamp`, not `encrypt`, since `stamp` is its only consumer — an
+// `encrypt`-only build (no `stamp`) never calls it.
+#[cfg(feature = "stamp")]
+pub(crate) use encrypt::encrypt_pdf;
 
 /// Document metadata plus the determinism knob for the creation date (§7, §14)
 /// and an optional page [`Watermark`].

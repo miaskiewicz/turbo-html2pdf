@@ -133,5 +133,9 @@ const render = guard((templateHtml, opts, fonts) => native.render(templateHtml, 
 // Glue foreign PDFs after `base`; parse faults surface as a typed TurboPdfError.
 const appendPdf = guard((base, extras) => native.appendPdf(base, extras));
 
-module.exports = { compile, render, appendPdf, Fonts: native.Fonts, TurboPdfError };
+// Overlay a watermark on every page of an existing PDF; faults surface as a
+// typed TurboPdfError.
+const stamp = guard((pdf, opts) => native.stamp(pdf, opts));
+
+module.exports = { compile, render, appendPdf, stamp, Fonts: native.Fonts, TurboPdfError };
 module.exports.default = module.exports;
