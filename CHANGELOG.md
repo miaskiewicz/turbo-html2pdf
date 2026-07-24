@@ -4,6 +4,23 @@ All notable changes to turbo-html2pdf are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/); versions follow SemVer. The npm,
 PyPI, and crates.io packages release in lockstep from a `v*` tag (PyPI on `pyv*`).
 
+## [0.2.15] — stamp an existing PDF
+
+A new `stamp()` entry point that overlays a page watermark onto an **already-rendered
+PDF** — no re-layout, the input PDF is taken as-is and a mark is drawn on every page.
+
+### Added
+- **`stamp(pdf, opts)`** — overlays a faded watermark (shaped-word or text-only) on
+  every page of an existing PDF. Reads each page's media box and composites the mark
+  behind/over the content, then re-emits the document.
+- **Bundled stamp font** — the overlay shapes and embeds a bundled font (replacing the
+  base-14 Helvetica placeholder), with an optional caller `font` (TrueType/OTF bytes)
+  override on the text mark.
+- **Encrypted-PDF support** — an encrypted input is decrypted around the overlay and
+  the stamped output is re-encrypted through turbo's own encryptor (qpdf-compatible).
+- **N-API binding** — `stamp()` and its `StampOptions` / text-mark types are exposed
+  through `turbo-html2pdf` for Node.
+
 ## [0.2.14] — real-site rendering, round 2 (nike.com cards / google.com search bar)
 
 More layout fixes found rendering production home pages faithfully.
