@@ -349,8 +349,13 @@ fn lay_atomic(b: &LayoutBox, cw: f32, fs: f32, ctx: &mut Ctx) -> Fragment {
         // pill has `min-width:85px`; unclamped it shrank to its ~68px text and, nearly
         // as tall as wide under `border-radius:100px`, rendered as a circle not a pill.
         let extra = bs.padding.horizontal() + bs.border.widths().horizontal();
-        let nat = super::flex::natural_width(b, ctx.fonts).min(cw);
-        let w = clamp_width(nat, &bs, cw, extra);
+        // CSS shrink-to-fit = min(max-content, max(available, min-content)). Flooring
+        // at min-content (not a bare `.min(cw)`) lets a box whose content can't fit —
+        // a `white-space:nowrap` tab wider than its parent — overflow at its full
+        // width instead of being clamped to the parent and dropping text.
+        let nat = super::flex::natural_width(b, ctx.fonts);
+        let mc = super::flex::min_content_width(b, ctx.fonts);
+        let w = clamp_width(nat.min(cw.max(mc)), &bs, cw, extra);
         layout_box_sized(b, &bs, 0.0, 0.0, w, ctx)
     } else {
         layout_box(b, 0.0, 0.0, cw, fs, ctx)
@@ -1006,16 +1011,16 @@ fn content_kind(lb: &LayoutBox, bs: &BoxStyle, bbw: f32, bbh: f32) -> FragmentCo
             border_radius: resolve_radius(bs.border_radius, bbw, bbh),
             shadow: bs.box_shadow,
             gradient: bs.background_gradient.clone(),
-            // Resolve a `%` translate against the box size and place the transform
-            // origin at the box centre (the CSS default `50% 50%`). The raster
+            // Resolve a `%` translate against the box size and the `transform-origin`
+            // (its `%`/keyword parts) against the box's own width/height. The raster
             // composes this about the box's absolute position.
             transform: bs.transform.map(|t| {
                 let e = t.tx.resolve(bbw).unwrap_or(0.0);
                 let f = t.ty.resolve(bbh).unwrap_or(0.0);
                 Transform2D {
                     matrix: [t.linear[0], t.linear[1], t.linear[2], t.linear[3], e, f],
-                    origin_x: bbw / 2.0,
-                    origin_y: bbh / 2.0,
+                    origin_x: bs.transform_origin.0.resolve(bbw).unwrap_or(bbw / 2.0),
+                    origin_y: bs.transform_origin.1.resolve(bbh).unwrap_or(bbh / 2.0),
                 }
             }),
         },

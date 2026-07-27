@@ -53,7 +53,7 @@ table { display: table; text-align: left }
 thead { display: table-header-group }
 tfoot { display: table-footer-group }
 tr { display: table-row }
-td, th { display: table-cell }
+td, th { display: table-cell; padding: 1px }
 li { display: list-item }
 center { display: block; text-align: center }
 br { display: block; height: 1em }

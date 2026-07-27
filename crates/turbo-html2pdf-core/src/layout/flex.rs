@@ -102,6 +102,22 @@ fn justify_items(s: &ComputedStyle) -> Option<AlignItems> {
     })
 }
 
+/// CSS `justify-self` (a grid item's own inline-axis alignment, overriding the
+/// container's `justify-items`). `None`/`auto` defers to the container. A non-stretch
+/// value shrinks the item to its own (measured/explicit) inline size and places it in
+/// the track — without mapping it a `width:80px; justify-self:center` cell inherited
+/// the default `stretch` and filled its whole track instead of centering (google's
+/// home logo cell).
+fn justify_self(s: &ComputedStyle) -> Option<AlignItems> {
+    match s.get("justify-self").map(str::trim) {
+        None | Some("auto") => None,
+        Some("start") | Some("flex-start") | Some("left") => Some(AlignItems::Start),
+        Some("end") | Some("flex-end") | Some("right") => Some(AlignItems::End),
+        Some("center") => Some(AlignItems::Center),
+        Some(_) => Some(AlignItems::Stretch),
+    }
+}
+
 /// A flex item's `align-self` (its own cross-axis alignment, overriding the
 /// container's `align-items`), `None`/`auto` deferring to the container. Google's
 /// search-bar "AI Mode" pill, the "Sign in" button and the two search buttons all
@@ -1011,6 +1027,11 @@ fn build_grid_leaves(
         .enumerate()
         .map(|(i, it)| {
             let mut style = item_style(it, fs);
+            // Grid items carry their own `justify-self` (flex has none). Its default
+            // is `stretch` via the container's `justify-items`; a `center`/`start`/
+            // `end` value here instead sizes the item to its own width and aligns it
+            // in the track.
+            style.justify_self = justify_self(&it.style);
             if let Some((row, col)) = area_placement(it, areas) {
                 style.grid_row = row;
                 style.grid_column = col;

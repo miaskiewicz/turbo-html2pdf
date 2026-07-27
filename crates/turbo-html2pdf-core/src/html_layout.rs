@@ -14,11 +14,14 @@
 
 use std::collections::HashMap;
 
+use crate::image::ImageResolver;
 use crate::layout::boxgen::{build_box_tree, BoxKind, InlineItem, LayoutBox};
-use crate::layout::fragment::Fragment;
+use crate::layout::fragment::{Fragment, FragmentContent, Transform2D};
 use crate::layout::ImageCtx;
 use crate::node::{Element, Node, Tag};
-use crate::style::{build_cascade_with_width, style_tree_with_roots, TokenSet};
+use crate::style::{
+    build_cascade_with_width, set_media_viewport_height, style_tree_with_roots, TokenSet,
+};
 use crate::text::FontRegistry;
 use crate::{Diagnostics, RenderError};
 
@@ -181,6 +184,17 @@ pub fn layout_boxes(
     let (nodes, roots) = parse_html_with_roots(html)?;
     let mut author_css = collect_style_css(&nodes);
     author_css.push_str(extra_css);
+    // Decode any `data:` image URIs the fixtures embed so replaced `<img>` boxes
+    // reach their intrinsic size (the default render path takes a host resolver; the
+    // conformance seam is self-contained, so it decodes the inline data itself).
+    // Scanned here while `nodes` is still owned — `style_tree_with_roots` consumes it.
+    let mut data_images: HashMap<String, Vec<u8>> = HashMap::new();
+    collect_data_uri_images(&nodes, &mut data_images);
+    // Thread the layout viewport HEIGHT so `@media (min/max-height)` conditions and
+    // `vh`/`vmin`/`vmax` units resolve against it — without this both fell back to the
+    // 800px default (a `20vh` box measured against 800, height-gated `@media` rules
+    // matched everywhere). `build_cascade_with_width` sets the matching width.
+    set_media_viewport_height(cb_height);
     let cascade = build_cascade_with_width(&author_css, "", TokenSet::default(), cb_width);
     let styled = style_tree_with_roots(&strip_non_visual(nodes), &cascade, &roots);
 
@@ -189,8 +203,9 @@ pub fn layout_boxes(
     let mut cids: HashMap<u32, String> = HashMap::new();
     collect_cids(&build_box_tree(&styled), &mut cids);
 
+    let resolver = DataUriImages(data_images);
     let ctx = ImageCtx {
-        resolver: &crate::image::NoImages,
+        resolver: &resolver,
         body_height: Some(cb_height),
     };
     let root = crate::layout_with_images(&styled, cb_width, fonts, &ctx, diags);
@@ -248,18 +263,134 @@ fn collect_boxes(
     let id = frag.node_id.0;
     if let Some(cid) = cids.get(&id) {
         if seen.insert(id) {
+            let (x, y, width, height) = transformed_rect(frag);
             out.push(CidBox {
                 cid: cid.clone(),
-                x: frag.x,
-                y: frag.y,
-                width: frag.width,
-                height: frag.height,
+                x,
+                y,
+                width,
+                height,
             });
         }
     }
     for c in &frag.children {
         collect_boxes(c, cids, seen, out);
     }
+}
+
+/// A self-contained image resolver for the conformance seam: it holds the bytes of
+/// every `data:` URI decoded from the document, keyed by the exact `src` string the
+/// layout looks up. Nothing else (no host, no I/O) — the default render path still
+/// takes a caller-supplied [`ImageResolver`].
+struct DataUriImages(HashMap<String, Vec<u8>>);
+
+impl ImageResolver for DataUriImages {
+    fn resolve(&self, name: &str) -> Option<&[u8]> {
+        self.0.get(name).map(Vec::as_slice)
+    }
+}
+
+/// Walk the node tree and decode every `<img src="data:...;base64,...">` into
+/// `out`, keyed by the full `src` (the name the layout resolves against).
+fn collect_data_uri_images(nodes: &[Node], out: &mut HashMap<String, Vec<u8>>) {
+    for node in nodes {
+        let Node::Element(el) = node else { continue };
+        if let Tag::Html(name) = &el.tag {
+            if name == "img" {
+                if let Some(src) = el.attr("src").filter(|s| s.starts_with("data:")) {
+                    if !out.contains_key(src) {
+                        if let Some(bytes) = decode_data_uri(src) {
+                            out.insert(src.to_string(), bytes);
+                        }
+                    }
+                }
+            }
+        }
+        collect_data_uri_images(&el.children, out);
+    }
+}
+
+/// Decode a `data:[<mediatype>];base64,<payload>` URI to bytes. Only base64 data
+/// URIs are handled (the raster fixtures embed encoded images that way); a
+/// percent-encoded/text data URI yields `None`.
+fn decode_data_uri(src: &str) -> Option<Vec<u8>> {
+    let rest = src.strip_prefix("data:")?;
+    let comma = rest.find(',')?;
+    if !rest[..comma].contains(";base64") {
+        return None;
+    }
+    base64_decode(&rest[comma + 1..])
+}
+
+/// Minimal standard-alphabet base64 decoder (no dependency): skips padding and
+/// whitespace, packs 6-bit groups into bytes. `None` on an invalid character.
+fn base64_decode(s: &str) -> Option<Vec<u8>> {
+    fn sextet(c: u8) -> Option<u32> {
+        match c {
+            b'A'..=b'Z' => Some(u32::from(c - b'A')),
+            b'a'..=b'z' => Some(u32::from(c - b'a') + 26),
+            b'0'..=b'9' => Some(u32::from(c - b'0') + 52),
+            b'+' => Some(62),
+            b'/' => Some(63),
+            _ => None,
+        }
+    }
+    let mut out = Vec::with_capacity(s.len() / 4 * 3);
+    let (mut acc, mut bits) = (0u32, 0u32);
+    for &c in s.as_bytes() {
+        if c == b'=' || c.is_ascii_whitespace() {
+            continue;
+        }
+        acc = (acc << 6) | sextet(c)?;
+        bits += 6;
+        if bits >= 8 {
+            bits -= 8;
+            out.push((acc >> bits) as u8);
+        }
+    }
+    Some(out)
+}
+
+/// A fragment's border-box rect after its CSS 2D `transform`, as the axis-aligned
+/// bounding box of the four transformed corners — exactly what a browser's
+/// `getBoundingClientRect()` reports for a transformed element. Untransformed
+/// fragments return their plain rect. The transform lives on the paint (never on
+/// `x`/`y`), so this is applied only on this debug/conformance read-back.
+fn transformed_rect(frag: &Fragment) -> (f32, f32, f32, f32) {
+    let t = match &frag.content {
+        FragmentContent::Box {
+            transform: Some(t), ..
+        } => *t,
+        _ => return (frag.x, frag.y, frag.width, frag.height),
+    };
+    let Transform2D {
+        matrix: [a, b, c, d, e, f],
+        origin_x,
+        origin_y,
+    } = t;
+    // Map a corner (relative to the box's top-left) about `transform-origin`:
+    // p' = origin + M·(p − origin), with M mapping (x,y) → (a·x+c·y+e, b·x+d·y+f).
+    let map = |px: f32, py: f32| {
+        let (u, v) = (px - origin_x, py - origin_y);
+        (a * u + c * v + e + origin_x, b * u + d * v + f + origin_y)
+    };
+    let corners = [
+        map(0.0, 0.0),
+        map(frag.width, 0.0),
+        map(0.0, frag.height),
+        map(frag.width, frag.height),
+    ];
+    let min_x = corners.iter().map(|p| p.0).fold(f32::INFINITY, f32::min);
+    let max_x = corners
+        .iter()
+        .map(|p| p.0)
+        .fold(f32::NEG_INFINITY, f32::max);
+    let min_y = corners.iter().map(|p| p.1).fold(f32::INFINITY, f32::min);
+    let max_y = corners
+        .iter()
+        .map(|p| p.1)
+        .fold(f32::NEG_INFINITY, f32::max);
+    (frag.x + min_x, frag.y + min_y, max_x - min_x, max_y - min_y)
 }
 
 #[cfg(test)]
@@ -357,6 +488,67 @@ mod tests {
             (b.height - 80.0).abs() < 0.5,
             "border-box height == 80, got {}",
             b.height
+        );
+    }
+
+    #[test]
+    fn base64_and_data_uri_decode_a_png_header() {
+        // Round-trips the base64 decoder and the data-URI split on a real 8x6 PNG.
+        let uri = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAgAAAAG\
+                   CAIAAABxZ0isAAAAEUlEQVR4nGMI6DmBFTEMpAQA/aBOwe19mXAAAAAASUVORK5CYII=";
+        let bytes = super::decode_data_uri(uri).expect("data uri decodes");
+        let intrinsic = crate::image::probe(&bytes).expect("png intrinsic");
+        assert_eq!((intrinsic.width, intrinsic.height), (8, 6));
+        // A non-base64 data URI is not handled (returns None, no panic).
+        assert!(super::decode_data_uri("data:text/plain,hello").is_none());
+    }
+
+    #[test]
+    fn layout_boxes_sizes_a_data_uri_image_by_intrinsic_aspect() {
+        // An 8x6 (4:3) PNG with `width:100%` of a 200px frame + `height:auto` derives
+        // its height from the intrinsic ratio (200 * 6/8 = 150). Guards both the
+        // data-URI decode in the conformance seam and % image sizing (0.2.10).
+        let html = r#"<html><body><style>
+            body { margin: 0 }
+            #frame { width: 200px }
+            #pic { display: block; width: 100%; height: auto }
+        </style><div id="frame"><img id="pic" data-cid="pic"
+            src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAgAAAAGCAIAAABxZ0isAAAAEUlEQVR4nGMI6DmBFTEMpAQA/aBOwe19mXAAAAAASUVORK5CYII="></div></body></html>"#;
+        let mut diags = Diagnostics::default();
+        let boxes = layout_boxes(html, "", 600.0, 800.0, &FontRegistry::new(), &mut diags)
+            .expect("layout_boxes");
+        let pic = boxes.iter().find(|b| b.cid == "pic").expect("pic box");
+        assert!(
+            (pic.width - 200.0).abs() < 0.5,
+            "100% width, got {}",
+            pic.width
+        );
+        assert!(
+            (pic.height - 150.0).abs() < 0.5,
+            "intrinsic-aspect height 150, got {}",
+            pic.height
+        );
+    }
+
+    #[test]
+    fn layout_boxes_reports_transformed_bounding_box() {
+        // `getBoundingClientRect` parity: a `scale(2)` about `top left` reports the
+        // scaled 200x80 border box at the origin (not the untransformed 100x40).
+        let html = r#"<html><body><style>
+            body { margin: 0 }
+            #s { width: 100px; height: 40px; transform: scale(2);
+                 transform-origin: top left; background: #ccc }
+        </style><div id="s" data-cid="s">s</div></body></html>"#;
+        let mut diags = Diagnostics::default();
+        let boxes = layout_boxes(html, "", 600.0, 800.0, &FontRegistry::new(), &mut diags)
+            .expect("layout_boxes");
+        let s = boxes.iter().find(|b| b.cid == "s").expect("s box");
+        assert!((s.x).abs() < 0.5 && (s.y).abs() < 0.5, "origin at (0,0)");
+        assert!(
+            (s.width - 200.0).abs() < 0.5 && (s.height - 80.0).abs() < 0.5,
+            "scaled to 200x80, got {}x{}",
+            s.width,
+            s.height
         );
     }
 
