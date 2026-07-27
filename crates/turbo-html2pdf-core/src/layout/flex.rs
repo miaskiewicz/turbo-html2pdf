@@ -1412,7 +1412,7 @@ mod coverage_tests {
             )
         );
         assert_eq!(track_of("auto"), TrackSizingFunction::AUTO);
-        assert_eq!(track_of("120px"), TrackSizingFunction::from_length(120.0));
+        assert_eq!(track_of("120px"), TrackSizingFunction::from_length(120.0_f32));
     }
 
     // --- flex_natural: row sums items, column takes the widest ---

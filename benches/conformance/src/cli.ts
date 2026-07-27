@@ -120,7 +120,8 @@ async function main(): Promise<number> {
   );
   if (deferred.length > 0) {
     console.log(`deferred (tracked, not gated): ${deferred.length} fixture(s)`);
-    for (const r of deferred) console.log(`  - ${r.fixture} [${r.passed}/${r.total}] — ${r.deferred}`);
+    for (const r of deferred)
+      console.log(`  - ${r.fixture} [${r.passed}/${r.total}] — ${r.deferred}`);
   }
   return passed === total ? 0 : 1;
 }
