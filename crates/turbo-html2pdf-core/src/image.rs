@@ -60,19 +60,33 @@ pub enum Format {
     WebP,
 }
 
+const PNG_MAGIC: &[u8] = &[0x89, b'P', b'N', b'G', 0x0D, 0x0A, 0x1A, 0x0A];
+
+/// GIF magic: either the `GIF87a` or `GIF89a` signature.
+fn is_gif(bytes: &[u8]) -> bool {
+    bytes.starts_with(b"GIF87a") || bytes.starts_with(b"GIF89a")
+}
+
+/// RIFF/WebP magic: `RIFF` … `WEBP` with the FourCC at bytes 8..12.
+fn is_webp(bytes: &[u8]) -> bool {
+    bytes.len() >= 12 && bytes.starts_with(b"RIFF") && &bytes[8..12] == b"WEBP"
+}
+
 /// Sniff the encoded format from the leading magic bytes, or `None` if neither.
 pub fn sniff(bytes: &[u8]) -> Option<Format> {
-    if bytes.starts_with(&[0x89, b'P', b'N', b'G', 0x0D, 0x0A, 0x1A, 0x0A]) {
-        Some(Format::Png)
-    } else if bytes.starts_with(&[0xFF, 0xD8, 0xFF]) {
-        Some(Format::Jpeg)
-    } else if bytes.starts_with(b"GIF87a") || bytes.starts_with(b"GIF89a") {
-        Some(Format::Gif)
-    } else if bytes.len() >= 12 && bytes.starts_with(b"RIFF") && &bytes[8..12] == b"WEBP" {
-        Some(Format::WebP)
-    } else {
-        None
+    if bytes.starts_with(PNG_MAGIC) {
+        return Some(Format::Png);
     }
+    if bytes.starts_with(&[0xFF, 0xD8, 0xFF]) {
+        return Some(Format::Jpeg);
+    }
+    if is_gif(bytes) {
+        return Some(Format::Gif);
+    }
+    if is_webp(bytes) {
+        return Some(Format::WebP);
+    }
+    None
 }
 
 /// The intrinsic pixel size of an encoded image plus whether it has an alpha
@@ -124,17 +138,23 @@ fn probe_gif(bytes: &[u8]) -> Option<Intrinsic> {
 fn probe_webp(bytes: &[u8]) -> Option<Intrinsic> {
     // The chunk FourCC follows the 12-byte RIFF/WEBP header.
     let fourcc = bytes.get(12..16)?;
-    let (w, h) = match fourcc {
-        b"VP8 " => webp_lossy_size(bytes)?,
-        b"VP8L" => webp_lossless_size(bytes)?,
-        b"VP8X" => webp_extended_size(bytes)?,
-        _ => return None,
-    };
+    let (w, h) = webp_size(fourcc, bytes)?;
     (w > 0 && h > 0).then_some(Intrinsic {
         width: w,
         height: h,
         has_alpha: fourcc != b"VP8 ", // lossless/extended may carry alpha
     })
+}
+
+/// Dispatch to the per-chunk size reader for a WebP FourCC; unknown chunks yield
+/// `None`.
+fn webp_size(fourcc: &[u8], bytes: &[u8]) -> Option<(u32, u32)> {
+    match fourcc {
+        b"VP8 " => webp_lossy_size(bytes),
+        b"VP8L" => webp_lossless_size(bytes),
+        b"VP8X" => webp_extended_size(bytes),
+        _ => None,
+    }
 }
 
 /// Lossy WebP: after the `VP8 ` chunk header (8 bytes) the VP8 key-frame carries a
@@ -393,5 +413,61 @@ mod format_tests {
         let gif = b"GIF89a\x08\x00\x06\x00\xf0\x00\x00";
         assert!(probe(gif).is_some());
         assert!(decode(gif).is_none());
+    }
+
+    #[test]
+    fn probe_gif_too_short_for_screen_descriptor_is_none() {
+        // A GIF whose signature matches but is truncated before the 10-byte logical
+        // screen descriptor has no readable intrinsic size.
+        assert!(probe(b"GIF89a\x00").is_none());
+    }
+
+    #[test]
+    fn probe_webp_extended_reads_canvas_size() {
+        // `VP8X`: 4-byte chunk size + 4-byte flags, then two 24-bit `value-1` LE
+        // canvas fields. width-1=99 -> 100, height-1=49 -> 50.
+        let mut b = Vec::from(*b"RIFF\x00\x00\x00\x00WEBPVP8X");
+        b.extend_from_slice(&[0x0a, 0x00, 0x00, 0x00]); // chunk size
+        b.extend_from_slice(&[0x00, 0x00, 0x00, 0x00]); // flags
+        b.extend_from_slice(&[0x63, 0x00, 0x00]); // width-1 = 99
+        b.extend_from_slice(&[0x31, 0x00, 0x00]); // height-1 = 49
+        let intrinsic = probe(&b).expect("vp8x intrinsic");
+        assert_eq!((intrinsic.width, intrinsic.height), (100, 50));
+        assert!(intrinsic.has_alpha, "extended WebP may carry alpha");
+    }
+
+    #[test]
+    fn probe_webp_unknown_chunk_is_none() {
+        // A RIFF/WEBP wrapper with an unrecognized FourCC has no known size reader.
+        let b = Vec::from(*b"RIFF\x00\x00\x00\x00WEBPXXXX\x00\x00\x00\x00");
+        assert!(probe(&b).is_none());
+    }
+
+    #[test]
+    fn probe_webp_lossy_rejects_bad_start_code() {
+        // `VP8 ` chunk without the `9d 01 2a` key-frame start code is not sized.
+        let mut b = Vec::from(*b"RIFF\x00\x00\x00\x00WEBPVP8 \x00\x00\x00\x00");
+        b.extend_from_slice(&[0x00; 6]); // frame tag + wrong start code
+        assert!(probe(&b).is_none());
+    }
+
+    #[test]
+    fn probe_webp_lossy_full_len_wrong_start_code_is_none() {
+        // Long enough to pass the 30-byte length check but with a corrupted start
+        // code, so the size read is rejected at the start-code guard (not the
+        // length `?`) — the branch a too-short buffer can't reach.
+        let mut b = Vec::from(*b"RIFF\x00\x00\x00\x00WEBPVP8 \x00\x00\x00\x00");
+        b.extend_from_slice(&[0x00, 0x00, 0x00]); // frame tag
+        b.extend_from_slice(&[0xde, 0xad, 0xbe]); // wrong start code (not 9d 01 2a)
+        b.extend_from_slice(&[0x64, 0x00, 0x32, 0x00]); // w/h bytes (unreached)
+        assert!(probe(&b).is_none());
+    }
+
+    #[test]
+    fn probe_webp_lossless_rejects_bad_signature() {
+        // `VP8L` chunk whose leading byte is not the `0x2f` signature is not sized.
+        let mut b = Vec::from(*b"RIFF\x00\x00\x00\x00WEBPVP8L\x00\x00\x00\x00");
+        b.extend_from_slice(&[0x00; 5]); // wrong signature + packed bytes
+        assert!(probe(&b).is_none());
     }
 }

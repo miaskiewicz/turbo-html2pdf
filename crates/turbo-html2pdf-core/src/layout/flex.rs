@@ -754,40 +754,46 @@ fn track_of(tok: &str) -> TrackSizingFunction {
     if let Some(mm) = minmax_track(t) {
         return mm;
     }
-    // `min-content`/`max-content` size the track to the items' content (a
-    // `grid-template-rows:min-content` row hugs its tallest cell's min-content
-    // height); mapping them to `AUTO` let the row stretch to the container instead.
-    match t {
-        "min-content" => {
-            return minmax(
-                MinTrackSizingFunction::MIN_CONTENT,
-                MaxTrackSizingFunction::MIN_CONTENT,
-            )
-        }
-        "max-content" => {
-            return minmax(
-                MinTrackSizingFunction::MAX_CONTENT,
-                MaxTrackSizingFunction::MAX_CONTENT,
-            )
-        }
-        _ => {}
+    if let Some(kw) = keyword_track(t) {
+        return kw;
     }
+    scalar_track(t).unwrap_or(TrackSizingFunction::AUTO)
+}
+
+/// `min-content`/`max-content` size the track to the items' content (a
+/// `grid-template-rows:min-content` row hugs its tallest cell's min-content height);
+/// mapping them to `AUTO` would let the row stretch to the container instead. Any
+/// other token is not a keyword track (`None`).
+fn keyword_track(t: &str) -> Option<TrackSizingFunction> {
+    match t {
+        "min-content" => Some(minmax(
+            MinTrackSizingFunction::MIN_CONTENT,
+            MaxTrackSizingFunction::MIN_CONTENT,
+        )),
+        "max-content" => Some(minmax(
+            MinTrackSizingFunction::MAX_CONTENT,
+            MaxTrackSizingFunction::MAX_CONTENT,
+        )),
+        _ => None,
+    }
+}
+
+/// A single scalar track: `1fr`, `50%`, or a length (`200px`/`15.5rem`). `None` if
+/// the token matches none of those (the caller falls back to `AUTO`).
+fn scalar_track(t: &str) -> Option<TrackSizingFunction> {
     if let Some(f) = t
         .strip_suffix("fr")
         .and_then(|x| x.trim().parse::<f32>().ok())
     {
-        return fr(f);
+        return Some(fr(f));
     }
     if let Some(p) = t
         .strip_suffix('%')
         .and_then(|x| x.trim().parse::<f32>().ok())
     {
-        return percent(p / 100.0);
+        return Some(percent(p / 100.0));
     }
-    if let Some(px) = parse_px(t, DEFAULT_FONT_SIZE) {
-        return TrackSizingFunction::from_length(px);
-    }
-    TrackSizingFunction::AUTO
+    parse_px(t, DEFAULT_FONT_SIZE).map(TrackSizingFunction::from_length)
 }
 
 /// The min side of a `minmax()` (no `fr` allowed): length/`%`, else `auto`.
@@ -1345,6 +1351,72 @@ mod coverage_tests {
         assert_eq!(flex_grow_shrink(&cs(&[("flex", "1 1 0%")])), (1.0, 1.0)); // basis skipped
     }
 
+    #[test]
+    fn justify_self_maps_every_keyword() {
+        // unset / `auto` -> None (defer to the container's justify-items).
+        assert_eq!(justify_self(&cs(&[])), None);
+        assert_eq!(justify_self(&cs(&[("justify-self", "auto")])), None);
+        // the start family (`start`/`flex-start`/`left`) -> Start.
+        for v in ["start", "flex-start", "left"] {
+            assert_eq!(
+                justify_self(&cs(&[("justify-self", v)])),
+                Some(AlignItems::Start)
+            );
+        }
+        // the end family (`end`/`flex-end`/`right`) -> End.
+        for v in ["end", "flex-end", "right"] {
+            assert_eq!(
+                justify_self(&cs(&[("justify-self", v)])),
+                Some(AlignItems::End)
+            );
+        }
+        assert_eq!(
+            justify_self(&cs(&[("justify-self", "center")])),
+            Some(AlignItems::Center)
+        );
+        // anything else -> Stretch (the item fills its track).
+        assert_eq!(
+            justify_self(&cs(&[("justify-self", "stretch")])),
+            Some(AlignItems::Stretch)
+        );
+    }
+
+    #[test]
+    fn flex_shorthand_basis_resolves_every_form() {
+        // `none`/`initial` -> the shorthand's `auto` basis.
+        assert_eq!(
+            flex_shorthand_basis(&cs(&[("flex", "none")]), 16.0),
+            Some(Dimension::auto())
+        );
+        // a length `<basis>` token wins (`1 1 60px` -> 60px).
+        assert_eq!(
+            flex_shorthand_basis(&cs(&[("flex", "1 1 60px")]), 16.0),
+            Some(Dimension::length(60.0))
+        );
+        // a `content` `<basis>` token -> content-sized.
+        assert_eq!(
+            flex_shorthand_basis(&cs(&[("flex", "1 1 content")]), 16.0),
+            Some(Dimension::auto())
+        );
+        // an explicit `auto` token defers to `width` (`None`).
+        assert_eq!(
+            flex_shorthand_basis(&cs(&[("flex", "1 1 auto")]), 16.0),
+            None
+        );
+        // a numbers-only shorthand carries an implied `0` basis (CSS `flex:1` == 1 1 0%).
+        assert_eq!(
+            flex_shorthand_basis(&cs(&[("flex", "2 0")]), 16.0),
+            Some(Dimension::length(0.0))
+        );
+        // an unparsable trailing token is skipped, leaving the implied `0` basis.
+        assert_eq!(
+            flex_shorthand_basis(&cs(&[("flex", "1 garbage")]), 16.0),
+            Some(Dimension::length(0.0))
+        );
+        // no `flex` at all -> None (caller falls back to `width`).
+        assert_eq!(flex_shorthand_basis(&cs(&[]), 16.0), None);
+    }
+
     fn bs_of(pairs: &[(&str, &str)]) -> BoxStyle {
         super::super::value::resolve_box_style(
             &cs(pairs),
@@ -1412,7 +1484,10 @@ mod coverage_tests {
             )
         );
         assert_eq!(track_of("auto"), TrackSizingFunction::AUTO);
-        assert_eq!(track_of("120px"), TrackSizingFunction::from_length(120.0));
+        assert_eq!(
+            track_of("120px"),
+            TrackSizingFunction::from_length(120.0_f32)
+        );
     }
 
     // --- flex_natural: row sums items, column takes the widest ---

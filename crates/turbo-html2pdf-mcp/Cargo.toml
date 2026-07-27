@@ -33,7 +33,7 @@ path = "src/main.rs"
 # resolves turbo-html2pdf-core from the registry. `"0.2"` (^0.2) tracks any 0.2.x core
 # so it only needs touching on a minor bump, not every patch. Keep core published
 # FIRST (the release-crates.yml job order) so this resolves.
-turbo-html2pdf-core = { path = "../turbo-html2pdf-core", version = "0.2", features = [
+turbo-html2pdf-core = { path = "../turbo-html2pdf-core", version = "0.3", features = [
     "endnotes",
     "xref",
     "pdf-a",

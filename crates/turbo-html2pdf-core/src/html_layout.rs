@@ -295,18 +295,25 @@ impl ImageResolver for DataUriImages {
 fn collect_data_uri_images(nodes: &[Node], out: &mut HashMap<String, Vec<u8>>) {
     for node in nodes {
         let Node::Element(el) = node else { continue };
-        if let Tag::Html(name) = &el.tag {
-            if name == "img" {
-                if let Some(src) = el.attr("src").filter(|s| s.starts_with("data:")) {
-                    if !out.contains_key(src) {
-                        if let Some(bytes) = decode_data_uri(src) {
-                            out.insert(src.to_string(), bytes);
-                        }
-                    }
-                }
-            }
-        }
+        record_img_data_uri(el, out);
         collect_data_uri_images(&el.children, out);
+    }
+}
+
+/// Decode this element's `<img src="data:...;base64,...">` into `out` (keyed by
+/// `src`), if it is an `img` with an as-yet-unseen, decodable base64 data URI.
+fn record_img_data_uri(el: &Element, out: &mut HashMap<String, Vec<u8>>) {
+    let Tag::Html(name) = &el.tag else { return };
+    if name != "img" {
+        return;
+    }
+    let Some(src) = el.attr("src").filter(|s| s.starts_with("data:")) else {
+        return;
+    };
+    if !out.contains_key(src) {
+        if let Some(bytes) = decode_data_uri(src) {
+            out.insert(src.to_string(), bytes);
+        }
     }
 }
 
@@ -325,6 +332,18 @@ fn decode_data_uri(src: &str) -> Option<Vec<u8>> {
 /// Minimal standard-alphabet base64 decoder (no dependency): skips padding and
 /// whitespace, packs 6-bit groups into bytes. `None` on an invalid character.
 fn base64_decode(s: &str) -> Option<Vec<u8>> {
+    let mut out = Vec::with_capacity(s.len() / 4 * 3);
+    let (mut acc, mut bits) = (0u32, 0u32);
+    for &c in s.as_bytes() {
+        base64_feed(c, &mut acc, &mut bits, &mut out)?;
+    }
+    Some(out)
+}
+
+/// Fold one base64 character into the rolling accumulator, emitting a decoded byte
+/// once at least 8 bits are buffered. Padding and whitespace are skipped; an
+/// invalid character yields `None`.
+fn base64_feed(c: u8, acc: &mut u32, bits: &mut u32, out: &mut Vec<u8>) -> Option<()> {
     fn sextet(c: u8) -> Option<u32> {
         match c {
             b'A'..=b'Z' => Some(u32::from(c - b'A')),
@@ -335,20 +354,16 @@ fn base64_decode(s: &str) -> Option<Vec<u8>> {
             _ => None,
         }
     }
-    let mut out = Vec::with_capacity(s.len() / 4 * 3);
-    let (mut acc, mut bits) = (0u32, 0u32);
-    for &c in s.as_bytes() {
-        if c == b'=' || c.is_ascii_whitespace() {
-            continue;
-        }
-        acc = (acc << 6) | sextet(c)?;
-        bits += 6;
-        if bits >= 8 {
-            bits -= 8;
-            out.push((acc >> bits) as u8);
-        }
+    if c == b'=' || c.is_ascii_whitespace() {
+        return Some(());
     }
-    Some(out)
+    *acc = (*acc << 6) | sextet(c)?;
+    *bits += 6;
+    if *bits >= 8 {
+        *bits -= 8;
+        out.push((*acc >> *bits) as u8);
+    }
+    Some(())
 }
 
 /// A fragment's border-box rect after its CSS 2D `transform`, as the axis-aligned
@@ -580,5 +595,49 @@ mod tests {
             inline.is_empty(),
             "inline span's data-cid is flattened away"
         );
+    }
+
+    #[test]
+    fn inline_block_data_cid_is_reported() {
+        // Unlike a plain inline `<span>`, an `inline-block` becomes an atomic box, so
+        // `collect_line_atoms` recurses into it and its `data-cid` is reported.
+        let html = r#"<html><body><div><span
+            style="display:inline-block;width:20px;height:10px" data-cid="ib">x</span></div></body></html>"#;
+        let mut diags = Diagnostics::default();
+        let boxes = layout_boxes(html, "", 400.0, 400.0, &FontRegistry::new(), &mut diags)
+            .expect("layout_boxes");
+        assert!(
+            boxes.iter().any(|b| b.cid == "ib"),
+            "inline-block atom's data-cid is reported"
+        );
+    }
+
+    #[test]
+    fn non_data_img_src_is_not_collected() {
+        // `collect_data_uri_images` skips an `<img>` whose `src` is not a `data:` URI
+        // (a plain http src) — no panic, nothing decoded, layout still succeeds.
+        let html = r#"<html><body><img src="http://example.com/a.png"></body></html>"#;
+        let mut diags = Diagnostics::default();
+        let boxes = layout_boxes(html, "", 400.0, 400.0, &FontRegistry::new(), &mut diags)
+            .expect("layout_boxes");
+        assert!(boxes.is_empty(), "no tagged boxes, non-data img ignored");
+    }
+
+    #[test]
+    fn base64_decode_handles_plus_slash_and_rejects_invalid() {
+        // `+`/`/` are the standard-alphabet's 62/63 sextets; "Tnk+" -> "Ny>".
+        assert_eq!(super::base64_decode("Tnk+").unwrap(), b"Ny>");
+        // whitespace and `=` padding are skipped; an out-of-alphabet char fails.
+        assert_eq!(super::base64_decode("Tm8=").unwrap(), b"No");
+        assert!(super::base64_decode("!!!!").is_none());
+    }
+
+    #[test]
+    fn block_children_of_a_directive_box_is_empty() {
+        // A `Directive` box is not a block/flex/grid/table container, so it exposes
+        // no block-level children (the `_ => &[]` arm).
+        use crate::layout::boxgen::BoxKind;
+        use crate::node::TKind;
+        assert!(super::block_children(&BoxKind::Directive(TKind::Footnote)).is_empty());
     }
 }

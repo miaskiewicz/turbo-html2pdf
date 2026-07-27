@@ -4,7 +4,7 @@ All notable changes to turbo-html2pdf are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/); versions follow SemVer. The npm,
 PyPI, and crates.io packages release in lockstep from a `v*` tag (PyPI on `pyv*`).
 
-## [0.2.15] — layout conformance harness + foundational layout fixes
+## [0.3.0] — layout conformance harness + foundational layout fixes
 
 A box-geometry **conformance harness** (`benches/conformance/`) diffs laid-out element
 geometry against Chromium per standard HTML/CSS feature. It surfaced — and this release

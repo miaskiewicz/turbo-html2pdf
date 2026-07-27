@@ -413,3 +413,99 @@ fn border_spacing_separates_cells_by_default() {
         "collapsed = no gap"
     );
 }
+
+/// A `<td>` carrying extra style pairs (e.g. an explicit `width`/`height`).
+fn tds(pairs: &[(&str, &str)], text: &str) -> StyledNode {
+    let mut p = vec![("display", "table-cell")];
+    p.extend_from_slice(pairs);
+    ela("td", &[], &p, vec![StyledNode::Text(text.to_string())])
+}
+
+/// A `<td>` with both HTML attrs (e.g. `rowspan`) and extra style pairs.
+fn tdas(attrs: &[(&str, &str)], pairs: &[(&str, &str)], text: &str) -> StyledNode {
+    let mut p = vec![("display", "table-cell")];
+    p.extend_from_slice(pairs);
+    ela("td", attrs, &p, vec![StyledNode::Text(text.to_string())])
+}
+
+#[test]
+fn fixed_layout_all_px_columns_leave_no_auto_share() {
+    // `table-layout:fixed`, non-collapse, every first-row column given an explicit
+    // px width -> zero unspecified columns, so the per-auto-column share is 0.
+    let t = table(
+        vec![tr(vec![
+            tds(&[("width", "100px")], "a"),
+            tds(&[("width", "100px")], "b"),
+        ])],
+        &[("table-layout", "fixed"), ("width", "300px")],
+        500.0,
+    );
+    let cc = cells(&rows(&t)[0]);
+    // Both columns keep their explicit width; nothing is widened by an auto share.
+    assert!((cc[0].width - cc[1].width).abs() < 0.5);
+}
+
+#[test]
+fn fixed_layout_auto_column_has_no_explicit_width() {
+    // A `table-layout:fixed` cell without a width is auto -> `explicit_width` yields
+    // None and the column falls to the shared auto track (the non-Px match arm).
+    let t = table(
+        vec![tr(vec![tds(&[("width", "80px")], "a"), td(&[], "auto")])],
+        &[("table-layout", "fixed"), ("width", "300px")],
+        500.0,
+    );
+    let cc = cells(&rows(&t)[0]);
+    // The auto column absorbs the remaining width, so it is wider than the fixed one.
+    assert!(cc[1].width > cc[0].width);
+}
+
+#[test]
+fn fixed_collapse_zero_width_columns_scale_to_zero() {
+    // `table-layout:fixed` + `border-collapse` where every first-row column is an
+    // explicit `width:0` -> no auto columns and a zero specified sum, so the scale
+    // factor is 0 (the `specified <= 0` branch) rather than a divide-by-zero.
+    let t = table(
+        vec![tr(vec![
+            tds(&[("width", "0px")], "a"),
+            tds(&[("width", "0px")], "b"),
+        ])],
+        &[
+            ("table-layout", "fixed"),
+            ("width", "200px"),
+            ("border-collapse", "collapse"),
+        ],
+        500.0,
+    );
+    // Lays out without panicking; the zero-width columns don't blow up the table.
+    assert_eq!(cells(&rows(&t)[0]).len(), 2);
+}
+
+#[test]
+fn collapse_tall_rowspan_grows_last_spanned_row() {
+    // A fixed-layout `border-collapse` rowspan=2 cell taller than the two rows it
+    // spans pushes the extra height onto the last spanned row (the need > have
+    // distribution in the collapsed row-height pass). `table-layout:fixed` +
+    // `border-collapse` is what routes through that collapsed path.
+    let t = table(
+        vec![
+            tr(vec![
+                tdas(&[("rowspan", "2")], &[("height", "100px")], "tall"),
+                tds(&[("height", "10px")], "b"),
+            ]),
+            tr(vec![tds(&[("height", "10px")], "c")]),
+        ],
+        &[
+            ("table-layout", "fixed"),
+            ("width", "300px"),
+            ("border-collapse", "collapse"),
+        ],
+        500.0,
+    );
+    let r = rows(&t);
+    // The rowspan cell forces total height >= its 100px across the two short rows.
+    let total = (r[1].y + r[1].height) - r[0].y;
+    assert!(
+        total >= 100.0,
+        "tall rowspan expands the spanned rows: {total}"
+    );
+}
