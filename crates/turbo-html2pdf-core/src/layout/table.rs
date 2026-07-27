@@ -500,15 +500,22 @@ fn fixed_min_cp(placed: &[Placed], ncols: usize, fonts: &FontRegistry) -> Vec<f3
         });
         let per = val / p.colspan as f32;
         for j in p.col..p.col + p.colspan {
-            if explicit.is_some() && !fixed[j] {
-                w[j] = per;
-                fixed[j] = true;
-            } else if !fixed[j] {
-                w[j] = w[j].max(per);
-            }
+            assign_fixed_col(&mut w, &mut fixed, j, per, explicit.is_some());
         }
     }
     w
+}
+
+/// Fold one first-row cell's per-column width `per` into column `j`: an explicit
+/// width pins the column (first wins); an implicit width only raises a still-open
+/// column's floor.
+fn assign_fixed_col(w: &mut [f32], fixed: &mut [bool], j: usize, per: f32, explicit: bool) {
+    if explicit && !fixed[j] {
+        w[j] = per;
+        fixed[j] = true;
+    } else if !fixed[j] {
+        w[j] = w[j].max(per);
+    }
 }
 
 /// Lay out the cells of a collapsed-border table into the grid defined by the
@@ -800,15 +807,18 @@ pub(crate) fn min_content_width(
         return fixed_min_cp(&placed, ncols, fonts).iter().sum::<f32>() + vert;
     }
     let (hs, _) = border_spacing(style);
-    // Each column's min-content is the widest single-column cell (text wraps to its
-    // longest word; a fixed-width cell keeps its size). The table is at least the sum
-    // of those, and at least any spanning cell's own min-content (e.g. the infobox's
-    // 267px cat-image row that spans both columns).
+    separated_min_content(&placed, ncols, hs, fonts)
+}
+
+/// Separated-border table min-content. Each column's min-content is the widest
+/// single-column cell (text wraps to its longest word; a fixed-width cell keeps its
+/// size). The table is at least the sum of those, and at least any spanning cell's
+/// own min-content (e.g. the infobox's 267px cat-image row that spans both columns),
+/// plus the border-spacing between and around the columns.
+fn separated_min_content(placed: &[Placed], ncols: usize, hs: f32, fonts: &FontRegistry) -> f32 {
     let mut w = vec![0.0_f32; ncols];
-    for p in &placed {
-        if p.colspan == 1 {
-            w[p.col] = w[p.col].max(super::flex::min_content_width(p.lb, fonts));
-        }
+    for p in placed.iter().filter(|p| p.colspan == 1) {
+        w[p.col] = w[p.col].max(super::flex::min_content_width(p.lb, fonts));
     }
     let base: f32 = w.iter().sum();
     let span_max = placed

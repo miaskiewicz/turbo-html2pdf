@@ -295,18 +295,25 @@ impl ImageResolver for DataUriImages {
 fn collect_data_uri_images(nodes: &[Node], out: &mut HashMap<String, Vec<u8>>) {
     for node in nodes {
         let Node::Element(el) = node else { continue };
-        if let Tag::Html(name) = &el.tag {
-            if name == "img" {
-                if let Some(src) = el.attr("src").filter(|s| s.starts_with("data:")) {
-                    if !out.contains_key(src) {
-                        if let Some(bytes) = decode_data_uri(src) {
-                            out.insert(src.to_string(), bytes);
-                        }
-                    }
-                }
-            }
-        }
+        record_img_data_uri(el, out);
         collect_data_uri_images(&el.children, out);
+    }
+}
+
+/// Decode this element's `<img src="data:...;base64,...">` into `out` (keyed by
+/// `src`), if it is an `img` with an as-yet-unseen, decodable base64 data URI.
+fn record_img_data_uri(el: &Element, out: &mut HashMap<String, Vec<u8>>) {
+    let Tag::Html(name) = &el.tag else { return };
+    if name != "img" {
+        return;
+    }
+    let Some(src) = el.attr("src").filter(|s| s.starts_with("data:")) else {
+        return;
+    };
+    if !out.contains_key(src) {
+        if let Some(bytes) = decode_data_uri(src) {
+            out.insert(src.to_string(), bytes);
+        }
     }
 }
 
@@ -325,6 +332,18 @@ fn decode_data_uri(src: &str) -> Option<Vec<u8>> {
 /// Minimal standard-alphabet base64 decoder (no dependency): skips padding and
 /// whitespace, packs 6-bit groups into bytes. `None` on an invalid character.
 fn base64_decode(s: &str) -> Option<Vec<u8>> {
+    let mut out = Vec::with_capacity(s.len() / 4 * 3);
+    let (mut acc, mut bits) = (0u32, 0u32);
+    for &c in s.as_bytes() {
+        base64_feed(c, &mut acc, &mut bits, &mut out)?;
+    }
+    Some(out)
+}
+
+/// Fold one base64 character into the rolling accumulator, emitting a decoded byte
+/// once at least 8 bits are buffered. Padding and whitespace are skipped; an
+/// invalid character yields `None`.
+fn base64_feed(c: u8, acc: &mut u32, bits: &mut u32, out: &mut Vec<u8>) -> Option<()> {
     fn sextet(c: u8) -> Option<u32> {
         match c {
             b'A'..=b'Z' => Some(u32::from(c - b'A')),
@@ -335,20 +354,16 @@ fn base64_decode(s: &str) -> Option<Vec<u8>> {
             _ => None,
         }
     }
-    let mut out = Vec::with_capacity(s.len() / 4 * 3);
-    let (mut acc, mut bits) = (0u32, 0u32);
-    for &c in s.as_bytes() {
-        if c == b'=' || c.is_ascii_whitespace() {
-            continue;
-        }
-        acc = (acc << 6) | sextet(c)?;
-        bits += 6;
-        if bits >= 8 {
-            bits -= 8;
-            out.push((acc >> bits) as u8);
-        }
+    if c == b'=' || c.is_ascii_whitespace() {
+        return Some(());
     }
-    Some(out)
+    *acc = (*acc << 6) | sextet(c)?;
+    *bits += 6;
+    if *bits >= 8 {
+        *bits -= 8;
+        out.push((*acc >> *bits) as u8);
+    }
+    Some(())
 }
 
 /// A fragment's border-box rect after its CSS 2D `transform`, as the axis-aligned

@@ -754,40 +754,46 @@ fn track_of(tok: &str) -> TrackSizingFunction {
     if let Some(mm) = minmax_track(t) {
         return mm;
     }
-    // `min-content`/`max-content` size the track to the items' content (a
-    // `grid-template-rows:min-content` row hugs its tallest cell's min-content
-    // height); mapping them to `AUTO` let the row stretch to the container instead.
-    match t {
-        "min-content" => {
-            return minmax(
-                MinTrackSizingFunction::MIN_CONTENT,
-                MaxTrackSizingFunction::MIN_CONTENT,
-            )
-        }
-        "max-content" => {
-            return minmax(
-                MinTrackSizingFunction::MAX_CONTENT,
-                MaxTrackSizingFunction::MAX_CONTENT,
-            )
-        }
-        _ => {}
+    if let Some(kw) = keyword_track(t) {
+        return kw;
     }
+    scalar_track(t).unwrap_or(TrackSizingFunction::AUTO)
+}
+
+/// `min-content`/`max-content` size the track to the items' content (a
+/// `grid-template-rows:min-content` row hugs its tallest cell's min-content height);
+/// mapping them to `AUTO` would let the row stretch to the container instead. Any
+/// other token is not a keyword track (`None`).
+fn keyword_track(t: &str) -> Option<TrackSizingFunction> {
+    match t {
+        "min-content" => Some(minmax(
+            MinTrackSizingFunction::MIN_CONTENT,
+            MaxTrackSizingFunction::MIN_CONTENT,
+        )),
+        "max-content" => Some(minmax(
+            MinTrackSizingFunction::MAX_CONTENT,
+            MaxTrackSizingFunction::MAX_CONTENT,
+        )),
+        _ => None,
+    }
+}
+
+/// A single scalar track: `1fr`, `50%`, or a length (`200px`/`15.5rem`). `None` if
+/// the token matches none of those (the caller falls back to `AUTO`).
+fn scalar_track(t: &str) -> Option<TrackSizingFunction> {
     if let Some(f) = t
         .strip_suffix("fr")
         .and_then(|x| x.trim().parse::<f32>().ok())
     {
-        return fr(f);
+        return Some(fr(f));
     }
     if let Some(p) = t
         .strip_suffix('%')
         .and_then(|x| x.trim().parse::<f32>().ok())
     {
-        return percent(p / 100.0);
+        return Some(percent(p / 100.0));
     }
-    if let Some(px) = parse_px(t, DEFAULT_FONT_SIZE) {
-        return TrackSizingFunction::from_length(px);
-    }
-    TrackSizingFunction::AUTO
+    parse_px(t, DEFAULT_FONT_SIZE).map(TrackSizingFunction::from_length)
 }
 
 /// The min side of a `minmax()` (no `fr` allowed): length/`%`, else `auto`.

@@ -60,19 +60,33 @@ pub enum Format {
     WebP,
 }
 
+const PNG_MAGIC: &[u8] = &[0x89, b'P', b'N', b'G', 0x0D, 0x0A, 0x1A, 0x0A];
+
+/// GIF magic: either the `GIF87a` or `GIF89a` signature.
+fn is_gif(bytes: &[u8]) -> bool {
+    bytes.starts_with(b"GIF87a") || bytes.starts_with(b"GIF89a")
+}
+
+/// RIFF/WebP magic: `RIFF` … `WEBP` with the FourCC at bytes 8..12.
+fn is_webp(bytes: &[u8]) -> bool {
+    bytes.len() >= 12 && bytes.starts_with(b"RIFF") && &bytes[8..12] == b"WEBP"
+}
+
 /// Sniff the encoded format from the leading magic bytes, or `None` if neither.
 pub fn sniff(bytes: &[u8]) -> Option<Format> {
-    if bytes.starts_with(&[0x89, b'P', b'N', b'G', 0x0D, 0x0A, 0x1A, 0x0A]) {
-        Some(Format::Png)
-    } else if bytes.starts_with(&[0xFF, 0xD8, 0xFF]) {
-        Some(Format::Jpeg)
-    } else if bytes.starts_with(b"GIF87a") || bytes.starts_with(b"GIF89a") {
-        Some(Format::Gif)
-    } else if bytes.len() >= 12 && bytes.starts_with(b"RIFF") && &bytes[8..12] == b"WEBP" {
-        Some(Format::WebP)
-    } else {
-        None
+    if bytes.starts_with(PNG_MAGIC) {
+        return Some(Format::Png);
     }
+    if bytes.starts_with(&[0xFF, 0xD8, 0xFF]) {
+        return Some(Format::Jpeg);
+    }
+    if is_gif(bytes) {
+        return Some(Format::Gif);
+    }
+    if is_webp(bytes) {
+        return Some(Format::WebP);
+    }
+    None
 }
 
 /// The intrinsic pixel size of an encoded image plus whether it has an alpha
@@ -124,17 +138,23 @@ fn probe_gif(bytes: &[u8]) -> Option<Intrinsic> {
 fn probe_webp(bytes: &[u8]) -> Option<Intrinsic> {
     // The chunk FourCC follows the 12-byte RIFF/WEBP header.
     let fourcc = bytes.get(12..16)?;
-    let (w, h) = match fourcc {
-        b"VP8 " => webp_lossy_size(bytes)?,
-        b"VP8L" => webp_lossless_size(bytes)?,
-        b"VP8X" => webp_extended_size(bytes)?,
-        _ => return None,
-    };
+    let (w, h) = webp_size(fourcc, bytes)?;
     (w > 0 && h > 0).then_some(Intrinsic {
         width: w,
         height: h,
         has_alpha: fourcc != b"VP8 ", // lossless/extended may carry alpha
     })
+}
+
+/// Dispatch to the per-chunk size reader for a WebP FourCC; unknown chunks yield
+/// `None`.
+fn webp_size(fourcc: &[u8], bytes: &[u8]) -> Option<(u32, u32)> {
+    match fourcc {
+        b"VP8 " => webp_lossy_size(bytes),
+        b"VP8L" => webp_lossless_size(bytes),
+        b"VP8X" => webp_extended_size(bytes),
+        _ => None,
+    }
 }
 
 /// Lossy WebP: after the `VP8 ` chunk header (8 bytes) the VP8 key-frame carries a
