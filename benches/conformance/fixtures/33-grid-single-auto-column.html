@@ -1,0 +1,15 @@
+<!doctype html>
+<html>
+  <head><meta charset="utf-8" /><title>grid single auto column stretches</title></head>
+  <body>
+    <!-- Feature: a single `auto` grid column stretches to fill the container
+         (grid's `normal` justify-content == stretch), so a centered cell centers
+         over the whole content box rather than pinning to the left padding
+         (google's home logo). Origin: CHANGELOG 0.2.13. -->
+    <style>
+      #g { display: grid; grid-template-columns: auto; width: 400px; padding: 0 40px }
+      #cell { justify-self: center; width: 80px; height: 40px; background: #cde }
+    </style>
+    <div id="g" data-cid="g"><div id="cell" data-cid="cell">c</div></div>
+  </body>
+</html>

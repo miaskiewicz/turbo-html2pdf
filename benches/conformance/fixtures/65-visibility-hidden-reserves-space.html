@@ -1,0 +1,20 @@
+<!doctype html>
+<html>
+  <head><meta charset="utf-8" /><title>visibility:hidden reserves layout space</title></head>
+  <body>
+    <!-- conformance:defer visibility:hidden layout-space reservation — the engine
+         drops the box from layout (conflating visibility with display) so the
+         following sibling pulls up. A nuance flagged to verify; tracked, not gated. -->
+    <!-- Feature: `visibility:hidden` (not `display:none`) still occupies 40px of
+         flow, so #b starts at y=30+40=70. Origin: wiki hover menus,
+         CHANGELOG 0.2.5/0.2.6. -->
+    <style>
+      #a { height: 30px; background: #cde }
+      #hid { visibility: hidden; height: 40px }
+      #b { height: 30px; background: #dec }
+    </style>
+    <div id="a" data-cid="a">a</div>
+    <div id="hid" data-cid="hid">hidden</div>
+    <div id="b" data-cid="b">b</div>
+  </body>
+</html>

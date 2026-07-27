@@ -1,0 +1,17 @@
+<!doctype html>
+<html>
+  <head><meta charset="utf-8" /><title>position:relative paint offset</title></head>
+  <body>
+    <!-- Feature: position:relative shifts a box for painting by its insets WITHOUT
+         changing normal flow — the following block sits where the relative box
+         WOULD have been (its reserved space), not below the shifted position. -->
+    <style>
+      #a { height: 40px; background: #cde }
+      #rel { position: relative; top: 15px; left: 25px; height: 40px; background: #fbb }
+      #b { height: 30px; background: #dec }
+    </style>
+    <div id="a" data-cid="a">a</div>
+    <div id="rel" data-cid="rel">rel</div>
+    <div id="b" data-cid="b">b</div>
+  </body>
+</html>

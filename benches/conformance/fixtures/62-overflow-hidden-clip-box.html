@@ -1,0 +1,14 @@
+<!doctype html>
+<html>
+  <head><meta charset="utf-8" /><title>overflow:hidden clips paint, not the box</title></head>
+  <body>
+    <!-- Feature: `overflow:hidden` clips paint but not layout — #clip keeps its
+         explicit 100x60 (not grown by the child) and #big keeps its full 200x200
+         border box at (0,0). Origin: overflow containers, CHANGELOG 0.2.5/0.2.6. -->
+    <style>
+      #clip { width: 100px; height: 60px; overflow: hidden; background: #eef }
+      #big { width: 200px; height: 200px; background: #cde }
+    </style>
+    <div id="clip" data-cid="clip"><div id="big" data-cid="big">big</div></div>
+  </body>
+</html>

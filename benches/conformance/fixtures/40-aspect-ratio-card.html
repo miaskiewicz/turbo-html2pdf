@@ -1,0 +1,18 @@
+<!doctype html>
+<html>
+  <head><meta charset="utf-8" /><title>aspect-ratio derives auto height</title></head>
+  <body>
+    <!-- Feature: an auto-height box with `aspect-ratio` derives its height from the
+         content width (width / ratio): 200x1 -> 200 tall; 300 @ 16/9 -> 168.75.
+         Origin: nike editorial cards, CHANGELOG 0.2.14. -->
+    <style>
+      #wrap { width: 400px }
+      #card { width: 200px; aspect-ratio: 1; background: #cde }
+      #wide { width: 300px; aspect-ratio: 16 / 9; background: #dec; margin-top: 8px }
+    </style>
+    <div id="wrap" data-cid="wrap">
+      <div id="card" data-cid="card">square</div>
+      <div id="wide" data-cid="wide">wide</div>
+    </div>
+  </body>
+</html>

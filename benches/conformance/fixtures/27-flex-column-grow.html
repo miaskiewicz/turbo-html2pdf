@@ -1,0 +1,20 @@
+<!doctype html>
+<html>
+  <head><meta charset="utf-8" /><title>flex column, multiple grow items</title></head>
+  <body>
+    <!-- Feature: a fixed-height column flex container distributes leftover main-axis
+         space by flex-grow ratio. 300px tall, a fixed 60px header, then two bodies
+         with grow 1 and grow 2 sharing the remaining 240: 80 and 160. -->
+    <style>
+      #col { display: flex; flex-direction: column; width: 160px; height: 300px; background: #eef }
+      #hd { flex: 0 0 60px; background: #cde }
+      #b1 { flex: 1; background: #dec }
+      #b2 { flex: 2; background: #fbb }
+    </style>
+    <div id="col" data-cid="col">
+      <div id="hd" data-cid="hd">hd</div>
+      <div id="b1" data-cid="b1">b1</div>
+      <div id="b2" data-cid="b2">b2</div>
+    </div>
+  </body>
+</html>

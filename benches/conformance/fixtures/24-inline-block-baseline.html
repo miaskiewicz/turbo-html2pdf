@@ -1,0 +1,15 @@
+<!doctype html>
+<html>
+  <head><meta charset="utf-8" /><title>text + inline-block baseline alignment</title></head>
+  <body>
+    <!-- Feature: a baseline-aligned inline-block sits with its bottom on the text
+         baseline, so a tall chip pushes the line's ascent and the text drops to
+         share the baseline. Checks the chip and the following text box line up. -->
+    <style>
+      #ln { font-size: 16px; line-height: 1 }
+      #chip { display: inline-block; width: 40px; height: 40px; background: #cde }
+      #tail { display: inline-block; width: 40px; height: 16px; background: #dec }
+    </style>
+    <div id="ln" data-cid="ln">Ax<span id="chip" data-cid="chip"></span>y<span id="tail" data-cid="tail"></span></div>
+  </body>
+</html>

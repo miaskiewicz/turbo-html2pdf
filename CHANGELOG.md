@@ -4,6 +4,105 @@ All notable changes to turbo-html2pdf are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/); versions follow SemVer. The npm,
 PyPI, and crates.io packages release in lockstep from a `v*` tag (PyPI on `pyv*`).
 
+## [0.2.15] — layout conformance harness + foundational layout fixes
+
+A box-geometry **conformance harness** (`benches/conformance/`) diffs laid-out element
+geometry against Chromium per standard HTML/CSS feature. It surfaced — and this release
+fixes — **8 foundational layout bug families**, then was **expanded to 68 fixtures** across
+the modern-CSS constructs real pages exercise (Grid, calc, aspect-ratio, transforms,
+`@media` height, logical props, viewport units, replaced images), surfacing **7 more
+engine fixes**.
+
+> ⚠️ **Behavioral change to DEFAULT layout output** (UA margins + table-cell padding,
+> margin collapsing, flex / grid / inline-block / float placement, transform geometry,
+> `vh`/height-`@media` resolution). Shared engine: it affects both the PDF pipeline and
+> turbo-surf's raster. **Validate against downstream real-site renders (nike / wiki /
+> google) before shipping.** 655 workspace tests pass, but unit tests ≠ real-site fidelity.
+
+### Added
+- **Conformance harness** (`benches/conformance/`): now **68 fixtures** (was 30) — block
+  flow → adversarial flex/float/abs combos, plus full coverage of the six previously-zero
+  families: **CSS Grid** (span, template-areas, single-auto-column, justify-items,
+  minmax/fr/gap, min-content rows), **calc()** (`calc(% ± px)` length + inset, `calc()`
+  media feature), **aspect-ratio**, **2D transforms** (translate, scale + `transform-origin`),
+  **`@media` height/width queries**, and **logical / flow-relative props** — plus viewport
+  units, `box-sizing:inherit`/border-box height, `white-space:nowrap`, tables
+  (border-spacing, empty rows), replaced `<img>` sizing, sticky/overflow/positioning combos,
+  and UA-default guards. Box-geometry diff vs Chromium, fonts pinned to bundled Inter on
+  both sides, skip-safe when Chromium is absent. **Result: 189/189 boxes within 2px, all 65
+  gated fixtures fully clean**; 3 documented deferrals (below) are tracked, not gated.
+- **Harness deferral mechanism**: a `<!-- conformance:defer <reason> -->` marker reports a
+  known-hard fixture's box deltas as `XFAIL` without reding the suite — so open gaps are
+  tracked honestly instead of hidden or force-passed.
+- **Image intrinsic-size probing for GIF and WebP** (`image::probe`): header-only,
+  dependency-free (GIF logical-screen descriptor; WebP `VP8 `/`VP8L`/`VP8X` chunks). Sizes
+  the box for layout; pixel decode/paint for these formats remains a follow-up (an
+  unsupported decode emits nothing, never a wrong image). PNG/JPEG (and gated SVG) unchanged.
+- **Data-URI image decode in the conformance seam** (`layout_boxes`): base64 `data:` image
+  URIs are decoded so replaced-`<img>` fixtures reach their real intrinsic size. Self-
+  contained (no I/O); the default render path still takes a host resolver.
+- **`layoutBoxes(html, css, width, height)` napi export** + `layout_boxes` / `CidBox` core
+  helper: dumps laid-out `{cid,x,y,width,height}` for elements tagged `data-cid`. Additive
+  — drives the harness, no effect on render output. The read-back now applies a box's CSS
+  2D `transform` (AABB of the transformed corners) so it matches `getBoundingClientRect`.
+
+### Fixed (default layout output — behavioral)
+- **UA default stylesheet**: browser-standard `h1`–`h6` / `p` margins, `ul` / `ol` margins
+  + `padding-left:40px`.
+- **Negative margins**: CSS 2.1 collapse (largest-positive + most-negative).
+- **Parent/child margin collapse**: a first child's top margin collapses through a
+  borderless/paddingless parent (recursive); the document root is excluded (root margins
+  never collapse — matches browsers).
+- **Inline-block**: honor `vertical-align` (top/bottom/middle/baseline), reserve inter-atom
+  whitespace, apply atom margins in the line box.
+- **Flex sizing**: apply taffy's resolved item height on read-back; parse the `flex`
+  shorthand `<basis>`; a nested flex container inherits its parent-assigned definite height
+  so `align-items:center` centers.
+- **Floats + absolute**: float margins offset placement and register the margin box; an
+  absolute `bottom` inset anchors against a definite-height positioned ancestor.
+- **`border-collapse: collapse` (fixed layout)**: shared cell edges now merge onto a
+  collapsed grid — each border counted once, half on each side (CSS 2.1 §17.6.2) — so
+  table/row/cell boxes size correctly across a `colspan` (fixture 29 was ~4–5px wide of
+  Chromium; now ≤0.6px). Non-colspan collapsed tables (fixture 07) went from 1px to exact.
+  Auto-layout collapsed tables remain a documented deferral.
+
+### Fixed (corpus expansion — 7 more engine fixes)
+- **Grid `justify-self`**: a grid item's own `justify-self:center`/`start`/`end` is mapped
+  to taffy — without it a `width:80px; justify-self:center` cell inherited the default
+  `stretch` and filled its whole track instead of centering (google's home-logo cell).
+- **`transform-origin`**: parsed into `(x, y)` `<length-percentage>` (keywords `left`/`top`
+  =0, `center`=50, `right`/`bottom`=100; either keyword order) and resolved against the box
+  size — previously the origin was hard-pinned to the box centre, so `transform-origin:top
+  left` (and any non-centre origin) placed a `scale`/`rotate` wrong.
+- **Viewport threading in the layout seam**: `vh`/`vmin`/`vmax` units and `@media
+  (min/max-height)` conditions now resolve against the actual layout-viewport height
+  (previously both fell back to the 800px default, so `20vh` measured against 800 and every
+  height-`@media` matched at any viewport).
+- **Shrink-to-fit floors at min-content**: an auto-width `inline-block` is sized
+  `min(max-content, max(available, min-content))` — a `white-space:nowrap` box wider than
+  its parent now overflows at its full width instead of being clamped and dropping text
+  (Wikipedia menu tabs). Was a bare `.min(available)`.
+- **UA default `td` / `th` padding: `1px`**: matches browsers, so an unpadded table cell's
+  border box is 2px larger per axis (Chromium parity) — surfaced by the new
+  `border-spacing` and empty-spacer-row fixtures.
+- **Grid `min-content` / `max-content` tracks**: a `grid-template-rows:min-content` (or
+  `-columns`) track now sizes to its items' content instead of mapping to `auto` and
+  stretching to fill the container (the row hugs its tallest cell).
+- **Inline replaced-image sizing** in a `<div>`/flex wrapper is exercised end-to-end now
+  that the conformance seam decodes `data:` intrinsics.
+
+### Deferred (tracked in the harness, not gated)
+- **Auto-layout collapsed-table min-content width** (`53-table-auto-min-content`): the
+  separate-border case is close, but auto-layout collapsed widths still diverge — the same
+  `table.rs` follow-up noted above.
+- **`visibility:hidden` reserves layout space** (`65-visibility-hidden-reserves-space`): the
+  engine drops the box from layout (conflating it with `display:none`) so the following
+  sibling pulls up. Paint-drop is correct; layout-space reservation is the open nuance.
+- **Auto-inset absolute flex child** (`63-abs-auto-inset-flex-child`): an intentional
+  divergence — the engine anchors it to its static start (0.2.14 fix for google's AI-Mode
+  icon), while Chromium spec-centers it via `justify-content` in this isolated repro.
+  Reverting to match the minimal repro would regress the shipped real-site fix.
+
 ## [0.2.14] — real-site rendering, round 2 (nike.com cards / google.com search bar)
 
 More layout fixes found rendering production home pages faithfully.

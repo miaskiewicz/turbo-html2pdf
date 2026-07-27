@@ -1,0 +1,16 @@
+<!doctype html>
+<html>
+  <head><meta charset="utf-8" /><title>2D transform: translate</title></head>
+  <body>
+    <!-- Feature: `transform: translate(40px, 25px)` shifts the border box by
+         (+40,+25) from its in-flow origin; normal-flow reservation is unchanged
+         (the transform does not move siblings). getBoundingClientRect reflects the
+         translated rect. Origin: carousels/overlays, CHANGELOG 0.2.11. -->
+    <style>
+      #base { height: 20px; background: #eee }
+      #t { width: 100px; height: 60px; transform: translate(40px, 25px); background: #cde }
+    </style>
+    <div id="base" data-cid="base"></div>
+    <div id="t" data-cid="t">t</div>
+  </body>
+</html>

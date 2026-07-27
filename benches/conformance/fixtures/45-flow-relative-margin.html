@@ -1,0 +1,16 @@
+<!doctype html>
+<html>
+  <head><meta charset="utf-8" /><title>flow-relative margin/padding longhands</title></head>
+  <body>
+    <!-- Feature: LTR/horizontal-tb flow-relative longhands map to physical sides —
+         `margin-inline-start` -> left (x=60), `padding-block-start` -> top padding
+         (border box height = 40+12 = 52). Origin: google search-bar labels,
+         CHANGELOG 0.2.14. -->
+    <style>
+      #outer { width: 400px }
+      #x { margin-inline-start: 60px; padding-block-start: 12px;
+           width: 100px; height: 40px; background: #cde }
+    </style>
+    <div id="outer" data-cid="outer"><div id="x" data-cid="x">x</div></div>
+  </body>
+</html>

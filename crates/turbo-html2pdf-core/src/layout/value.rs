@@ -632,6 +632,10 @@ pub struct BoxStyle {
     /// components (kept as `<length-percentage>` so a `%` translate resolves against
     /// the box's own size at layout). `None` for `none`/unparsable/3D-only.
     pub transform: Option<RawTransform>,
+    /// `transform-origin` as `(x, y)` `<length-percentage>` from the box's top-left
+    /// (keywords mapped: `left`/`top`=0%, `center`=50%, `right`/`bottom`=100%).
+    /// Resolved against the box size at layout; the CSS default is `50% 50%`.
+    pub transform_origin: (LengthPct, LengthPct),
 }
 
 /// A parsed CSS 2D transform before its `%` translate is resolved: the linear
@@ -977,7 +981,42 @@ fn resolve_box_metrics(s: &ComputedStyle, fs: f32, ctx: ResolveCtx) -> BoxStyle 
         box_shadow: box_shadow_of(s, fs),
         background_gradient: linear_gradient_of(s),
         transform: transform_of(s, fs),
+        transform_origin: transform_origin_of(s, fs),
     }
+}
+
+/// Parse `transform-origin` into `(x, y)` `<length-percentage>` offsets from the
+/// box's top-left. Keywords map to percentages (`left`/`top`=0, `center`=50,
+/// `right`/`bottom`=100); horizontal keywords bind to x and vertical ones to y (so
+/// `top left` and `left top` are equivalent), while `center`/lengths fill the
+/// remaining axes positionally (x then y). A third (z) token is ignored. Missing
+/// axes default to `50%`. Origin: fixture `transform-scale-origin` — `top left`
+/// was silently falling back to the box centre.
+fn transform_origin_of(s: &ComputedStyle, fs: f32) -> (LengthPct, LengthPct) {
+    let default = (LengthPct::Pct(50.0), LengthPct::Pct(50.0));
+    let Some(v) = s.get("transform-origin") else {
+        return default;
+    };
+    let (mut x, mut y) = (None, None);
+    let mut positional: Vec<LengthPct> = Vec::new();
+    for tok in v.split_whitespace().take(3) {
+        match tok.to_ascii_lowercase().as_str() {
+            "left" => x = Some(LengthPct::Pct(0.0)),
+            "right" => x = Some(LengthPct::Pct(100.0)),
+            "top" => y = Some(LengthPct::Pct(0.0)),
+            "bottom" => y = Some(LengthPct::Pct(100.0)),
+            "center" => positional.push(LengthPct::Pct(50.0)),
+            other => {
+                if let Some(lp) = parse_length_pct(other, fs) {
+                    positional.push(lp);
+                }
+            }
+        }
+    }
+    let mut pos = positional.into_iter();
+    let x = x.or_else(|| pos.next()).unwrap_or(LengthPct::Pct(50.0));
+    let y = y.or_else(|| pos.next()).unwrap_or(LengthPct::Pct(50.0));
+    (x, y)
 }
 
 /// Parse a CSS 2D `transform` list into a [`RawTransform`]: the non-translate
@@ -1717,6 +1756,43 @@ mod transform_tests {
         let t = xf("translateY(-50%)").unwrap();
         assert_eq!(t.ty, LengthPct::Pct(-50.0));
         assert_eq!(t.tx, LengthPct::Px(0.0));
+    }
+
+    fn origin(value: &str) -> (LengthPct, LengthPct) {
+        transform_origin_of(
+            &ComputedStyle::from_pairs([("transform-origin", value)]),
+            16.0,
+        )
+    }
+
+    #[test]
+    fn transform_origin_maps_keywords_and_lengths() {
+        // Absent → CSS default `50% 50%`.
+        assert_eq!(
+            transform_origin_of(&ComputedStyle::from_pairs([("color", "red")]), 16.0),
+            (LengthPct::Pct(50.0), LengthPct::Pct(50.0))
+        );
+        // Keyword pair, either order → (left/top = 0%).
+        assert_eq!(
+            origin("top left"),
+            (LengthPct::Pct(0.0), LengthPct::Pct(0.0))
+        );
+        assert_eq!(
+            origin("left top"),
+            (LengthPct::Pct(0.0), LengthPct::Pct(0.0))
+        );
+        // A single vertical keyword sets y; x defaults to center.
+        assert_eq!(origin("top"), (LengthPct::Pct(50.0), LengthPct::Pct(0.0)));
+        // Positional percentages: x then y.
+        assert_eq!(
+            origin("100% 25%"),
+            (LengthPct::Pct(100.0), LengthPct::Pct(25.0))
+        );
+        // Mixed keyword + length: `right` binds x, the length fills y.
+        assert_eq!(
+            origin("right 10px"),
+            (LengthPct::Pct(100.0), LengthPct::Px(10.0))
+        );
     }
 
     #[test]

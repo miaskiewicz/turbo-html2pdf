@@ -1,0 +1,15 @@
+<!doctype html>
+<html>
+  <head><meta charset="utf-8" /><title>::after rule does not leak onto its element</title></head>
+  <body>
+    <!-- Feature: a `#tb::after{height:1px}` rule must NOT apply to the real #tb
+         element — its height stays 48, not clamped to 1. turbo generates no
+         pseudo-elements, so `::after` matches nothing. Origin: Wikipedia titlebar
+         collapse, CHANGELOG 0.2.7 (commit 303169a). -->
+    <style>
+      #tb { height: 48px; background: #cde }
+      #tb::after { content: ""; height: 1px }
+    </style>
+    <div id="tb" data-cid="tb">title bar</div>
+  </body>
+</html>

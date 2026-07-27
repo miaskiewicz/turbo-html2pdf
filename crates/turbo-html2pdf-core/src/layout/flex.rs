@@ -11,7 +11,7 @@
 
 use std::collections::HashMap;
 
-use taffy::prelude::{FromLength, FromPercent, TaffyAuto};
+use taffy::prelude::{FromLength, FromPercent, TaffyAuto, TaffyMaxContent, TaffyMinContent};
 use taffy::style_helpers::{fr, line, minmax, percent, span};
 use taffy::{
     AlignItems, AvailableSpace, Dimension, Display, FlexDirection, FlexWrap, GridPlacement,
@@ -28,7 +28,7 @@ use super::block::{self, Ctx};
 use super::boxgen::{BoxKind, InlineItem, LayoutBox};
 use super::fragment::Fragment;
 use super::inline;
-use super::value::{parse_px, BoxStyle, LengthPct, ResolveCtx, DEFAULT_FONT_SIZE};
+use super::value::{parse_px, BoxSizing, BoxStyle, LengthPct, ResolveCtx, DEFAULT_FONT_SIZE};
 use super::ImageCtx;
 
 // --------------------------------------------------------------------------
@@ -102,6 +102,22 @@ fn justify_items(s: &ComputedStyle) -> Option<AlignItems> {
     })
 }
 
+/// CSS `justify-self` (a grid item's own inline-axis alignment, overriding the
+/// container's `justify-items`). `None`/`auto` defers to the container. A non-stretch
+/// value shrinks the item to its own (measured/explicit) inline size and places it in
+/// the track — without mapping it a `width:80px; justify-self:center` cell inherited
+/// the default `stretch` and filled its whole track instead of centering (google's
+/// home logo cell).
+fn justify_self(s: &ComputedStyle) -> Option<AlignItems> {
+    match s.get("justify-self").map(str::trim) {
+        None | Some("auto") => None,
+        Some("start") | Some("flex-start") | Some("left") => Some(AlignItems::Start),
+        Some("end") | Some("flex-end") | Some("right") => Some(AlignItems::End),
+        Some("center") => Some(AlignItems::Center),
+        Some(_) => Some(AlignItems::Stretch),
+    }
+}
+
 /// A flex item's `align-self` (its own cross-axis alignment, overriding the
 /// container's `align-items`), `None`/`auto` deferring to the container. Google's
 /// search-bar "AI Mode" pill, the "Sign in" button and the two search buttons all
@@ -127,12 +143,22 @@ fn gap_len(s: &ComputedStyle) -> LengthPercentage {
     LengthPercentage::length(px)
 }
 
-fn container_style(container: &LayoutBox, cw: f32, fs: f32) -> Style {
+fn container_style(container: &LayoutBox, cw: f32, fs: f32, cb_h: f32) -> Style {
     let s = &container.style;
     let bs = container.resolved(ResolveCtx {
         parent_font_size: fs,
         cb_width: cw,
     });
+    // When the container's own `height` is `auto` but a definite content height was
+    // handed down (`cb_h` — e.g. this flex box is itself a flex item its parent
+    // stretched/grew, or an in-flow box under a fixed-height ancestor), give taffy
+    // that definite height so cross-axis `align-items` / column main-axis space has
+    // a basis. Without it a nested `align-items:center` centres in content height
+    // instead of the assigned height (a centred child lands at the top).
+    let container_h = match bs.height {
+        LengthPct::Auto if cb_h > 0.0 => Dimension::length(cb_h),
+        _ => dim(bs.height),
+    };
     Style {
         display: Display::Flex,
         flex_direction: flex_direction(s),
@@ -149,7 +175,7 @@ fn container_style(container: &LayoutBox, cw: f32, fs: f32) -> Style {
         // content width.
         size: Size {
             width: Dimension::length(cw),
-            height: dim(bs.height),
+            height: container_h,
         },
         min_size: Size {
             width: dim(bs.min_width),
@@ -202,21 +228,73 @@ fn flex_grow_shrink(s: &ComputedStyle) -> (f32, f32) {
 /// shrink-wrapped to its content instead of filling the row.
 fn item_basis(s: &ComputedStyle, bs: &BoxStyle, fs: f32) -> Dimension {
     match s.get("flex-basis").map(str::trim) {
-        None | Some("auto") => dim(bs.width),
+        // No `flex-basis` longhand: the basis may still live in the `flex`
+        // shorthand's third component (`flex: 0 0 60px`), which the grow/shrink
+        // parse skips. Fall back to it before defaulting to `width`.
+        None | Some("auto") => flex_shorthand_basis(s, fs).unwrap_or_else(|| dim(bs.width)),
         Some("content") => Dimension::auto(),
-        Some(b) => {
-            if let Some(px) = parse_px(b, fs) {
-                Dimension::length(px)
-            } else if let Some(p) = b
-                .strip_suffix('%')
-                .and_then(|n| n.trim().parse::<f32>().ok())
-            {
-                Dimension::percent(p / 100.0)
-            } else {
-                dim(bs.width)
-            }
+        Some(b) => parse_basis(b, fs).unwrap_or_else(|| dim(bs.width)),
+    }
+}
+
+/// The `<basis>` component of the `flex` shorthand (`flex: <grow> <shrink>?
+/// <basis>?`), or `None` when the shorthand is absent or carries no basis:
+/// `none`→`auto`, a length/`%` token→that size, `content`→content, a bare
+/// number-only shorthand (`flex: 1`)→`0` (the CSS `flex: 1` == `1 1 0%`), and
+/// an explicit `auto` token→`None` so the caller falls back to `width`.
+fn flex_shorthand_basis(s: &ComputedStyle, fs: f32) -> Option<Dimension> {
+    let v = s.get("flex").map(str::trim)?;
+    if matches!(v, "none" | "initial") {
+        return Some(Dimension::auto());
+    }
+    let mut saw_token = false;
+    for tok in v.split_whitespace() {
+        saw_token = true;
+        match token_basis(tok, fs) {
+            TokenBasis::DeferToWidth => return None,
+            TokenBasis::Skip => {}
+            TokenBasis::Basis(d) => return Some(d),
         }
     }
+    // A numbers-only shorthand (`flex: 1`, `flex: 2 0`) has an implied `0` basis.
+    saw_token.then(|| Dimension::length(0.0))
+}
+
+/// One `flex`-shorthand token's role in basis resolution.
+enum TokenBasis {
+    /// A bare number — grow/shrink, not the basis.
+    Skip,
+    /// An explicit `auto` — basis defers to `width`.
+    DeferToWidth,
+    /// A length/`%`/`content` basis.
+    Basis(Dimension),
+}
+
+fn token_basis(tok: &str, fs: f32) -> TokenBasis {
+    if tok == "auto" {
+        return TokenBasis::DeferToWidth;
+    }
+    if tok.parse::<f32>().is_ok() {
+        return TokenBasis::Skip; // a bare number is grow/shrink
+    }
+    match parse_basis(tok, fs) {
+        Some(d) => TokenBasis::Basis(d),
+        None => TokenBasis::Skip,
+    }
+}
+
+/// Parse a single `flex-basis`/basis token (`60px`, `50%`, `content`) into a taffy
+/// [`Dimension`]; `None` for `auto`/unparsable (caller falls back to `width`).
+fn parse_basis(b: &str, fs: f32) -> Option<Dimension> {
+    if b == "content" {
+        return Some(Dimension::auto());
+    }
+    if let Some(px) = parse_px(b, fs) {
+        return Some(Dimension::length(px));
+    }
+    b.strip_suffix('%')
+        .and_then(|n| n.trim().parse::<f32>().ok())
+        .map(|p| Dimension::percent(p / 100.0))
 }
 
 fn item_margins(bs: &BoxStyle) -> Rect<LengthPercentageAuto> {
@@ -608,10 +686,22 @@ fn place_one(
     fs: f32,
     ctx: &mut Ctx,
 ) -> Fragment {
-    let bs = item.resolved(ResolveCtx {
+    let mut bs = item.resolved(ResolveCtx {
         parent_font_size: fs,
         cb_width: layout.size.width,
     });
+    // taffy has resolved this item's main-axis size (column `flex-basis`/`grow`)
+    // and cross-axis size (row `align-items:stretch`). Force that border-box height
+    // onto the item's own layout as a definite content-box height, so it drives the
+    // fragment height AND is exposed to the item's own content (nested flex,
+    // `%` heights) — otherwise the item collapses back to its content height and a
+    // `flex:1` / stretched item, and anything it centres, is placed wrong. An item
+    // whose height taffy left at auto keeps its content height (basis == content).
+    if !matches!(bs.height, LengthPct::Px(_)) {
+        let inset_v = bs.padding.vertical() + bs.border.widths().vertical();
+        bs.height = LengthPct::Px((layout.size.height - inset_v).max(0.0));
+        bs.box_sizing = BoxSizing::ContentBox;
+    }
     let mut frag = block::layout_box_sized_isolated(item, &bs, 0.0, 0.0, layout.size.width, ctx);
     frag.translate(cx + layout.location.x, cy + layout.location.y);
     frag
@@ -663,6 +753,24 @@ fn track_of(tok: &str) -> TrackSizingFunction {
     let t = tok.trim();
     if let Some(mm) = minmax_track(t) {
         return mm;
+    }
+    // `min-content`/`max-content` size the track to the items' content (a
+    // `grid-template-rows:min-content` row hugs its tallest cell's min-content
+    // height); mapping them to `AUTO` let the row stretch to the container instead.
+    match t {
+        "min-content" => {
+            return minmax(
+                MinTrackSizingFunction::MIN_CONTENT,
+                MaxTrackSizingFunction::MIN_CONTENT,
+            )
+        }
+        "max-content" => {
+            return minmax(
+                MinTrackSizingFunction::MAX_CONTENT,
+                MaxTrackSizingFunction::MAX_CONTENT,
+            )
+        }
+        _ => {}
     }
     if let Some(f) = t
         .strip_suffix("fr")
@@ -937,6 +1045,11 @@ fn build_grid_leaves(
         .enumerate()
         .map(|(i, it)| {
             let mut style = item_style(it, fs);
+            // Grid items carry their own `justify-self` (flex has none). Its default
+            // is `stretch` via the container's `justify-items`; a `center`/`start`/
+            // `end` value here instead sizes the item to its own width and aligns it
+            // in the track.
+            style.justify_self = justify_self(&it.style);
             if let Some((row, col)) = area_placement(it, areas) {
                 style.grid_row = row;
                 style.grid_column = col;
@@ -1034,7 +1147,7 @@ pub(crate) fn layout_flex(
     let mut tree: TaffyTree<usize> = TaffyTree::new();
     let leaves = build_leaves(&mut tree, items, fs);
     let root = tree
-        .new_with_children(container_style(container, cw, fs), &leaves)
+        .new_with_children(container_style(container, cw, fs, ctx.cb_h), &leaves)
         .expect("flex root");
     solve(&mut tree, root, items, fs, cw, ctx.fonts, ctx.images);
     let frags = place_items(&tree, &leaves, items, cx, cy, fs, ctx);
@@ -1277,6 +1390,29 @@ mod coverage_tests {
         let inset = item_inset(&bs);
         assert_eq!(inset.top, LengthPercentageAuto::percent(0.25_f32));
         assert_eq!(inset.left, LengthPercentageAuto::percent(0.10_f32));
+    }
+
+    // --- grid track keywords: min-content / max-content size to content ---
+    #[test]
+    fn track_of_maps_content_keywords() {
+        // A `min-content`/`max-content` track must size to content, not stretch like
+        // `auto` — else a `grid-template-rows:min-content` row fills the container.
+        assert_eq!(
+            track_of("min-content"),
+            minmax(
+                MinTrackSizingFunction::MIN_CONTENT,
+                MaxTrackSizingFunction::MIN_CONTENT
+            )
+        );
+        assert_eq!(
+            track_of("max-content"),
+            minmax(
+                MinTrackSizingFunction::MAX_CONTENT,
+                MaxTrackSizingFunction::MAX_CONTENT
+            )
+        );
+        assert_eq!(track_of("auto"), TrackSizingFunction::AUTO);
+        assert_eq!(track_of("120px"), TrackSizingFunction::from_length(120.0));
     }
 
     // --- flex_natural: row sums items, column takes the widest ---

@@ -1,0 +1,21 @@
+<!doctype html>
+<html>
+  <head><meta charset="utf-8" /><title>nested margin-collapse chain</title></head>
+  <body>
+    <!-- Feature: a top margin collapses through SEVERAL nested borderless/paddingless
+         wrappers. The innermost content's margin-top (50) and an outer wrapper's
+         margin-top (20) all collapse to max(20,50)=50 above the whole stack. -->
+    <style>
+      #prev { height: 20px; background: #cde }
+      #w1 { margin-top: 20px; background: #eee }
+      #w2 { background: #e8e8e8 }
+      #leaf { margin-top: 50px; height: 30px; background: #fbb }
+    </style>
+    <div id="prev" data-cid="prev">prev</div>
+    <div id="w1" data-cid="w1">
+      <div id="w2" data-cid="w2">
+        <div id="leaf" data-cid="leaf">leaf</div>
+      </div>
+    </div>
+  </body>
+</html>

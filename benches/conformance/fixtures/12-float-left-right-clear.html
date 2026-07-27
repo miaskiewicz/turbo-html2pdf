@@ -1,0 +1,20 @@
+<!doctype html>
+<html>
+  <head><meta charset="utf-8" /><title>opposing floats + clear</title></head>
+  <body>
+    <!-- Feature: a left and a right float share the first band; a clear:both block
+         drops below the taller of the two. Checks float placement to both edges
+         and that the cleared block's y clears max(float heights). -->
+    <style>
+      #bar { width: 300px; background: #eef }
+      #l { float: left; width: 70px; height: 50px; background: #bbf }
+      #r { float: right; width: 70px; height: 80px; background: #bfb }
+      #cl { clear: both; height: 20px; background: #ddd }
+    </style>
+    <div id="bar" data-cid="bar">
+      <div id="l" data-cid="l">L</div>
+      <div id="r" data-cid="r">R</div>
+      <div id="cl" data-cid="cl">cleared</div>
+    </div>
+  </body>
+</html>

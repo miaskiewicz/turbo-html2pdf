@@ -1,0 +1,16 @@
+<!doctype html>
+<html>
+  <head><meta charset="utf-8" /><title>grid justify-items: end</title></head>
+  <body>
+    <!-- Feature: `justify-items: end` packs each grid item to the inline end of
+         its track (nike/google grids). Origin: CHANGELOG 0.2.13. -->
+    <style>
+      #g { display: grid; grid-template-columns: 200px 200px; justify-items: end }
+      .c { width: 60px; height: 30px; background: #cde }
+    </style>
+    <div id="g" data-cid="g">
+      <div class="c" id="c1" data-cid="c1">1</div>
+      <div class="c" id="c2" data-cid="c2">2</div>
+    </div>
+  </body>
+</html>

@@ -1,0 +1,21 @@
+<!doctype html>
+<html>
+  <head><meta charset="utf-8" /><title>empty table row honors explicit height</title></head>
+  <body>
+    <!-- Feature: an empty spacer row honors its explicit `height` (24px) rather than
+         collapsing, so the following row is pushed down (r2 y = 20+24 = 44). A fixed
+         layout + collapsed borders + explicit cell heights isolate the spacer-row
+         height from auto-table sizing and text metrics. Origin: Wikipedia spacer
+         rows, CHANGELOG 0.2.6. -->
+    <style>
+      #t { border-collapse: collapse; table-layout: fixed; width: 80px }
+      #t td { height: 20px; background: #cde }
+      #sp { height: 24px; background: #eee }
+    </style>
+    <table id="t" data-cid="t">
+      <tr id="r1" data-cid="r1"><td>x</td></tr>
+      <tr id="sp" data-cid="sp"><td></td></tr>
+      <tr id="r2" data-cid="r2"><td>y</td></tr>
+    </table>
+  </body>
+</html>

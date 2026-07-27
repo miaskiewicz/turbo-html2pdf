@@ -33,8 +33,14 @@ strong { font-weight: bold }
 i { font-style: italic }
 em { font-style: italic }
 a { color: #0000ee; display: inline }
-h1 { font-weight: bold; font-size: 2em }
-h2 { font-weight: bold; font-size: 1.5em }
+h1 { font-weight: bold; font-size: 2em; margin: 0.67em 0 }
+h2 { font-weight: bold; font-size: 1.5em; margin: 0.83em 0 }
+h3 { font-weight: bold; font-size: 1.17em; margin: 1em 0 }
+h4 { font-weight: bold; margin: 1.33em 0 }
+h5 { font-weight: bold; font-size: 0.83em; margin: 1.67em 0 }
+h6 { font-weight: bold; font-size: 0.67em; margin: 2.33em 0 }
+p { margin: 1em 0 }
+ul, ol { margin: 1em 0; padding-left: 40px }
 small { font-size: 0.8em; display: inline }
 span { display: inline }
 b, strong, i, em { display: inline }
@@ -47,7 +53,7 @@ table { display: table; text-align: left }
 thead { display: table-header-group }
 tfoot { display: table-footer-group }
 tr { display: table-row }
-td, th { display: table-cell }
+td, th { display: table-cell; padding: 1px }
 li { display: list-item }
 center { display: block; text-align: center }
 br { display: block; height: 1em }

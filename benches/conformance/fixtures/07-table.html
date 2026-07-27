@@ -1,0 +1,24 @@
+<!doctype html>
+<html>
+  <head><meta charset="utf-8" /><title>table 2x2 with border-collapse</title></head>
+  <body>
+    <!-- Feature: table layout. A fixed-layout 2x2 table with collapsed borders
+         and padded cells. Checks cell origins and sizes: column widths are fixed
+         at 120px, cells are one row-height tall, and border-collapse shares the
+         1px edges between neighbours. -->
+    <style>
+      #t { border-collapse: collapse; table-layout: fixed; width: 240px }
+      #t td { width: 120px; height: 30px; padding: 6px; border: 1px solid #333; background: #cde }
+    </style>
+    <table id="t" data-cid="t">
+      <tr>
+        <td data-cid="r1c1">A1</td>
+        <td data-cid="r1c2">B1</td>
+      </tr>
+      <tr>
+        <td data-cid="r2c1">A2</td>
+        <td data-cid="r2c2">B2</td>
+      </tr>
+    </table>
+  </body>
+</html>

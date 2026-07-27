@@ -1,0 +1,16 @@
+<!doctype html>
+<html>
+  <head><meta charset="utf-8" /><title>section-scoped h1 vs top-level h1</title></head>
+  <body>
+    <!-- Feature: a top-level `<h1>` and an `<h1>` nested in a `<section>` both match
+         Chromium's current UA sheet (modern Chromium no longer shrinks the sectioned
+         h1). Pins the em math against double-application. Origin: memory h1
+         em-doubling / CHANGELOG 0.2.15 UA margins. -->
+    <style> #lead { height: 8px; background: #eee } </style>
+    <div id="lead" data-cid="lead"></div>
+    <h1 data-cid="h1top">Top-level H1</h1>
+    <section>
+      <h1 data-cid="h1sec">Sectioned H1</h1>
+    </section>
+  </body>
+</html>

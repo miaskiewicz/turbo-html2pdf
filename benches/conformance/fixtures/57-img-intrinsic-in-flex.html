@@ -1,0 +1,20 @@
+<!doctype html>
+<html>
+  <head><meta charset="utf-8" /><title>img intrinsic size inside flex</title></head>
+  <body>
+    <!-- Feature: a replaced `<img>` (intrinsic 120x60, from the decoded GIF header)
+         inside a `<div>` inside a flex row sizes to its intrinsic width — the wrapper
+         does not shrink to 0 or grow to fill the row. `display:block` on the image
+         drops the inline baseline strut so the wrapper is exactly the image box.
+         Origin: nike/google replaced flex items, CHANGELOG 0.2.13. -->
+    <style>
+      #row { display: flex; width: 400px }
+      #wrap { background: #cde }
+      #im { display: block }
+    </style>
+    <div id="row" data-cid="row">
+      <div id="wrap" data-cid="wrap"><img id="im" data-cid="im" alt=""
+        src="data:image/gif;base64,R0lGODlheAA8APAAAFCMyN7IUCwAAAAAeAA8AAACADs="></div>
+    </div>
+  </body>
+</html>

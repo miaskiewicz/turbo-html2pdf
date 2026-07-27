@@ -33,10 +33,10 @@ use std::collections::HashMap;
 
 use turbo_html2pdf_core::style::TokenSet;
 use turbo_html2pdf_core::{
-    append_pdfs, build_cascade, compile as core_compile, emit_pdf_with_images, render_pages,
-    style::parse_stylesheet, CompileOptions, Diagnostics, EmitOptions, Encryption, FontRegistry,
-    ImageWatermark, MissingPolicy, NoImages, Permissions, RenderInputs, Rgba, TextWatermark,
-    Watermark,
+    append_pdfs, build_cascade, compile as core_compile, emit_pdf_with_images, layout_boxes,
+    render_pages, style::parse_stylesheet, CidBox, CompileOptions, Diagnostics, EmitOptions,
+    Encryption, FontRegistry, ImageWatermark, MissingPolicy, NoImages, Permissions, RenderInputs,
+    Rgba, TextWatermark, Watermark,
 };
 
 use convert::{build_registry, diagnostics_to_js, JsDiagnostic, JsFont, JsImage, MapResolver};
@@ -297,6 +297,72 @@ pub fn render_oneshot(
     let (program, _diags) =
         core_compile(&template_html, &CompileOptions::default()).map_err(errors::from_compile)?;
     run_pipeline(&program, opts.unwrap_or_default(), fonts)
+}
+
+/// Lay `html` out (author `<style>` blocks + `css`) at `width`×`height` px with
+/// the bundled default fonts, and return — as a JSON string — the placed
+/// geometry of every box whose source element carries a `data-cid="..."`
+/// attribute: `[{ "cid", "x", "y", "width", "height" }, …]`, in document order.
+///
+/// A debug/conformance seam (drives `benches/conformance` against Chromium's
+/// `getBoundingClientRect()`); it does NOT touch the compile→render→emit path.
+/// Coordinates are absolute px (page origin at top-left) and sizes are the border
+/// box, matching a browser's client rect. See the core `layout_boxes` for the
+/// inline-flattening limitation (tag box-generating elements).
+#[napi(js_name = "layoutBoxes")]
+pub fn layout_boxes_json(
+    html: String,
+    css: String,
+    width: f64,
+    height: f64,
+) -> napi::Result<String> {
+    let fonts = FontRegistry::new();
+    let mut diags = Diagnostics::default();
+    let boxes = layout_boxes(&html, &css, width as f32, height as f32, &fonts, &mut diags)
+        .map_err(errors::from_render)?;
+    Ok(cid_boxes_to_json(&boxes))
+}
+
+/// Serialize the placed boxes to a JSON array by hand — a handful of numeric
+/// fields, so a manual encoder keeps the dependency-free thin-bridge contract
+/// without pulling `serde` onto the core `CidBox` type.
+fn cid_boxes_to_json(boxes: &[CidBox]) -> String {
+    let mut s = String::from("[");
+    for (i, b) in boxes.iter().enumerate() {
+        if i > 0 {
+            s.push(',');
+        }
+        s.push_str(&format!(
+            "{{\"cid\":{},\"x\":{},\"y\":{},\"width\":{},\"height\":{}}}",
+            json_string(&b.cid),
+            b.x,
+            b.y,
+            b.width,
+            b.height
+        ));
+    }
+    s.push(']');
+    s
+}
+
+/// Encode `s` as a JSON string literal (quotes + the mandatory escapes), so a
+/// `data-cid` containing a quote/backslash/control char can't break the array.
+fn json_string(s: &str) -> String {
+    let mut out = String::with_capacity(s.len() + 2);
+    out.push('"');
+    for c in s.chars() {
+        match c {
+            '"' => out.push_str("\\\""),
+            '\\' => out.push_str("\\\\"),
+            '\n' => out.push_str("\\n"),
+            '\r' => out.push_str("\\r"),
+            '\t' => out.push_str("\\t"),
+            c if (c as u32) < 0x20 => out.push_str(&format!("\\u{:04x}", c as u32)),
+            c => out.push(c),
+        }
+    }
+    out.push('"');
+    out
 }
 
 /// Glue one or more foreign PDF documents after `base`, page by page, returning
