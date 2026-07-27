@@ -38,7 +38,9 @@ pub use emit::{
 #[cfg(feature = "encrypt")]
 pub use emit::{Encryption, Permissions};
 pub use error::{CompileError, Diagnostics, ErrorCode, Lint, LintCode, RenderError, Span};
-pub use html_layout::{collect_style_css, layout_html, layout_html_with_images, parse_html};
+pub use html_layout::{
+    collect_style_css, layout_boxes, layout_html, layout_html_with_images, parse_html, CidBox,
+};
 pub use image::{ImageResolver, NoImages};
 pub use layout::fragment::{
     BoxShadow, BreakMeta, Fragment, FragmentContent, GradientStop, ImagePlacement, LinearGradient,

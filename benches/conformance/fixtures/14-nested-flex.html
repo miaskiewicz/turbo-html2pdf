@@ -1,0 +1,21 @@
+<!doctype html>
+<html>
+  <head><meta charset="utf-8" /><title>nested flex: column grow + centered child</title></head>
+  <body>
+    <!-- Feature: a column flex container with a fixed header and a flex:1 body that
+         itself centers a child both ways. Checks flex-grow height resolution
+         (body fills 200-60=140) and centering (child at the body's center). -->
+    <style>
+      #of { display: flex; flex-direction: column; width: 200px; height: 200px; background: #eef }
+      #top { flex: 0 0 60px; background: #cde }
+      #body { flex: 1; display: flex; align-items: center; justify-content: center; background: #dec }
+      #inner { width: 50px; height: 50px; background: #fbb }
+    </style>
+    <div id="of" data-cid="of">
+      <div id="top" data-cid="top">top</div>
+      <div id="body" data-cid="body">
+        <div id="inner" data-cid="inner">x</div>
+      </div>
+    </div>
+  </body>
+</html>

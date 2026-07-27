@@ -1,0 +1,28 @@
+<!doctype html>
+<html>
+  <head><meta charset="utf-8" /><title>combo: flex + float + inline-block + absolute on a relative stage</title></head>
+  <body>
+    <!-- Feature: several formatting contexts in conjunction on one relative stage:
+         a space-between flex bar at the top, a left float below it, an inline-block
+         chip beside the float, and an absolutely-positioned pin anchored to the
+         stage's bottom-right. Exercises how the engine composes flex, float, inline
+         flow, and out-of-flow positioning together. -->
+    <style>
+      #stage { position: relative; width: 400px; height: 220px; background: #eef }
+      #bar { display: flex; justify-content: space-between; width: 100% }
+      #a, #b { width: 90px; height: 32px; background: #cde }
+      #floaty { float: left; width: 60px; height: 60px; margin: 8px; background: #bfb }
+      #chip { display: inline-block; width: 44px; height: 44px; margin-top: 8px; background: #ffd }
+      #pin { position: absolute; bottom: 12px; right: 12px; width: 70px; height: 24px; background: #fbb }
+    </style>
+    <div id="stage" data-cid="stage">
+      <div id="bar" data-cid="bar">
+        <div id="a" data-cid="a">A</div>
+        <div id="b" data-cid="b">B</div>
+      </div>
+      <div id="floaty" data-cid="floaty">fl</div>
+      <span id="chip" data-cid="chip">c</span>
+      <div id="pin" data-cid="pin">pin</div>
+    </div>
+  </body>
+</html>

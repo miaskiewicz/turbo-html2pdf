@@ -44,6 +44,26 @@ pub struct InlineAtom {
     pub id: usize,
     pub width: f32,
     pub height: f32,
+    /// The box's `vertical-align`, driving where it sits in the line box: `Top`
+    /// pins its top to the line top, `Bottom` its bottom to the line bottom,
+    /// `Middle` centres it, else it sits on the baseline (the CSS default).
+    pub valign: VAlign,
+    /// The box's own margins (border box → margin box). An inline-block reserves
+    /// its margin box in the line: horizontal margins add to its inline advance,
+    /// and vertical margins grow the line and offset the border box within it (a
+    /// baseline atom sits with its *margin* box bottom on the baseline).
+    pub margin_top: f32,
+    pub margin_bottom: f32,
+    pub margin_left: f32,
+    pub margin_right: f32,
+}
+
+impl InlineAtom {
+    /// The atom's margin-box height (border box + vertical margins) — what it
+    /// contributes to the line box.
+    fn outer_height(&self) -> f32 {
+        self.height + self.margin_top + self.margin_bottom
+    }
 }
 
 /// One inline-level piece in document order: a styled text run or an atomic box.
@@ -246,7 +266,9 @@ fn build_pieces(pieces: &[Piece], reg: &FontRegistry, diags: &mut Diagnostics) -
                 flush_run_group(&mut group, reg, diags, &mut words);
                 words.push(Word {
                     segs: Vec::new(),
-                    width: atom.width,
+                    // The atom occupies its MARGIN box inline, so horizontal margins
+                    // count toward wrapping + advance.
+                    width: atom.width + atom.margin_left + atom.margin_right,
                     space_after: 0.0,
                     atom: Some(*atom),
                 });
@@ -267,8 +289,24 @@ fn flush_run_group(
 ) {
     if !group.is_empty() {
         let chars = flatten_chars(group, reg, diags);
+        hand_off_leading_space(&chars, group, out);
         out.extend(build_words(&chars, group));
         group.clear();
+    }
+}
+
+/// Whitespace that opens a text group directly follows a preceding word —
+/// typically an atom (`<span-ib> <span-ib>`) whose own `space_after` is 0, or an
+/// atom before text (`<img> caption`). `build_words` drops leading whitespace, so
+/// hand its collapsed space to that preceding word; otherwise the ~4px
+/// inter-inline-block gap a browser paints would vanish.
+fn hand_off_leading_space(chars: &[CharInfo], group: &[InlineRun], out: &mut [Word]) {
+    let (Some(first), Some(last)) = (chars.first(), out.last_mut()) else {
+        return;
+    };
+    let breakable = first.ch.is_whitespace() && !group[first.run].nowrap;
+    if breakable && last.space_after == 0.0 {
+        last.space_after = space_width(first, group);
     }
 }
 
@@ -358,11 +396,20 @@ fn line_metrics(words: &[Word]) -> Metrics {
         for seg in &word.segs {
             fold_seg_metrics(seg, &mut m);
         }
-        // An atom sits with its bottom on the baseline (the CSS default for a
-        // replaced/empty inline-block), so it contributes its full height as ascent.
+        // A baseline-aligned atom sits with its bottom on the baseline (the CSS
+        // default for a replaced/empty inline-block), so it contributes its full
+        // height as ascent and grows the line above the baseline. A `top`/`bottom`
+        // atom is placed against the line box edges instead, so it only grows the
+        // line's total height — folding it into `ascent` would shove the baseline
+        // (and every other item) down under a tall top-aligned box.
         if let Some(atom) = word.atom {
-            m.ascent = m.ascent.max(atom.height);
-            m.height = m.height.max(atom.height);
+            let outer = atom.outer_height();
+            if matches!(atom.valign, VAlign::Top | VAlign::Bottom) {
+                m.height = m.height.max(outer);
+            } else {
+                m.ascent = m.ascent.max(outer);
+                m.height = m.height.max(outer);
+            }
         }
     }
     m.height = m.height.max(m.ascent + m.descent);
@@ -433,13 +480,23 @@ fn place_line(words: Vec<Word>, max_width: f32, align: Align) -> InlineLine {
     let mut atoms = Vec::new();
     for word in &words {
         if let Some(atom) = word.atom {
-            // Bottom-align the atom to the baseline.
+            // Place the atom's MARGIN box vertically per its `vertical-align`: `top`
+            // pins to the line-box top, `bottom` to its bottom, `middle` centres,
+            // else the margin box's bottom sits on the baseline (the CSS default);
+            // the border box is then its `margin-top` below the margin-box top.
+            let outer = atom.outer_height();
+            let margin_top = match atom.valign {
+                VAlign::Top => 0.0,
+                VAlign::Bottom => m.height - outer,
+                VAlign::Middle => (m.height - outer) / 2.0,
+                _ => baseline - outer,
+            };
             atoms.push(PlacedAtom {
                 id: atom.id,
-                x: pen,
-                y: baseline - atom.height,
+                x: pen + atom.margin_left,
+                y: margin_top + atom.margin_top,
             });
-            pen += atom.width;
+            pen += atom.width + atom.margin_left + atom.margin_right;
         } else {
             for seg in &word.segs {
                 runs.push(shape_seg(seg, pen, baseline));

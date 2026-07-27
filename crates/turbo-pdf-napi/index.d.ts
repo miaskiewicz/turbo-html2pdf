@@ -203,3 +203,14 @@ export function render(templateHtml: string, opts?: RenderOptions, fonts?: Fonts
  *  the merged PDF. Equivalent to `RenderOptions.appendPdfs` but usable on
  *  already-emitted bytes. Throws `TurboPdfError` if any input fails to parse. */
 export function appendPdf(base: Buffer, extras: Buffer[]): Buffer;
+
+/** Debug/conformance seam (NOT part of the render path): lay `html` out (its
+ *  own `<style>` blocks plus `css`) at `width`×`height` px with the bundled
+ *  default fonts, and return a JSON string — an array of
+ *  `{ cid, x, y, width, height }`, one per box whose source element carried a
+ *  `data-cid="..."` attribute, in document order. Coordinates are absolute px
+ *  (page origin top-left) and sizes are the border box, matching a browser's
+ *  `getBoundingClientRect()`. Only box-generating elements (block, inline-block,
+ *  flex/grid/table items, replaced `<img>`) resolve a `data-cid`; a
+ *  `display:inline` element is flattened during box generation and drops it. */
+export function layoutBoxes(html: string, css: string, width: number, height: number): string;

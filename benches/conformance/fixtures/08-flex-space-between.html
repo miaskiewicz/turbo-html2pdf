@@ -1,0 +1,19 @@
+<!doctype html>
+<html>
+  <head><meta charset="utf-8" /><title>flex row, justify-content:space-between</title></head>
+  <body>
+    <!-- Feature: flexbox. A 600px flex row with three 100px items and
+         space-between: the first item pins to the left edge (x=0), the last to
+         the right edge (x=500), and the remaining space is split evenly so the
+         middle item sits at x=250. -->
+    <style>
+      #row { display: flex; justify-content: space-between; width: 600px }
+      #row > div { width: 100px; height: 40px; background: #cde }
+    </style>
+    <div id="row" data-cid="row">
+      <div data-cid="f1">1</div>
+      <div data-cid="f2">2</div>
+      <div data-cid="f3">3</div>
+    </div>
+  </body>
+</html>

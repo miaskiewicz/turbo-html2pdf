@@ -1,0 +1,20 @@
+<!doctype html>
+<html>
+  <head><meta charset="utf-8" /><title>nested percentage widths + padding</title></head>
+  <body>
+    <!-- Feature: percentage widths resolve against the containing block's content
+         width, compounding through nesting, with content-box padding added outside
+         the percentage. outer 600 -> mid 50%=300 (content) + 20 padding each side;
+         inner 50% of mid's content 300 = 150. -->
+    <style>
+      #outer { width: 600px; background: #eef }
+      #mid { width: 50%; padding: 0 20px; height: 80px; background: #cde }
+      #inner { width: 50%; height: 40px; background: #fbb }
+    </style>
+    <div id="outer" data-cid="outer">
+      <div id="mid" data-cid="mid">
+        <div id="inner" data-cid="inner">inner</div>
+      </div>
+    </div>
+  </body>
+</html>

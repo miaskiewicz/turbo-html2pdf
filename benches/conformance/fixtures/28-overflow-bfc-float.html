@@ -1,0 +1,19 @@
+<!doctype html>
+<html>
+  <head><meta charset="utf-8" /><title>overflow BFC contains a float</title></head>
+  <body>
+    <!-- Feature: `overflow:hidden` establishes a block formatting context, so the
+         container grows to CONTAIN its float (the classic clearfix), instead of
+         collapsing to zero height and letting the float spill. The container's
+         height should equal the float's height. -->
+    <style>
+      #bfc { overflow: hidden; width: 300px; background: #eef }
+      #f { float: left; width: 80px; height: 70px; background: #fbb }
+      #after { height: 20px; background: #cde }
+    </style>
+    <div id="bfc" data-cid="bfc">
+      <div id="f" data-cid="f">f</div>
+    </div>
+    <div id="after" data-cid="after">after</div>
+  </body>
+</html>

@@ -1,0 +1,17 @@
+<!doctype html>
+<html>
+  <head><meta charset="utf-8" /><title>position:fixed vs the viewport</title></head>
+  <body>
+    <!-- Feature: position:fixed resolves against the viewport (initial containing
+         block), independent of normal flow. With no scroll the fixed box sits at
+         its top/left insets; the flow block below ignores it entirely. -->
+    <style>
+      #fx { position: fixed; top: 24px; left: 36px; width: 120px; height: 40px; background: #fbb }
+      #flow1 { height: 50px; background: #cde }
+      #flow2 { height: 30px; background: #dec }
+    </style>
+    <div id="fx" data-cid="fx">fixed</div>
+    <div id="flow1" data-cid="flow1">flow 1</div>
+    <div id="flow2" data-cid="flow2">flow 2</div>
+  </body>
+</html>

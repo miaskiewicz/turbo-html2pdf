@@ -1,0 +1,18 @@
+<!doctype html>
+<html>
+  <head><meta charset="utf-8" /><title>min-width / max-width clamping</title></head>
+  <body>
+    <!-- Feature: min-width / max-width clamp the used width. `#wide` wants 90% of
+         500 (=450) but max-width:300 clamps it; `#narrow` wants 10% (=50) but
+         min-width:120 floors it. Both stay left-aligned. -->
+    <style>
+      #box { width: 500px }
+      #wide { width: 90%; max-width: 300px; height: 30px; background: #cde }
+      #narrow { width: 10%; min-width: 120px; height: 30px; margin-top: 8px; background: #dec }
+    </style>
+    <div id="box" data-cid="box">
+      <div id="wide" data-cid="wide">wide</div>
+      <div id="narrow" data-cid="narrow">narrow</div>
+    </div>
+  </body>
+</html>

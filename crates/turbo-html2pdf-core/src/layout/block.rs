@@ -1,14 +1,15 @@
 //! Block layout (§5.3, AC-5.5): turns the box tree into positioned fragments in
 //! the galley's continuous top-down coordinate space. Widths resolve top-down
 //! (honoring `box-sizing`, `auto` fill, and min/max clamps); heights/positions
-//! accumulate as children stack, with **margin collapsing** between siblings and
-//! collapse-through of empty blocks (a running-margin model). `Lines` boxes defer
-//! to the inline builder; `Flex`/`Table` fall back to block flow until their own
-//! modules replace the dispatch.
+//! accumulate as children stack, with **margin collapsing** between siblings,
+//! collapse-through of empty blocks, and parent/child collapse of a first child's
+//! top margin through a borderless/paddingless parent (a running-margin model;
+//! negative margins collapse per CSS 2.1). `Lines` boxes defer to the inline
+//! builder (which places atomic `inline-block`s within the line, honouring their
+//! `vertical-align` + margins); `Flex`/`Grid`/`Table` dispatch to their own modules.
 //!
-//! Deferred in v1 (documented): parent/child margin collapse, negative margins,
-//! `%`/auto explicit heights, and true inline placement of atomic inlines (an
-//! `inline-block` is stacked below its line rather than placed within it).
+//! Deferred in v1 (documented): some `%`/auto explicit-height edge cases and full
+//! `border-collapse` border merging (see `table.rs`).
 
 use crate::error::Diagnostics;
 use crate::image::probe;
@@ -419,10 +420,18 @@ fn build_inline_pieces(
             }
             InlineItem::Atomic(b) => {
                 let f = lay_atomic(b, cw, bs.font_size, ctx);
+                // Cheap re-resolve (style cache memoizes) to read the box's own
+                // `vertical-align` + margins for line-box placement.
+                let abs = resolve(b, cw, bs.font_size);
                 pieces.push(inline::Piece::Atom(inline::InlineAtom {
                     id: atom_frags.len(),
                     width: f.width,
                     height: f.height,
+                    valign: abs.vertical_align,
+                    margin_top: abs.margin.top,
+                    margin_bottom: abs.margin.bottom,
+                    margin_left: abs.margin.left,
+                    margin_right: abs.margin.right,
                 }));
                 atom_frags.push(f);
             }
@@ -456,6 +465,70 @@ struct FlowRun {
     align: Align,
 }
 
+/// Collapse two adjacent vertical margins (CSS 2.1 §8.3.1): the used margin is the
+/// largest positive margin plus the most-negative negative margin, so an all-
+/// positive pair takes the max (the common case) while a negative margin pulls the
+/// following box back up/over its neighbour.
+fn collapse_margins(a: f32, b: f32) -> f32 {
+    a.max(0.0).max(b.max(0.0)) + a.min(0.0).min(b.min(0.0))
+}
+
+/// Whether a box's first in-flow child's top margin collapses *through* the box's
+/// top edge (CSS 2.1 §8.3.1): the box is a block container with no top border and
+/// no top padding that does not establish a new block formatting context (so not a
+/// float, out-of-flow, flex/grid/table, or scroll container). When it does, that
+/// child margin appears above the box rather than inside it.
+fn top_margins_collapse_through(lb: &LayoutBox, bs: &BoxStyle) -> bool {
+    // The document root (the synthetic box `build_box_tree` stamps id 0, standing in
+    // for html/body which this engine models as match-only shells) does NOT collapse
+    // its children's margins out its top — root-element margins never collapse (CSS
+    // 2.1 §8.3.1), so a first child's `margin-top` manifests at the page top as a
+    // browser renders it, rather than vanishing to y=0.
+    lb.node_id.0 != 0
+        && matches!(lb.kind, BoxKind::Block(_))
+        && bs.border.widths().top == 0.0
+        && bs.padding.top == 0.0
+        && !establishes_bfc(lb, bs)
+}
+
+/// The first in-flow (non-float, non-out-of-flow) child of a block container.
+fn first_inflow_child(lb: &LayoutBox, cw: f32, fs: f32) -> Option<&LayoutBox> {
+    let BoxKind::Block(kids) = &lb.kind else {
+        return None;
+    };
+    kids.iter().find(|k| {
+        let kbs = resolve(k, cw, fs);
+        kbs.float == Float::None && !kbs.position.is_out_of_flow()
+    })
+}
+
+/// The collapsed top margin that shows *above* `lb`'s content: its own `margin-top`
+/// collapsed with its first in-flow child's leading margin, recursively, whenever
+/// that child's top margin collapses through `lb`'s top edge. A box's caller uses
+/// this (rather than the bare `margin-top`) so a child's margin escaping a
+/// borderless/paddingless parent stacks the parent against its sibling correctly.
+fn leading_margin(lb: &LayoutBox, bs: &BoxStyle, cw: f32, fs: f32) -> f32 {
+    let mut m = bs.margin.top;
+    if top_margins_collapse_through(lb, bs) {
+        if let Some(child) = first_inflow_child(lb, cw, fs) {
+            let cbs = resolve(child, cw, fs);
+            m = collapse_margins(m, leading_margin(child, &cbs, cw, fs));
+        }
+    }
+    m
+}
+
+/// The leading top margin to feed a flow child: `0` when this container hoists the
+/// first child's margin out its own top (parent/child collapse), else the child's
+/// [`leading_margin`].
+fn child_leading(kid: &LayoutBox, kbs: &BoxStyle, cw: f32, fs: f32, suppressed: bool) -> f32 {
+    if suppressed {
+        0.0
+    } else {
+        leading_margin(kid, kbs, cw, fs)
+    }
+}
+
 fn layout_block_flow(
     kids: &[LayoutBox],
     cx: f32,
@@ -463,6 +536,7 @@ fn layout_block_flow(
     cw: f32,
     bs: &BoxStyle,
     ctx: &mut Ctx,
+    suppress_first_leading: bool,
 ) -> (Vec<Fragment>, f32) {
     let fs = bs.font_size;
     let mut frags = Vec::new();
@@ -472,6 +546,7 @@ fn layout_block_flow(
         align: bs.text_align,
     };
     let mut deferred: Vec<(&LayoutBox, (f32, f32))> = Vec::new();
+    let mut first_inflow = true;
     for kid in kids {
         let kbs = resolve(kid, cw, fs);
         // When this box is the containing block for an `absolute` child but its own
@@ -482,7 +557,7 @@ fn layout_block_flow(
         if defer_this_kid(bs, &kbs, ctx) {
             let static_pos = (
                 cx + kbs.margin.left,
-                flow.cursor + flow.pending.max(kbs.margin.top),
+                flow.cursor + collapse_margins(flow.pending, kbs.margin.top),
             );
             deferred.push((kid, static_pos));
             continue;
@@ -493,7 +568,13 @@ fn layout_block_flow(
             frags.push(f);
             continue;
         }
-        frags.push(layout_in_flow_kid(kid, &kbs, cx, cw, fs, &mut flow, ctx));
+        // The box's leading (collapsed) top margin — suppressed for the first in-flow
+        // child when this container hoists it out its own top edge (parent/child
+        // collapse), else the child's `margin-top` collapsed with any margins that
+        // escape ITS borderless top.
+        let leading = child_leading(kid, &kbs, cw, fs, first_inflow && suppress_first_leading);
+        first_inflow = false;
+        frags.push(layout_in_flow_kid(kid, leading, cx, cw, fs, &mut flow, ctx));
     }
     // Height is the in-flow content only. Floats are contained by their BFC (see
     // `layout_box_sized`), not by every block they pass through — a non-BFC block
@@ -567,10 +648,19 @@ fn place_special_kid(
     if kbs.position.is_out_of_flow() {
         let static_pos = (
             cx + kbs.margin.left,
-            flow.cursor + flow.pending.max(kbs.margin.top),
+            flow.cursor + collapse_margins(flow.pending, kbs.margin.top),
         );
         let (bx, by) = out_of_flow_origin(kbs, cw, ctx, static_pos);
-        return Some(layout_box(kid, bx, by, cw, fs, ctx));
+        let mut frag = layout_box(kid, bx, by, cw, fs, ctx);
+        // A `bottom`-anchored (auto `top`) box left at its static y by
+        // `out_of_flow_origin` — because its height wasn't known there — is pulled
+        // to the CB bottom now, when the CB height is DEFINITE. (An indefinite-height
+        // CB defers its absolute children instead, via `place_deferred_abs`, so the
+        // `> 0` guard keeps this off that path.)
+        if ctx.abs_cb_h > 0.0 {
+            anchor_bottom(&mut frag, kbs, ctx.abs_cb_h, ctx);
+        }
+        return Some(frag);
     }
     if kbs.float != Float::None {
         return Some(place_float(
@@ -591,13 +681,15 @@ fn place_special_kid(
 /// avoidance for BFC/replaced boxes, and horizontal alignment.
 fn layout_in_flow_kid(
     kid: &LayoutBox,
-    kbs: &BoxStyle,
+    leading: f32,
     cx: f32,
     cw: f32,
     fs: f32,
     flow: &mut FlowRun,
     ctx: &mut Ctx,
 ) -> Fragment {
+    let kbs = resolve(kid, cw, fs);
+    let kbs = &kbs;
     // `clear`: skip past the floats on the cleared side(s) before laying out.
     let base = flow.cursor + flow.pending;
     let cleared = clear_below(ctx, kid, base);
@@ -606,7 +698,9 @@ fn layout_in_flow_kid(
         flow.pending = 0.0;
     }
     let (dx, dy) = flow_relative_offset(kbs, cw);
-    flow.pending = flow.pending.max(kbs.margin.top);
+    // `leading` is the box's `margin-top` already collapsed with any margin escaping
+    // its borderless top (parent/child collapse); collapse it into the running margin.
+    flow.pending = collapse_margins(flow.pending, leading);
     let flow_y = flow.cursor + flow.pending;
     let (region_x, region_w) = flow_region(kid, kbs, ctx, cx, cw, flow_y);
     let mut frag = layout_box(
@@ -626,7 +720,7 @@ fn layout_in_flow_kid(
     }
     // Advance the cursor by the box's height at its *unshifted* flow position.
     if frag.height == 0.0 {
-        flow.pending = flow.pending.max(kbs.margin.bottom);
+        flow.pending = collapse_margins(flow.pending, kbs.margin.bottom);
     } else {
         flow.cursor += flow.pending + frag.height;
         flow.pending = kbs.margin.bottom;
@@ -785,11 +879,14 @@ fn place_float(
 ) -> Fragment {
     let replaced = kid.image.as_ref().is_some_and(|s| s.replaced);
     let (w, shrink) = float_width(kid, kbs, cw, ctx.fonts, replaced);
-    let y = float_drop_y(ctx, cx, cw, w, y0);
+    // A float is offset from its packing edge by its own margins (CSS 9.5): its
+    // border box drops below preceding floats plus `margin-top`, and packs inside
+    // the inline region by `margin-left`/`margin-right`.
+    let y = float_drop_y(ctx, cx, cw, w, y0) + kbs.margin.top;
     let (rx, rw) = inline_region(ctx, cx, cw, y);
     let bx = match kbs.float {
-        Float::Right => rx + rw - w,
-        _ => rx,
+        Float::Right => rx + rw - w - kbs.margin.right,
+        _ => rx + kbs.margin.left,
     };
     let mut f = if shrink {
         layout_box_sized(kid, kbs, bx, y, w, ctx)
@@ -797,11 +894,13 @@ fn place_float(
         layout_box(kid, bx, y, cw, fs, ctx)
     };
     reanchor_right_float(&mut f, kbs, rx, rw, w);
+    // Register the float's MARGIN box (not just its border box), so later in-flow
+    // content clears the float's margins too — matching the `FloatRect` contract.
     ctx.floats.push(FloatRect {
-        x0: f.x,
-        x1: f.x + f.width,
-        top: y,
-        bottom: y + f.height,
+        x0: f.x - kbs.margin.left,
+        x1: f.x + f.width + kbs.margin.right,
+        top: y - kbs.margin.top,
+        bottom: y + f.height + kbs.margin.bottom,
         side: kbs.float,
     });
     f
@@ -866,7 +965,13 @@ fn layout_content(
     ctx: &mut Ctx,
 ) -> (Vec<Fragment>, f32) {
     match &lb.kind {
-        BoxKind::Block(kids) => layout_block_flow(kids, cx, cy, cw, bs, ctx),
+        BoxKind::Block(kids) => {
+            // When this box lets its first child's top margin collapse through, that
+            // leading margin is applied by THIS box's own caller (via `leading_margin`)
+            // — so suppress it inside to avoid double-counting.
+            let suppress_first = top_margins_collapse_through(lb, bs);
+            layout_block_flow(kids, cx, cy, cw, bs, ctx, suppress_first)
+        }
         BoxKind::Flex(kids) => super::flex::layout_flex(lb, kids, cx, cy, cw, bs.font_size, ctx),
         BoxKind::Grid(kids) => super::flex::layout_grid(lb, kids, cx, cy, cw, bs.font_size, ctx),
         BoxKind::Table(kids) => super::table::layout_table(lb, kids, cx, cy, cw, bs.font_size, ctx),

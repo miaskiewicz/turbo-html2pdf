@@ -12,6 +12,9 @@
 //! blocks as author CSS (the base pipeline applies only inline `style=` +
 //! UA defaults), then cascades and lays out at the caller's content width.
 
+use std::collections::HashMap;
+
+use crate::layout::boxgen::{build_box_tree, BoxKind, InlineItem, LayoutBox};
 use crate::layout::fragment::Fragment;
 use crate::layout::ImageCtx;
 use crate::node::{Element, Node, Tag};
@@ -131,9 +134,139 @@ pub fn layout_html_with_images(
     ))
 }
 
+/// One laid-out box paired with the `data-cid` its source element carried
+/// ([`layout_boxes`]). Coordinates are absolute px in the galley's top-down
+/// space (a fragment's `x`/`y` are already accumulated to page origin), and the
+/// size is the border box — the same rectangle a browser's
+/// `getBoundingClientRect()` reports — so the two can be compared directly.
+#[derive(Debug, Clone, PartialEq)]
+pub struct CidBox {
+    /// The `data-cid` attribute value of the source element.
+    pub cid: String,
+    /// Left edge, px from the page origin.
+    pub x: f32,
+    /// Top edge, px from the page origin.
+    pub y: f32,
+    /// Border-box width, px.
+    pub width: f32,
+    /// Border-box height, px.
+    pub height: f32,
+}
+
+/// Lay `html` out (Jinja-free, exactly as [`layout_html`]) and return the placed
+/// geometry of every box whose SOURCE element carries a `data-cid="..."`
+/// attribute — a debug/conformance seam, **not** part of the render path.
+///
+/// The box tree stamps each box a pre-order [`NodeId`](crate::NodeId) alongside
+/// the source element's `attrs`, so we build the box tree once to map
+/// `node_id → data-cid`, then walk the laid-out [`Fragment`] galley and emit the
+/// first (outermost, border-box) fragment for each mapped id. The map is exact —
+/// no document-order fallback is needed — with one honest limitation: a
+/// `display:inline` element is flattened into anonymous inline runs during box
+/// generation and does not keep its own box/attrs, so a `data-cid` is only
+/// resolved on box-generating elements (block, `inline-block`, flex/grid/table
+/// items, replaced `<img>`). Tag the box-generating element under test.
+///
+/// `cb_height` bounds the (here absent) image height cap only; the galley height
+/// is otherwise unbounded, so a percentage height against the root resolves to 0
+/// as in the normal no-geometry layout entry.
+pub fn layout_boxes(
+    html: &str,
+    extra_css: &str,
+    cb_width: f32,
+    cb_height: f32,
+    fonts: &FontRegistry,
+    diags: &mut Diagnostics,
+) -> Result<Vec<CidBox>, RenderError> {
+    let (nodes, roots) = parse_html_with_roots(html)?;
+    let mut author_css = collect_style_css(&nodes);
+    author_css.push_str(extra_css);
+    let cascade = build_cascade_with_width(&author_css, "", TokenSet::default(), cb_width);
+    let styled = style_tree_with_roots(&strip_non_visual(nodes), &cascade, &roots);
+
+    // `build_box_tree` is deterministic (monotonic pre-order ids), so the ids in
+    // this tree match the ones `crate::layout` stamps on the fragments below.
+    let mut cids: HashMap<u32, String> = HashMap::new();
+    collect_cids(&build_box_tree(&styled), &mut cids);
+
+    let ctx = ImageCtx {
+        resolver: &crate::image::NoImages,
+        body_height: Some(cb_height),
+    };
+    let root = crate::layout_with_images(&styled, cb_width, fonts, &ctx, diags);
+
+    let mut out = Vec::new();
+    let mut seen: std::collections::HashSet<u32> = std::collections::HashSet::new();
+    collect_boxes(&root, &cids, &mut seen, &mut out);
+    Ok(out)
+}
+
+/// Walk the box tree, recording `node_id → data-cid` for every box that carries
+/// one. Anonymous boxes and flattened inline runs have empty `attrs`, so they
+/// contribute nothing (see [`layout_boxes`]).
+fn collect_cids(bx: &LayoutBox, out: &mut HashMap<u32, String>) {
+    if let Some(cid) = bx.attrs.iter().find(|a| a.name == "data-cid") {
+        out.insert(bx.node_id.0, cid.value.clone());
+    }
+    match &bx.kind {
+        BoxKind::Lines(items) => collect_line_atoms(items, out),
+        other => {
+            for c in block_children(other) {
+                collect_cids(c, out);
+            }
+        }
+    }
+}
+
+/// The block-level children of a box (`Block`/`Flex`/`Grid`/`Table`); empty for a
+/// `Lines`/`Directive` box.
+fn block_children(kind: &BoxKind) -> &[LayoutBox] {
+    match kind {
+        BoxKind::Block(k) | BoxKind::Flex(k) | BoxKind::Grid(k) | BoxKind::Table(k) => k,
+        _ => &[],
+    }
+}
+
+/// Recurse into the atomic (`inline-block`) boxes of an inline `Lines` run.
+fn collect_line_atoms(items: &[InlineItem], out: &mut HashMap<u32, String>) {
+    for it in items {
+        if let InlineItem::Atomic(b) = it {
+            collect_cids(b, out);
+        }
+    }
+}
+
+/// Pre-order walk the fragment galley, emitting the FIRST fragment seen for each
+/// mapped `node_id` — the outermost (border-box) fragment, since a parent is
+/// visited before its background-fill/content children that reuse the same id.
+fn collect_boxes(
+    frag: &Fragment,
+    cids: &HashMap<u32, String>,
+    seen: &mut std::collections::HashSet<u32>,
+    out: &mut Vec<CidBox>,
+) {
+    let id = frag.node_id.0;
+    if let Some(cid) = cids.get(&id) {
+        if seen.insert(id) {
+            out.push(CidBox {
+                cid: cid.clone(),
+                x: frag.x,
+                y: frag.y,
+                width: frag.width,
+                height: frag.height,
+            });
+        }
+    }
+    for c in &frag.children {
+        collect_boxes(c, cids, seen, out);
+    }
+}
+
 #[cfg(test)]
 mod tests {
-    use super::{collect_style_css, parse_html};
+    use super::{collect_style_css, layout_boxes, parse_html};
+    use crate::text::FontRegistry;
+    use crate::Diagnostics;
 
     #[test]
     fn parse_html_keeps_body_and_skips_jinja() {
@@ -195,6 +328,65 @@ mod tests {
         assert!(
             (boxes[0].1 - boxes[1].1).abs() < 1.0,
             "both cards share a row (border-box let them fit)"
+        );
+    }
+
+    #[test]
+    fn layout_boxes_reports_placed_data_cid_geometry() {
+        // A padded, offset box tags itself; `layout_boxes` should report its
+        // absolute border-box rectangle. box-sizing:border-box keeps width == 200.
+        let html = r#"<html><body><style>
+            body { margin: 0 }
+            #a { box-sizing: border-box; width: 200px; height: 80px;
+                 margin: 10px 0 0 30px; padding: 5px; border: 2px solid #000 }
+        </style><div id="a" data-cid="a">hi</div></body></html>"#;
+        let mut diags = Diagnostics::default();
+        let boxes = layout_boxes(html, "", 600.0, 800.0, &FontRegistry::new(), &mut diags)
+            .expect("layout_boxes");
+        assert_eq!(boxes.len(), 1, "one tagged box");
+        let b = &boxes[0];
+        assert_eq!(b.cid, "a");
+        assert!((b.x - 30.0).abs() < 0.5, "x == margin-left, got {}", b.x);
+        assert!((b.y - 10.0).abs() < 0.5, "y == margin-top, got {}", b.y);
+        assert!(
+            (b.width - 200.0).abs() < 0.5,
+            "border-box width == 200, got {}",
+            b.width
+        );
+        assert!(
+            (b.height - 80.0).abs() < 0.5,
+            "border-box height == 80, got {}",
+            b.height
+        );
+    }
+
+    #[test]
+    fn layout_boxes_ignores_untagged_and_inline_flattened() {
+        // No data-cid anywhere -> empty; an inline element's data-cid is dropped
+        // by inline flattening (documented limitation).
+        let mut diags = Diagnostics::default();
+        let plain = layout_boxes(
+            "<body><div>x</div></body>",
+            "",
+            400.0,
+            400.0,
+            &FontRegistry::new(),
+            &mut diags,
+        )
+        .expect("layout_boxes");
+        assert!(plain.is_empty(), "no tagged boxes");
+        let inline = layout_boxes(
+            r#"<body><span data-cid="s">x</span></body>"#,
+            "",
+            400.0,
+            400.0,
+            &FontRegistry::new(),
+            &mut diags,
+        )
+        .expect("layout_boxes");
+        assert!(
+            inline.is_empty(),
+            "inline span's data-cid is flattened away"
         );
     }
 }

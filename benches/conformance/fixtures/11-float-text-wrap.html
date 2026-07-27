@@ -1,0 +1,21 @@
+<!doctype html>
+<html>
+  <head><meta charset="utf-8" /><title>text wrapping around a float</title></head>
+  <body>
+    <!-- Feature: a float:left block inside a column of text; the text wraps to the
+         float's right for the float's height, then reclaims full width below it.
+         Font-pinned so wrap points match Chromium. Checks the float rect and the
+         column's total height (line count depends on the wrap around the float). -->
+    <style>
+      #col { width: 320px; line-height: 20px; font-size: 14px; background: #eef }
+      #fl { float: left; width: 90px; height: 60px; margin: 0 12px 6px 0; background: #fbb }
+      #after { clear: both; height: 16px; background: #ddd }
+    </style>
+    <div id="col" data-cid="col">
+      <div id="fl" data-cid="fl">float</div>
+      Lorem ipsum dolor sit amet consectetur adipiscing elit sed do eiusmod tempor
+      incididunt ut labore et dolore magna aliqua ut enim ad minim veniam quis nostrud.
+      <div id="after" data-cid="after"></div>
+    </div>
+  </body>
+</html>

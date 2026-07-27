@@ -4,6 +4,45 @@ All notable changes to turbo-html2pdf are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/); versions follow SemVer. The npm,
 PyPI, and crates.io packages release in lockstep from a `v*` tag (PyPI on `pyv*`).
 
+## [0.2.15] — layout conformance harness + foundational layout fixes
+
+A box-geometry **conformance harness** (`benches/conformance/`) diffs laid-out element
+geometry against Chromium per standard HTML/CSS feature. It surfaced — and this release
+fixes — **8 foundational layout bug families**.
+
+> ⚠️ **Behavioral change to DEFAULT layout output** (UA margins, margin collapsing,
+> flex / inline-block / float placement). Shared engine: it affects both the PDF pipeline
+> and turbo-surf's raster. **Validate against downstream real-site renders (nike / wiki /
+> google) before shipping.** 646 workspace tests pass, but unit tests ≠ real-site fidelity.
+
+### Added
+- **Conformance harness** (`benches/conformance/`): 30 fixtures (block flow → adversarial
+  flex/float/abs combos), box-geometry diff vs Chromium with fonts pinned to the bundled
+  Inter on both sides, skip-safe when Chromium is absent. Result: 104/108 boxes within 2px,
+  29/30 fixtures fully clean.
+- **`layoutBoxes(html, css, width, height)` napi export** + `layout_boxes` / `CidBox` core
+  helper: dumps laid-out `{cid,x,y,width,height}` for elements tagged `data-cid`. Additive
+  — drives the harness, no effect on render output.
+
+### Fixed (default layout output — behavioral)
+- **UA default stylesheet**: browser-standard `h1`–`h6` / `p` margins, `ul` / `ol` margins
+  + `padding-left:40px`.
+- **Negative margins**: CSS 2.1 collapse (largest-positive + most-negative).
+- **Parent/child margin collapse**: a first child's top margin collapses through a
+  borderless/paddingless parent (recursive); the document root is excluded (root margins
+  never collapse — matches browsers).
+- **Inline-block**: honor `vertical-align` (top/bottom/middle/baseline), reserve inter-atom
+  whitespace, apply atom margins in the line box.
+- **Flex sizing**: apply taffy's resolved item height on read-back; parse the `flex`
+  shorthand `<basis>`; a nested flex container inherits its parent-assigned definite height
+  so `align-items:center` centers.
+- **Floats + absolute**: float margins offset placement and register the margin box; an
+  absolute `bottom` inset anchors against a definite-height positioned ancestor.
+
+### Known gap
+- `border-collapse` border merging on a colspanned collapsed table is still ~4–5px off
+  Chromium (pre-existing v1 deferral in `table.rs`); one conformance fixture documents it.
+
 ## [0.2.14] — real-site rendering, round 2 (nike.com cards / google.com search bar)
 
 More layout fixes found rendering production home pages faithfully.

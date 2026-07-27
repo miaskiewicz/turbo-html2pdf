@@ -1,0 +1,16 @@
+<!doctype html>
+<html>
+  <head><meta charset="utf-8" /><title>width:50% + margin:auto centering</title></head>
+  <body>
+    <!-- Feature: auto-margin centering. A block with width:50% and margin:auto
+         inside an 800px container resolves to width 400 and equal left/right
+         auto margins, so its left edge sits at (800-400)/2 = 200. -->
+    <style>
+      #outer { width: 800px; background: #eee }
+      #mid { width: 50%; height: 60px; margin: 0 auto; background: #cde }
+    </style>
+    <div id="outer" data-cid="outer">
+      <div id="mid" data-cid="mid">centered</div>
+    </div>
+  </body>
+</html>
