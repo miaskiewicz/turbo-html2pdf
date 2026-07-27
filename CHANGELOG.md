@@ -4,6 +4,32 @@ All notable changes to turbo-html2pdf are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/); versions follow SemVer. The npm,
 PyPI, and crates.io packages release in lockstep from a `v*` tag (PyPI on `pyv*`).
 
+## [0.3.1] — `<br>` inline forced line-break + sub/sup conformance
+
+### Fixed
+- **`<br>` phantom line-height**: the UA sheet declared `br { display: block; height: 1em }`,
+  making every `<br>` a separate 1em-tall block *on top of* the flow break, so multi-line
+  `<br>` text was double-spaced / too tall vs Chromium. A `<br>` is now a proper **inline
+  forced line break** — it ends the current line and continues on the next, contributing no
+  box of its own. Each line box carries the block's **line-box strut** (its `line-height`),
+  so the break advances by the line-height *in effect* and honors the cascade: default
+  (font line-height), a parent/class `line-height`, and an inline-style `line-height` on the
+  line's content all match Chromium (empirically ≤ 1.3px). An empty line from consecutive
+  `<br><br>` is exactly one strut tall (not a 1em phantom, not zero); a trailing `<br>` adds
+  no phantom line. Matches Chromium's behavior that a `<br>`'s *own* `line-height` is ignored
+  — the surrounding inline content governs the terminated line.
+- **`vertical-align: super`/`sub` on inline-blocks**: atoms now honor `super`/`sub` (shifted
+  off the baseline by `valign_shift`), previously ignored (they sat on the baseline).
+
+### Added
+- **Conformance fixtures (68 → 73)**: four `<br>` cases — `69-br-default-line-height`,
+  `70-br-parent-line-height-override`, `71-br-inline-line-height-override`,
+  `72-br-double-empty-line` (the three cascade cases + the empty-line case) — and
+  `73-sub-sup-vertical-align`, which asserts the `super`/`sub` baseline-shift offset against
+  Chromium's measured `~0.3383em` / `~0.2050em`. The engine's existing `valign_shift`
+  factors (`0.33` / `0.2`) already match within ~1.3px, so **no factor tuning was needed**.
+  All 74 boxes across the new/old gated fixtures stay within 2px (no regression).
+
 ## [0.3.0] — layout conformance harness + foundational layout fixes
 
 A box-geometry **conformance harness** (`benches/conformance/`) diffs laid-out element

@@ -1,0 +1,16 @@
+<!doctype html>
+<html>
+  <head><meta charset="utf-8" /><title>br parent line-height override</title></head>
+  <body>
+    <!-- Feature: the <br> break advances by the line-height IN EFFECT, so when the
+         containing block sets `line-height:40px` each of the two lines it splits is
+         40px tall — the box is 80px and the next block starts at y=80. The forced
+         break honors the cascaded line-height, not a fixed 1em. -->
+    <style>
+      #box { width: 400px; font-size: 16px; line-height: 40px; background: #eef }
+      #after { font-size: 16px; background: #dee }
+    </style>
+    <div id="box" data-cid="box">First line<br>Second line</div>
+    <div id="after" data-cid="after">After</div>
+  </body>
+</html>

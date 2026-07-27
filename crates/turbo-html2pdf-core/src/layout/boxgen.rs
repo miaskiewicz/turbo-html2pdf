@@ -195,6 +195,10 @@ pub enum InlineItem {
     },
     /// An atomic inline box (`inline-block`, or a block nested in inline flow).
     Atomic(LayoutBox),
+    /// A forced line break (`<br>`): it ends the current line and continues on the
+    /// next (browser-faithful inline behavior). It carries no metrics of its own —
+    /// the line-height in effect comes from the line's content and the block strut.
+    LineBreak,
     /// An inline paged-media directive (e.g. a footnote reference).
     Directive {
         node_id: NodeId,
@@ -332,9 +336,18 @@ fn tiny_clipped(style: &ComputedStyle) -> bool {
     tiny("width") && tiny("height") && overflow_hidden
 }
 
+/// Whether the element is a `<br>` — an inline forced line break, handled by the
+/// inline layout, not a box (it has no `display`/`height` of its own).
+fn is_br(el: &StyledElement) -> bool {
+    matches!(&el.tag, Tag::Html(n) if n == "br")
+}
+
 fn classify_html(el: &StyledElement, ids: &mut Ids) -> Option<Level> {
     if is_hidden(&el.style) {
         return None;
+    }
+    if is_br(el) {
+        return Some(Level::Inline(vec![InlineItem::LineBreak]));
     }
     #[cfg(feature = "xref")]
     if xref::internal_link_href(el).is_some() {
@@ -709,3 +722,56 @@ mod ua;
 #[cfg(feature = "xref")]
 #[path = "boxgen_xref.rs"]
 mod xref;
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn html_el(tag: &str, children: Vec<StyledNode>) -> StyledNode {
+        StyledNode::Element(StyledElement {
+            tag: Tag::Html(tag.to_string()),
+            attrs: vec![],
+            style: ComputedStyle::default(),
+            children,
+        })
+    }
+
+    fn bare(tag: &str) -> StyledElement {
+        StyledElement {
+            tag: Tag::Html(tag.to_string()),
+            attrs: vec![],
+            style: ComputedStyle::default(),
+            children: vec![],
+        }
+    }
+
+    #[test]
+    fn is_br_matches_only_the_br_tag() {
+        assert!(is_br(&bare("br")));
+        assert!(!is_br(&bare("span")));
+    }
+
+    #[test]
+    fn br_becomes_an_inline_line_break() {
+        // `<div>a<br>b</div>`: the <br> is an inline forced break within the div's
+        // inline formatting context (a `LineBreak` item), not a block box.
+        let tree = build_box_tree(&[html_el(
+            "div",
+            vec![
+                StyledNode::Text("a".to_string()),
+                html_el("br", vec![]),
+                StyledNode::Text("b".to_string()),
+            ],
+        )]);
+        let BoxKind::Block(kids) = &tree.kind else {
+            panic!("root is a block");
+        };
+        let BoxKind::Lines(items) = &kids[0].kind else {
+            panic!("div establishes an inline (lines) context");
+        };
+        assert!(
+            items.iter().any(|i| matches!(i, InlineItem::LineBreak)),
+            "the <br> produced a LineBreak item"
+        );
+    }
+}

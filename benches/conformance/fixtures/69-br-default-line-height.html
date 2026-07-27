@@ -1,0 +1,18 @@
+<!doctype html>
+<html>
+  <head><meta charset="utf-8" /><title>br default line-height</title></head>
+  <body>
+    <!-- Feature: a <br> is an inline forced line break, NOT a fixed-height block.
+         With the default (normal) line-height the two text lines are one
+         line-height apart, so the box is exactly two lines tall and the following
+         block starts two line-heights down — no phantom extra height from the
+         <br> (the bug this fixture guards: `br{display:block;height:1em}` used to
+         double-space the break). -->
+    <style>
+      #box { width: 400px; font-size: 16px; background: #eef }
+      #after { font-size: 16px; background: #dee }
+    </style>
+    <div id="box" data-cid="box">First line<br>Second line</div>
+    <div id="after" data-cid="after">After</div>
+  </body>
+</html>

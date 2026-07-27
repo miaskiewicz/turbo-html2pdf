@@ -226,6 +226,7 @@ fn atom(id: usize, valign: VAlign, height: f32) -> InlineAtom {
         width: 20.0,
         height,
         valign,
+        font_size: 16.0,
         margin_top: 0.0,
         margin_bottom: 0.0,
         margin_left: 0.0,

@@ -285,6 +285,21 @@ fn text_run(item: &InlineItem, parent_fs: f32, cw: f32, fonts: &FontRegistry) ->
     })
 }
 
+/// The block's line-box strut height: the minimum height of every line box it
+/// establishes — its explicit `line-height`, else its own font's natural line
+/// height. Empty lines (from consecutive `<br>`) are exactly this tall, matching a
+/// browser's strut.
+fn line_strut(bs: &BoxStyle, fonts: &FontRegistry) -> f32 {
+    if let Some(lh) = bs.line_height {
+        return lh;
+    }
+    let families: Vec<&str> = bs.font_families.iter().map(String::as_str).collect();
+    match fonts.select(&families, bs.font_weight, bs.italic) {
+        Some(face) => face.line_height_px(bs.font_size),
+        None => bs.font_size * 1.2,
+    }
+}
+
 pub(crate) fn build_runs(
     items: &[InlineItem],
     parent_fs: f32,
@@ -385,7 +400,9 @@ fn layout_lines(
         let (rx, rw) = inline_region_from(&floats, cx, cw, cy + top);
         (rx - cx, rw)
     };
-    let para = inline::layout_paragraph_in(&pieces, fonts, bs.text_align, ctx.diags, &region);
+    let strut = line_strut(bs, fonts);
+    let para =
+        inline::layout_paragraph_in(&pieces, fonts, bs.text_align, ctx.diags, &region, strut);
     let mut frags = Vec::new();
     lines_to_fragments(&para, cx, cy, &mut frags);
     // Translate each pre-laid atom to where it landed within its line.
@@ -423,6 +440,7 @@ fn build_inline_pieces(
                     pieces.push(inline::Piece::Run(run));
                 }
             }
+            InlineItem::LineBreak => pieces.push(inline::Piece::Break),
             InlineItem::Atomic(b) => {
                 let f = lay_atomic(b, cw, bs.font_size, ctx);
                 // Cheap re-resolve (style cache memoizes) to read the box's own
@@ -433,6 +451,7 @@ fn build_inline_pieces(
                     width: f.width,
                     height: f.height,
                     valign: abs.vertical_align,
+                    font_size: abs.font_size,
                     margin_top: abs.margin.top,
                     margin_bottom: abs.margin.bottom,
                     margin_left: abs.margin.left,
@@ -1459,6 +1478,34 @@ mod tests {
             style: ComputedStyle::from_pairs([("display".to_string(), "flex".to_string())]),
             children: vec![],
         })
+    }
+
+    #[test]
+    fn line_strut_prefers_line_height_then_face_then_fallback() {
+        use super::line_strut;
+        use crate::layout::value::{resolve_box_style, ResolveCtx};
+        use crate::text::FontRegistry;
+        let ctx = ResolveCtx {
+            parent_font_size: 16.0,
+            cb_width: 100.0,
+        };
+        let fonts = FontRegistry::new();
+        // An explicit `line-height` is the strut directly.
+        let explicit = resolve_box_style(
+            &ComputedStyle::from_pairs([("line-height".to_string(), "40px".to_string())]),
+            ctx,
+        );
+        assert_eq!(line_strut(&explicit, &fonts), 40.0);
+        // No `line-height`: the block's own font natural line height (positive).
+        let normal = resolve_box_style(
+            &ComputedStyle::from_pairs([("font-size".to_string(), "20px".to_string())]),
+            ctx,
+        );
+        let natural = line_strut(&normal, &fonts);
+        assert!(natural > 0.0 && natural < 60.0);
+        // No selectable face (empty registry): the `font-size * 1.2` fallback.
+        let empty = FontRegistry::default();
+        assert_eq!(line_strut(&normal, &empty), normal.font_size * 1.2);
     }
 
     #[test]
