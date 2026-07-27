@@ -10,7 +10,7 @@ A box-geometry **conformance harness** (`benches/conformance/`) diffs laid-out e
 geometry against Chromium per standard HTML/CSS feature. It surfaced — and this release
 fixes — **8 foundational layout bug families**, then was **expanded to 68 fixtures** across
 the modern-CSS constructs real pages exercise (Grid, calc, aspect-ratio, transforms,
-`@media` height, logical props, viewport units, replaced images), surfacing **6 more
+`@media` height, logical props, viewport units, replaced images), surfacing **7 more
 engine fixes**.
 
 > ⚠️ **Behavioral change to DEFAULT layout output** (UA margins + table-cell padding,
@@ -29,8 +29,8 @@ engine fixes**.
   units, `box-sizing:inherit`/border-box height, `white-space:nowrap`, tables
   (border-spacing, empty rows), replaced `<img>` sizing, sticky/overflow/positioning combos,
   and UA-default guards. Box-geometry diff vs Chromium, fonts pinned to bundled Inter on
-  both sides, skip-safe when Chromium is absent. **Result: 186/186 boxes within 2px, all 64
-  gated fixtures fully clean**; 4 documented deferrals (below) are tracked, not gated.
+  both sides, skip-safe when Chromium is absent. **Result: 189/189 boxes within 2px, all 65
+  gated fixtures fully clean**; 3 documented deferrals (below) are tracked, not gated.
 - **Harness deferral mechanism**: a `<!-- conformance:defer <reason> -->` marker reports a
   known-hard fixture's box deltas as `XFAIL` without reding the suite — so open gaps are
   tracked honestly instead of hidden or force-passed.
@@ -66,7 +66,7 @@ engine fixes**.
   Chromium; now ≤0.6px). Non-colspan collapsed tables (fixture 07) went from 1px to exact.
   Auto-layout collapsed tables remain a documented deferral.
 
-### Fixed (corpus expansion — 6 more engine fixes)
+### Fixed (corpus expansion — 7 more engine fixes)
 - **Grid `justify-self`**: a grid item's own `justify-self:center`/`start`/`end` is mapped
   to taffy — without it a `width:80px; justify-self:center` cell inherited the default
   `stretch` and filled its whole track instead of centering (google's home-logo cell).
@@ -85,13 +85,13 @@ engine fixes**.
 - **UA default `td` / `th` padding: `1px`**: matches browsers, so an unpadded table cell's
   border box is 2px larger per axis (Chromium parity) — surfaced by the new
   `border-spacing` and empty-spacer-row fixtures.
+- **Grid `min-content` / `max-content` tracks**: a `grid-template-rows:min-content` (or
+  `-columns`) track now sizes to its items' content instead of mapping to `auto` and
+  stretching to fill the container (the row hugs its tallest cell).
 - **Inline replaced-image sizing** in a `<div>`/flex wrapper is exercised end-to-end now
   that the conformance seam decodes `data:` intrinsics.
 
 ### Deferred (tracked in the harness, not gated)
-- **Grid `min-content` row height** (`36-grid-min-content-row`): the explicit-`min-content`
-  row does not yet match Chromium's row height across both cells (a diagnosed-but-unfixed
-  gap; grid geometry is otherwise clean).
 - **Auto-layout collapsed-table min-content width** (`53-table-auto-min-content`): the
   separate-border case is close, but auto-layout collapsed widths still diverge — the same
   `table.rs` follow-up noted above.
