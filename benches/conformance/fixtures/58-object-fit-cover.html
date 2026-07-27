@@ -1,0 +1,13 @@
+<!doctype html>
+<html>
+  <head><meta charset="utf-8" /><title>object-fit does not perturb the box</title></head>
+  <body>
+    <!-- Feature: `object-fit: cover` clips paint, not layout — an `<img>` with an
+         explicit 100x100 style has a 100x100 border box regardless of its 120x60
+         intrinsic size. A box-geometry don't-break guard. Origin: nike hero imagery
+         (paint-only concern). -->
+    <img id="im" data-cid="im"
+         style="display:block;width:100px;height:100px;object-fit:cover"
+         src="data:image/gif;base64,R0lGODlheAA8APAAAFCMyN7IUCwAAAAAeAA8AAACADs=" alt="">
+  </body>
+</html>

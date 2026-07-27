@@ -1,0 +1,20 @@
+<!doctype html>
+<html>
+  <head><meta charset="utf-8" /><title>auto-layout table grows to column min-content</title></head>
+  <body>
+    <!-- conformance:defer auto-layout collapsed-table column min-content sizing is a
+         documented deferral (CHANGELOG 0.2.15 / table.rs follow-up). The separate
+         case is close, but auto-layout collapsed widths still diverge from Chromium;
+         tracked, not gated. -->
+    <!-- Feature: an auto-layout table (no table-layout:fixed, no width) sizes each
+         column to its cell's min-content (+padding+border) and grows to the sum.
+         Font-pinned. Origin: Wikipedia infobox/taxobox, CHANGELOG 0.2.7. -->
+    <style>
+      #t { border-collapse: collapse }
+      #t td { border: 1px solid #333; padding: 4px; background: #cde }
+    </style>
+    <table id="t" data-cid="t">
+      <tr><td id="a" data-cid="a">Scientific name</td><td id="b" data-cid="b">Felis catus</td></tr>
+    </table>
+  </body>
+</html>

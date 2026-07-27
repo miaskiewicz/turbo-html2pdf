@@ -1,0 +1,15 @@
+<!doctype html>
+<html>
+  <head><meta charset="utf-8" /><title>2D transform: scale + transform-origin</title></head>
+  <body>
+    <!-- Feature: `transform: scale(2)` with `transform-origin: top left` scales the
+         border box in place from its top-left corner -> (0,0,200,80). Pins that the
+         origin is honored (a default center origin would report a different rect).
+         Origin: overlays/zoom tiles, CHANGELOG 0.2.11. -->
+    <style>
+      #s { width: 100px; height: 40px; transform: scale(2); transform-origin: top left;
+           background: #cde }
+    </style>
+    <div id="s" data-cid="s">s</div>
+  </body>
+</html>

@@ -1,0 +1,18 @@
+<!doctype html>
+<html>
+  <head><meta charset="utf-8" /><title>grid grid-column span N</title></head>
+  <body>
+    <!-- Feature: CSS Grid `grid-column: span N` on a `repeat(12, 1fr)` track list
+         (nike's 12-column header). Each item must span six 50px tracks (300px),
+         not collapse to a single track. Origin: CHANGELOG 0.2.13. -->
+    <style>
+      #g { display: grid; grid-template-columns: repeat(12, 1fr); width: 600px }
+      #a { grid-column: span 6; height: 40px; background: #cde }
+      #b { grid-column: span 6; height: 40px; background: #dec }
+    </style>
+    <div id="g" data-cid="g">
+      <div id="a" data-cid="a">a</div>
+      <div id="b" data-cid="b">b</div>
+    </div>
+  </body>
+</html>

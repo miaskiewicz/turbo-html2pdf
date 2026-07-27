@@ -1,0 +1,16 @@
+<!doctype html>
+<html>
+  <head><meta charset="utf-8" /><title>position: sticky == relative (no scroll)</title></head>
+  <body>
+    <!-- Feature: in a paged/snapshot render with no scroll container, `sticky` acts
+         as `relative` at offset 0 and reserves its normal-flow space, so #body
+         starts at y=40. Guards that sticky neither goes out-of-flow nor
+         double-counts. Origin: nike/wiki nav, CHANGELOG 0.2.5. -->
+    <style>
+      #hd { position: sticky; top: 0; height: 40px; background: #cde }
+      #body { height: 200px; background: #dec }
+    </style>
+    <div id="hd" data-cid="hd">header</div>
+    <div id="body" data-cid="body">body</div>
+  </body>
+</html>

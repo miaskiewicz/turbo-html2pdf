@@ -1,0 +1,14 @@
+<!doctype html>
+<html>
+  <head><meta charset="utf-8" /><title>box-sizing: border-box px height</title></head>
+  <body>
+    <!-- Feature: `box-sizing:border-box` consumes padding+border INSIDE a px
+         `height`, so the pill's border box is 40 tall, not 40+22+2=64. Origin:
+         google "Sign in" pill, CHANGELOG 0.2.13. -->
+    <style>
+      #pill { box-sizing: border-box; height: 40px; padding: 11px 16px;
+              border: 1px solid #333; background: #cde; display: inline-block }
+    </style>
+    <span id="pill" data-cid="pill">Sign in</span>
+  </body>
+</html>

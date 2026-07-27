@@ -1,0 +1,14 @@
+<!doctype html>
+<html>
+  <head><meta charset="utf-8" /><title>UA heading em-margins across h1/h4/h6/p</title></head>
+  <body>
+    <!-- Feature: each UA heading's font-size and em-relative vertical margins match
+         Chromium across the full range (h1/h4/h6/p); the following block's y
+         accumulates the collapsed margins. Extends fixture 05 to h4/h6/p. Origin:
+         CHANGELOG 0.2.15 UA headings. -->
+    <style> #lead { height: 8px; background: #eee } </style>
+    <div id="lead" data-cid="lead"></div>
+    <h1 data-cid="h1">H1</h1><h4 data-cid="h4">H4</h4><h6 data-cid="h6">H6</h6>
+    <p data-cid="p">para</p>
+  </body>
+</html>

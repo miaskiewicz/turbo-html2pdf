@@ -1,0 +1,19 @@
+<!doctype html>
+<html>
+  <head><meta charset="utf-8" /><title>img %-width + intrinsic-aspect height</title></head>
+  <body>
+    <!-- Feature: `width:100%; height:auto` on an `<img>` with an 8x6 (4:3) intrinsic
+         sizes to 200 wide (100% of the frame) and 200*6/8 = 150 tall via the intrinsic
+         aspect ratio. A regression resolves the % against a 0 basis -> 0x0. The
+         intrinsic comes from the decoded PNG (the harness decodes data: URIs).
+         Origin: nike responsive imagery, CHANGELOG 0.2.10. -->
+    <style>
+      #frame { width: 200px }
+      #pic { display: block; width: 100%; height: auto; background: #cde }
+    </style>
+    <div id="frame" data-cid="frame">
+      <img id="pic" data-cid="pic" alt=""
+           src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAgAAAAGCAIAAABxZ0isAAAAEUlEQVR4nGMI6DmBFTEMpAQA/aBOwe19mXAAAAAASUVORK5CYII=">
+    </div>
+  </body>
+</html>

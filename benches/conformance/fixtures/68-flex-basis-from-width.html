@@ -1,0 +1,14 @@
+<!doctype html>
+<html>
+  <head><meta charset="utf-8" /><title>flex-basis:auto defers to item width</title></head>
+  <body>
+    <!-- Feature: with `flex-basis:auto`, an item's `width:100%` drives its basis so
+         it fills the 400px row (width 400, x=0) instead of shrink-wrapping to
+         content. Origin: Wikipedia `.mw-header` full-width, CHANGELOG 0.2.7. -->
+    <style>
+      #f { display: flex; width: 400px; background: #eef }
+      #child { width: 100%; flex-basis: auto; height: 40px; background: #cde }
+    </style>
+    <div id="f" data-cid="f"><div id="child" data-cid="child">full width</div></div>
+  </body>
+</html>

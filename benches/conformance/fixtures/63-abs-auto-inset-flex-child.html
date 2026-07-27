@@ -1,0 +1,25 @@
+<!doctype html>
+<html>
+  <head><meta charset="utf-8" /><title>auto-inset absolute flex child at static start</title></head>
+  <body>
+    <!-- conformance:defer intentional divergence — the engine anchors a fully
+         auto-inset absolute flex child to its STATIC START (left:0), a shipped
+         real-site fix (0.2.14 / commit 0eccda6) for google's "AI Mode" sparkle icon
+         that otherwise printed over the label. Chromium instead spec-centers it via
+         the row's justify-content:center ((300-16)/2 = 142) in this isolated repro.
+         Tracked as a known behavioural difference, not gated — reverting the anchor
+         to match this minimal repro would regress the real-site fix. -->
+    <!-- Feature: a fully auto-inset `position:absolute` flex child; the engine keeps
+         it at its static start (x~=0) rather than centered. Origin: google "AI Mode"
+         sparkle icon, CHANGELOG 0.2.14 (commit 0eccda6). -->
+    <style>
+      #row { display: flex; justify-content: center; width: 300px; height: 40px; position: relative }
+      #label { width: 100px; height: 40px; background: #cde }
+      #icon { position: absolute; width: 16px; height: 16px; background: #fbb }
+    </style>
+    <div id="row" data-cid="row">
+      <div id="label" data-cid="label">AI Mode</div>
+      <div id="icon" data-cid="icon"></div>
+    </div>
+  </body>
+</html>
