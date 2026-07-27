@@ -18,8 +18,8 @@ fixes — **8 foundational layout bug families**.
 ### Added
 - **Conformance harness** (`benches/conformance/`): 30 fixtures (block flow → adversarial
   flex/float/abs combos), box-geometry diff vs Chromium with fonts pinned to the bundled
-  Inter on both sides, skip-safe when Chromium is absent. Result: 104/108 boxes within 2px,
-  29/30 fixtures fully clean.
+  Inter on both sides, skip-safe when Chromium is absent. Result: 108/108 boxes within 2px,
+  all 30 fixtures fully clean.
 - **`layoutBoxes(html, css, width, height)` napi export** + `layout_boxes` / `CidBox` core
   helper: dumps laid-out `{cid,x,y,width,height}` for elements tagged `data-cid`. Additive
   — drives the harness, no effect on render output.
@@ -38,10 +38,11 @@ fixes — **8 foundational layout bug families**.
   so `align-items:center` centers.
 - **Floats + absolute**: float margins offset placement and register the margin box; an
   absolute `bottom` inset anchors against a definite-height positioned ancestor.
-
-### Known gap
-- `border-collapse` border merging on a colspanned collapsed table is still ~4–5px off
-  Chromium (pre-existing v1 deferral in `table.rs`); one conformance fixture documents it.
+- **`border-collapse: collapse` (fixed layout)**: shared cell edges now merge onto a
+  collapsed grid — each border counted once, half on each side (CSS 2.1 §17.6.2) — so
+  table/row/cell boxes size correctly across a `colspan` (fixture 29 was ~4–5px wide of
+  Chromium; now ≤0.6px). Non-colspan collapsed tables (fixture 07) went from 1px to exact.
+  Auto-layout collapsed tables remain a documented deferral.
 
 ## [0.2.14] — real-site rendering, round 2 (nike.com cards / google.com search bar)
 

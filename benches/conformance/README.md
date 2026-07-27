@@ -88,15 +88,15 @@ A per-fixture table plus a summary:
   body      (0, 60, 200, 140)       (0, 60, 200, 140)       0px     PASS
   inner     (75, 105, 50, 50)       (75, 105, 50, 50)       0px     PASS
   ...
-summary: 104/108 boxes within tolerance across 30 fixtures (29 fixtures fully clean)
+summary: 108/108 boxes within tolerance across 30 fixtures (30 fixtures fully clean)
 ```
 
 ## Fixtures
 
 **Foundational-first**, then progressively adversarial combinations. Each fixture
 is minimal, self-contained, deterministic, and tags the element(s) under test
-with `data-cid`. Current status: **104/108 boxes within 2px across 30 fixtures
-(29/30 fully clean)** — the lone exception is border-collapse merging (#29 below).
+with `data-cid`. Current status: **108/108 boxes within 2px across 30 fixtures
+(all 30 fully clean)**.
 
 | #  | fixture                       | feature under test                                    |
 | -- | ----------------------------- | ----------------------------------------------------- |
@@ -153,15 +153,17 @@ foundational layout bugs (all now within 2px of Chromium):
 - **Parent/child margin collapse (21/26):** a first child's top margin collapses
   through a borderless/paddingless parent (recursively), while the document root's
   margins never collapse (matching browsers).
+- **`border-collapse` border merging (07/29):** a fixed-layout collapsed table now
+  merges shared cell edges onto a collapsed grid — each border counted once, half on
+  each side (CSS 2.1 §17.6.2) — so the table/row/cell boxes size correctly across a
+  `colspan` (fixture 29 went from ~5px to ≤0.6px; 07 from 1px to exact).
 
 ### Known remaining gap
 
-- **29 — full `border-collapse` border merging.** Adjacent collapsed cell borders
-  are not merged (each cell keeps its full borders), so a colspanned collapsed
-  table is ~4–5px wider than Chromium and cells are ~2px off. This is a documented
-  v1 engine deferral (`table.rs`): merging requires the full collapsed-border grid
-  model and matching Chromium's subpixel collapsed-border box reporting. Non-colspan
-  collapsed tables (07) already land within tolerance.
+- **`border-collapse` on AUTO-layout tables.** The merged-grid model above applies to
+  `table-layout: fixed` collapsed tables; an auto-layout collapsed table still lays out
+  with each cell's full borders. No current fixture exercises it, and Wikipedia-style
+  infoboxes (auto layout) render acceptably — a documented follow-up in `table.rs`.
 
 ## Adding a fixture
 

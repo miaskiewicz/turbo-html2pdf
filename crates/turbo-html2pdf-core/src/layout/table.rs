@@ -5,9 +5,13 @@
 //! repeatable (`BreakMeta.repeatable`) so the fragmenter can re-emit them on each
 //! page a table spans (§6.3, AC-5.8).
 //!
-//! Deferred in v1 (documented): `<caption>`, `border-spacing`, and full
-//! `border-collapse` border merging (collapse and separate both lay out with no
-//! spacing); a cell taller than its row span expands the last spanned row.
+//! A fixed-layout `border-collapse: collapse` table merges shared cell edges onto a
+//! collapsed grid (each shared border counted once, half on each side, CSS 2.1
+//! §17.6.2) so table/row/cell boxes size correctly across a `colspan`; see the
+//! collapsed-border section below. Deferred in v1 (documented): `<caption>`,
+//! `border-spacing`, and collapsed-border merging for AUTO-layout tables (those
+//! still lay out with each cell's full borders); a cell taller than its row span
+//! expands the last spanned row.
 
 use crate::node::Attr;
 use crate::style::ComputedStyle;
@@ -18,7 +22,7 @@ use super::boxgen::{BoxKind, LayoutBox};
 use super::flex::natural_width;
 use super::fragment::{Fragment, FragmentContent, NodeId, RepeatKind};
 use super::value::{
-    parse_px, resolve_box_style, BorderEdges, Display, LengthPct, ResolveCtx, VAlign,
+    parse_px, resolve_box_style, BorderEdges, Display, Edges, LengthPct, ResolveCtx, VAlign,
     DEFAULT_FONT_SIZE,
 };
 
@@ -188,6 +192,10 @@ fn is_fixed(style: &ComputedStyle) -> bool {
     style.get("table-layout").map(str::trim) == Some("fixed")
 }
 
+fn collapsed(style: &ComputedStyle) -> bool {
+    style.get("border-collapse").map(str::trim) == Some("collapse")
+}
+
 fn explicit_width(lb: &LayoutBox) -> Option<f32> {
     let bs = lb.resolved(ResolveCtx {
         parent_font_size: DEFAULT_FONT_SIZE,
@@ -337,6 +345,275 @@ fn column_widths(
 }
 
 // --------------------------------------------------------------------------
+// collapsed-border grid (`border-collapse: collapse`)
+// --------------------------------------------------------------------------
+//
+// In the collapse model a shared edge between two cells is a SINGLE border, drawn
+// at the max width of the abutting borders and centred on the grid line, with half
+// on each side (CSS 2.1 §17.6.2). So a cell's border box runs from the centre of
+// its left grid line to the centre of its right one, and the table's width is the
+// column content+padding tracks plus one border per grid line — NOT each cell's
+// full borders summed (which double-counts every internal edge and overshoots,
+// especially under a `colspan`). We model it explicitly: per grid-line border
+// widths, content+padding column tracks, and grid-line centre positions.
+
+/// A cell's resolved border widths (px). Cheap wrapper so callers read
+/// `.left`/`.right`/`.top`/`.bottom` without re-plumbing a `ResolveCtx`.
+fn cell_border(lb: &LayoutBox) -> Edges {
+    lb.resolved(ResolveCtx {
+        parent_font_size: DEFAULT_FONT_SIZE,
+        cb_width: 0.0,
+    })
+    .border
+    .widths()
+}
+
+/// A cell's specified content+padding width (px) when it has a `width: <px>` — the
+/// column's preferred track width in the collapse model (borders live on the grid
+/// lines, not inside the track). `None` for an auto width.
+fn explicit_cp(lb: &LayoutBox) -> Option<f32> {
+    let bs = lb.resolved(ResolveCtx {
+        parent_font_size: DEFAULT_FONT_SIZE,
+        cb_width: 0.0,
+    });
+    match bs.width {
+        LengthPct::Px(w) => Some(w + bs.padding.horizontal()),
+        _ => None,
+    }
+}
+
+/// Collapsed border widths at the `ncols + 1` vertical grid lines. Line `j` is the
+/// max of the table's left/right border (outer lines only) and every cell edging it
+/// (its left border if it starts at `j`, its right if it ends at `j`). A `colspan`
+/// cell contributes only at its two outer edges, so the line under it still takes
+/// its width from cells in other rows that really border there.
+fn vborders(placed: &[Placed], ncols: usize, style: &ComputedStyle) -> Vec<f32> {
+    let table = resolve_box_style(
+        style,
+        ResolveCtx {
+            parent_font_size: DEFAULT_FONT_SIZE,
+            cb_width: 0.0,
+        },
+    )
+    .border
+    .widths();
+    let mut v = vec![0.0_f32; ncols + 1];
+    v[0] = table.left;
+    v[ncols] = v[ncols].max(table.right);
+    for p in placed {
+        let b = cell_border(p.lb);
+        v[p.col] = v[p.col].max(b.left);
+        v[p.col + p.colspan] = v[p.col + p.colspan].max(b.right);
+    }
+    v
+}
+
+/// Collapsed border widths at the `nrows + 1` horizontal grid lines (the row-axis
+/// analogue of [`vborders`], keyed on `rowspan` and top/bottom borders).
+fn hborders(placed: &[Placed], nrows: usize, style: &ComputedStyle) -> Vec<f32> {
+    let table = resolve_box_style(
+        style,
+        ResolveCtx {
+            parent_font_size: DEFAULT_FONT_SIZE,
+            cb_width: 0.0,
+        },
+    )
+    .border
+    .widths();
+    let mut h = vec![0.0_f32; nrows + 1];
+    h[0] = table.top;
+    h[nrows] = h[nrows].max(table.bottom);
+    for p in placed {
+        let b = cell_border(p.lb);
+        h[p.row] = h[p.row].max(b.top);
+        h[p.row + p.rowspan] = h[p.row + p.rowspan].max(b.bottom);
+    }
+    h
+}
+
+/// Centre positions of the `n + 1` grid lines bounding `n` content+padding tracks,
+/// where line `i` has collapsed border width `borders[i]`. Track `i` sits between
+/// the full widths of lines `i` and `i+1`; a cell's border box runs centre-to-centre
+/// so it owns half of each bounding border.
+fn line_centers(tracks: &[f32], borders: &[f32]) -> Vec<f32> {
+    let n = tracks.len();
+    let mut out = Vec::with_capacity(n + 1);
+    let mut pos = 0.0_f32;
+    for i in 0..n {
+        out.push(pos + borders[i] / 2.0);
+        pos += borders[i] + tracks[i];
+    }
+    out.push(pos + borders[n] / 2.0);
+    out
+}
+
+/// Per-column specified content+padding width from the FIRST row (fixed layout's
+/// column authority), a `colspan` cell's width divided over the columns it covers.
+/// `None` = auto (shares the leftover). Later rows never widen a column here — they
+/// just flow into it (fixed layout, CSS 2.1 §17.5.2.1).
+fn first_row_cp(placed: &[Placed], ncols: usize) -> Vec<Option<f32>> {
+    let mut w = vec![None; ncols];
+    for p in placed.iter().filter(|p| p.row == 0) {
+        if let Some(total) = explicit_cp(p.lb) {
+            let per = total / p.colspan as f32;
+            for slot in w.iter_mut().skip(p.col).take(p.colspan) {
+                slot.get_or_insert(per);
+            }
+        }
+    }
+    w
+}
+
+/// Content+padding widths per column for a fixed-layout collapsed table, given the
+/// available content width (`table width − all grid-line borders`). Specified
+/// columns keep their width and auto columns share the rest; when every column is
+/// specified, the whole set scales proportionally to fill (or fit) `avail` — CSS
+/// distributes the table's surplus/deficit over the columns.
+fn fixed_collapse_columns(placed: &[Placed], ncols: usize, avail: f32) -> Vec<f32> {
+    let spec = first_row_cp(placed, ncols);
+    let specified: f32 = spec.iter().flatten().sum();
+    let n_auto = spec.iter().filter(|x| x.is_none()).count();
+    if n_auto > 0 {
+        let each = share(avail - specified, n_auto);
+        return spec.iter().map(|x| x.unwrap_or(each)).collect();
+    }
+    let k = if specified > 0.0 {
+        avail / specified
+    } else {
+        0.0
+    };
+    spec.iter().map(|x| x.unwrap_or(0.0) * k).collect()
+}
+
+/// The fixed-collapse table's minimum content+padding per column: each first-row
+/// cell's specified width, else its text min-content (colspan-distributed). Summed
+/// with the grid-line borders this is the table's used-width floor — so a declared
+/// width narrower than the columns grows (07), while one wider than them is honoured
+/// (29's `colspan` first row asks for less than its `width:200px`).
+fn fixed_min_cp(placed: &[Placed], ncols: usize, fonts: &FontRegistry) -> Vec<f32> {
+    let mut w = vec![0.0_f32; ncols];
+    let mut fixed = vec![false; ncols];
+    for p in placed.iter().filter(|p| p.row == 0) {
+        let explicit = explicit_cp(p.lb);
+        let val = explicit.unwrap_or_else(|| {
+            (super::flex::min_content_width(p.lb, fonts) - cell_border(p.lb).horizontal()).max(0.0)
+        });
+        let per = val / p.colspan as f32;
+        for j in p.col..p.col + p.colspan {
+            if explicit.is_some() && !fixed[j] {
+                w[j] = per;
+                fixed[j] = true;
+            } else if !fixed[j] {
+                w[j] = w[j].max(per);
+            }
+        }
+    }
+    w
+}
+
+/// Lay out the cells of a collapsed-border table into the grid defined by the
+/// vertical grid-line centres `line_x` and their border widths `vert`. Each cell's
+/// content is laid at the width its content region truly gets — the collapsed
+/// border box minus the half-borders it shares, plus the cell's own full border
+/// (which the block layout subtracts back out) — then its reported box width is
+/// overwritten to the collapsed border box (centre-to-centre).
+fn layout_cells_collapsed<'a>(
+    placed: &'a [Placed],
+    line_x: &[f32],
+    vert: &[f32],
+    fs: f32,
+    ctx: &mut Ctx,
+) -> Vec<LaidCell<'a>> {
+    placed
+        .iter()
+        .map(|p| {
+            let extent = line_x[p.col + p.colspan] - line_x[p.col];
+            let half = vert[p.col] / 2.0 + vert[p.col + p.colspan] / 2.0;
+            let bs = p.lb.resolved(ResolveCtx {
+                parent_font_size: fs,
+                cb_width: extent,
+            });
+            let own = bs.border.widths().horizontal();
+            let layout_w = (extent - half + own).max(0.0);
+            let mut frag = block::layout_box_sized_isolated(p.lb, &bs, 0.0, 0.0, layout_w, ctx);
+            let content_h = frag.height;
+            frag.width = extent;
+            LaidCell {
+                p,
+                frag,
+                valign: bs.vertical_align,
+                content_h,
+            }
+        })
+        .collect()
+}
+
+/// Content+padding height per row for a collapsed table: the tallest cell's own
+/// content+padding (its laid border box minus its vertical borders), floored by the
+/// row's explicit `height`. A `rowspan` cell that overflows its rows grows the last.
+fn collapse_row_heights(laid: &[LaidCell], rows: &[RowRef]) -> Vec<f32> {
+    let cp = |c: &LaidCell| (c.frag.height - cell_border(c.p.lb).vertical()).max(0.0);
+    let mut h: Vec<f32> = rows.iter().map(|r| r.min_height).collect();
+    for c in laid.iter().filter(|c| c.p.rowspan == 1) {
+        h[c.p.row] = h[c.p.row].max(cp(c));
+    }
+    for c in laid.iter().filter(|c| c.p.rowspan > 1) {
+        let (start, span) = (c.p.row, c.p.rowspan);
+        let have: f32 = h[start..start + span].iter().sum();
+        let need = cp(c);
+        if need > have {
+            h[start + span - 1] += need - have;
+        }
+    }
+    h
+}
+
+/// A placed table grid: the collected rows and their cells positioned on the
+/// `ncols`-wide occupancy grid (colspan/rowspan resolved). Bundled so the collapse
+/// layout doesn't thread three coupled values through its signature.
+struct Grid<'a> {
+    rows: &'a [RowRef<'a>],
+    placed: &'a [Placed<'a>],
+    ncols: usize,
+}
+
+/// Lay out a fixed-layout `border-collapse: collapse` table (§17.6.2): merge shared
+/// cell edges so the table/row/cell boxes are sized against the collapsed grid, not
+/// each cell's full borders. Returns the row fragments and the table content height.
+fn layout_table_collapsed(
+    table: &LayoutBox,
+    grid: &Grid,
+    cx: f32,
+    cy: f32,
+    cw: f32,
+    fs: f32,
+    ctx: &mut Ctx,
+) -> (Vec<Fragment>, f32) {
+    let &Grid {
+        rows,
+        placed,
+        ncols,
+    } = grid;
+    let nrows = rows.len();
+    let vert = vborders(placed, ncols, &table.style);
+    let vert_total: f32 = vert.iter().sum();
+    let col_cp = fixed_collapse_columns(placed, ncols, (cw - vert_total).max(1.0));
+    let line_x = line_centers(&col_cp, &vert);
+    let laid = layout_cells_collapsed(placed, &line_x, &vert, fs, ctx);
+    let horiz = hborders(placed, nrows, &table.style);
+    let row_cp = collapse_row_heights(&laid, rows);
+    let line_y = line_centers(&row_cp, &horiz);
+    let geom = Geom {
+        col_x: line_x[..ncols].to_vec(),
+        row_y: line_y[..nrows].to_vec(),
+        row_h: line_y.windows(2).map(|w| w[1] - w[0]).collect(),
+        table_w: col_cp.iter().sum::<f32>() + vert_total,
+    };
+    let height = row_cp.iter().sum::<f32>() + horiz.iter().sum::<f32>();
+    (finalize(rows, laid, &geom, cx, cy), height)
+}
+
+// --------------------------------------------------------------------------
 // cell layout, row heights, placement
 // --------------------------------------------------------------------------
 
@@ -481,7 +758,7 @@ fn finalize(rows: &[RowRef], laid: Vec<LaidCell>, geom: &Geom, cx: f32, cy: f32)
 /// removes it. Without it a table's cells butt together (the infobox label ran
 /// straight into its value: "SpeciesF. catus").
 fn border_spacing(style: &ComputedStyle) -> (f32, f32) {
-    if style.get("border-collapse").map(str::trim) == Some("collapse") {
+    if collapsed(style) {
         return (0.0, 0.0);
     }
     let mut it = style
@@ -515,6 +792,12 @@ pub(crate) fn min_content_width(
     let (placed, ncols) = build_grid(&rows);
     if ncols == 0 {
         return 0.0;
+    }
+    // Fixed collapsed table: floor = first-row columns (colspan-distributed) plus one
+    // border per grid line — the used-width basis, not each cell's full borders.
+    if is_fixed(style) && collapsed(style) {
+        let vert: f32 = vborders(&placed, ncols, style).iter().sum();
+        return fixed_min_cp(&placed, ncols, fonts).iter().sum::<f32>() + vert;
     }
     let (hs, _) = border_spacing(style);
     // Each column's min-content is the widest single-column cell (text wraps to its
@@ -550,6 +833,16 @@ pub(crate) fn layout_table(
     let (placed, ncols) = build_grid(&rows);
     if ncols == 0 {
         return (Vec::new(), 0.0);
+    }
+    // Fixed-layout collapsed borders need the merged-grid geometry (shared edges
+    // counted once). Auto/separate tables keep the track+spacing model below.
+    if is_fixed(&table.style) && collapsed(&table.style) {
+        let grid = Grid {
+            rows: &rows,
+            placed: &placed,
+            ncols,
+        };
+        return layout_table_collapsed(table, &grid, cx, cy, cw, fs, ctx);
     }
     let (hs, vs) = border_spacing(&table.style);
     // Reserve the horizontal spacing (gaps + edges) out of the content width so the
