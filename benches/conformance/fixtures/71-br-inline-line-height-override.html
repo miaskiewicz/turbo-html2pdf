@@ -1,0 +1,18 @@
+<!doctype html>
+<html>
+  <head><meta charset="utf-8" /><title>br inline line-height override</title></head>
+  <body>
+    <!-- Feature: the line a <br> terminates is sized by the content ON that line.
+         An inline `style="line-height:44px"` span on the first line makes THAT line
+         44px tall while the second line keeps the block's 24px line-height, so the
+         box is 44+24=68px. The break follows the line-height in effect per line
+         (matches Chromium: a <br>'s OWN line-height is ignored — the surrounding
+         inline content governs). -->
+    <style>
+      #box { width: 400px; font-size: 16px; line-height: 24px; background: #eef }
+      #after { font-size: 16px; background: #dee }
+    </style>
+    <div id="box" data-cid="box"><span style="line-height: 44px">First line</span><br>Second line</div>
+    <div id="after" data-cid="after">After</div>
+  </body>
+</html>

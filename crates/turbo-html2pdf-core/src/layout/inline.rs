@@ -46,8 +46,12 @@ pub struct InlineAtom {
     pub height: f32,
     /// The box's `vertical-align`, driving where it sits in the line box: `Top`
     /// pins its top to the line top, `Bottom` its bottom to the line bottom,
-    /// `Middle` centres it, else it sits on the baseline (the CSS default).
+    /// `Middle` centres it, `Super`/`Sub` shift it off the baseline (by
+    /// [`valign_shift`] of `font_size`), else it sits on the baseline (the default).
     pub valign: VAlign,
+    /// The box's font size — the basis for the `Super`/`Sub` baseline shift (a
+    /// browser's superscript/subscript offset scales with the font in effect).
+    pub font_size: f32,
     /// The box's own margins (border box → margin box). An inline-block reserves
     /// its margin box in the line: horizontal margins add to its inline advance,
     /// and vertical margins grow the line and offset the border box within it (a
@@ -66,11 +70,20 @@ impl InlineAtom {
     }
 }
 
-/// One inline-level piece in document order: a styled text run or an atomic box.
+/// One inline-level piece in document order: a styled text run, an atomic box, or
+/// a forced line break (`<br>`).
+///
+/// A `<br>` is a pure forced break: it ends the current line and continues on the
+/// next, but contributes **no metrics of its own** (a browser ignores a `<br>`'s
+/// own `line-height`). Each line's height instead comes from its content plus the
+/// block's *strut* (see [`layout_paragraph_in`]), so the break advances by the
+/// line-height in effect on the terminated line and an empty line from `<br><br>`
+/// is exactly one strut tall — not a block of fixed height.
 #[derive(Debug, Clone)]
 pub enum Piece {
     Run(InlineRun),
     Atom(InlineAtom),
+    Break,
 }
 
 /// Where an atom landed: its `id` and top-left relative to the line's top-left.
@@ -178,6 +191,9 @@ struct Word {
     space_after: f32,
     /// An atomic inline box occupying this word's slot (its `segs` are empty).
     atom: Option<InlineAtom>,
+    /// A forced line break (`<br>`): a zero-width, metric-less word (empty `segs`,
+    /// no `atom`) that flushes the current line once placed on it.
+    break_after: bool,
 }
 
 fn seg_key(c: &CharInfo) -> (usize, String, u16, bool) {
@@ -224,6 +240,18 @@ fn make_word(chars: &[CharInfo], runs: &[InlineRun], space_after: f32) -> Word {
         width,
         space_after,
         atom: None,
+        break_after: false,
+    }
+}
+
+/// A zero-width forced-break word (`<br>`): no glyphs, flushes its line.
+fn break_word() -> Word {
+    Word {
+        segs: Vec::new(),
+        width: 0.0,
+        space_after: 0.0,
+        atom: None,
+        break_after: true,
     }
 }
 
@@ -271,7 +299,12 @@ fn build_pieces(pieces: &[Piece], reg: &FontRegistry, diags: &mut Diagnostics) -
                     width: atom.width + atom.margin_left + atom.margin_right,
                     space_after: 0.0,
                     atom: Some(*atom),
+                    break_after: false,
                 });
+            }
+            Piece::Break => {
+                flush_run_group(&mut group, reg, diags, &mut words);
+                words.push(break_word());
             }
         }
     }
@@ -319,35 +352,93 @@ fn hand_off_leading_space(chars: &[CharInfo], group: &[InlineRun], out: &mut [Wo
 /// free for that line. The default (no floats) is `(0, max_width)` for every y.
 pub type LineRegion<'a> = &'a dyn Fn(f32) -> (f32, f32);
 
-/// Break `words` into placed lines, threading `y` top-down so each line's
-/// available width is queried from `region` at its own vertical position — text
-/// wraps in the narrow column beside a float, then widens once past its bottom.
-fn wrap_and_place(words: Vec<Word>, align: Align, region: LineRegion) -> Vec<InlineLine> {
-    let mut out: Vec<InlineLine> = Vec::new();
-    let mut cur: Vec<Word> = Vec::new();
-    let mut y = 0.0_f32;
-    let (mut indent, mut lw) = region(y);
-    let mut x = 0.0_f32;
-    for word in words {
-        if !cur.is_empty() && x + word.width > lw {
-            let mut line = place_line(std::mem::take(&mut cur), lw, align);
-            line.top = y;
-            line.indent = indent;
-            y += line.height;
-            out.push(line);
-            (indent, lw) = region(y);
-            x = 0.0;
+/// Running state of line breaking: the accumulated `cur` words, the current line
+/// `y`, the float region `(indent, lw)` at that y, and the pen `x`. Threads `y`
+/// top-down so each line's available width is queried from `region` at its own
+/// vertical position — text wraps in the narrow column beside a float, then widens
+/// once past its bottom — and flushes eagerly at a forced break (`<br>`).
+struct Placer<'a> {
+    align: Align,
+    region: LineRegion<'a>,
+    /// The block's line-box strut height — the minimum height of every line box,
+    /// so an empty line (from consecutive `<br>`) is exactly one strut tall.
+    strut: f32,
+    out: Vec<InlineLine>,
+    cur: Vec<Word>,
+    y: f32,
+    indent: f32,
+    lw: f32,
+    x: f32,
+}
+
+impl<'a> Placer<'a> {
+    fn new(align: Align, region: LineRegion<'a>, strut: f32) -> Self {
+        let (indent, lw) = region(0.0);
+        Placer {
+            align,
+            region,
+            strut,
+            out: Vec::new(),
+            cur: Vec::new(),
+            y: 0.0,
+            indent,
+            lw,
+            x: 0.0,
         }
-        x += word.width + word.space_after;
-        cur.push(word);
     }
-    if !cur.is_empty() {
-        let mut line = place_line(cur, lw, align);
-        line.top = y;
-        line.indent = indent;
-        out.push(line);
+
+    /// Place the accumulated words into a line at the current `y`, advance `y` by
+    /// its height, and re-query the float region for the next line.
+    fn flush(&mut self) {
+        if self.cur.is_empty() {
+            return;
+        }
+        let mut line = place_line(
+            std::mem::take(&mut self.cur),
+            self.lw,
+            self.align,
+            self.strut,
+        );
+        line.top = self.y;
+        line.indent = self.indent;
+        self.y += line.height;
+        self.out.push(line);
+        (self.indent, self.lw) = (self.region)(self.y);
+        self.x = 0.0;
     }
-    out
+
+    /// Add one word: wrap first if it no longer fits, then flush after it if it is
+    /// a forced break (so a `<br>` ends its line and the next word starts below).
+    fn add(&mut self, word: Word) {
+        if !self.cur.is_empty() && self.x + word.width > self.lw {
+            self.flush();
+        }
+        let forced = word.break_after;
+        self.x += word.width + word.space_after;
+        self.cur.push(word);
+        if forced {
+            self.flush();
+        }
+    }
+
+    fn finish(mut self) -> Vec<InlineLine> {
+        self.flush();
+        self.out
+    }
+}
+
+/// Break `words` into placed lines via a [`Placer`].
+fn wrap_and_place(
+    words: Vec<Word>,
+    align: Align,
+    region: LineRegion,
+    strut: f32,
+) -> Vec<InlineLine> {
+    let mut placer = Placer::new(align, region, strut);
+    for word in words {
+        placer.add(word);
+    }
+    placer.finish()
 }
 
 // --------------------------------------------------------------------------
@@ -386,30 +477,38 @@ fn fold_seg_metrics(seg: &Seg, m: &mut Metrics) {
     m.height = m.height.max(lh);
 }
 
-fn line_metrics(words: &[Word]) -> Metrics {
+/// Fold an atom's contribution into the line metrics. A baseline-aligned atom sits
+/// with its bottom on the baseline (the CSS default for a replaced/empty
+/// inline-block), so it contributes its full height as ascent and grows the line
+/// above the baseline. A `top`/`bottom` atom is placed against the line box edges
+/// instead, so it only grows the line's total height — folding it into `ascent`
+/// would shove the baseline (and every other item) down under a tall top box.
+fn fold_atom_metrics(atom: &InlineAtom, m: &mut Metrics) {
+    let outer = atom.outer_height();
+    if matches!(atom.valign, VAlign::Top | VAlign::Bottom) {
+        m.height = m.height.max(outer);
+    } else {
+        m.ascent = m.ascent.max(outer);
+        m.height = m.height.max(outer);
+    }
+}
+
+/// The line-box metrics: the block `strut` seeds the height (so an empty line — a
+/// `<br><br>` gap — is exactly one strut tall), then each word's text segments and
+/// atoms grow it. Text ascent/descent still floor the height via the final `max`,
+/// as a line box is never shorter than its own content.
+fn line_metrics(words: &[Word], strut: f32) -> Metrics {
     let mut m = Metrics {
         ascent: 0.0,
         descent: 0.0,
-        height: 0.0,
+        height: strut,
     };
     for word in words {
         for seg in &word.segs {
             fold_seg_metrics(seg, &mut m);
         }
-        // A baseline-aligned atom sits with its bottom on the baseline (the CSS
-        // default for a replaced/empty inline-block), so it contributes its full
-        // height as ascent and grows the line above the baseline. A `top`/`bottom`
-        // atom is placed against the line box edges instead, so it only grows the
-        // line's total height — folding it into `ascent` would shove the baseline
-        // (and every other item) down under a tall top-aligned box.
         if let Some(atom) = word.atom {
-            let outer = atom.outer_height();
-            if matches!(atom.valign, VAlign::Top | VAlign::Bottom) {
-                m.height = m.height.max(outer);
-            } else {
-                m.ascent = m.ascent.max(outer);
-                m.height = m.height.max(outer);
-            }
+            fold_atom_metrics(&atom, &mut m);
         }
     }
     m.height = m.height.max(m.ascent + m.descent);
@@ -471,8 +570,24 @@ fn merge_runs(runs: Vec<GlyphRun>) -> Vec<GlyphRun> {
     out
 }
 
-fn place_line(words: Vec<Word>, max_width: f32, align: Align) -> InlineLine {
-    let m = line_metrics(&words);
+/// The margin-box top of an atom within its line box, per `vertical-align`: `top`
+/// pins to the line top, `bottom` to the line bottom, `middle` centres, `super`/
+/// `sub` shift the baseline placement off the baseline by [`valign_shift`], else
+/// the margin box's bottom sits on the baseline (the CSS default). The border box
+/// is then its `margin-top` below the returned margin-box top.
+fn atom_margin_top(atom: &InlineAtom, height: f32, baseline: f32) -> f32 {
+    let outer = atom.outer_height();
+    match atom.valign {
+        VAlign::Top => 0.0,
+        VAlign::Bottom => height - outer,
+        VAlign::Middle => (height - outer) / 2.0,
+        VAlign::Super | VAlign::Sub => baseline - outer - valign_shift(atom.valign, atom.font_size),
+        _ => baseline - outer,
+    }
+}
+
+fn place_line(words: Vec<Word>, max_width: f32, align: Align, strut: f32) -> InlineLine {
+    let m = line_metrics(&words, strut);
     let baseline = m.ascent + (m.height - m.ascent - m.descent) / 2.0;
     let width = line_used_width(&words);
     let mut pen = align_offset(align, width, max_width);
@@ -480,17 +595,7 @@ fn place_line(words: Vec<Word>, max_width: f32, align: Align) -> InlineLine {
     let mut atoms = Vec::new();
     for word in &words {
         if let Some(atom) = word.atom {
-            // Place the atom's MARGIN box vertically per its `vertical-align`: `top`
-            // pins to the line-box top, `bottom` to its bottom, `middle` centres,
-            // else the margin box's bottom sits on the baseline (the CSS default);
-            // the border box is then its `margin-top` below the margin-box top.
-            let outer = atom.outer_height();
-            let margin_top = match atom.valign {
-                VAlign::Top => 0.0,
-                VAlign::Bottom => m.height - outer,
-                VAlign::Middle => (m.height - outer) / 2.0,
-                _ => baseline - outer,
-            };
+            let margin_top = atom_margin_top(&atom, m.height, baseline);
             atoms.push(PlacedAtom {
                 id: atom.id,
                 x: pen + atom.margin_left,
@@ -539,21 +644,25 @@ pub fn layout_paragraph(
     align: Align,
     diags: &mut Diagnostics,
 ) -> ParagraphLayout {
-    layout_paragraph_in(pieces, reg, align, diags, &|_| (0.0, max_width))
+    // Width-measurement callers ignore line heights, so no strut is needed here.
+    layout_paragraph_in(pieces, reg, align, diags, &|_| (0.0, max_width), 0.0)
 }
 
 /// [`layout_paragraph`] with a per-line float region — each line's `(indent,
 /// width)` comes from `region` at the line's own top, so text wraps beside a
-/// float and widens below it. `layout_paragraph` passes a full-width region.
+/// float and widens below it — and a block `strut` (the minimum line-box height,
+/// the block's own line-height), so an empty line from `<br><br>` is one strut
+/// tall. `layout_paragraph` passes a full-width region and a zero strut.
 pub fn layout_paragraph_in(
     pieces: &[Piece],
     reg: &FontRegistry,
     align: Align,
     diags: &mut Diagnostics,
     region: LineRegion,
+    strut: f32,
 ) -> ParagraphLayout {
     let words = build_pieces(pieces, reg, diags);
-    finalize(wrap_and_place(words, align, region))
+    finalize(wrap_and_place(words, align, region, strut))
 }
 
 /// Lay out a paragraph of text runs only (no atoms) — a convenience for callers
@@ -567,4 +676,140 @@ pub fn layout_runs(
 ) -> ParagraphLayout {
     let pieces: Vec<Piece> = runs.iter().cloned().map(Piece::Run).collect();
     layout_paragraph(&pieces, reg, max_width, align, diags)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn face(reg: &FontRegistry) -> FontFace {
+        reg.select(&["sans-serif"], 400, false)
+            .expect("bundled sans-serif")
+            .clone()
+    }
+
+    fn run(text: &str, reg: &FontRegistry, line_height: Option<f32>) -> Piece {
+        Piece::Run(InlineRun {
+            node_id: NodeId(0),
+            text: text.to_string(),
+            face: face(reg),
+            families: vec!["sans-serif".to_string()],
+            weight: 400,
+            italic: false,
+            font_size: 16.0,
+            line_height,
+            letter_spacing: 0.0,
+            color: Rgba {
+                r: 0,
+                g: 0,
+                b: 0,
+                a: 255,
+            },
+            valign: VAlign::Baseline,
+            nowrap: false,
+        })
+    }
+
+    fn atom(valign: VAlign) -> InlineAtom {
+        InlineAtom {
+            id: 0,
+            width: 10.0,
+            height: 10.0,
+            valign,
+            font_size: 20.0,
+            margin_top: 0.0,
+            margin_bottom: 0.0,
+            margin_left: 0.0,
+            margin_right: 0.0,
+        }
+    }
+
+    // A `<br>` splits the flow into lines; consecutive breaks leave an empty line
+    // exactly one strut tall — never a fixed-height phantom block.
+    #[test]
+    fn forced_break_makes_strut_tall_lines() {
+        let reg = FontRegistry::new();
+        let mut diags = Diagnostics::default();
+        let pieces = [
+            run("a", &reg, Some(20.0)),
+            Piece::Break,
+            Piece::Break,
+            run("b", &reg, Some(20.0)),
+        ];
+        let para = layout_paragraph_in(
+            &pieces,
+            &reg,
+            Align::Left,
+            &mut diags,
+            &|_| (0.0, 500.0),
+            20.0,
+        );
+        assert_eq!(para.lines.len(), 3, "a / empty / b");
+        assert!(para.lines[1].runs.is_empty(), "middle line is empty");
+        assert!(
+            (para.lines[1].height - 20.0).abs() < 0.01,
+            "empty line is one strut"
+        );
+        assert!((para.height - 60.0).abs() < 0.01, "three 20px lines");
+    }
+
+    // A trailing `<br>` ends its line but adds no phantom empty line after it.
+    #[test]
+    fn trailing_break_adds_no_extra_line() {
+        let reg = FontRegistry::new();
+        let mut diags = Diagnostics::default();
+        let pieces = [run("a", &reg, Some(20.0)), Piece::Break];
+        let para = layout_paragraph_in(
+            &pieces,
+            &reg,
+            Align::Left,
+            &mut diags,
+            &|_| (0.0, 500.0),
+            20.0,
+        );
+        assert_eq!(para.lines.len(), 1);
+        assert!((para.height - 20.0).abs() < 0.01);
+    }
+
+    // Words wider than the region wrap onto successive lines (the `Placer` wrap arm).
+    #[test]
+    fn words_wrap_when_they_exceed_the_line() {
+        let reg = FontRegistry::new();
+        let mut diags = Diagnostics::default();
+        let pieces = [run("aaaa bbbb cccc", &reg, Some(20.0))];
+        let para = layout_paragraph_in(
+            &pieces,
+            &reg,
+            Align::Left,
+            &mut diags,
+            &|_| (0.0, 40.0),
+            20.0,
+        );
+        assert!(para.lines.len() >= 2, "narrow column wraps");
+    }
+
+    // `vertical-align: super`/`sub` shift an atom off the baseline by `valign_shift`;
+    // the other keywords pin it to the line-box top/bottom/middle/baseline.
+    #[test]
+    fn atom_margin_top_honors_vertical_align() {
+        let (h, base) = (30.0, 25.0);
+        assert_eq!(atom_margin_top(&atom(VAlign::Top), h, base), 0.0);
+        assert_eq!(atom_margin_top(&atom(VAlign::Bottom), h, base), 20.0);
+        assert_eq!(atom_margin_top(&atom(VAlign::Middle), h, base), 10.0);
+        assert_eq!(atom_margin_top(&atom(VAlign::Baseline), h, base), 15.0);
+        // super raises (smaller margin-top), sub lowers, both by valign_shift(fs=20).
+        let sup = atom_margin_top(&atom(VAlign::Super), h, base);
+        let sub = atom_margin_top(&atom(VAlign::Sub), h, base);
+        assert!((sup - (15.0 - 20.0 * 0.33)).abs() < 0.01);
+        assert!((sub - (15.0 + 20.0 * 0.2)).abs() < 0.01);
+    }
+
+    // The super/sub baseline-shift factors (asserted against Chromium's measured
+    // ~0.3383em / 0.2050em by the sub-sup conformance fixture); other aligns: 0.
+    #[test]
+    fn valign_shift_factors() {
+        assert!((valign_shift(VAlign::Super, 100.0) - 33.0).abs() < 0.01);
+        assert!((valign_shift(VAlign::Sub, 100.0) + 20.0).abs() < 0.01);
+        assert_eq!(valign_shift(VAlign::Middle, 100.0), 0.0);
+    }
 }
