@@ -88,15 +88,57 @@ A per-fixture table plus a summary:
   body      (0, 60, 200, 140)       (0, 60, 200, 140)       0px     PASS
   inner     (75, 105, 50, 50)       (75, 105, 50, 50)       0px     PASS
   ...
-summary: 108/108 boxes within tolerance across 30 fixtures (30 fixtures fully clean)
+summary: 186/186 boxes within tolerance across 64 gated fixtures (64 fixtures fully clean)
+deferred (tracked, not gated): 4 fixture(s)
+  - 36-grid-min-content-row.html [0/3] — …
 ```
 
 ## Fixtures
 
-**Foundational-first**, then progressively adversarial combinations. Each fixture
-is minimal, self-contained, deterministic, and tags the element(s) under test
-with `data-cid`. Current status: **108/108 boxes within 2px across 30 fixtures
-(all 30 fully clean)**.
+**Foundational-first** (`01`–`30`), then a **modern-CSS corpus expansion** (`31`–`68`)
+covering the constructs real pages (nike / google / wikipedia) exercise. Each fixture
+is minimal, self-contained, deterministic, and tags the element(s) under test with
+`data-cid`. Current status: **186/186 boxes within 2px across 64 gated fixtures (all 64
+fully clean)**, plus **4 documented deferrals** (below) that are reported but not gated.
+
+### Corpus expansion (`31`–`68`)
+
+Adds the six families the original 30 had **zero** coverage for, plus more inline/table/
+image/positioning guards. Each fixture cites its real-site origin + CHANGELOG entry in a
+`<body>` comment.
+
+| range | family | fixtures |
+| ----- | ------ | -------- |
+| 31–36 | **CSS Grid** | column-span, template-areas, single-auto-column, justify-items, minmax/fr/gap, min-content row† |
+| 37–39 | **calc()** | `calc(% − px)` length, `calc()` inset (vs CB height), `calc()` in a media feature |
+| 40    | **aspect-ratio** | auto-height = width ÷ ratio |
+| 41–42 | **2D transforms** | translate, scale + `transform-origin` (getBoundingClientRect parity) |
+| 43–44 | **`@media` queries** | height query (google blank-page guard), width breakpoint (no space after `@media`) |
+| 45    | **logical props** | `margin-inline-start` / `padding-block-start` → physical sides |
+| 46–49 | **sizing** | `box-sizing:inherit`, border-box `px` height, `vw`/`vh`, `top:%` vs CB height |
+| 50–52 | **inline / white-space** | `nowrap` full-text sizing, inline-block min-content, `::after` no-leak |
+| 53–55 | **tables** | auto min-content†, `border-spacing`, empty spacer-row height |
+| 56–58 | **replaced images** | `%`-width + intrinsic aspect (PNG), intrinsic-in-flex (GIF), `object-fit` box |
+| 59–68 | **UA / overflow / sticky / positioning** | section-scoped `h1`, h4/h6/p em-margins, sticky, overflow-clip, auto-inset abs flex child†, sr-only drop, visibility-hidden†, auto-inset static position, float scoping across sections, `flex-basis` from width |
+
+† = a documented deferral (see below).
+
+### Documented deferrals
+
+Known-hard or intentional-divergence fixtures carry a `<!-- conformance:defer <reason> -->`
+marker; the runner reports their deltas as `XFAIL` and lists them separately without
+reding the suite (so an open gap is tracked, never hidden or force-passed):
+
+- **`36-grid-min-content-row`** — explicit `min-content` grid-row height doesn't yet match
+  Chromium across both cells (diagnosed-but-unfixed; grid geometry is otherwise clean).
+- **`53-table-auto-min-content`** — auto-layout collapsed-table column min-content sizing
+  (the `table.rs` follow-up; separate-border case is close, collapsed still diverges).
+- **`63-abs-auto-inset-flex-child`** — **intentional divergence**: the engine anchors a
+  fully auto-inset absolute flex child to its static start (0.2.14 fix for google's AI-Mode
+  icon), while Chromium spec-centers it via `justify-content`. Not reverted for a minimal
+  repro.
+- **`65-visibility-hidden-reserves-space`** — `visibility:hidden` is dropped from layout
+  (should reserve its space); paint-drop is correct, layout-space reservation is open.
 
 | #  | fixture                       | feature under test                                    |
 | -- | ----------------------------- | ----------------------------------------------------- |
@@ -158,12 +200,21 @@ foundational layout bugs (all now within 2px of Chromium):
   each side (CSS 2.1 §17.6.2) — so the table/row/cell boxes size correctly across a
   `colspan` (fixture 29 went from ~5px to ≤0.6px; 07 from 1px to exact).
 
-### Known remaining gap
+The `31`–`68` expansion then drove six more fixes: grid `justify-self` mapping,
+`transform-origin` parsing (was pinned to the box centre), viewport-height threading for
+`vh`/height-`@media`, shrink-to-fit flooring at min-content (`white-space:nowrap`
+overflow), the browser-default `td`/`th` `padding:1px`, and GIF/WebP intrinsic probing +
+`data:` URI decode so replaced-image fixtures size for real.
 
-- **`border-collapse` on AUTO-layout tables.** The merged-grid model above applies to
-  `table-layout: fixed` collapsed tables; an auto-layout collapsed table still lays out
-  with each cell's full borders. No current fixture exercises it, and Wikipedia-style
-  infoboxes (auto layout) render acceptably — a documented follow-up in `table.rs`.
+### Known remaining gaps
+
+Beyond the 4 gated deferrals above: **`border-collapse` on AUTO-layout tables** — the
+merged-grid model applies to `table-layout: fixed` collapsed tables; an auto-layout
+collapsed table still lays out with each cell's full borders (a `table.rs` follow-up,
+exercised by `53`). The **inline replaced-image baseline strut** (an inline `<img>`'s line
+box reserves the font descent below the baseline) is not modelled — image fixtures use
+`display:block` to isolate the sizing under test. GIF/WebP are **probed for size but not
+pixel-decoded** for paint.
 
 ## Adding a fixture
 
