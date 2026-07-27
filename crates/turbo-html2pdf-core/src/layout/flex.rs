@@ -1351,6 +1351,72 @@ mod coverage_tests {
         assert_eq!(flex_grow_shrink(&cs(&[("flex", "1 1 0%")])), (1.0, 1.0)); // basis skipped
     }
 
+    #[test]
+    fn justify_self_maps_every_keyword() {
+        // unset / `auto` -> None (defer to the container's justify-items).
+        assert_eq!(justify_self(&cs(&[])), None);
+        assert_eq!(justify_self(&cs(&[("justify-self", "auto")])), None);
+        // the start family (`start`/`flex-start`/`left`) -> Start.
+        for v in ["start", "flex-start", "left"] {
+            assert_eq!(
+                justify_self(&cs(&[("justify-self", v)])),
+                Some(AlignItems::Start)
+            );
+        }
+        // the end family (`end`/`flex-end`/`right`) -> End.
+        for v in ["end", "flex-end", "right"] {
+            assert_eq!(
+                justify_self(&cs(&[("justify-self", v)])),
+                Some(AlignItems::End)
+            );
+        }
+        assert_eq!(
+            justify_self(&cs(&[("justify-self", "center")])),
+            Some(AlignItems::Center)
+        );
+        // anything else -> Stretch (the item fills its track).
+        assert_eq!(
+            justify_self(&cs(&[("justify-self", "stretch")])),
+            Some(AlignItems::Stretch)
+        );
+    }
+
+    #[test]
+    fn flex_shorthand_basis_resolves_every_form() {
+        // `none`/`initial` -> the shorthand's `auto` basis.
+        assert_eq!(
+            flex_shorthand_basis(&cs(&[("flex", "none")]), 16.0),
+            Some(Dimension::auto())
+        );
+        // a length `<basis>` token wins (`1 1 60px` -> 60px).
+        assert_eq!(
+            flex_shorthand_basis(&cs(&[("flex", "1 1 60px")]), 16.0),
+            Some(Dimension::length(60.0))
+        );
+        // a `content` `<basis>` token -> content-sized.
+        assert_eq!(
+            flex_shorthand_basis(&cs(&[("flex", "1 1 content")]), 16.0),
+            Some(Dimension::auto())
+        );
+        // an explicit `auto` token defers to `width` (`None`).
+        assert_eq!(
+            flex_shorthand_basis(&cs(&[("flex", "1 1 auto")]), 16.0),
+            None
+        );
+        // a numbers-only shorthand carries an implied `0` basis (CSS `flex:1` == 1 1 0%).
+        assert_eq!(
+            flex_shorthand_basis(&cs(&[("flex", "2 0")]), 16.0),
+            Some(Dimension::length(0.0))
+        );
+        // an unparsable trailing token is skipped, leaving the implied `0` basis.
+        assert_eq!(
+            flex_shorthand_basis(&cs(&[("flex", "1 garbage")]), 16.0),
+            Some(Dimension::length(0.0))
+        );
+        // no `flex` at all -> None (caller falls back to `width`).
+        assert_eq!(flex_shorthand_basis(&cs(&[]), 16.0), None);
+    }
+
     fn bs_of(pairs: &[(&str, &str)]) -> BoxStyle {
         super::super::value::resolve_box_style(
             &cs(pairs),

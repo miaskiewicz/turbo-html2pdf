@@ -1444,3 +1444,32 @@ pub fn layout_tree_with_images(
     }
     frag
 }
+
+#[cfg(test)]
+mod tests {
+    use super::first_inflow_child;
+    use crate::layout::boxgen::{build_box_tree, BoxKind};
+    use crate::node::Tag;
+    use crate::{ComputedStyle, StyledElement, StyledNode};
+
+    fn flex_div() -> StyledNode {
+        StyledNode::Element(StyledElement {
+            tag: Tag::Html("div".to_string()),
+            attrs: vec![],
+            style: ComputedStyle::from_pairs([("display".to_string(), "flex".to_string())]),
+            children: vec![],
+        })
+    }
+
+    #[test]
+    fn first_inflow_child_is_none_for_a_non_block_box() {
+        // The box-flow "first in-flow child" only applies to a `BoxKind::Block`; a
+        // flex box hits the let-else guard and yields `None`.
+        let root = build_box_tree(&[flex_div()]);
+        let BoxKind::Block(kids) = &root.kind else {
+            panic!("synthetic root is a block");
+        };
+        assert!(matches!(kids[0].kind, BoxKind::Flex(_)));
+        assert!(first_inflow_child(&kids[0], 100.0, 16.0).is_none());
+    }
+}

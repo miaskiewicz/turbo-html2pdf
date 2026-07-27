@@ -219,3 +219,50 @@ fn nowrap_run_stays_on_one_line() {
         "control: wrapping text does wrap at 10px"
     );
 }
+
+fn atom(id: usize, valign: VAlign, height: f32) -> InlineAtom {
+    InlineAtom {
+        id,
+        width: 20.0,
+        height,
+        valign,
+        margin_top: 0.0,
+        margin_bottom: 0.0,
+        margin_left: 0.0,
+        margin_right: 0.0,
+    }
+}
+
+#[test]
+fn vertical_align_places_inline_block_atoms() {
+    // A 60px baseline atom sets the line box height; three 40px atoms then pin
+    // differently: `top` to the line top (y=0), `bottom` to the line bottom
+    // (60 - 40 = 20), and `middle` centred ((60 - 40)/2 = 10).
+    let reg = common::registry();
+    let mut diags = Diagnostics::default();
+    let pieces = vec![
+        Piece::Atom(atom(0, VAlign::Baseline, 60.0)),
+        Piece::Atom(atom(1, VAlign::Top, 40.0)),
+        Piece::Atom(atom(2, VAlign::Bottom, 40.0)),
+        Piece::Atom(atom(3, VAlign::Middle, 40.0)),
+    ];
+    let p = layout_paragraph(&pieces, &reg, 500.0, Align::Left, &mut diags);
+    let line = &p.lines[0];
+    assert!(
+        (line.height - 60.0).abs() < 0.01,
+        "line height, got {}",
+        line.height
+    );
+    let y = |id: usize| line.atoms.iter().find(|a| a.id == id).unwrap().y;
+    assert!(
+        (y(1) - 0.0).abs() < 0.01,
+        "top pins to line top, got {}",
+        y(1)
+    );
+    assert!(
+        (y(2) - 20.0).abs() < 0.01,
+        "bottom pins to line bottom, got {}",
+        y(2)
+    );
+    assert!((y(3) - 10.0).abs() < 0.01, "middle centres, got {}", y(3));
+}

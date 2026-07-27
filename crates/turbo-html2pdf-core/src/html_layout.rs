@@ -596,4 +596,48 @@ mod tests {
             "inline span's data-cid is flattened away"
         );
     }
+
+    #[test]
+    fn inline_block_data_cid_is_reported() {
+        // Unlike a plain inline `<span>`, an `inline-block` becomes an atomic box, so
+        // `collect_line_atoms` recurses into it and its `data-cid` is reported.
+        let html = r#"<html><body><div><span
+            style="display:inline-block;width:20px;height:10px" data-cid="ib">x</span></div></body></html>"#;
+        let mut diags = Diagnostics::default();
+        let boxes = layout_boxes(html, "", 400.0, 400.0, &FontRegistry::new(), &mut diags)
+            .expect("layout_boxes");
+        assert!(
+            boxes.iter().any(|b| b.cid == "ib"),
+            "inline-block atom's data-cid is reported"
+        );
+    }
+
+    #[test]
+    fn non_data_img_src_is_not_collected() {
+        // `collect_data_uri_images` skips an `<img>` whose `src` is not a `data:` URI
+        // (a plain http src) — no panic, nothing decoded, layout still succeeds.
+        let html = r#"<html><body><img src="http://example.com/a.png"></body></html>"#;
+        let mut diags = Diagnostics::default();
+        let boxes = layout_boxes(html, "", 400.0, 400.0, &FontRegistry::new(), &mut diags)
+            .expect("layout_boxes");
+        assert!(boxes.is_empty(), "no tagged boxes, non-data img ignored");
+    }
+
+    #[test]
+    fn base64_decode_handles_plus_slash_and_rejects_invalid() {
+        // `+`/`/` are the standard-alphabet's 62/63 sextets; "Tnk+" -> "Ny>".
+        assert_eq!(super::base64_decode("Tnk+").unwrap(), b"Ny>");
+        // whitespace and `=` padding are skipped; an out-of-alphabet char fails.
+        assert_eq!(super::base64_decode("Tm8=").unwrap(), b"No");
+        assert!(super::base64_decode("!!!!").is_none());
+    }
+
+    #[test]
+    fn block_children_of_a_directive_box_is_empty() {
+        // A `Directive` box is not a block/flex/grid/table container, so it exposes
+        // no block-level children (the `_ => &[]` arm).
+        use crate::layout::boxgen::BoxKind;
+        use crate::node::TKind;
+        assert!(super::block_children(&BoxKind::Directive(TKind::Footnote)).is_empty());
+    }
 }

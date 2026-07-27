@@ -414,4 +414,60 @@ mod format_tests {
         assert!(probe(gif).is_some());
         assert!(decode(gif).is_none());
     }
+
+    #[test]
+    fn probe_gif_too_short_for_screen_descriptor_is_none() {
+        // A GIF whose signature matches but is truncated before the 10-byte logical
+        // screen descriptor has no readable intrinsic size.
+        assert!(probe(b"GIF89a\x00").is_none());
+    }
+
+    #[test]
+    fn probe_webp_extended_reads_canvas_size() {
+        // `VP8X`: 4-byte chunk size + 4-byte flags, then two 24-bit `value-1` LE
+        // canvas fields. width-1=99 -> 100, height-1=49 -> 50.
+        let mut b = Vec::from(*b"RIFF\x00\x00\x00\x00WEBPVP8X");
+        b.extend_from_slice(&[0x0a, 0x00, 0x00, 0x00]); // chunk size
+        b.extend_from_slice(&[0x00, 0x00, 0x00, 0x00]); // flags
+        b.extend_from_slice(&[0x63, 0x00, 0x00]); // width-1 = 99
+        b.extend_from_slice(&[0x31, 0x00, 0x00]); // height-1 = 49
+        let intrinsic = probe(&b).expect("vp8x intrinsic");
+        assert_eq!((intrinsic.width, intrinsic.height), (100, 50));
+        assert!(intrinsic.has_alpha, "extended WebP may carry alpha");
+    }
+
+    #[test]
+    fn probe_webp_unknown_chunk_is_none() {
+        // A RIFF/WEBP wrapper with an unrecognized FourCC has no known size reader.
+        let b = Vec::from(*b"RIFF\x00\x00\x00\x00WEBPXXXX\x00\x00\x00\x00");
+        assert!(probe(&b).is_none());
+    }
+
+    #[test]
+    fn probe_webp_lossy_rejects_bad_start_code() {
+        // `VP8 ` chunk without the `9d 01 2a` key-frame start code is not sized.
+        let mut b = Vec::from(*b"RIFF\x00\x00\x00\x00WEBPVP8 \x00\x00\x00\x00");
+        b.extend_from_slice(&[0x00; 6]); // frame tag + wrong start code
+        assert!(probe(&b).is_none());
+    }
+
+    #[test]
+    fn probe_webp_lossy_full_len_wrong_start_code_is_none() {
+        // Long enough to pass the 30-byte length check but with a corrupted start
+        // code, so the size read is rejected at the start-code guard (not the
+        // length `?`) — the branch a too-short buffer can't reach.
+        let mut b = Vec::from(*b"RIFF\x00\x00\x00\x00WEBPVP8 \x00\x00\x00\x00");
+        b.extend_from_slice(&[0x00, 0x00, 0x00]); // frame tag
+        b.extend_from_slice(&[0xde, 0xad, 0xbe]); // wrong start code (not 9d 01 2a)
+        b.extend_from_slice(&[0x64, 0x00, 0x32, 0x00]); // w/h bytes (unreached)
+        assert!(probe(&b).is_none());
+    }
+
+    #[test]
+    fn probe_webp_lossless_rejects_bad_signature() {
+        // `VP8L` chunk whose leading byte is not the `0x2f` signature is not sized.
+        let mut b = Vec::from(*b"RIFF\x00\x00\x00\x00WEBPVP8L\x00\x00\x00\x00");
+        b.extend_from_slice(&[0x00; 5]); // wrong signature + packed bytes
+        assert!(probe(&b).is_none());
+    }
 }
