@@ -2,20 +2,19 @@
 <html>
   <head><meta charset="utf-8" /><title>grid min-content row sizing</title></head>
   <body>
-    <!-- conformance:defer grid min-content row sizing is a diagnosed-but-unfixed
-         gap (MEMORY.md wiki grid); the explicit-`min-content` row does not yet
-         match Chromium's row height across both cells. Tracked, not gated. -->
-    <!-- Feature: `grid-template-rows: min-content` sizes the row to the taller
-         cell's min-content height; both cells share it and start at y=0. -->
+    <!-- Feature: `grid-template-rows: min-content` sizes the row to the taller cell's
+         min-content height; both cells share it and start at y=0. The taller cell is
+         padding-driven (single line + 30px block padding) so text metrics stay
+         deterministic. Origin: MEMORY.md wiki grid. -->
     <style>
       #g { display: grid; grid-template-columns: 120px 120px;
            grid-template-rows: min-content; width: 240px }
-      #tall { padding: 20px 0; background: #cde }
+      #tall { padding: 30px 0; background: #cde }
       #short { background: #dec }
     </style>
     <div id="g" data-cid="g">
-      <div id="tall" data-cid="tall">line<br>two<br>three</div>
-      <div id="short" data-cid="short">x</div>
+      <div id="tall" data-cid="tall">tall</div>
+      <div id="short" data-cid="short">short</div>
     </div>
   </body>
 </html>

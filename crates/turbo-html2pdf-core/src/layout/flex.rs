@@ -11,7 +11,7 @@
 
 use std::collections::HashMap;
 
-use taffy::prelude::{FromLength, FromPercent, TaffyAuto};
+use taffy::prelude::{FromLength, FromPercent, TaffyAuto, TaffyMaxContent, TaffyMinContent};
 use taffy::style_helpers::{fr, line, minmax, percent, span};
 use taffy::{
     AlignItems, AvailableSpace, Dimension, Display, FlexDirection, FlexWrap, GridPlacement,
@@ -754,6 +754,24 @@ fn track_of(tok: &str) -> TrackSizingFunction {
     if let Some(mm) = minmax_track(t) {
         return mm;
     }
+    // `min-content`/`max-content` size the track to the items' content (a
+    // `grid-template-rows:min-content` row hugs its tallest cell's min-content
+    // height); mapping them to `AUTO` let the row stretch to the container instead.
+    match t {
+        "min-content" => {
+            return minmax(
+                MinTrackSizingFunction::MIN_CONTENT,
+                MaxTrackSizingFunction::MIN_CONTENT,
+            )
+        }
+        "max-content" => {
+            return minmax(
+                MinTrackSizingFunction::MAX_CONTENT,
+                MaxTrackSizingFunction::MAX_CONTENT,
+            )
+        }
+        _ => {}
+    }
     if let Some(f) = t
         .strip_suffix("fr")
         .and_then(|x| x.trim().parse::<f32>().ok())
@@ -1372,6 +1390,29 @@ mod coverage_tests {
         let inset = item_inset(&bs);
         assert_eq!(inset.top, LengthPercentageAuto::percent(0.25_f32));
         assert_eq!(inset.left, LengthPercentageAuto::percent(0.10_f32));
+    }
+
+    // --- grid track keywords: min-content / max-content size to content ---
+    #[test]
+    fn track_of_maps_content_keywords() {
+        // A `min-content`/`max-content` track must size to content, not stretch like
+        // `auto` — else a `grid-template-rows:min-content` row fills the container.
+        assert_eq!(
+            track_of("min-content"),
+            minmax(
+                MinTrackSizingFunction::MIN_CONTENT,
+                MaxTrackSizingFunction::MIN_CONTENT
+            )
+        );
+        assert_eq!(
+            track_of("max-content"),
+            minmax(
+                MinTrackSizingFunction::MAX_CONTENT,
+                MaxTrackSizingFunction::MAX_CONTENT
+            )
+        );
+        assert_eq!(track_of("auto"), TrackSizingFunction::AUTO);
+        assert_eq!(track_of("120px"), TrackSizingFunction::from_length(120.0));
     }
 
     // --- flex_natural: row sums items, column takes the widest ---
