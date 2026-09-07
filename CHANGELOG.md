@@ -4,6 +4,22 @@ All notable changes to turbo-html2pdf are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/); versions follow SemVer. The npm,
 PyPI, and crates.io packages release in lockstep from a `v*` tag (PyPI on `pyv*`).
 
+## [0.3.2] — selector-list comma split respects `:is()`/`:not()` arguments
+
+### Fixed
+- **Comma inside a functional pseudo split the selector list**: `parse_selector_list`
+  split the prelude on every `,`, so a comma *inside* `:is(...)` / `:where(...)` /
+  `:not(...)` / `[attr="a,b"]` was treated as a list separator. Wikipedia's collapse
+  sheet ships
+  `.client-js .mw-collapsed:not(.mw-made-collapsible) > :is(p,table,thead + tbody){display:none}`;
+  the naive split tore `:is(p,table,thead + tbody)` into a **bare `table` selector with
+  no ancestor context**, so `display:none` matched *every* table on the page. On the Nike,
+  Inc. article this dropped the `float:right` infobox entirely — its logo/photo images and
+  facts table vanished and the body text spanned the full column instead of wrapping beside
+  it. The list is now split on **top-level commas only** (paren/bracket/quote aware), so
+  `:is()`/`:where()`/`:not()` argument lists and attribute-value commas stay intact and the
+  infobox floats right with its images + rows, matching Chromium.
+
 ## [0.3.1] — `<br>` inline forced line-break + sub/sup conformance
 
 ### Fixed

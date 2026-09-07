@@ -212,11 +212,47 @@ fn parse_selector(sel: &str) -> Option<Selector> {
     })
 }
 
-/// Parse a comma-separated selector list.
+/// Parse a comma-separated selector list. Commas are split only at the top level:
+/// a comma nested inside a functional pseudo-class (`:is(p, table)`,
+/// `:not(a, b)`, `:nth-child(...)`), an `[attr="a,b"]` value, or a quoted string
+/// is part of that argument, not a list separator. A naive `split(',')` tore
+/// `:is(p,table,thead + tbody)` into a bare `table` selector that then matched
+/// (and hid) every table on the page.
 pub fn parse_selector_list(list: &str) -> Vec<Selector> {
-    list.split(',')
+    split_selector_list(list)
+        .into_iter()
         .filter_map(|s| parse_selector(s.trim()))
         .collect()
+}
+
+/// Split a selector list on top-level commas, honoring `()`/`[]` nesting and
+/// `'`/`"` strings.
+fn split_selector_list(list: &str) -> Vec<&str> {
+    let mut out = Vec::new();
+    let (mut parens, mut brackets, mut quote, mut start) = (0i32, 0i32, None::<char>, 0usize);
+    for (i, c) in list.char_indices() {
+        match quote {
+            Some(q) => {
+                if c == q {
+                    quote = None;
+                }
+            }
+            None => match c {
+                '\'' | '"' => quote = Some(c),
+                '(' => parens += 1,
+                ')' => parens = parens.saturating_sub(1),
+                '[' => brackets += 1,
+                ']' => brackets = brackets.saturating_sub(1),
+                ',' if parens == 0 && brackets == 0 => {
+                    out.push(&list[start..i]);
+                    start = i + 1;
+                }
+                _ => {}
+            },
+        }
+    }
+    out.push(&list[start..]);
+    out
 }
 
 // --------------------------------------------------------------------------

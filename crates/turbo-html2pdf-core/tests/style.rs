@@ -641,6 +641,51 @@ fn where_with_nested_not_matches() {
 }
 
 #[test]
+fn selector_list_comma_inside_is_is_not_a_list_separator() {
+    // Regression: a comma INSIDE a functional pseudo (`:is()`, `:where()`, `:not()`)
+    // is part of that argument, not a selector-list separator. Wikipedia's collapse
+    // sheet hides collapsed rows with
+    //   `.client-js .mw-collapsed:not(...) > :is(p,table,thead + tbody){display:none}`
+    // A naive `split(',')` tore this into three selectors — including a bare `table`
+    // with NO ancestor context — so `display:none` matched (and hid) EVERY table on
+    // the page, notably the Nike article's `float:right` infobox, which then vanished
+    // from the screenshot. An un-collapsed table must keep the UA `display:table`.
+    let css = ".wrap.collapsed > :is(p,table,thead + tbody){display:none}";
+    let n = styled(
+        "<div><table id='free'><tbody><tr><td>x</td></tr></tbody></table>\
+         <div class='wrap collapsed'><table id='hidden'><tbody><tr><td>y</td></tr></tbody></table></div></div>",
+        css,
+    );
+    // The free-standing table (no `.collapsed` parent) must NOT be hidden — it
+    // keeps the UA `display:table`.
+    assert_ne!(
+        prop(&n, "free", "display").as_deref(),
+        Some("none"),
+        "a bare `table` split out of `:is(...)` must not match every table"
+    );
+    assert_eq!(prop(&n, "free", "display").as_deref(), Some("table"));
+    // The table that genuinely matches the full selector IS hidden.
+    assert_eq!(
+        prop(&n, "hidden", "display").as_deref(),
+        Some("none"),
+        "the real `.collapsed > :is(...table...)` still hides its table"
+    );
+}
+
+#[test]
+fn selector_list_comma_inside_attribute_value_is_not_a_separator() {
+    // A comma inside an `[attr="a,b"]` value (or a quoted string) is likewise part
+    // of the value, not a list separator.
+    let css = r#"[data-k="a,b"]{color:red}"#;
+    let n = styled(
+        r#"<div><p id='m' data-k="a,b">1</p><p id='x' data-k="a">2</p></div>"#,
+        css,
+    );
+    assert_eq!(prop(&n, "m", "color").as_deref(), Some("red"));
+    assert_eq!(prop(&n, "x", "color"), None, "only the a,b value matches");
+}
+
+#[test]
 fn em_font_size_does_not_compound_on_inheritance() {
     // `font-size` computes to an absolute px at the element that declares the `em`,
     // so descendants inherit the resolved value — they must NOT re-multiply. A
