@@ -284,7 +284,8 @@ fn calc_term_px(t: &str, font_size: f32) -> Option<f32> {
 fn sum_calc_terms(toks: &[&str], font_size: f32) -> Option<f32> {
     let (first, rest) = toks.split_first()?;
     let init = calc_term_px(first, font_size)?;
-    rest.chunks_exact(2).try_fold(init, |total, pair| {
+    let (pairs, _) = rest.as_chunks::<2>();
+    pairs.iter().try_fold(init, |total, pair| {
         let v = calc_term_px(pair[1], font_size)?;
         match pair[0] {
             "+" => Some(total + v),
@@ -314,7 +315,8 @@ fn eval_calc_length(s: &str, font_size: f32) -> Option<LengthPct> {
     let toks: Vec<&str> = strip_calc(s)?.split_whitespace().collect();
     let (first, rest) = toks.split_first()?;
     let init = calc_term_parts(first, font_size)?;
-    let (pct, px) = rest.chunks_exact(2).try_fold(init, |(pct, px), pair| {
+    let (pairs, _) = rest.as_chunks::<2>();
+    let (pct, px) = pairs.iter().try_fold(init, |(pct, px), pair| {
         let sign = calc_sign(pair[0])?;
         let (tp, tx) = calc_term_parts(pair[1], font_size)?;
         Some((pct + sign * tp, px + sign * tx))
