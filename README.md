@@ -100,6 +100,32 @@ const { pdf } = program.render({ data: { t: 'Hi' },
                                  css: 'h1{font-family:sans-serif;font-size:24pt}' })
 ```
 
+### Bun single-file executables (`bun build --compile`)
+
+Use a **WASM** package here, **not** the Node/N-API `turbo-html2pdf`. A Bun
+standalone executable can only embed assets it can see statically, and it cannot
+carry the N-API loader's dynamically-resolved native `.node` addon — the compiled
+binary bakes in the build machine's absolute paths and fails on any other host
+with `native addon not found`. The `.wasm`, by contrast, embeds cleanly with an
+`import ... with { type: 'file' }`:
+
+```ts
+import initPdf, { compile } from 'turbo-html2pdf-wasm-fonts'
+import wasm from 'turbo-html2pdf-wasm-fonts/turbo_pdf_wasm_bg.wasm' with { type: 'file' }
+
+// Load the bytes yourself — a URL/path won't resolve inside the compiled binary.
+const bytes = await Bun.file(wasm).bytes()
+await initPdf({ module_or_path: bytes })   // single-object form; positional initPdf(bytes) is deprecated
+
+const program = compile('<h1>{{ t }}</h1>')
+const { pdf } = program.render({ data: { t: 'Hi' },
+                                 css: 'h1{font-family:sans-serif;font-size:24pt}' })
+```
+
+Pass the wasm bytes to `initPdf` as `{ module_or_path: bytes }` — the bare
+positional `initPdf(bytes)` still works but logs a wasm-bindgen deprecation
+warning.
+
 ---
 
 ## Why it's fast
