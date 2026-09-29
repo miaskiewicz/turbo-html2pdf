@@ -1,0 +1,20 @@
+<!doctype html>
+<html>
+  <head><meta charset="utf-8" /><title>absolute badge on a relative flex item</title></head>
+  <body>
+    <!-- Feature: an absolutely-positioned badge offset by top/right insets from a
+         position:relative flex item, which itself is placed by the flex row.
+         Checks that abs resolves right/top against the relative item's padding box
+         (not the viewport) AND accumulates the item's flex-assigned position. -->
+    <style>
+      #row { display: flex; justify-content: flex-end; width: 400px }
+      #item { position: relative; width: 150px; height: 100px; background: #dde }
+      #badge { position: absolute; top: -8px; right: -8px; width: 32px; height: 24px; background: #fbb }
+    </style>
+    <div id="row" data-cid="row">
+      <div id="item" data-cid="item">
+        <div id="badge" data-cid="badge">!</div>
+      </div>
+    </div>
+  </body>
+</html>

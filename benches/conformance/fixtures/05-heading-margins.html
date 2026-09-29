@@ -1,0 +1,16 @@
+<!doctype html>
+<html>
+  <head><meta charset="utf-8" /><title>heading default margins</title></head>
+  <body>
+    <!-- Feature: user-agent default margins/sizes for h1-h3. No author margins:
+         this measures the UA sheet. Browsers give h1 1.5em vertical margins and
+         2em font-size, h2 ~1.5em/1.5em, h3 ~1.17em/1.17em. -->
+    <style>
+      #lead { height: 10px; background: #eee }
+    </style>
+    <div id="lead" data-cid="lead"></div>
+    <h1 data-cid="h1">Heading one</h1>
+    <h2 data-cid="h2">Heading two</h2>
+    <h3 data-cid="h3">Heading three</h3>
+  </body>
+</html>

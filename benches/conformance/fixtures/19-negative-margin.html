@@ -1,0 +1,17 @@
+<!doctype html>
+<html>
+  <head><meta charset="utf-8" /><title>negative margins</title></head>
+  <body>
+    <!-- Feature: negative margins. A negative margin-top pulls a block up over its
+         predecessor; a negative margin-left pulls a block left past the edge.
+         Checks that negative margins shift placement (not clamp to 0). -->
+    <style>
+      #base { height: 50px; background: #cde }
+      #pull-up { height: 40px; margin-top: -20px; background: #fbb }
+      #pull-left { height: 30px; margin-left: -15px; width: 100px; background: #bfb }
+    </style>
+    <div id="base" data-cid="base">base</div>
+    <div id="pull-up" data-cid="pull-up">up</div>
+    <div id="pull-left" data-cid="pull-left">left</div>
+  </body>
+</html>

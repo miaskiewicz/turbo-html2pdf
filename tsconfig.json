@@ -24,6 +24,7 @@
     "packages/react/test",
     "packages/template/src",
     "packages/template/test",
-    "benches/competitive/src"
+    "benches/competitive/src",
+    "benches/conformance/src"
   ]
 }

@@ -212,11 +212,88 @@ fn parse_selector(sel: &str) -> Option<Selector> {
     })
 }
 
-/// Parse a comma-separated selector list.
+/// Parse a comma-separated selector list. Commas are split only at the top level:
+/// a comma nested inside a functional pseudo-class (`:is(p, table)`,
+/// `:not(a, b)`, `:nth-child(...)`), an `[attr="a,b"]` value, or a quoted string
+/// is part of that argument, not a list separator. A naive `split(',')` tore
+/// `:is(p,table,thead + tbody)` into a bare `table` selector that then matched
+/// (and hid) every table on the page.
 pub fn parse_selector_list(list: &str) -> Vec<Selector> {
-    list.split(',')
+    split_selector_list(list)
+        .into_iter()
         .filter_map(|s| parse_selector(s.trim()))
         .collect()
+}
+
+/// Tracks `()`/`[]` nesting depth and `'`/`"` string state while scanning a
+/// selector list, so only a TOP-LEVEL comma separates items.
+#[derive(Default)]
+struct Nest {
+    parens: i32,
+    brackets: i32,
+    quote: Option<char>,
+}
+
+/// `depth ± 1` for an open/close bracket (never below zero).
+fn step(depth: i32, opening: bool) -> i32 {
+    if opening {
+        depth + 1
+    } else {
+        depth.saturating_sub(1)
+    }
+}
+
+impl Nest {
+    /// Update string state for `c`; returns true while inside a string (so the
+    /// char is inert for depth/comma purposes).
+    fn in_quote(&mut self, c: char) -> bool {
+        match self.quote {
+            Some(q) => {
+                if c == q {
+                    self.quote = None;
+                }
+                true
+            }
+            None if c == '\'' || c == '"' => {
+                self.quote = Some(c);
+                true
+            }
+            None => false,
+        }
+    }
+
+    fn update_depth(&mut self, c: char) {
+        match c {
+            '(' | ')' => self.parens = step(self.parens, c == '('),
+            '[' | ']' => self.brackets = step(self.brackets, c == '['),
+            _ => {}
+        }
+    }
+
+    /// Feed one char; true only when `c` is a comma at the top level.
+    fn is_top_comma(&mut self, c: char) -> bool {
+        if self.in_quote(c) {
+            return false;
+        }
+        self.update_depth(c);
+        c == ',' && self.parens == 0 && self.brackets == 0
+    }
+}
+
+/// Split a selector list on top-level commas, honoring `()`/`[]` nesting and
+/// `'`/`"` strings.
+fn split_selector_list(list: &str) -> Vec<&str> {
+    let mut out = Vec::new();
+    let mut nest = Nest::default();
+    let mut start = 0usize;
+    for (i, c) in list.char_indices() {
+        if nest.is_top_comma(c) {
+            out.push(&list[start..i]);
+            start = i + 1;
+        }
+    }
+    out.push(&list[start..]);
+    out
 }
 
 // --------------------------------------------------------------------------

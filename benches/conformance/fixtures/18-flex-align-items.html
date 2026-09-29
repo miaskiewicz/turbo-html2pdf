@@ -1,0 +1,20 @@
+<!doctype html>
+<html>
+  <head><meta charset="utf-8" /><title>flex row align-items variants</title></head>
+  <body>
+    <!-- Feature: cross-axis alignment in a fixed-height flex row. `stretch` fills
+         the row height, `center` and `flex-end` place fixed-height items at the
+         middle and bottom. Checks each item's cross-axis y and height. -->
+    <style>
+      #r { display: flex; align-items: flex-end; width: 400px; height: 100px; background: #eef }
+      #s { align-self: stretch; width: 80px; background: #cde }
+      #c { align-self: center; width: 80px; height: 40px; background: #dec }
+      #e { width: 80px; height: 30px; background: #fbb }
+    </style>
+    <div id="r" data-cid="r">
+      <div id="s" data-cid="s">s</div>
+      <div id="c" data-cid="c">c</div>
+      <div id="e" data-cid="e">e</div>
+    </div>
+  </body>
+</html>

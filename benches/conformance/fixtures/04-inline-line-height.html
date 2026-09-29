@@ -1,0 +1,16 @@
+<!doctype html>
+<html>
+  <head><meta charset="utf-8" /><title>inline flow + line-height</title></head>
+  <body>
+    <!-- Feature: inline flow and line-height. A fixed-width paragraph of known
+         text wraps to several line boxes; with the font pinned to Inter on both
+         sides the wrap points match, so the block height = lines * line-height.
+         An inline-block chip tests atomic-inline sizing (content + padding). -->
+    <style>
+      #para { width: 300px; line-height: 30px; font-size: 16px; background: #eef }
+      #chip { display: inline-block; padding: 4px 8px; background: #dec }
+    </style>
+    <div id="para" data-cid="para">The quick brown fox jumps over the lazy dog and then keeps running well past the edge.</div>
+    <div><span id="chip" data-cid="chip">chip</span></div>
+  </body>
+</html>

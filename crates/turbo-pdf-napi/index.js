@@ -133,9 +133,23 @@ const render = guard((templateHtml, opts, fonts) => native.render(templateHtml, 
 // Glue foreign PDFs after `base`; parse faults surface as a typed TurboPdfError.
 const appendPdf = guard((base, extras) => native.appendPdf(base, extras));
 
+// Debug/conformance seam: lay HTML out and return the placed geometry of every
+// `data-cid`-tagged box as a JSON string. Not part of the render path.
+const layoutBoxes = guard((html, css, width, height) =>
+  native.layoutBoxes(html, css, width, height),
+);
+
 // Overlay a watermark on every page of an existing PDF; faults surface as a
 // typed TurboPdfError.
 const stamp = guard((pdf, opts) => native.stamp(pdf, opts));
 
-module.exports = { compile, render, appendPdf, stamp, Fonts: native.Fonts, TurboPdfError };
+module.exports = {
+  compile,
+  render,
+  appendPdf,
+  layoutBoxes,
+  stamp,
+  Fonts: native.Fonts,
+  TurboPdfError,
+};
 module.exports.default = module.exports;

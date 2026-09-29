@@ -164,7 +164,8 @@ pub fn paint(
 // --------------------------------------------------------------------------
 
 /// Stamp the shaped word, rotated by `angle_deg` about the page center and
-/// horizontally centered on its own advance width.
+/// centered on it: horizontally on its own advance width, vertically on the
+/// font's metric box.
 fn paint_text(
     content: &mut Content,
     text: &TextWatermark,
@@ -179,18 +180,25 @@ fn paint_text(
     let scale = size_pt / f32::from(text.face.units_per_em());
     let advance: f32 = glyphs.iter().map(|g| advance_pt(g.x_advance, scale)).sum();
 
-    // Rotate about the page center: translate to center, rotate, then place the
-    // word's baseline so its advance is centered on the origin.
-    content.transform(rotation_about(page_w / 2.0, page_h / 2.0, text.angle_deg));
+    // Rotate about the page center, and place the word centered on it — advance
+    // centered horizontally, and the baseline dropped by half the font's metric
+    // box so ascent/descent straddle the center (baseline-on-center would ride
+    // the whole word above it). The rotation keeps the center fixed, so a word
+    // drawn around the origin would instead be swung off the page.
+    let (cx, cy) = (page_w / 2.0, page_h / 2.0);
+    let ascent = f32::from(text.face.ascent_units()) * scale;
+    let descent = f32::from(text.face.descent_units()) * scale; // negative
+    let baseline = cy - (ascent + descent) / 2.0;
+    content.transform(rotation_about(cx, cy, text.angle_deg));
     content.begin_text();
     content.set_font(
         Name(FontStore::resource_name(face_index).as_bytes()),
         size_pt,
     );
     set_fill(content, text.color, cmyk);
-    let mut pen = -advance / 2.0;
+    let mut pen = cx - advance / 2.0;
     for glyph in &glyphs {
-        content.set_text_matrix([1.0, 0.0, 0.0, 1.0, pen, 0.0]);
+        content.set_text_matrix([1.0, 0.0, 0.0, 1.0, pen, baseline]);
         let code = fonts.remap(face_index, glyph.glyph_id);
         content.show(pdf_writer::Str(&code.to_be_bytes()));
         pen += advance_pt(glyph.x_advance, scale);

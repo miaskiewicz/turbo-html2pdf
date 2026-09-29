@@ -1,0 +1,14 @@
+<!doctype html>
+<html>
+  <head><meta charset="utf-8" /><title>calc(% - px) width</title></head>
+  <body>
+    <!-- Feature: `width: calc(100% - 616px)` resolves to 1000-616=384 instead of
+         falling back to `auto` (which would fill 1000). Origin: nike nav width,
+         CHANGELOG 0.2.14 (`LengthPct::Calc`). -->
+    <style>
+      #outer { width: 1000px }
+      #nav { width: calc(100% - 616px); height: 40px; background: #cde }
+    </style>
+    <div id="outer" data-cid="outer"><div id="nav" data-cid="nav">nav</div></div>
+  </body>
+</html>

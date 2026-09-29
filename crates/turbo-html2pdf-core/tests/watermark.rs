@@ -235,6 +235,121 @@ fn custom_angle_changes_the_rotation_matrix() {
     );
 }
 
+/// The page `/MediaBox` width and height, in points.
+fn media_box(pdf: &[u8]) -> (f32, f32) {
+    let text = String::from_utf8_lossy(pdf);
+    let start = text.find("/MediaBox [").expect("MediaBox") + "/MediaBox [".len();
+    let nums: Vec<f32> = text[start..]
+        .split(']')
+        .next()
+        .expect("MediaBox array")
+        .split_whitespace()
+        .map(|n| n.parse().expect("MediaBox number"))
+        .collect();
+    (nums[2] - nums[0], nums[3] - nums[1])
+}
+
+/// Where each watermark glyph's origin lands on the page: the stream's first
+/// `cm` (the watermark paints first, behind the body) applied to every `Tm`
+/// of the first text object.
+fn watermark_glyph_origins(pdf: &[u8]) -> Vec<(f32, f32)> {
+    let text = String::from_utf8_lossy(pdf);
+    let lines: Vec<&str> = text.lines().collect();
+    let numbers = |line: &str| -> Vec<f32> {
+        line.split_whitespace()
+            .filter_map(|n| n.parse().ok())
+            .collect()
+    };
+    let cm_at = lines
+        .iter()
+        .position(|l| l.ends_with(" cm"))
+        .expect("watermark cm");
+    let m = numbers(lines[cm_at]);
+    lines[cm_at..]
+        .iter()
+        .take_while(|l| **l != "ET")
+        .filter(|l| l.ends_with(" Tm"))
+        .map(|l| {
+            let tm = numbers(l);
+            let (x, y) = (tm[4], tm[5]);
+            (m[0] * x + m[2] * y + m[4], m[1] * x + m[3] * y + m[5])
+        })
+        .collect()
+}
+
+// A mark rotated about the page centre must land on the page, centred on it —
+// not rotated about the centre while drawn around the origin, which puts it
+// off-page for every angle.
+#[test]
+fn text_watermark_lands_centred_on_the_page_at_any_angle() {
+    let pages = vec![page_with(vec![body_text(common::evolventa())])];
+    for angle_deg in [0.0, 30.0, 45.0, -45.0, 90.0] {
+        let pdf = emit_pdf(
+            &pages,
+            &text_opts(TextWatermark {
+                angle_deg,
+                ..TextWatermark::draft(common::evolventa())
+            }),
+        );
+        let (width, height) = media_box(&pdf);
+        let origins = watermark_glyph_origins(&pdf);
+        assert!(
+            !origins.is_empty(),
+            "{angle_deg}°: watermark glyphs expected"
+        );
+        for &(x, y) in &origins {
+            assert!(
+                (0.0..=width).contains(&x) && (0.0..=height).contains(&y),
+                "{angle_deg}°: glyph origin ({x}, {y}) is off the {width}x{height} page"
+            );
+        }
+        let n = origins.len() as f32;
+        let mean_x = origins.iter().map(|o| o.0).sum::<f32>() / n;
+        let mean_y = origins.iter().map(|o| o.1).sum::<f32>() / n;
+        // Glyph origins sit left of each glyph, so their mean trails the word's
+        // centre by about half a glyph: allow that much.
+        let tolerance = 40.0;
+        assert!(
+            (mean_x - width / 2.0).abs() < tolerance && (mean_y - height / 2.0).abs() < tolerance,
+            "{angle_deg}°: word centred at ({mean_x}, {mean_y}), page centre is ({}, {})",
+            width / 2.0,
+            height / 2.0
+        );
+    }
+}
+
+// The mark is centred on the page vertically too, not just horizontally: its
+// font metric box (ascent..descent) straddles the page centre. Drawing the
+// baseline *on* the centre leaves the whole word riding above it — for DRAFT at
+// 48 pt the ink centre sits ~17 pt (~0.24 in) high.
+#[test]
+fn text_watermark_is_vertically_centred_on_the_page() {
+    let face = common::evolventa();
+    let pages = vec![page_with(vec![body_text(face.clone())])];
+    // Angle 0: the watermark `cm` is the identity, so every glyph origin's y is
+    // the raw baseline the emitter placed.
+    let pdf = emit_pdf(
+        &pages,
+        &text_opts(TextWatermark {
+            angle_deg: 0.0,
+            ..TextWatermark::draft(face.clone())
+        }),
+    );
+    let (_width, height) = media_box(&pdf);
+    let origins = watermark_glyph_origins(&pdf);
+    let baseline = origins[0].1;
+    // Font metric box in points at the DRAFT size (64 px → 48 pt).
+    let scale = (64.0 * 72.0 / 96.0) / f32::from(face.units_per_em());
+    let ascent = f32::from(face.ascent_units()) * scale;
+    let descent = f32::from(face.descent_units()) * scale; // negative
+    let metric_centre = baseline + (ascent + descent) / 2.0;
+    assert!(
+        (metric_centre - height / 2.0).abs() < 1.0,
+        "word metric centre at {metric_centre}, page centre is {}",
+        height / 2.0
+    );
+}
+
 // --------------------------------------------------------------------------
 // image watermark: centered + tiled, via the shared resolver
 // --------------------------------------------------------------------------

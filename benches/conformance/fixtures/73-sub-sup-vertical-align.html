@@ -1,0 +1,22 @@
+<!doctype html>
+<html>
+  <head><meta charset="utf-8" /><title>sub/sup vertical-align offset</title></head>
+  <body>
+    <!-- Feature: `vertical-align: super`/`sub` — the mechanism behind <sup>/<sub> —
+         raises/lowers an inline box off the text baseline. Three equal inline-block
+         marks share a line anchored by the text "x" (so both engines agree on the
+         baseline): #base sits ON the baseline, #sup is raised by `super`, #sub is
+         lowered by `sub`. The engine's `valign_shift` (super ≈ 0.33em, sub ≈ 0.2em
+         of the font in effect) is asserted against Chromium's actual offset within
+         2px. (Inline <sup>/<sub> TEXT is not a laid-out box the harness can read;
+         inline-block marks are the measurable proxy for the same shift path.) -->
+    <style>
+      #line { font-size: 20px; line-height: 1.5; background: #eef }
+      .m { display: inline-block; width: 10px; height: 10px }
+      #base { background: #333 }
+      #sup { background: #c33; vertical-align: super }
+      #sub { background: #33c; vertical-align: sub }
+    </style>
+    <div id="line">x<span class="m" id="base" data-cid="base"></span><span class="m" id="sup" data-cid="sup"></span><span class="m" id="sub" data-cid="sub"></span>x</div>
+  </body>
+</html>

@@ -1,0 +1,15 @@
+<!doctype html>
+<html>
+  <head><meta charset="utf-8" /><title>calc() inside a media feature</title></head>
+  <body>
+    <!-- Feature: `@media (max-width: calc(1120px - 1px))` parses the calc() feature
+         and matches at the 800px harness viewport (< 1119px), so #box widens to
+         300. A regression that fails to parse the calc() drops the rule -> 100.
+         Origin: Wikipedia Vector gating, CHANGELOG 0.2.6. -->
+    <style>
+      #box { width: 100px; height: 40px; background: #cde }
+      @media (max-width: calc(1120px - 1px)) { #box { width: 300px } }
+    </style>
+    <div id="box" data-cid="box">box</div>
+  </body>
+</html>

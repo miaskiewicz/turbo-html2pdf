@@ -1,0 +1,15 @@
+<!doctype html>
+<html>
+  <head><meta charset="utf-8" /><title>white-space: nowrap sizes to full text</title></head>
+  <body>
+    <!-- Feature: `white-space: nowrap` keeps an inline-block on one line and sizes
+         it to the full text's natural width (overflowing its 120px parent). A
+         regression wraps it (narrower, taller). Font-pinned. Origin: Wikipedia menu
+         tabs, CHANGELOG 0.2.7. -->
+    <style>
+      #tabs { width: 120px }
+      #nw { display: inline-block; white-space: nowrap; background: #cde }
+    </style>
+    <div id="tabs" data-cid="tabs"><span id="nw" data-cid="nw">View source history discussion</span></div>
+  </body>
+</html>

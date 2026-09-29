@@ -1,0 +1,16 @@
+<!doctype html>
+<html>
+  <head><meta charset="utf-8" /><title>separate-model border-spacing</title></head>
+  <body>
+    <!-- Feature: `border-collapse: separate` with `border-spacing: 8px` frames every
+         cell on both axes: #c1 x=8, #c2 x=8+100+8=116, row y=8; 216 = 8+100+8+100+8.
+         Origin: Wikipedia taxobox, CHANGELOG 0.2.7. -->
+    <style>
+      #t { border-collapse: separate; border-spacing: 8px; table-layout: fixed; width: 216px }
+      #t td { width: 100px; height: 30px; background: #cde }
+    </style>
+    <table id="t" data-cid="t"><tr>
+      <td id="c1" data-cid="c1">1</td><td id="c2" data-cid="c2">2</td>
+    </tr></table>
+  </body>
+</html>

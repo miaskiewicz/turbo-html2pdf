@@ -1,0 +1,16 @@
+<!doctype html>
+<html>
+  <head><meta charset="utf-8" /><title>block flow + vertical margins</title></head>
+  <body>
+    <!-- Feature: block-level normal flow with vertical margins. Three stacked
+         blocks; adjacent vertical margins collapse to the larger of the pair. -->
+    <style>
+      #b1 { height: 40px; margin: 0 0 20px 0; background: #cde }
+      #b2 { height: 30px; margin: 15px 0 0 0; background: #dec }
+      #b3 { height: 25px; background: #edc }
+    </style>
+    <div id="b1" data-cid="b1">one</div>
+    <div id="b2" data-cid="b2">two</div>
+    <div id="b3" data-cid="b3">three</div>
+  </body>
+</html>

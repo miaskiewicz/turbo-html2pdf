@@ -494,6 +494,48 @@ fn paragraph_lines_widen_below_the_float() {
     );
 }
 
+#[test]
+fn infobox_survives_is_list_collapse_rule() {
+    // The Nike-article regression: Wikipedia's collapse sheet carries
+    //   `.client-js .mw-collapsed:not(.mw-made-collapsible) > :is(p,table,thead + tbody){display:none}`
+    // A naive comma split tore `:is(p,table,thead + tbody)` into a bare `table`
+    // selector that hid EVERY table — so the `float:right` infobox (a `<table>`)
+    // with its logo image and facts rows vanished, and the article text spanned the
+    // full width. With the paren-aware split the infobox must still float right,
+    // keep its image, and let the article wrap to its left.
+    let css = "@media(min-width:640px){.infobox{float:right;width:300px}}\
+        .client-js .mw-collapsed:not(.mw-made-collapsible) > :is(p,table,thead + tbody){display:none}";
+    let html = r#"<html class="client-js"><body><div class="mw-parser-output">
+        <table class="infobox" style="background-color:#ff0000"><tbody>
+          <tr><td><div style="width:250px;height:120px;background-color:#0000ff"></div></td></tr>
+          <tr><td>Founded</td><td>1964</td></tr>
+        </tbody></table>
+        <p style="background-color:#00ff00">The company was founded in 1964 with plenty of words here to fill several lines wrapping beside the floated infobox on the left side of the column.</p>
+      </div></body></html>"#;
+    let mut d = Diagnostics::default();
+    let f = layout_html(html, css, 1000.0, &FontRegistry::new(), &mut d).expect("layout");
+    let info = rect(&f, RED).expect("infobox must still render (not hidden by the :is rule)");
+    assert!(info[0] > 500.0, "infobox floats right, got x={}", info[0]);
+    // Its logo image (blue box) is inside the floated table.
+    let logo = rect(&f, BLUE).expect("infobox image renders inside the float");
+    assert!(
+        logo[0] >= info[0] - 1.0 && logo[0] + logo[2] <= info[0] + info[2] + 1.0,
+        "logo sits within the infobox (logo x={}, info [{}..{}])",
+        logo[0],
+        info[0],
+        info[0] + info[2]
+    );
+    // Article text wraps in the narrowed column to the LEFT of the float.
+    let beside = lines_beside_right_float(&f, info);
+    assert!(!beside.is_empty(), "article text wraps beside the infobox");
+    for l in &beside {
+        assert!(
+            l[0] + l[2] <= info[0] + 1.0,
+            "text stays left of the infobox"
+        );
+    }
+}
+
 // --------------------------------------------------------------------------
 // harness 9: skin-chrome gating — @supports, html/body-class ancestors, calc()
 // media. Together these un-hide Vector's sidebar TOC + appearance panel.

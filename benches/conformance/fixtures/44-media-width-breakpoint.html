@@ -1,0 +1,14 @@
+<!doctype html>
+<html>
+  <head><meta charset="utf-8" /><title>@media(min-width) no space after @media</title></head>
+  <body>
+    <!-- Feature: `@media(min-width:700px)` (NO space after @media) matches at the
+         800px default and widens #b to 400. A parser that requires the space drops
+         the block -> width 100. Origin: responsive gating, CHANGELOG 0.2.5/0.2.6. -->
+    <style>
+      #b { width: 100px; height: 40px; background: #cde }
+      @media(min-width:700px){ #b { width: 400px } }
+    </style>
+    <div id="b" data-cid="b">b</div>
+  </body>
+</html>

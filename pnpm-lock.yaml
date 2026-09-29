@@ -71,6 +71,16 @@ importers:
         specifier: ^7.0.0
         version: 7.0.0
 
+  benches/conformance:
+    optionalDependencies:
+      playwright:
+        specifier: ^1.48.0
+        version: 1.60.0
+    devDependencies:
+      '@types/node':
+        specifier: ^25.9.3
+        version: 25.9.3
+
   crates/turbo-pdf-napi:
     devDependencies:
       '@napi-rs/cli':

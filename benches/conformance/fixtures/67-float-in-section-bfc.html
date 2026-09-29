@@ -1,0 +1,23 @@
+<!doctype html>
+<html>
+  <head><meta charset="utf-8" /><title>float scoping across sibling sections</title></head>
+  <body>
+    <!-- Feature: a `float:right` box in the lead section overhangs into the next
+         section's band (the section is not a BFC, so it does not grow to contain
+         the float and the sibling's text does not clear full-width below it).
+         Distinct from fixture 11 (single-column wrap). Font-pinned. Origin:
+         Wikipedia taxobox float scope, CHANGELOG 0.2.6 (commit 30b8417). -->
+    <style>
+      #wrap { width: 320px; font-size: 14px; line-height: 20px }
+      #fl { float: right; width: 100px; height: 80px; background: #fbb }
+      section { background: #eef }
+    </style>
+    <div id="wrap" data-cid="wrap">
+      <section id="s1" data-cid="s1">
+        <div id="fl" data-cid="fl">box</div>
+        Lorem ipsum dolor sit amet consectetur adipiscing elit sed do eiusmod tempor.
+      </section>
+      <section id="s2" data-cid="s2">Next section text that should NOT clear below the float.</section>
+    </div>
+  </body>
+</html>

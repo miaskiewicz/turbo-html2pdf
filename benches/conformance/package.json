@@ -1,0 +1,19 @@
+{
+  "name": "@turbo-html2pdf/bench-conformance",
+  "private": true,
+  "version": "0.0.1",
+  "type": "module",
+  "description": "Layout-conformance harness: turbo-html2pdf-core box geometry vs Chromium (getBoundingClientRect), per HTML/CSS feature.",
+  "license": "MIT",
+  "scripts": {
+    "conformance": "node --experimental-strip-types src/cli.ts",
+    "build:addon": "cargo build -p turbo-pdf-napi --release && node scripts/refresh-addon.mjs",
+    "typecheck": "tsgo --noEmit"
+  },
+  "devDependencies": {
+    "@types/node": "^25.9.3"
+  },
+  "optionalDependencies": {
+    "playwright": "^1.48.0"
+  }
+}

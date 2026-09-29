@@ -1,0 +1,16 @@
+<!doctype html>
+<html>
+  <head><meta charset="utf-8" /><title>calc(% - px) top inset against CB height</title></head>
+  <body>
+    <!-- Feature: `top: calc(66.6% - 48px)` on an absolute box resolves against the
+         containing block's HEIGHT (300): 0.666*300 - 48 ~= 151.8. Guards both the
+         `calc(% - px)` inset AND top-against-height. Origin: nike editorial-card
+         overlay, CHANGELOG 0.2.14. -->
+    <style>
+      #host { position: relative; width: 200px; height: 300px; background: #eef }
+      #ov { position: absolute; left: 0; top: calc(66.6% - 48px);
+            width: 100px; height: 30px; background: #fbb }
+    </style>
+    <div id="host" data-cid="host"><div id="ov" data-cid="ov">ov</div></div>
+  </body>
+</html>

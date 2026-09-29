@@ -168,5 +168,7 @@ fn collect_inline_ids(
             out.insert(*node_id);
         }
         InlineItem::Atomic(b) => collect_box_ids(b, out),
+        // A `<br>` forced break carries no node id of its own.
+        InlineItem::LineBreak => {}
     }
 }

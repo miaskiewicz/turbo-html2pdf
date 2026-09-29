@@ -1,0 +1,17 @@
+<!doctype html>
+<html>
+  <head><meta charset="utf-8" /><title>box-sizing: inherit reset reaches the page</title></head>
+  <body>
+    <!-- Feature: the `html{box-sizing:border-box} *{box-sizing:inherit}` reset
+         propagates so each `width:50%` card is border-box (200 incl. padding) and
+         two sit side-by-side. Content-box leaves each 240 and they stack. Origin:
+         nike two-up editorial cards, CHANGELOG 0.2.13. -->
+    <style>
+      html { box-sizing: border-box }
+      *, *::before, *::after { box-sizing: inherit }
+      #row { width: 400px; font-size: 0 }
+      .card { display: inline-block; width: 50%; padding: 0 20px; height: 80px; background: #cde }
+    </style>
+    <div id="row" data-cid="row"><span class="card" id="c1" data-cid="c1">1</span><span class="card" id="c2" data-cid="c2">2</span></div>
+  </body>
+</html>

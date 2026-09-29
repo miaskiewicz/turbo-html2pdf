@@ -1,0 +1,13 @@
+<!doctype html>
+<html>
+  <head><meta charset="utf-8" /><title>viewport units vw/vh</title></head>
+  <body>
+    <!-- Feature: `vw`/`vh` resolve against the viewport. At the 800x600 default:
+         50vw = 400, 20vh = 120. Both sides get the same viewport. Origin: nike
+         full-bleed hero, CHANGELOG 0.2.13. -->
+    <style>
+      #hero { width: 50vw; height: 20vh; background: #cde }
+    </style>
+    <div id="hero" data-cid="hero">hero</div>
+  </body>
+</html>

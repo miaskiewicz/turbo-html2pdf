@@ -1,0 +1,19 @@
+<!doctype html>
+<html>
+  <head><meta charset="utf-8" /><title>absolute offset from a relative parent</title></head>
+  <body>
+    <!-- Feature: positioned layout. A position:absolute child is offset by its
+         top/left insets from the padding box of the nearest positioned ancestor
+         (position:relative). The spacer pushes the parent down so we also verify
+         the child's absolute y accumulates the parent's flow position. -->
+    <style>
+      #spacer { height: 50px; background: #eee }
+      #rel { position: relative; height: 120px; width: 200px; margin: 0 0 0 40px; background: #dde }
+      #abs { position: absolute; top: 20px; left: 30px; width: 60px; height: 40px; background: #fbb }
+    </style>
+    <div id="spacer" data-cid="spacer"></div>
+    <div id="rel" data-cid="rel">
+      <div id="abs" data-cid="abs">abs</div>
+    </div>
+  </body>
+</html>

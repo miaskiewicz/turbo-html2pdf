@@ -1,0 +1,15 @@
+<!doctype html>
+<html>
+  <head><meta charset="utf-8" /><title>inline-block min-content contribution</title></head>
+  <body>
+    <!-- Feature: atomic inline-block width counts toward the line's natural and
+         min-content sizes; a shrink-wrapped bar fits both buttons on one line and
+         no glyph drops to a second line (max-content rounded up). Font-pinned.
+         Origin: google footer/header buttons, CHANGELOG 0.2.13. -->
+    <style>
+      #bar { display: inline-block; background: #eef }
+      .btn { display: inline-block; padding: 6px 10px; background: #cde }
+    </style>
+    <div id="bar" data-cid="bar"><span class="btn" id="b1" data-cid="b1">Settings</span><span class="btn" id="b2" data-cid="b2">Sign in</span></div>
+  </body>
+</html>

@@ -1,0 +1,16 @@
+<!doctype html>
+<html>
+  <head><meta charset="utf-8" /><title>br double empty line</title></head>
+  <body>
+    <!-- Feature: consecutive `<br><br>` produce a truly empty line whose height is
+         exactly one line-box strut (the block's line-height, 24px) — not a 1em
+         phantom block and not zero. `a<br><br>b` is three 24px lines = 72px, and
+         the next block starts at y=72. -->
+    <style>
+      #box { width: 400px; font-size: 16px; line-height: 24px; background: #eef }
+      #after { font-size: 16px; background: #dee }
+    </style>
+    <div id="box" data-cid="box">a<br><br>b</div>
+    <div id="after" data-cid="after">After</div>
+  </body>
+</html>

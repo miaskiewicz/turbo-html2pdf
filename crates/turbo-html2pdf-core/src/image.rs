@@ -53,17 +53,40 @@ impl ImageResolver for NoImages {
 pub enum Format {
     Png,
     Jpeg,
+    /// GIF87a/GIF89a. Intrinsic-size only (header probe); not decoded for paint.
+    Gif,
+    /// RIFF/WebP (lossy `VP8 `, lossless `VP8L`, extended `VP8X`). Intrinsic-size
+    /// only (header probe); not decoded for paint.
+    WebP,
+}
+
+const PNG_MAGIC: &[u8] = &[0x89, b'P', b'N', b'G', 0x0D, 0x0A, 0x1A, 0x0A];
+
+/// GIF magic: either the `GIF87a` or `GIF89a` signature.
+fn is_gif(bytes: &[u8]) -> bool {
+    bytes.starts_with(b"GIF87a") || bytes.starts_with(b"GIF89a")
+}
+
+/// RIFF/WebP magic: `RIFF` … `WEBP` with the FourCC at bytes 8..12.
+fn is_webp(bytes: &[u8]) -> bool {
+    bytes.len() >= 12 && bytes.starts_with(b"RIFF") && &bytes[8..12] == b"WEBP"
 }
 
 /// Sniff the encoded format from the leading magic bytes, or `None` if neither.
 pub fn sniff(bytes: &[u8]) -> Option<Format> {
-    if bytes.starts_with(&[0x89, b'P', b'N', b'G', 0x0D, 0x0A, 0x1A, 0x0A]) {
-        Some(Format::Png)
-    } else if bytes.starts_with(&[0xFF, 0xD8, 0xFF]) {
-        Some(Format::Jpeg)
-    } else {
-        None
+    if bytes.starts_with(PNG_MAGIC) {
+        return Some(Format::Png);
     }
+    if bytes.starts_with(&[0xFF, 0xD8, 0xFF]) {
+        return Some(Format::Jpeg);
+    }
+    if is_gif(bytes) {
+        return Some(Format::Gif);
+    }
+    if is_webp(bytes) {
+        return Some(Format::WebP);
+    }
+    None
 }
 
 /// The intrinsic pixel size of an encoded image plus whether it has an alpha
@@ -88,7 +111,85 @@ pub fn probe(bytes: &[u8]) -> Option<Intrinsic> {
     match sniff(bytes)? {
         Format::Png => probe_png(bytes),
         Format::Jpeg => probe_jpeg(bytes),
+        Format::Gif => probe_gif(bytes),
+        Format::WebP => probe_webp(bytes),
     }
+}
+
+/// GIF intrinsic size from the logical-screen descriptor: width/height are the two
+/// little-endian `u16`s at bytes 6..10 (right after the 6-byte signature). No pixel
+/// decode. `has_alpha` is left false — GIF transparency is per-frame and only
+/// matters at emit, which this format doesn't take.
+fn probe_gif(bytes: &[u8]) -> Option<Intrinsic> {
+    if bytes.len() < 10 {
+        return None;
+    }
+    let w = u16::from_le_bytes([bytes[6], bytes[7]]);
+    let h = u16::from_le_bytes([bytes[8], bytes[9]]);
+    (w > 0 && h > 0).then_some(Intrinsic {
+        width: u32::from(w),
+        height: u32::from(h),
+        has_alpha: false,
+    })
+}
+
+/// WebP intrinsic size across the three chunk layouts (lossy `VP8 `, lossless
+/// `VP8L`, extended `VP8X`). Reads only the header dimensions — no pixel decode.
+fn probe_webp(bytes: &[u8]) -> Option<Intrinsic> {
+    // The chunk FourCC follows the 12-byte RIFF/WEBP header.
+    let fourcc = bytes.get(12..16)?;
+    let (w, h) = webp_size(fourcc, bytes)?;
+    (w > 0 && h > 0).then_some(Intrinsic {
+        width: w,
+        height: h,
+        has_alpha: fourcc != b"VP8 ", // lossless/extended may carry alpha
+    })
+}
+
+/// Dispatch to the per-chunk size reader for a WebP FourCC; unknown chunks yield
+/// `None`.
+fn webp_size(fourcc: &[u8], bytes: &[u8]) -> Option<(u32, u32)> {
+    match fourcc {
+        b"VP8 " => webp_lossy_size(bytes),
+        b"VP8L" => webp_lossless_size(bytes),
+        b"VP8X" => webp_extended_size(bytes),
+        _ => None,
+    }
+}
+
+/// Lossy WebP: after the `VP8 ` chunk header (8 bytes) the VP8 key-frame carries a
+/// 3-byte start code `9d 01 2a`, then 14-bit width and height (little-endian) at
+/// bytes 26..30 of the file.
+fn webp_lossy_size(bytes: &[u8]) -> Option<(u32, u32)> {
+    let d = bytes.get(20..30)?; // frame tag (3) + start code (3) + w/h (4)
+    if d[3..6] != [0x9d, 0x01, 0x2a] {
+        return None;
+    }
+    let w = u16::from_le_bytes([d[6], d[7]]) & 0x3fff;
+    let h = u16::from_le_bytes([d[8], d[9]]) & 0x3fff;
+    Some((u32::from(w), u32::from(h)))
+}
+
+/// Lossless WebP: after the `VP8L` chunk header the signature byte `0x2f` precedes
+/// 14-bit `width-1` and `height-1` packed little-endian across the next 4 bytes.
+fn webp_lossless_size(bytes: &[u8]) -> Option<(u32, u32)> {
+    let d = bytes.get(20..25)?; // signature (1) + 4 packed bytes
+    if d[0] != 0x2f {
+        return None;
+    }
+    let bits = u32::from_le_bytes([d[1], d[2], d[3], d[4]]);
+    let w = (bits & 0x3fff) + 1;
+    let h = ((bits >> 14) & 0x3fff) + 1;
+    Some((w, h))
+}
+
+/// Extended WebP (`VP8X`): the canvas size is two 24-bit `value-1` little-endian
+/// fields at bytes 24..30 (after the 4-byte flags of the VP8X chunk body).
+fn webp_extended_size(bytes: &[u8]) -> Option<(u32, u32)> {
+    let d = bytes.get(24..30)?;
+    let w = u32::from_le_bytes([d[0], d[1], d[2], 0]) + 1;
+    let h = u32::from_le_bytes([d[3], d[4], d[5], 0]) + 1;
+    Some((w, h))
 }
 
 fn probe_png(bytes: &[u8]) -> Option<Intrinsic> {
@@ -181,6 +282,9 @@ pub fn decode(bytes: &[u8]) -> Option<RasterImage> {
     match sniff(bytes)? {
         Format::Png => decode_png(bytes),
         Format::Jpeg => decode_jpeg(bytes),
+        // GIF/WebP are probed for intrinsic size (layout) but not yet pixel-decoded
+        // for paint — an unsupported decode emits nothing rather than a wrong image.
+        Format::Gif | Format::WebP => None,
     }
 }
 
@@ -257,5 +361,113 @@ fn jpeg_color(format: jpeg_decoder::PixelFormat) -> Option<ColorSpace> {
         jpeg_decoder::PixelFormat::L8 | jpeg_decoder::PixelFormat::L16 => Some(ColorSpace::Gray),
         jpeg_decoder::PixelFormat::RGB24 => Some(ColorSpace::Rgb),
         jpeg_decoder::PixelFormat::CMYK32 => None,
+    }
+}
+
+#[cfg(test)]
+mod format_tests {
+    use super::*;
+
+    #[test]
+    fn sniff_recognizes_gif_and_webp() {
+        assert_eq!(sniff(b"GIF89a\x00\x00\x00\x00\x00\x00"), Some(Format::Gif));
+        assert_eq!(sniff(b"GIF87a\x00\x00\x00\x00\x00\x00"), Some(Format::Gif));
+        assert_eq!(sniff(b"RIFF\x00\x00\x00\x00WEBPVP8 "), Some(Format::WebP));
+        assert_eq!(sniff(b"not an image"), None);
+    }
+
+    #[test]
+    fn probe_gif_reads_logical_screen_size() {
+        // GIF89a header: signature, then width=120 (0x0078) and height=60 (0x003C) LE.
+        let gif = b"GIF89a\x78\x00\x3c\x00\xf0\x00\x00";
+        let intrinsic = probe(gif).expect("gif intrinsic");
+        assert_eq!((intrinsic.width, intrinsic.height), (120, 60));
+    }
+
+    #[test]
+    fn probe_webp_lossy_reads_frame_size() {
+        // RIFF/WEBP + `VP8 ` chunk; 14-bit width=100, height=50 after the start code.
+        let mut b = Vec::from(*b"RIFF\x00\x00\x00\x00WEBPVP8 \x00\x00\x00\x00");
+        b.extend_from_slice(&[0x00, 0x00, 0x00]); // frame tag
+        b.extend_from_slice(&[0x9d, 0x01, 0x2a]); // start code
+        b.extend_from_slice(&[0x64, 0x00, 0x32, 0x00]); // w=100, h=50 (LE, 14-bit)
+        let intrinsic = probe(&b).expect("webp intrinsic");
+        assert_eq!((intrinsic.width, intrinsic.height), (100, 50));
+    }
+
+    #[test]
+    fn probe_webp_lossless_reads_packed_size() {
+        // `VP8L`: signature 0x2f then packed (width-1)|((height-1)<<14). w=8, h=6.
+        let bits: u32 = (8 - 1) | ((6 - 1) << 14);
+        let mut b = Vec::from(*b"RIFF\x00\x00\x00\x00WEBPVP8L\x00\x00\x00\x00");
+        b.push(0x2f);
+        b.extend_from_slice(&bits.to_le_bytes());
+        let intrinsic = probe(&b).expect("webp lossless intrinsic");
+        assert_eq!((intrinsic.width, intrinsic.height), (8, 6));
+    }
+
+    #[test]
+    fn gif_is_probed_but_not_decoded() {
+        // Intrinsic sizing works (layout) but the pixel decode is intentionally
+        // unsupported (paint) — an unsupported decode emits nothing.
+        let gif = b"GIF89a\x08\x00\x06\x00\xf0\x00\x00";
+        assert!(probe(gif).is_some());
+        assert!(decode(gif).is_none());
+    }
+
+    #[test]
+    fn probe_gif_too_short_for_screen_descriptor_is_none() {
+        // A GIF whose signature matches but is truncated before the 10-byte logical
+        // screen descriptor has no readable intrinsic size.
+        assert!(probe(b"GIF89a\x00").is_none());
+    }
+
+    #[test]
+    fn probe_webp_extended_reads_canvas_size() {
+        // `VP8X`: 4-byte chunk size + 4-byte flags, then two 24-bit `value-1` LE
+        // canvas fields. width-1=99 -> 100, height-1=49 -> 50.
+        let mut b = Vec::from(*b"RIFF\x00\x00\x00\x00WEBPVP8X");
+        b.extend_from_slice(&[0x0a, 0x00, 0x00, 0x00]); // chunk size
+        b.extend_from_slice(&[0x00, 0x00, 0x00, 0x00]); // flags
+        b.extend_from_slice(&[0x63, 0x00, 0x00]); // width-1 = 99
+        b.extend_from_slice(&[0x31, 0x00, 0x00]); // height-1 = 49
+        let intrinsic = probe(&b).expect("vp8x intrinsic");
+        assert_eq!((intrinsic.width, intrinsic.height), (100, 50));
+        assert!(intrinsic.has_alpha, "extended WebP may carry alpha");
+    }
+
+    #[test]
+    fn probe_webp_unknown_chunk_is_none() {
+        // A RIFF/WEBP wrapper with an unrecognized FourCC has no known size reader.
+        let b = Vec::from(*b"RIFF\x00\x00\x00\x00WEBPXXXX\x00\x00\x00\x00");
+        assert!(probe(&b).is_none());
+    }
+
+    #[test]
+    fn probe_webp_lossy_rejects_bad_start_code() {
+        // `VP8 ` chunk without the `9d 01 2a` key-frame start code is not sized.
+        let mut b = Vec::from(*b"RIFF\x00\x00\x00\x00WEBPVP8 \x00\x00\x00\x00");
+        b.extend_from_slice(&[0x00; 6]); // frame tag + wrong start code
+        assert!(probe(&b).is_none());
+    }
+
+    #[test]
+    fn probe_webp_lossy_full_len_wrong_start_code_is_none() {
+        // Long enough to pass the 30-byte length check but with a corrupted start
+        // code, so the size read is rejected at the start-code guard (not the
+        // length `?`) — the branch a too-short buffer can't reach.
+        let mut b = Vec::from(*b"RIFF\x00\x00\x00\x00WEBPVP8 \x00\x00\x00\x00");
+        b.extend_from_slice(&[0x00, 0x00, 0x00]); // frame tag
+        b.extend_from_slice(&[0xde, 0xad, 0xbe]); // wrong start code (not 9d 01 2a)
+        b.extend_from_slice(&[0x64, 0x00, 0x32, 0x00]); // w/h bytes (unreached)
+        assert!(probe(&b).is_none());
+    }
+
+    #[test]
+    fn probe_webp_lossless_rejects_bad_signature() {
+        // `VP8L` chunk whose leading byte is not the `0x2f` signature is not sized.
+        let mut b = Vec::from(*b"RIFF\x00\x00\x00\x00WEBPVP8L\x00\x00\x00\x00");
+        b.extend_from_slice(&[0x00; 5]); // wrong signature + packed bytes
+        assert!(probe(&b).is_none());
     }
 }

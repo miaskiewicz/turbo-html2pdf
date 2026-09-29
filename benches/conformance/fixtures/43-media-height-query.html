@@ -1,0 +1,16 @@
+<!doctype html>
+<html>
+  <head><meta charset="utf-8" /><title>@media (max-height) evaluated</title></head>
+  <body>
+    <!-- Feature: `@media (max-height: 575px)` is evaluated against the real viewport
+         height. At the harness default (600) it must NOT match, so #panel renders.
+         The regression this guards ignored height features, matched at every
+         viewport, and hid Google's homepage (blank page). Origin: CHANGELOG 0.2.12.
+         Viewport-dependent: assumes the default --height 600 (> 575). -->
+    <style>
+      #panel { width: 200px; height: 60px; background: #cde }
+      @media (max-height: 575px) { #panel { display: none } }
+    </style>
+    <div id="panel" data-cid="panel">panel</div>
+  </body>
+</html>

@@ -1,0 +1,17 @@
+<!doctype html>
+<html>
+  <head><meta charset="utf-8" /><title>box model: content-box vs border-box</title></head>
+  <body>
+    <!-- Feature: the box model. Same declared width:200 + padding:20 + border:5,
+         under both box-sizing modes. content-box border box = 200+40+10 = 250;
+         border-box border box = 200. getBoundingClientRect reports the border box. -->
+    <style>
+      #cb { box-sizing: content-box; width: 200px; height: 60px;
+            padding: 20px; border: 5px solid #333; background: #cde; margin: 0 0 10px 0 }
+      #bb { box-sizing: border-box; width: 200px; height: 60px;
+            padding: 20px; border: 5px solid #333; background: #dec }
+    </style>
+    <div id="cb" data-cid="cb">content-box</div>
+    <div id="bb" data-cid="bb">border-box</div>
+  </body>
+</html>

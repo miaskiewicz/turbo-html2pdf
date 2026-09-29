@@ -1,0 +1,20 @@
+<!doctype html>
+<html>
+  <head><meta charset="utf-8" /><title>sr-only clip does not spill over content</title></head>
+  <body>
+    <!-- Feature: a visually-hidden / sr-only span (1x1, overflow:hidden,
+         clip:rect(0 0 0 0)) is dropped entirely and does not perturb the visible
+         content — #real stays (0,0,W,40) and the sr text does not pile at the origin.
+         The engine legitimately removes the clipped span, so it carries NO data-cid
+         (no box to diff — asserting on the neighbour is the guard, per the harness
+         drop-elements caveat). Origin: Wikipedia "overlapping text" pile,
+         CHANGELOG 0.2.6. -->
+    <style>
+      #real { height: 40px; background: #cde }
+      #sr { position: absolute; width: 1px; height: 1px; overflow: hidden;
+            clip: rect(0 0 0 0); background: #fbb }
+    </style>
+    <div id="real" data-cid="real">visible</div>
+    <span id="sr">screen-reader only</span>
+  </body>
+</html>

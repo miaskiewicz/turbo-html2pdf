@@ -1,0 +1,19 @@
+<!doctype html>
+<html>
+  <head><meta charset="utf-8" /><title>flex-wrap onto multiple lines</title></head>
+  <body>
+    <!-- Feature: flex-wrap breaks items onto multiple flex lines when they overflow
+         the main size. Four 120px items in a 300px row wrap 2-per-line. Checks the
+         wrap point (item 3 drops to a second line) and per-line y. -->
+    <style>
+      #fw { display: flex; flex-wrap: wrap; width: 300px; background: #eef }
+      #fw > div { width: 120px; height: 40px; margin: 5px; background: #cde }
+    </style>
+    <div id="fw" data-cid="fw">
+      <div data-cid="w1">1</div>
+      <div data-cid="w2">2</div>
+      <div data-cid="w3">3</div>
+      <div data-cid="w4">4</div>
+    </div>
+  </body>
+</html>
