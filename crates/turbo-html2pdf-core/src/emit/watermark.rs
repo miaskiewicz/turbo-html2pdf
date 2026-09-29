@@ -179,18 +179,20 @@ fn paint_text(
     let scale = size_pt / f32::from(text.face.units_per_em());
     let advance: f32 = glyphs.iter().map(|g| advance_pt(g.x_advance, scale)).sum();
 
-    // Rotate about the page center: translate to center, rotate, then place the
-    // word's baseline so its advance is centered on the origin.
-    content.transform(rotation_about(page_w / 2.0, page_h / 2.0, text.angle_deg));
+    // Rotate about the page center, and place the word's baseline on that center
+    // with its advance centered on it (the rotation keeps the center fixed, so a
+    // word drawn around the origin would be swung off the page).
+    let (cx, cy) = (page_w / 2.0, page_h / 2.0);
+    content.transform(rotation_about(cx, cy, text.angle_deg));
     content.begin_text();
     content.set_font(
         Name(FontStore::resource_name(face_index).as_bytes()),
         size_pt,
     );
     set_fill(content, text.color, cmyk);
-    let mut pen = -advance / 2.0;
+    let mut pen = cx - advance / 2.0;
     for glyph in &glyphs {
-        content.set_text_matrix([1.0, 0.0, 0.0, 1.0, pen, 0.0]);
+        content.set_text_matrix([1.0, 0.0, 0.0, 1.0, pen, cy]);
         let code = fonts.remap(face_index, glyph.glyph_id);
         content.show(pdf_writer::Str(&code.to_be_bytes()));
         pen += advance_pt(glyph.x_advance, scale);
