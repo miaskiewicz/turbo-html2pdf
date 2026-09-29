@@ -22,6 +22,7 @@ turbo-html2pdf-core = { path = "../turbo-html2pdf-core", features = [
     "print-color",
     "append",
     "encrypt",
+    "stamp",
 ] }
 serde = { workspace = true }
 serde_json = { workspace = true }

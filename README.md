@@ -50,7 +50,7 @@ string* — they pair with a render package (`turbo-html2pdf` on Node, a
 PDF. The Rust engine lives in
 [`crates/turbo-html2pdf-core`](https://github.com/miaskiewicz/turbo-html2pdf/tree/main/crates/turbo-html2pdf-core).
 
-> Status: the npm, PyPI, and crates.io packages ship at **`v0.3.1`** (see
+> Status: the npm, PyPI, and crates.io packages ship at **`v0.3.3`** (see
 > [CHANGELOG.md](./CHANGELOG.md)).
 
 ## 🌐 Bonus: the same engine runs *inside* a web browser
@@ -99,6 +99,32 @@ const program = compile('<h1>{{ t }}</h1>')
 const { pdf } = program.render({ data: { t: 'Hi' },
                                  css: 'h1{font-family:sans-serif;font-size:24pt}' })
 ```
+
+### Bun single-file executables (`bun build --compile`)
+
+Use a **WASM** package here, **not** the Node/N-API `turbo-html2pdf`. A Bun
+standalone executable can only embed assets it can see statically, and it cannot
+carry the N-API loader's dynamically-resolved native `.node` addon — the compiled
+binary bakes in the build machine's absolute paths and fails on any other host
+with `native addon not found`. The `.wasm`, by contrast, embeds cleanly with an
+`import ... with { type: 'file' }`:
+
+```ts
+import initPdf, { compile } from 'turbo-html2pdf-wasm-fonts'
+import wasm from 'turbo-html2pdf-wasm-fonts/turbo_pdf_wasm_bg.wasm' with { type: 'file' }
+
+// Load the bytes yourself — a URL/path won't resolve inside the compiled binary.
+const bytes = await Bun.file(wasm).bytes()
+await initPdf({ module_or_path: bytes })   // single-object form; positional initPdf(bytes) is deprecated
+
+const program = compile('<h1>{{ t }}</h1>')
+const { pdf } = program.render({ data: { t: 'Hi' },
+                                 css: 'h1{font-family:sans-serif;font-size:24pt}' })
+```
+
+Pass the wasm bytes to `initPdf` as `{ module_or_path: bytes }` — the bare
+positional `initPdf(bytes)` still works but logs a wasm-bindgen deprecation
+warning.
 
 ---
 
@@ -327,7 +353,8 @@ program.render({
 - Font subsetting + embedding (TrueType & CFF/OpenType); per-glyph fallback.
 - Raster images (PNG/JPEG, alpha → SMask) with a sane max-size clamp; optional SVG
   via the `turbo-html2pdf-svg` build (resvg).
-- **Internal links & cross-references**, **watermarks**, **append/merge**, and the
+- **Internal links & cross-references**, **watermarks**, **append/merge**,
+  **stamp** (post-emit watermark on an existing PDF), and the
   **PDF/A · PDF/UA · CMYK · AES-256** per-render toggles (above).
 - Deterministic output; `Send + Sync`; no network / no system fonts.
 
@@ -380,6 +407,50 @@ In Rust the watermark lives on `EmitOptions.watermark`
 (`Watermark::Text(TextWatermark)` / `Watermark::Image(ImageWatermark)`;
 `TextWatermark::draft(face)` is the preset).
 
+### Stamp: watermark an existing PDF
+
+`watermark` (above) only paints while pages are freshly emitted. `stamp` is the
+post-emit counterpart: it overlays a faded, rotated text mark onto **every page
+of a PDF you already have** — e.g. a document you `append`ed a certified PDF
+onto, or any foreign PDF — without touching the original content streams. It can
+also open a password-protected input and hand back a still-protected result.
+
+```js
+const { stamp } = require('turbo-html2pdf')
+
+const stamped = stamp(existingPdfBytes, {
+  watermark: { text: 'CANCELLED' },   // gray, 15% opacity, 45°, bundled sans-serif (embedded)
+})
+
+// fully custom mark, plus a decrypt/re-encrypt round trip:
+stamp(existingPdfBytes, {
+  watermark: { text: 'VOID', color: '#cc0000', opacity: 0.2, angle: 30, fontSize: 72 },
+  password: 'open-me',                                       // decrypts the input first
+  encryption: { userPassword: 'new-pw', ownerPassword: 'owner-secret' }, // re-seals the output
+})
+```
+
+| Field | What it does |
+|---|---|
+| **`watermark.text`** | The word to stamp. Required. |
+| **`watermark.color`** | Fill color `#rrggbb`. Defaults to gray. |
+| **`watermark.opacity`** | Fill opacity `0.0..=1.0`. Defaults to `0.15`. |
+| **`watermark.angle`** | Rotation in degrees. Defaults to `45`. |
+| **`watermark.fontSize`** | Font size in CSS px. Defaults to `64`. |
+| **`watermark.font`** | Font (TrueType/OTF bytes, a `Buffer`) to shape and embed the text with. Omit for the bundled sans-serif. Either way the font is embedded, so the output is self-contained and never relies on a base-14 font the reader may lack. |
+| **`password`** | Opens an encrypted `pdf` input first. Omit for a plaintext input. |
+| **`encryption`** | Re-encrypts the stamped output — same shape as `render`'s `encrypt` above. Omit for a plaintext output. |
+
+Throws `TurboPdfError` if `pdf` doesn't parse or has no pages, or if `password`/
+`encryption` fail to open/re-seal it.
+
+Unlike the render-time mark (which may be text *or* image), `stamp` is text-only —
+no image form. Like the render mark, its text is shaped and embedded from a real
+font (the bundled sans-serif by default, or a caller-supplied `watermark.font`), so
+the output is self-contained and never relies on a base-14 font the reader may lack.
+In Rust it's `stamp(pdf, &StampWatermark, password, encryption)` behind the `stamp`
+feature (`crates/turbo-html2pdf-core/src/stamp.rs`).
+
 ### Opt-in: SVG images
 
 SVG vector images (`<img>` / `background-image`) are **off in the default build to
@@ -397,7 +468,7 @@ npm i turbo-html2pdf-svg    # identical API, SVG support baked in (resvg)
 
 ## Status
 
-**`v0.3.1`** on npm and PyPI. The core engine is complete and heavily tested (the
+**`v0.3.3`** on npm and PyPI. The core engine is complete and heavily tested (the
 `turbo-html2pdf-core` crate holds 100% line coverage with a cyclomatic-complexity ≤ 5
 gate). Bindings: Node (N-API), WebAssembly (lean + fonts), and Python (PyO3). See
 [`docs/`](docs/) for the full guide and

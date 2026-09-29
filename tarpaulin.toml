@@ -109,5 +109,17 @@ exclude-files = [
     "crates/turbo-html2pdf-core/src/emit/encrypt.rs",
     "crates/turbo-html2pdf-core/src/emit/encrypt/parse.rs",
     "crates/turbo-html2pdf-core/src/emit/encrypt/serialize.rs",
+    # Opt-in `stamp` feature: post-emit watermark overlay on an existing PDF. Off
+    # in normal builds — the whole module is behind `#[cfg(feature = "stamp")]`
+    # and pulls `lopdf` (+ transitively `encrypt`, for the optional
+    # decrypt/re-encrypt round trip), so it is not compiled under default
+    # features and never enters the default coverage surface (same as
+    # append.rs / endnotes.rs). Covered by the `--features stamp` tests in
+    # tests/stamp.rs, which drive it to 100% line+region coverage (verified
+    # locally via `cargo tarpaulin --features stamp --engine llvm`; not
+    # currently CI-enforced, the same way `append`/`svg`/`xref`/`pdf-a`/
+    # `pdf-ua`/`encrypt` aren't). Listed here defensively so a stray tarpaulin
+    # cfg quirk cannot flag the gated-out module.
+    "crates/turbo-html2pdf-core/src/stamp.rs",
 ]
 fail-under = 100.0

@@ -4,6 +4,21 @@ All notable changes to turbo-html2pdf are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/); versions follow SemVer. The npm,
 PyPI, and crates.io packages release in lockstep from a `v*` tag (PyPI on `pyv*`).
 
+## [0.3.3] — text watermark centred on the page (both axes)
+
+### Fixed
+- **Render-time text watermark landed off the page / rode high**: `paint_text` rotated
+  the mark about the page centre but drew the word around the origin, so it swung off
+  the page at every angle; and once that was corrected the baseline sat *on* the centre,
+  leaving the whole word riding ~14–18 pt above it (DRAFT at 48 pt on A4). The word is now
+  centred on both axes — horizontally on its advance, vertically on the font's metric box
+  (`baseline = cy − (ascent + descent) / 2`) — and rotates in place at any angle.
+
+### Merged
+- The 0.3.x layout-conformance line and the 0.2.15 `stamp()` feature are unified on this
+  release: `stamp()` (and its N-API binding) ship alongside the conformance harness and
+  the `layoutBoxes` seam.
+
 ## [0.3.2] — selector-list comma split respects `:is()`/`:not()` arguments
 
 ### Fixed
@@ -144,6 +159,23 @@ engine fixes**.
   divergence — the engine anchors it to its static start (0.2.14 fix for google's AI-Mode
   icon), while Chromium spec-centers it via `justify-content` in this isolated repro.
   Reverting to match the minimal repro would regress the shipped real-site fix.
+
+## [0.2.15] — stamp an existing PDF
+
+A new `stamp()` entry point that overlays a page watermark onto an **already-rendered
+PDF** — no re-layout, the input PDF is taken as-is and a mark is drawn on every page.
+
+### Added
+- **`stamp(pdf, opts)`** — overlays a faded watermark (shaped-word or text-only) on
+  every page of an existing PDF. Reads each page's media box and composites the mark
+  behind/over the content, then re-emits the document.
+- **Bundled stamp font** — the overlay shapes and embeds a bundled font (replacing the
+  base-14 Helvetica placeholder), with an optional caller `font` (TrueType/OTF bytes)
+  override on the text mark.
+- **Encrypted-PDF support** — an encrypted input is decrypted around the overlay and
+  the stamped output is re-encrypted through turbo's own encryptor (qpdf-compatible).
+- **N-API binding** — `stamp()` and its `StampOptions` / text-mark types are exposed
+  through `turbo-html2pdf` for Node.
 
 ## [0.2.14] — real-site rendering, round 2 (nike.com cards / google.com search bar)
 

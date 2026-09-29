@@ -139,5 +139,17 @@ const layoutBoxes = guard((html, css, width, height) =>
   native.layoutBoxes(html, css, width, height),
 );
 
-module.exports = { compile, render, appendPdf, layoutBoxes, Fonts: native.Fonts, TurboPdfError };
+// Overlay a watermark on every page of an existing PDF; faults surface as a
+// typed TurboPdfError.
+const stamp = guard((pdf, opts) => native.stamp(pdf, opts));
+
+module.exports = {
+  compile,
+  render,
+  appendPdf,
+  layoutBoxes,
+  stamp,
+  Fonts: native.Fonts,
+  TurboPdfError,
+};
 module.exports.default = module.exports;

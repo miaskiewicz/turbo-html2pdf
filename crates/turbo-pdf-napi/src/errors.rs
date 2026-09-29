@@ -7,7 +7,7 @@
 //! JS wrapper (`index.js`) detects the prefix and rethrows a typed
 //! `TurboPdfError` whose `.code` and `.span` mirror this payload.
 
-use turbo_html2pdf_core::{AppendError, CompileError, ErrorCode, RenderError, Span};
+use turbo_html2pdf_core::{AppendError, CompileError, ErrorCode, RenderError, Span, StampError};
 
 /// Sentinel that marks a `reason` string as a structured turbo-pdf error. The JS
 /// wrapper splits on this to recover the JSON payload.
@@ -54,4 +54,17 @@ pub fn from_render(e: RenderError) -> napi::Error {
 /// source span, so a zeroed span is used under the generic `Render` code.
 pub fn from_append(e: AppendError) -> napi::Error {
     encode(ErrorCode::Render, &e.to_string(), Span::default())
+}
+
+/// Map a PDF stamp failure to a typed N-API error. Stamp errors carry no source
+/// span, so a zeroed span is used under the generic `Render` code.
+pub fn from_stamp(e: StampError) -> napi::Error {
+    encode(ErrorCode::Render, &e.to_string(), Span::default())
+}
+
+/// Map a caller-supplied stamp watermark font that failed to parse to a typed
+/// N-API error. Mirrors [`from_stamp`]'s shape (generic `Render` code, zeroed
+/// span) since font parsing carries no source span either.
+pub fn from_invalid_font(message: &str) -> napi::Error {
+    encode(ErrorCode::Render, message, Span::default())
 }

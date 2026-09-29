@@ -88,6 +88,39 @@ export interface Watermark {
   tiled?: boolean;
 }
 
+/** A text-only watermark for {@link stamp}. Unlike {@link Watermark} (the
+ *  render-time mark, which may be text or image), the post-emit overlay is
+ *  text-only. Its text is shaped and embedded with a real, subsetted font —
+ *  the bundled sans-serif by default, or {@link StampWatermark.font} when you
+ *  supply one — so the output is self-contained and never depends on a base-14
+ *  font the reader may or may not have installed. */
+export interface StampWatermark {
+  /** The word to stamp. */
+  text: string;
+  /** Fill color `#rrggbb`. Defaults to gray. */
+  color?: string;
+  /** Fill opacity `0.0..=1.0`. Defaults to `0.15`. */
+  opacity?: number;
+  /** Rotation in degrees. Defaults to `45`. */
+  angle?: number;
+  /** Font size in CSS px. Defaults to `64`. */
+  fontSize?: number;
+  /** Font (TrueType/OTF bytes) to shape and embed the stamp text with. Omit
+   *  for the bundled sans-serif. */
+  font?: Buffer;
+}
+
+/** Options for {@link stamp}: the watermark plus the optional decrypt/
+ *  re-encrypt round trip. */
+export interface StampOptions {
+  /** The watermark overlaid on every page. */
+  watermark: StampWatermark;
+  /** Opens an encrypted `pdf` input. Omit for a plaintext input. */
+  password?: string;
+  /** Re-encrypts the stamped output. Omit for plaintext output. */
+  encryption?: Encryption;
+}
+
 /** Compile-time knobs: partials, missing-value policy, and include depth. */
 export interface CompileOptions {
   /** Partial templates by name, for `{% include %}`. */
@@ -214,3 +247,6 @@ export function appendPdf(base: Buffer, extras: Buffer[]): Buffer;
  *  flex/grid/table items, replaced `<img>`) resolve a `data-cid`; a
  *  `display:inline` element is flattened during box generation and drops it. */
 export function layoutBoxes(html: string, css: string, width: number, height: number): string;
+/** Overlay a watermark on EVERY page of an existing PDF, optionally decrypting
+ *  the input and re-encrypting the output. Throws `TurboPdfError` on failure. */
+export function stamp(pdf: Buffer, opts: StampOptions): Buffer;
