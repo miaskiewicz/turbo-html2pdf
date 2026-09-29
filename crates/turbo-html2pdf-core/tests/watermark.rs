@@ -318,6 +318,38 @@ fn text_watermark_lands_centred_on_the_page_at_any_angle() {
     }
 }
 
+// The mark is centred on the page vertically too, not just horizontally: its
+// font metric box (ascent..descent) straddles the page centre. Drawing the
+// baseline *on* the centre leaves the whole word riding above it — for DRAFT at
+// 48 pt the ink centre sits ~17 pt (~0.24 in) high.
+#[test]
+fn text_watermark_is_vertically_centred_on_the_page() {
+    let face = common::evolventa();
+    let pages = vec![page_with(vec![body_text(face.clone())])];
+    // Angle 0: the watermark `cm` is the identity, so every glyph origin's y is
+    // the raw baseline the emitter placed.
+    let pdf = emit_pdf(
+        &pages,
+        &text_opts(TextWatermark {
+            angle_deg: 0.0,
+            ..TextWatermark::draft(face.clone())
+        }),
+    );
+    let (_width, height) = media_box(&pdf);
+    let origins = watermark_glyph_origins(&pdf);
+    let baseline = origins[0].1;
+    // Font metric box in points at the DRAFT size (64 px → 48 pt).
+    let scale = (64.0 * 72.0 / 96.0) / f32::from(face.units_per_em());
+    let ascent = f32::from(face.ascent_units()) * scale;
+    let descent = f32::from(face.descent_units()) * scale; // negative
+    let metric_centre = baseline + (ascent + descent) / 2.0;
+    assert!(
+        (metric_centre - height / 2.0).abs() < 1.0,
+        "word metric centre at {metric_centre}, page centre is {}",
+        height / 2.0
+    );
+}
+
 // --------------------------------------------------------------------------
 // image watermark: centered + tiled, via the shared resolver
 // --------------------------------------------------------------------------
