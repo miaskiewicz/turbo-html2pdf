@@ -1,9 +1,8 @@
-//! `/ToUnicode` CMap construction (`pdf-ua`, ISO 14289-1 §7.21.7). A tagged PDF
-//! must let assistive tech recover the text behind each shown glyph; this builds
+//! `/ToUnicode` CMap construction for searchable, extractable PDF text. This builds
 //! a CMap mapping each 2-byte subset glyph code (what the content stream shows
 //! under `Identity-H`) to its Unicode scalar.
 //!
-//! Only compiled under the `pdf-ua` feature.
+//! Emitted for every embedded font, independently of PDF/UA tagging.
 
 use std::collections::BTreeMap;
 
@@ -101,3 +100,36 @@ const FOOTER: &str = "endcmap\n\
 CMapName currentdict /CMap defineresource pop\n\
 end\n\
 end\n";
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn reverse_mapping_uses_original_font_and_handles_stripped_cmap() {
+        let bytes = include_bytes!("../../assets/fonts/Go-Regular.ttf");
+        let face = Face::parse(bytes, 0).unwrap();
+        let gid = face.glyph_index('é').unwrap().0;
+        assert_eq!(reverse_cmap(&face).get(&gid), Some(&0xE9));
+        let remapper = subsetter::GlyphRemapper::new_from_glyphs(&[gid]);
+        let subset = subsetter::subset(bytes, 0, &remapper).unwrap();
+        let subset_face = Face::parse(&subset, 0).unwrap();
+        assert!(reverse_cmap(&subset_face).is_empty());
+    }
+
+    #[test]
+    fn unicode_destinations_use_utf16_and_codes_are_sorted_and_unique() {
+        let cmap = build(&[(3, 0x1F600), (2, 0xE9), (1, 0x41), (2, 0xE9), (4, 0x110000)]);
+        assert!(cmap.contains("4 beginbfchar\n<0001> <0041>\n<0002> <00E9>\n<0003> <D83DDE00>\n<0004> <FFFD>\nendbfchar"));
+    }
+
+    #[test]
+    fn cmap_blocks_are_limited_to_one_hundred_entries() {
+        let pairs: Vec<_> = (0..201).map(|code| (code, u32::from(code))).collect();
+        let cmap = build(&pairs);
+        assert_eq!(cmap.matches("100 beginbfchar").count(), 2);
+        assert_eq!(cmap.matches("1 beginbfchar").count(), 1);
+        assert_eq!(cmap.matches("endbfchar").count(), 3);
+        assert!(build(&[]).contains("endcodespacerange\nendcmap"));
+    }
+}

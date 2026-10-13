@@ -69,8 +69,8 @@ mod step1_spike {
             .expect("ANSWER(a): load_mem WITHOUT any catalog/root succeeds");
         assert_eq!(
             doc.objects.len(),
-            4,
-            "default EmitOptions writes exactly 4 objects/face"
+            5,
+            "default EmitOptions writes five objects/face including ToUnicode"
         );
 
         // ANSWER(b), same no-catalog bytes: the Type0 lands at exactly the id

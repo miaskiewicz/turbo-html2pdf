@@ -4,6 +4,16 @@ All notable changes to turbo-html2pdf are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/); versions follow SemVer. The npm,
 PyPI, and crates.io packages release in lockstep from a `v*` tag (PyPI on `pyv*`).
 
+## [0.3.4] — searchable and copyable text in ordinary PDFs
+
+### Fixed
+- **Corrupted text extraction with subsetted fonts** ([#17](https://github.com/miaskiewicz/turbo-html2pdf/issues/17)):
+  every embedded Type0 font now includes a `/ToUnicode` CMap mapping the actual
+  subset glyph codes to UTF-16BE text. Search, selection/copy, and `pdftotext`
+  work without enabling PDF/UA tagging, including `turbo-html2pdf-wasm-fonts`.
+  Font object allocation reserves the mapping stream in every render to keep
+  page resources, images, metadata, and conformance objects from colliding.
+
 ## [0.3.3] — text watermark centred on the page (both axes)
 
 ### Fixed

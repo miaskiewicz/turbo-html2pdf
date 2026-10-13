@@ -83,7 +83,6 @@ fn all_flags_off_emits_no_conformance_machinery() {
         b"/MarkInfo",
         b"/ParentTree",
         b"/MCID",
-        b"/ToUnicode",
         b"/StructParents",
         b"/DisplayDocTitle",
         // print-color: a DeviceCMYK fill operator

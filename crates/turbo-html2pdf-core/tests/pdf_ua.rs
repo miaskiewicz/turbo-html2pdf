@@ -159,7 +159,7 @@ fn carries_the_pdfua_xmp_identifier() {
 fn pdf_ua_false_emits_no_tagged_machinery_under_pdf_ua_build() {
     // The per-render toggle is OFF: even compiled with `pdf-ua`, the output must
     // carry NONE of the tagged-PDF machinery — no StructTreeRoot, no marked
-    // content, no /ToUnicode, no /MarkInfo / /Lang / DisplayDocTitle. This is the
+    // content, no /MarkInfo / /Lang / DisplayDocTitle. This is the
     // byte-identical-default guarantee.
     let pages = sample_pages();
     let pdf = emit_pdf(
@@ -177,7 +177,6 @@ fn pdf_ua_false_emits_no_tagged_machinery_under_pdf_ua_build() {
         b"/ParentTree",
         b"/MCID",
         b"/StructParents",
-        b"/ToUnicode",
         b"/DisplayDocTitle",
         b"BDC",
         b"/Artifact",
