@@ -478,3 +478,11 @@ gate). Bindings: Node (N-API), WebAssembly (lean + fonts), and Python (PyO3). Se
 
 MIT (engine + bindings). Bundled fonts are SIL OFL 1.1 — see
 [`assets/fonts/NOTICE.md`](crates/turbo-html2pdf-core/assets/fonts/NOTICE.md).
+
+### Native live-tree layout snapshots
+
+The core's additive `layout_snapshot` API preserves caller-owned source IDs across
+all native layout fragments and composes nested transforms. Its continuous-media
+path retains nonpainting boxes and sizes replaced images without PDF page-fit
+caps. Existing PDF APIs are unchanged; see [the API contract, Chrome controls and
+remaining geometry boundaries](docs/live-layout-snapshot.md).

@@ -22,6 +22,16 @@ impl ComputedStyle {
         self.map.get(property).map(String::as_str)
     }
 
+    /// Anonymous live formatting boxes inherit text properties, never the
+    /// parent's frame/transform/position a second time.
+    pub(crate) fn inherited_only(&self) -> Self {
+        Self::from_pairs(
+            INHERITED
+                .iter()
+                .filter_map(|&name| self.get(name).map(|value| (name, value))),
+        )
+    }
+
     /// Whether no value uses a containing-block-relative (`%`) or font-relative
     /// (`em`/`rem`) unit. When true, the box's resolved metrics do not depend on
     /// the layout context, so they can be resolved once and cached (a `font-size`
