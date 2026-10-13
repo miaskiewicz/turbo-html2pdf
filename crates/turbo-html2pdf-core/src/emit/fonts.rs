@@ -128,21 +128,16 @@ impl FontStore {
         self.fonts.is_empty()
     }
 
-    /// Write every collected face into `chunk`, returning the Type0 font refs in
-    /// resource order. `alloc` hands out fresh object ids. A `pdf-ua` render
-    /// (`opts.pdf_ua`) also writes a per-face `/ToUnicode` CMap, consuming one
-    /// extra object id per face; a flag-off render writes the default 4 objects
-    /// per face, byte-for-byte the untagged output.
+    /// Write every collected face, including a `/ToUnicode` CMap for text extraction.
     pub fn write(
         &self,
         chunk: &mut Chunk,
         alloc: &mut RefAlloc,
-        opts: &super::EmitOptions,
+        _opts: &super::EmitOptions,
     ) -> Vec<Ref> {
-        let to_unicode = to_unicode_on(opts);
         self.fonts
             .iter()
-            .map(|font| write_font(font, chunk, alloc, to_unicode))
+            .map(|font| write_font(font, chunk, alloc))
             .collect()
     }
 }
@@ -174,40 +169,21 @@ impl RefAlloc {
     }
 }
 
-/// Whether this render writes per-face `/ToUnicode` CMaps: `opts.pdf_ua` under
-/// the `pdf-ua` feature, else a compile-time `false` so the default build folds
-/// the branch (and the extra object) away.
-#[cfg(feature = "pdf-ua")]
-fn to_unicode_on(opts: &super::EmitOptions) -> bool {
-    opts.pdf_ua
-}
-#[cfg(not(feature = "pdf-ua"))]
-fn to_unicode_on(_opts: &super::EmitOptions) -> bool {
-    false
-}
-
-/// Subset, embed, and wire up one face; returns the Type0 font ref. When
-/// `to_unicode` is set (a `pdf-ua` render) the face also gets a `/ToUnicode`
-/// stream, the 5th object; otherwise it occupies the default 4.
-fn write_font(font: &UsedFont, chunk: &mut Chunk, alloc: &mut RefAlloc, to_unicode: bool) -> Ref {
+/// Subset and embed one face with its Unicode mapping (five PDF objects).
+fn write_font(font: &UsedFont, chunk: &mut Chunk, alloc: &mut RefAlloc) -> Ref {
     let remapper = font.remapper();
     let subset = subset_bytes(&font.face, &remapper);
-    let refs = FontRefs::alloc(alloc, to_unicode);
+    let refs = FontRefs::alloc(alloc);
     write_type0(chunk, &refs, font);
     write_cid_font(chunk, &refs, font, &remapper);
     write_descriptor(chunk, &refs, &font.face);
     embed_program(chunk, &refs, &font.face, &subset);
-    #[cfg(feature = "pdf-ua")]
-    if let Some(to_unicode) = refs.to_unicode {
-        write_to_unicode(chunk, to_unicode, font, &remapper);
-    }
+    write_to_unicode(chunk, refs.to_unicode, font, &remapper);
     refs.type0
 }
 
 /// Write the `/ToUnicode` CMap stream mapping each shown 2-byte glyph code (the
-/// subset-local gid) to its Unicode scalar, so a tagged PDF's text is
-/// extractable by assistive tech (`pdf-ua`, ISO 14289-1 §7.21.7).
-#[cfg(feature = "pdf-ua")]
+/// subset-local gid) to its Unicode scalar for search and copy/paste.
 fn write_to_unicode(chunk: &mut Chunk, to_unicode: Ref, font: &UsedFont, remapper: &GlyphRemapper) {
     let used: Vec<u16> = font.glyphs.iter().copied().collect();
     let pairs: Vec<(u16, u32)> = font
@@ -232,30 +208,23 @@ fn subset_bytes(face: &FontFace, remapper: &GlyphRemapper) -> Vec<u8> {
     }
 }
 
-/// The object refs a single embedded font occupies: four by default, plus an
-/// optional `/ToUnicode` stream for a `pdf-ua` render.
+/// The five object refs occupied by each embedded font.
 struct FontRefs {
     type0: Ref,
     cid: Ref,
     descriptor: Ref,
     program: Ref,
-    /// The `/ToUnicode` stream ref — allocated only when a `pdf-ua` render asks
-    /// for it, so a flag-off render bumps exactly four ids per face.
-    #[cfg(feature = "pdf-ua")]
-    to_unicode: Option<Ref>,
+    to_unicode: Ref,
 }
 
 impl FontRefs {
-    fn alloc(alloc: &mut RefAlloc, to_unicode: bool) -> FontRefs {
-        #[cfg(not(feature = "pdf-ua"))]
-        let _ = to_unicode;
+    fn alloc(alloc: &mut RefAlloc) -> FontRefs {
         FontRefs {
             type0: alloc.bump(),
             cid: alloc.bump(),
             descriptor: alloc.bump(),
             program: alloc.bump(),
-            #[cfg(feature = "pdf-ua")]
-            to_unicode: to_unicode.then(|| alloc.bump()),
+            to_unicode: alloc.bump(),
         }
     }
 }
@@ -290,10 +259,7 @@ fn write_type0(chunk: &mut Chunk, refs: &FontRefs, font: &UsedFont) {
     type0.base_font(Name(name.as_bytes()));
     type0.encoding_predefined(Name(b"Identity-H"));
     type0.descendant_font(refs.cid);
-    #[cfg(feature = "pdf-ua")]
-    if let Some(to_unicode) = refs.to_unicode {
-        type0.to_unicode(to_unicode);
-    }
+    type0.to_unicode(refs.to_unicode);
     type0.finish();
 }
 

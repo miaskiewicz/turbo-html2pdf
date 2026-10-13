@@ -350,3 +350,95 @@ fn geometry_uses_edges_margins() {
     let pdf = emit_pdf(&[page], &EmitOptions::default());
     assert!(pdf.starts_with(b"%PDF-1.7"));
 }
+
+/// Issue #17: ordinary renders must preserve text even though Identity-H codes
+/// are subset glyph IDs, not Unicode. Exercise multiple faces and non-ASCII text.
+#[test]
+fn ordinary_pdf_fonts_have_unicode_maps_and_extract_original_text() {
+    let html = "<p>Hello World 1234567890 TEST!! @#$%&amp;</p><p><b>Relatório de Auditoria e Diagnóstico CFTV</b></p><p style=\"font-family: Go\">192.168.1.107</p>";
+    let (program, _) = compile(html, &CompileOptions::default()).unwrap();
+    let (nodes, _) = program
+        .render_nodes(&serde_json::json!({}), Some(0))
+        .unwrap();
+    let cascade = build_cascade(
+        "body { font-family: Evolventa; font-size: 12px; }",
+        "",
+        TokenSet::default(),
+    );
+    let styled = style_tree(&nodes, &cascade);
+    let mut diags = Diagnostics::default();
+    let galley = layout(&styled, 540.0, &common::registry(), &mut diags);
+    let pages = paginate(&galley, &[], &mut diags).unwrap();
+    assert_extractable_pdf(&pages, "Hello World 1234567890 TEST!! @#$%& Relatório de Auditoria e Diagnóstico CFTV 192.168.1.107");
+}
+
+fn assert_extractable_pdf(pages: &[Page], expected: &str) {
+    let pdf = emit_pdf(pages, &EmitOptions::default());
+    let count = |needle: &[u8]| pdf.windows(needle.len()).filter(|w| *w == needle).count();
+    assert!(count(b"/Subtype /Type0") > 0);
+    assert_eq!(count(b"/ToUnicode"), count(b"/Subtype /Type0"));
+    assert!(contains(&pdf, b"begincodespacerange"));
+    assert!(contains(&pdf, b"beginbfchar"));
+    assert!(!contains(&pdf, b"/StructTreeRoot"));
+    assert_eq!(pdf, emit_pdf(pages, &EmitOptions::default()));
+    check_text_extraction(&pdf, expected);
+}
+
+fn check_text_extraction(pdf: &[u8], expected: &str) {
+    use std::io::Write;
+    use std::process::{Command, Stdio};
+    let mut child = match Command::new("pdftotext")
+        .args(["-enc", "UTF-8", "-", "-"])
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+    {
+        Ok(child) => child,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+            eprintln!("pdftotext not on PATH; CMap structure assertions still ran");
+            return;
+        }
+        Err(e) => panic!("start pdftotext: {e}"),
+    };
+    child.stdin.take().unwrap().write_all(pdf).unwrap();
+    let output = child.wait_with_output().unwrap();
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let extracted = String::from_utf8(output.stdout).unwrap();
+    assert_eq!(
+        extracted.split_whitespace().collect::<Vec<_>>().join(" "),
+        expected
+    );
+}
+
+#[cfg(feature = "bundled-fonts")]
+#[test]
+fn bundled_cff_and_truetype_text_is_extractable_without_pdf_ua() {
+    let html = "<p>Hello World 1234567890 TEST!! @#$%&amp;</p><p style=\"font-family: monospace\">192.168.1.107</p>";
+    let (program, _) = compile(html, &CompileOptions::default()).unwrap();
+    let (nodes, _) = program
+        .render_nodes(&serde_json::json!({}), Some(0))
+        .unwrap();
+    let cascade = build_cascade(
+        "body { font-family: sans-serif; font-size: 12px; }",
+        "",
+        TokenSet::default(),
+    );
+    let styled = style_tree(&nodes, &cascade);
+    let mut diags = Diagnostics::default();
+    let galley = layout(
+        &styled,
+        540.0,
+        &turbo_html2pdf_core::text::FontRegistry::new(),
+        &mut diags,
+    );
+    let pages = paginate(&galley, &[], &mut diags).unwrap();
+    let pdf = emit_pdf(&pages, &EmitOptions::default());
+    assert!(contains(&pdf, b"/Subtype /CIDFontType0"));
+    assert!(contains(&pdf, b"/Subtype /CIDFontType2"));
+    assert_extractable_pdf(&pages, "Hello World 1234567890 TEST!! @#$%& 192.168.1.107");
+}

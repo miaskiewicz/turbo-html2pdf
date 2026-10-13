@@ -30,7 +30,6 @@ mod page;
 #[cfg(feature = "pdf-a")]
 mod pdfa;
 mod text;
-#[cfg(feature = "pdf-ua")]
 pub(crate) mod tounicode;
 #[cfg(feature = "pdf-ua")]
 mod ua;
@@ -115,10 +114,10 @@ pub struct EmitOptions {
     pub pdf_a: bool,
     /// Emit tagged / accessible PDF (PDF/UA-1) machinery for *this render* (the
     /// `pdf-ua` feature, AC-11.1): a `StructTreeRoot`, `BDC`/`EMC` marked content,
-    /// a per-face `/ToUnicode` CMap, `/MarkInfo`, `/Lang`, an XMP packet and the
+    /// `/MarkInfo`, `/Lang`, an XMP packet and the
     /// `DisplayDocTitle` viewer preference. A per-render runtime toggle: `false`
-    /// (the default) is byte-for-byte the untagged output, including 4 objects per
-    /// embedded font (the `/ToUnicode` stream is the 5th, emitted only when on).
+    /// (the default) emits untagged output. Every embedded font includes a
+    /// `/ToUnicode` stream regardless of this toggle.
     #[cfg(feature = "pdf-ua")]
     pub pdf_ua: bool,
     /// AES-256 password protection (the `encrypt` feature). `None` (the default)

@@ -2,7 +2,7 @@
 //! objects and info dict, written in a fixed order so output is deterministic.
 //!
 //! Object layout (1-based ids): `1` catalog, `2` page tree, then for each page a
-//! page object and its content stream, then all font objects (4 per face), then
+//! page object and its content stream, then all font objects (5 per face), then
 //! all image objects (1 per image, +1 for each alpha SMask), then the info dict
 //! last. `pdf-writer` serializes objects in id order, so this layout is stable
 //! across runs. The font and image object ids are known from the layout up
@@ -50,26 +50,6 @@ use super::watermark;
 use super::xref::Xref;
 use super::EmitOptions;
 
-/// The number of PDF objects each embedded face occupies (Type0, CIDFont,
-/// FontDescriptor, font program): 4 by default. A `pdf-ua` render adds a
-/// per-face `/ToUnicode` CMap stream, so each face occupies one more object
-/// (AC-11.1) — a *runtime* count, decided per render by `opts.pdf_ua`, so a
-/// flag-off render under the `pdf-ua` build keeps the default 4-object plan.
-/// Without the `pdf-ua` feature the count is the constant 4 (the `pdf_ua` flag
-/// can never be set), so the default build carries no dead `5` branch.
-#[cfg(feature = "pdf-ua")]
-fn objects_per_font(pdf_ua: bool) -> i32 {
-    if pdf_ua {
-        5
-    } else {
-        4
-    }
-}
-#[cfg(not(feature = "pdf-ua"))]
-fn objects_per_font(_pdf_ua: bool) -> i32 {
-    4
-}
-
 /// Whether this render emits PDF/A-2b objects: `opts.pdf_a` under the `pdf-a`
 /// feature, else a compile-time `false` so the default build folds the branch
 /// away and the gated objects never enter the plan.
@@ -83,14 +63,10 @@ fn pdf_a_on(_opts: &EmitOptions) -> bool {
 }
 
 /// Whether this render emits PDF/UA tagged-PDF objects: `opts.pdf_ua` under the
-/// `pdf-ua` feature, else a compile-time `false`.
+/// `pdf-ua` feature.
 #[cfg(feature = "pdf-ua")]
 fn pdf_ua_on(opts: &EmitOptions) -> bool {
     opts.pdf_ua
-}
-#[cfg(not(feature = "pdf-ua"))]
-fn pdf_ua_on(_opts: &EmitOptions) -> bool {
-    false
 }
 
 /// Build the whole PDF document from the paginated pages.
@@ -231,7 +207,6 @@ struct Plan {
     /// Whether this render emits PDF/UA tagged-PDF objects (resolved from
     /// `opts.pdf_ua`). Drives the struct-tree allocation and each page's
     /// `/StructParents` key, so a flag-off render keeps the default object plan.
-    /// (The font-object count is decided in [`Plan::new`] from the same flag.)
     #[cfg(feature = "pdf-ua")]
     pdf_ua: bool,
 }
@@ -241,11 +216,12 @@ impl Plan {
         pages: &[Page],
         fonts: &FontStore,
         images: &ImageStore,
-        opts: &EmitOptions,
+        _opts: &EmitOptions,
         #[cfg(feature = "xref")] xref: &Xref,
     ) -> Plan {
-        let pdf_ua = pdf_ua_on(opts);
-        let per_font = objects_per_font(pdf_ua);
+        #[cfg(feature = "pdf-ua")]
+        let pdf_ua = pdf_ua_on(_opts);
+        let per_font = 5;
         let mut next = 3;
         let page_refs = page_ref_pairs(pages.len(), &mut next);
         let fonts_start = next;
@@ -267,7 +243,7 @@ impl Plan {
         // this render emits PDF/A; otherwise the ids stay free for whatever
         // follows (the `pdf-ua` struct tree), keeping a flag-off plan unchanged.
         #[cfg(feature = "pdf-a")]
-        let pdf_a = pdf_a_on(opts);
+        let pdf_a = pdf_a_on(_opts);
         #[cfg(all(feature = "pdf-a", feature = "xref"))]
         let pdfa_start = info_id + 1 + xref_object_count(xref);
         #[cfg(all(feature = "pdf-a", not(feature = "xref")))]
