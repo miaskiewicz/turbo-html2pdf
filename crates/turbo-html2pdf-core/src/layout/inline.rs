@@ -615,8 +615,8 @@ fn fold_atom_metrics(atom: &InlineAtom, m: &mut Metrics) {
 
 /// The line-box metrics: the block `strut` seeds the height (so an empty line — a
 /// `<br><br>` gap — is exactly one strut tall), then each word's text segments and
-/// atoms grow it. Text ascent/descent still floor the height via the final `max`,
-/// as a line box is never shorter than its own content.
+/// atoms grow it. The PDF policy floors the height at the font box; explicit
+/// HTML line-height permits negative leading and overlapping glyph font boxes.
 fn line_metrics(words: &[Word], strut: f32, capture_sources: bool) -> Metrics {
     let mut m = Metrics {
         ascent: 0.0,
@@ -631,8 +631,15 @@ fn line_metrics(words: &[Word], strut: f32, capture_sources: bool) -> Metrics {
             fold_atom_metrics(&atom, &mut m);
         }
     }
-    m.height = m.height.max(m.ascent + m.descent);
+    finish_line_height(&mut m, words, capture_sources);
     m
+}
+
+fn finish_line_height(metrics: &mut Metrics, words: &[Word], html_font_metrics: bool) {
+    // Atomic baseline placement still uses the existing ascent/descent policy.
+    if !html_font_metrics || words.iter().any(|word| word.atom.is_some()) {
+        metrics.height = metrics.height.max(metrics.ascent + metrics.descent);
+    }
 }
 
 fn line_used_width(words: &[Word]) -> f32 {

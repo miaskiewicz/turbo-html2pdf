@@ -148,6 +148,15 @@ fn capture_snapshot(
     width: f32,
     enabled: bool,
 ) -> turbo_html2pdf_core::layout_snapshot::LayoutSnapshot {
+    capture_snapshot_style(texts, width, enabled, "transform:translate(5px,7px)")
+}
+
+fn capture_snapshot_style(
+    texts: &[&str],
+    width: f32,
+    enabled: bool,
+    style: &str,
+) -> turbo_html2pdf_core::layout_snapshot::LayoutSnapshot {
     use turbo_html2pdf_core::layout_snapshot::{
         snapshot_live_tree, snapshot_live_tree_with_text, SnapshotInputs, SourceId, SourceIdentity,
     };
@@ -156,9 +165,7 @@ fn capture_snapshot(
         tag: Tag::Html("div".into()),
         attrs: vec![Attr {
             name: "style".into(),
-            value: format!(
-                "width:{width}px;font-size:16px;line-height:24px;transform:translate(5px,7px)"
-            ),
+            value: format!("width:{width}px;font-size:16px;line-height:24px;{style}"),
         }],
         children: texts
             .iter()
@@ -372,6 +379,8 @@ fn native_cluster_advances_match_independent_chrome_ranges_with_the_same_real_fo
         )
         .unwrap();
         assert_cluster_geometry(&native, case);
+        assert_range_geometry(&native, case);
+        assert_caret_geometry(&native, case);
     }
 }
 
@@ -597,4 +606,248 @@ fn cluster_geometry_shares_immutable_native_ancestry_and_survives_snapshot_drop(
     assert_eq!(cells[0].source_ancestors.as_ref(), &[SourceId(99)]);
     assert_eq!(cells[1].source_id, Some(SourceId(100)));
     assert_eq!(cells[1].utf16_start, 1);
+}
+
+fn assert_range_geometry(
+    native: &turbo_html2pdf_core::layout_snapshot::LayoutSnapshot,
+    case: &serde_json::Value,
+) {
+    use turbo_html2pdf_core::layout_snapshot::SourceId;
+    for (offsets, expected) in case["ranges"].as_object().unwrap() {
+        let (start, end) = offsets.split_once(':').unwrap();
+        let boxes = native
+            .text_range_boxes(SourceId(100), start.parse().unwrap(), end.parse().unwrap())
+            .unwrap();
+        let actual: Vec<_> = boxes
+            .iter()
+            .map(|value| {
+                let rect = value.transformed_bounds;
+                (
+                    f64::from(rect.x),
+                    f64::from(rect.y),
+                    f64::from(rect.width),
+                    f64::from(rect.height),
+                )
+            })
+            .collect();
+        let expected: Vec<_> = expected["rects"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|rect| {
+                (
+                    rect["x"].as_f64().unwrap(),
+                    rect["y"].as_f64().unwrap(),
+                    rect["width"].as_f64().unwrap(),
+                    rect["height"].as_f64().unwrap(),
+                )
+            })
+            .collect();
+        assert_eq!(actual, expected, "{} native Range {offsets}", case["name"]);
+    }
+}
+
+fn assert_caret_geometry(
+    native: &turbo_html2pdf_core::layout_snapshot::LayoutSnapshot,
+    case: &serde_json::Value,
+) {
+    use turbo_html2pdf_core::layout_snapshot::{Point, SourceId};
+    for hit in case["hits"].as_array().unwrap() {
+        let point = Point {
+            x: hit["point"]["x"].as_f64().unwrap() as f32,
+            y: hit["point"]["y"].as_f64().unwrap() as f32,
+        };
+        let actual = native
+            .text_caret_offset_from_point(SourceId(100), point)
+            .unwrap();
+        assert!(hit["sameText"].as_bool().unwrap());
+        assert_eq!(
+            actual,
+            hit["offset"].as_u64().unwrap() as usize,
+            "{} caret {}",
+            case["name"],
+            hit["range"]
+        );
+    }
+}
+
+#[test]
+fn text_geometry_errors_preserve_missing_unplaced_and_invalid_input_distinctions() {
+    use turbo_html2pdf_core::layout_snapshot::{Point, SourceId, TextGeometryError};
+    let native = capture_snapshot(&["ab"], 80.0, true);
+    let point = Point { x: 5.0, y: 7.0 };
+    assert_eq!(
+        native.text_range_boxes(SourceId(999), 0, 0),
+        Err(TextGeometryError::MissingSource(SourceId(999)))
+    );
+    assert_eq!(
+        native.text_caret_offset_from_point(SourceId(999), point),
+        Err(TextGeometryError::MissingSource(SourceId(999)))
+    );
+    for (start, end) in [(2, 1), (0, 3), (usize::MAX, usize::MAX)] {
+        assert_eq!(
+            native.text_range_boxes(SourceId(100), start, end),
+            Err(TextGeometryError::InvalidOffsets)
+        );
+    }
+    let unplaced = capture_snapshot_style(&["ab"], 80.0, true, "display:none");
+    assert_eq!(unplaced.text_sources()[0].text, "ab");
+    assert_eq!(
+        unplaced.text_range_boxes(SourceId(100), 0, 2),
+        Err(TextGeometryError::UnresolvedSource)
+    );
+    assert_eq!(
+        unplaced.text_caret_offset_from_point(SourceId(100), point),
+        Err(TextGeometryError::UnresolvedSource)
+    );
+}
+
+#[test]
+fn nonfinite_caret_input_and_unsupported_real_transforms_are_explicit() {
+    use turbo_html2pdf_core::layout_snapshot::{Point, SourceId, TextGeometryError};
+    let native = capture_snapshot(&["ab"], 80.0, true);
+    for point in [
+        Point {
+            x: f32::NAN,
+            y: 0.0,
+        },
+        Point {
+            x: 0.0,
+            y: f32::INFINITY,
+        },
+        Point {
+            x: f32::NEG_INFINITY,
+            y: 0.0,
+        },
+    ] {
+        assert_eq!(
+            native.text_caret_offset_from_point(SourceId(100), point),
+            Err(TextGeometryError::InvalidPoint)
+        );
+    }
+    for style in [
+        "transform:rotate(30deg)",
+        "transform:skewX(15deg)",
+        "transform:scaleX(0)",
+    ] {
+        let transformed = capture_snapshot_style(&["ab"], 80.0, true, style);
+        assert_eq!(
+            transformed.text_caret_offset_from_point(SourceId(100), Point { x: 5.0, y: 7.0 }),
+            Err(TextGeometryError::UnsupportedCaretTransform),
+            "{style}"
+        );
+        assert_eq!(
+            transformed
+                .text_range_boxes(SourceId(100), 0, 2)
+                .unwrap()
+                .len(),
+            1
+        );
+    }
+}
+
+#[test]
+fn caret_selects_actual_combining_cluster_edges_without_inventing_an_internal_offset() {
+    use turbo_html2pdf_core::layout_snapshot::{Point, SourceId};
+    let native = capture_snapshot(&["e\u{301}"], 80.0, true);
+    let cells = native.text_cluster_boxes();
+    assert_eq!(cells.len(), 1);
+    assert_eq!((cells[0].utf16_start, cells[0].utf16_end), (0, 2));
+    let rect = cells[0].transformed_bounds;
+    for (fraction, expected) in [(0.1, 0), (0.9, 2)] {
+        assert_eq!(
+            native
+                .text_caret_offset_from_point(
+                    SourceId(100),
+                    Point {
+                        x: rect.x + rect.width * fraction,
+                        y: rect.y + rect.height / 2.0,
+                    }
+                )
+                .unwrap(),
+            expected
+        );
+    }
+}
+
+#[test]
+fn same_source_font_fallback_runs_choose_the_nearby_actual_edge() {
+    use turbo_html2pdf_core::layout_snapshot::{Point, SourceId};
+    let native = capture_snapshot(&["aאב"], 200.0, true);
+    assert!(
+        native.text_runs().len() >= 2,
+        "actual font fallback must produce separate fragments"
+    );
+    let cells = native.text_cluster_boxes_for_source(SourceId(100));
+    let first = cells.iter().find(|cell| cell.utf16_start == 0).unwrap();
+    let point = Point {
+        x: first.transformed_bounds.x + first.transformed_bounds.width * 0.1,
+        y: first.transformed_bounds.y + first.transformed_bounds.height / 2.0,
+    };
+    assert_eq!(
+        native
+            .text_caret_offset_from_point(SourceId(100), point)
+            .unwrap(),
+        0
+    );
+}
+
+#[test]
+fn source_scoped_cluster_geometry_retains_original_ownership_and_full_query_results() {
+    use turbo_html2pdf_core::layout_snapshot::SourceId;
+    let native = capture_snapshot(&["first", "second"], 200.0, true);
+    let all = native.text_cluster_boxes();
+    let selected = native.text_cluster_boxes_for_source(SourceId(101));
+    let expected: Vec<_> = all
+        .into_iter()
+        .filter(|cell| cell.source_id == Some(SourceId(101)))
+        .collect();
+    assert_eq!(selected, expected);
+    assert_eq!(selected.first().unwrap().utf16_start, 0);
+    assert_eq!(selected.last().unwrap().utf16_end, 6);
+    assert_eq!(native.text_cluster_boxes_for_source(SourceId(999)), vec![]);
+}
+
+#[test]
+fn html_negative_leading_keeps_native_font_boxes_without_changing_pdf_line_height() {
+    use turbo_html2pdf_core::layout::inline::layout_html_paragraph_in_with_sources;
+    let fonts = FontRegistry::new();
+    let Piece::Run(mut text) = run(&fonts, 71, "ab") else {
+        unreachable!()
+    };
+    text.line_height = Some(4.0);
+    let pieces = [Piece::Run(text)];
+    let region = |_: f32| (0.0, 200.0);
+    let html = layout_html_paragraph_in_with_sources(
+        &pieces,
+        &fonts,
+        Align::Left,
+        &mut Diagnostics::default(),
+        &region,
+        4.0,
+    );
+    let pdf = layout_paragraph_in(
+        &pieces,
+        &fonts,
+        Align::Left,
+        &mut Diagnostics::default(),
+        &region,
+        4.0,
+    );
+    let traced_pdf = layout_paragraph_in_with_sources(
+        &pieces,
+        &fonts,
+        Align::Left,
+        &mut Diagnostics::default(),
+        &region,
+        4.0,
+    );
+    assert_eq!(html.layout.lines[0].height, 4.0);
+    assert!(html.font_boxes[0][0].baseline < html.font_boxes[0][0].ascent);
+    assert!(pdf.lines[0].height > html.layout.lines[0].height);
+    assert_eq!(pdf.lines[0].height, traced_pdf.layout.lines[0].height);
+    assert_eq!(
+        pdf.lines[0].runs[0].glyphs,
+        traced_pdf.layout.lines[0].runs[0].glyphs
+    );
 }

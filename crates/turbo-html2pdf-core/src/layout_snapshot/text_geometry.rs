@@ -1,5 +1,5 @@
 //! Advance/font boxes from real glyph clusters, not line-container rectangles.
-use super::{geometry, LayoutSnapshot, Point, Rect, SourceId};
+use super::{geometry, LayoutSnapshot, Point, Rect, SnapshotTextRun, SourceId};
 use std::collections::BTreeMap;
 use std::sync::Arc;
 
@@ -19,8 +19,28 @@ pub struct SourceClusterBox {
 }
 
 pub(crate) fn cluster_boxes(snapshot: &LayoutSnapshot) -> Vec<SourceClusterBox> {
+    collect_boxes(snapshot, snapshot.text_runs().iter())
+}
+
+pub(crate) fn source_cluster_boxes(
+    snapshot: &LayoutSnapshot,
+    source: SourceId,
+) -> Vec<SourceClusterBox> {
+    collect_boxes(
+        snapshot,
+        snapshot
+            .text_runs()
+            .iter()
+            .filter(|run| run.source_id == Some(source)),
+    )
+}
+
+fn collect_boxes<'a>(
+    snapshot: &LayoutSnapshot,
+    runs: impl Iterator<Item = &'a SnapshotTextRun>,
+) -> Vec<SourceClusterBox> {
     let mut boxes = Vec::new();
-    for run in snapshot.text_runs() {
+    for run in runs {
         let fragment = &snapshot.fragments()[run.fragment_index];
         let ancestry: Arc<[SourceId]> = run.source_ancestors.clone().into();
         let mut groups = BTreeMap::<(usize, usize), (f32, f32, bool)>::new();

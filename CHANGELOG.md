@@ -26,6 +26,18 @@ PyPI, and crates.io packages release in lockstep from a `v*` tag (PyPI on `pyv*`
   all Unicode whitespace; two additional authored Chrome controls reproduce the
   old defect and verify the correction. Full whitespace-mode/line-breaking and
   caret semantics remain open.
+- Add source-scoped native Range rectangles from actual placed clusters and
+  collapsible pen gaps, plus caret selection at genuine cluster edges. All offset
+  pairs and recorded caret hits match the twelve controlled-font Chrome graphs.
+  Missing/unplaced sources, invalid offsets/points and rotated/skewed/degenerate
+  caret transforms fail explicitly. DOM hit testing, cross-node Range assembly,
+  full bidi and whitespace modes remain separate integration work.
+- Honor explicit HTML line heights below the loaded font height through actual
+  negative leading. A fresh independently recorded overlapping-line control
+  reproduces the former 29px displacement and wrong caret selection. Native line
+  precedence and nearby cluster edges now determine caret hits across separate
+  fallback-font runs; source queries avoid materializing unrelated glyph cells.
+  PDF line heights and the existing atomic-inline policy are retained.
 - Share immutable source ancestry between native cluster boxes rather than copying
   an ancestor vector for every glyph; retained geometry remains valid after the
   snapshot is dropped.

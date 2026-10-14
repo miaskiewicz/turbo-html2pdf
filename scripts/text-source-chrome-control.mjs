@@ -40,6 +40,7 @@ async function collect() {
     { name: "ligature", text: "ffi", width: 400 },
     { name: "combining", text: "e\u0301", width: 400 },
     { name: "wrapped-identical", text: "ab ab", width: 90 },
+    { name: "overlapping-lines", text: "ab ab", width: 90, lineHeight: 16 },
     { name: "astral-fallback", text: "A😀B", width: 400 },
     { name: "transformed", text: "ab", width: 400, transform: "translate(8px,12px) scale(1.5)" },
   ];
@@ -113,6 +114,13 @@ try {
     recordedAt: new Date().toISOString(),
     fontSha256: createHash("sha256").update(font).digest("hex"),
     effectiveExtensionFlags: trace.effectiveExtensionFlags,
+    collectorSha256: createHash("sha256")
+      .update(readFileSync(fileURLToPath(import.meta.url)))
+      .digest("hex"),
+    probeSha256: createHash("sha256").update(readFileSync(probe)).digest("hex"),
+    runnerSha256: createHash("sha256")
+      .update(readFileSync(resolve(values.runner)))
+      .digest("hex"),
     result: trace.probes[0].result,
   };
   writeFileSync(resolve(values.out), `${JSON.stringify(oracle, null, 2)}\n`);

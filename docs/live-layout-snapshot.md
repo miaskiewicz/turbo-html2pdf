@@ -221,18 +221,43 @@ The authored `scripts/text-source-chrome-control.mjs` serves the exact bundled
 Go-Regular.ttf and captures Range rectangles and caret queries in independent
 Chrome. Its saved font hash is
 `197d9f3703b4c00af609178876a8d73e396f64fe438b2c871778566632374be3`.
-Eleven controlled-face graphs check exact native cluster x/y/width/height,
+Twelve controlled-face graphs check exact native cluster x/y/width/height,
 including combining text, collapsed leading whitespace, wrapping, transforms
 and four font sizes. NBSP/em-space retain their actual shaped advances, and
-NBSP remains unbroken when its word overflows. A twelfth graph preserves the uncontrolled installed emoji
+NBSP remains unbroken when its word overflows. A thirteenth graph preserves the uncontrolled installed emoji
 fallback result; its
 numeric metrics are not certified. The capture requires zero errors and records
 localhost-only extension flags. Native tests separately verify astral UTF-16
 ranges, source ownership and repeated wrapped runs.
 
-Caret selection, partial-cluster ranges, whitespace gap provenance, bidi/CJK
-itemization, fragmented inline borders, full CSS whitespace-mode/Unicode line
-breaking and complete font-fallback behavior remain
-unfinished. The collector preserves these fields for subsequent implementation.
-The controlled-font box comparisons do not certify installed fallback fonts,
-platform-specific hinted metrics or complete Range/caret geometry.
+`text_range_boxes(source, start, end)` selects one original text node using the
+actual placed cells and pen gaps. It returns the native fragment index, local
+rectangle and transformed bounds for each selected line. Partial combining
+clusters retain their whole native cell; selecting collapsed spaces uses the
+measured gap between adjacent placed cells or a genuine zero-width line edge.
+`text_caret_offset_from_point(source, point)` chooses a real cluster edge after
+inverting an axis-aligned fragment transform. The embedding caller must first
+identify the visible text source through its actual DOM hit-test policy. This
+method does not choose a DOM node, invent internal ligature offsets or perform
+browser viewport clipping. Rotation, skew and degenerate caret transforms are
+explicitly unsupported. Missing/unplaced sources and invalid input have distinct
+`TextGeometryError` variants.
+
+The same twelve controlled-font graphs now compare every valid UTF-16 start/end
+pair's complete client-rectangle list and every recorded caret hit. This includes
+partial combining-cluster selection, collapsed spaces, wrap edges, overlapping
+negative-leading lines and translated/scaled fragments. The source-scoped producer
+filters actual native runs before producing cells, avoiding unrelated glyph
+geometry allocations. On overlapping font boxes the earlier real line wins;
+between equally distant boxes the following line wins. Separate fallback runs
+on a chosen native line compete by their genuine edge distances. The public HTML
+text policy permits negative leading; generic/PDF and atomic-inline line policy
+remain unchanged. Offline contracts also cover invalid/missing/hidden sources,
+nonfinite coordinates and unsupported caret transforms. The original emoji
+fallback graph remains recorded but is explicitly outside numerical certification.
+
+Full cross-node DOM Range assembly, hit-test selection, bidi/CJK itemization,
+fragmented inline borders, CSS whitespace modes/Unicode line breaking and complete
+font-fallback behavior remain unfinished. The controlled-font comparisons do not
+certify installed fallback fonts, platform-specific hinted metrics or complete
+CSSOM View behavior.

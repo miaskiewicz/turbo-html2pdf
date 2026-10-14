@@ -17,7 +17,9 @@ mod geometry;
 mod metrics;
 pub(crate) mod sources;
 pub(crate) mod text;
+mod text_carets;
 mod text_geometry;
+mod text_ranges;
 
 use crate::layout::{block, boxgen};
 use crate::{Cascade, Diagnostics, FontRegistry, Fragment, ImageCtx, Node, NodeId, StyledNode};
@@ -27,6 +29,7 @@ pub use geometry::{Point, Rect};
 pub use metrics::UsedBoxMetrics;
 pub use text::{SnapshotTextGlyph, SnapshotTextRun, SnapshotTextSource};
 pub use text_geometry::SourceClusterBox;
+pub use text_ranges::{SourceRangeBox, TextGeometryError};
 
 /// A stable identity from the caller's source tree, independent of its position.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -127,9 +130,37 @@ pub struct LayoutSnapshot {
 }
 
 impl LayoutSnapshot {
+    /// Resolve a candidate text source to a real placed cluster edge. The caller
+    /// chooses a visible hit-test source; this does not perform DOM hit testing.
+    /// Rotation/skew and degenerate transforms fail rather than guessing a caret.
+    pub fn text_caret_offset_from_point(
+        &self,
+        source: SourceId,
+        point: Point,
+    ) -> Result<usize, TextGeometryError> {
+        text_carets::offset(self, source, point)
+    }
+
+    /// Select one original text source using actual placed shaper cells. Partial
+    /// clusters keep their full native cell; no interior caret is interpolated.
+    /// Unplaced or unresolved sources fail explicitly instead of returning zeros.
+    pub fn text_range_boxes(
+        &self,
+        source: SourceId,
+        start: usize,
+        end: usize,
+    ) -> Result<Vec<SourceRangeBox>, TextGeometryError> {
+        text_ranges::ranges(self, source, start, end)
+    }
+
     /// Actual glyph advance/font boxes, preserving source ranges and transforms.
     pub fn text_cluster_boxes(&self) -> Vec<SourceClusterBox> {
         text_geometry::cluster_boxes(self)
+    }
+    /// Capture only one source's real cluster boxes without materializing the
+    /// rest of the document's glyph geometry. Unknown sources produce no cells.
+    pub fn text_cluster_boxes_for_source(&self, source: SourceId) -> Vec<SourceClusterBox> {
+        text_geometry::source_cluster_boxes(self, source)
     }
     /// Actual per-glyph source metadata; empty for the original box-only API.
     pub fn text_runs(&self) -> &[SnapshotTextRun] {
