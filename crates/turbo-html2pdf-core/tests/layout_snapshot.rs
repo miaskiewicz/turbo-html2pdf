@@ -687,6 +687,19 @@ fn compare_chrome_metrics(
 ) {
     let metrics = fragment.used_box.unwrap();
     let padding = metrics.padding_rect(fragment.rect);
+    // CSSOM View gives the document root viewport client dimensions; this API
+    // retains its actual native padding box, so compare its box/offset geometry.
+    if expected["isDocumentRoot"] == true {
+        assert_eq!(
+            f64::from(fragment.rect.width.round()),
+            expected["offset"]["width"].as_f64().unwrap()
+        );
+        assert_eq!(
+            f64::from(fragment.rect.height.round()),
+            expected["offset"]["height"].as_f64().unwrap()
+        );
+        return;
+    }
     for (field, value) in [
         ("left", metrics.border.left),
         ("top", metrics.border.top),
@@ -861,4 +874,85 @@ fn positioned_shorthands_keep_cascade_order_and_importance() {
             "{css}"
         );
     }
+}
+
+#[test]
+fn invalid_quad_declarations_preserve_prior_valid_sides_and_inherited_variables_expand() {
+    for (css, left, top) in [
+        ("left:7px;top:8px;inset:10px bogus", 7.0, 8.0),
+        ("left:7px;top:8px;inset:initial auto", 7.0, 8.0),
+        ("left:20px;inset:var(--edges)", 7.0, 3.0),
+        ("inset:var(--edges);left:20px", 20.0, 3.0),
+        ("left:20px!important;inset:var(--edges)", 20.0, 3.0),
+        ("left:20px;inset:var(--edges)!important", 7.0, 3.0),
+        ("left:20px;inset:var(--missing)", 0.0, 0.0),
+    ] {
+        let nodes = vec![element(
+            "div",
+            "position:relative;width:100px;height:80px;--edges:3px 7px",
+            vec![element(
+                "div",
+                &format!("position:absolute;width:10px;height:10px;{css}"),
+                Vec::new(),
+            )],
+        )];
+        let snapshot = capture(&nodes, &[identity(1, &[0, 0])]);
+        assert_eq!(border(&snapshot, 1).rect.x, left, "{css}");
+        assert_eq!(border(&snapshot, 1).rect.y, top, "{css}");
+    }
+    let nodes = vec![element(
+        "div",
+        "border-left-width:7px;border-width:3px red",
+        Vec::new(),
+    )];
+    let styled = style_tree(&nodes, &build_cascade("", "", Default::default()));
+    let turbo_html2pdf_core::StyledNode::Element(element) = &styled[0] else {
+        panic!("element");
+    };
+    assert_eq!(element.style.get("border-left-width"), Some("7px"));
+}
+
+#[test]
+fn live_document_root_contains_body_margins_and_preserves_legacy_pdf_policy() {
+    let nodes = vec![element(
+        "html",
+        "margin:0;padding:0",
+        vec![element(
+            "body",
+            "margin:12px;padding:5px;border:3px solid black",
+            Vec::new(),
+        )],
+    )];
+    let snapshot = capture(&nodes, &[identity(1, &[0]), identity(2, &[0, 0])]);
+    assert_eq!(
+        border(&snapshot, 1).rect,
+        Rect {
+            x: 0.0,
+            y: 0.0,
+            width: 200.0,
+            height: 40.0
+        }
+    );
+    assert_eq!(
+        border(&snapshot, 2).rect,
+        Rect {
+            x: 12.0,
+            y: 12.0,
+            width: 176.0,
+            height: 16.0
+        }
+    );
+    let styled = style_tree(&nodes, &build_cascade("", "", Default::default()));
+    let legacy = layout_with_images(
+        &styled,
+        200.0,
+        &FontRegistry::new(),
+        &ImageCtx {
+            resolver: &NoImages,
+            body_height: None,
+        },
+        &mut Diagnostics::default(),
+    );
+    assert_eq!(legacy.children[0].y, 12.0);
+    assert_eq!(legacy.children[0].height, 16.0);
 }

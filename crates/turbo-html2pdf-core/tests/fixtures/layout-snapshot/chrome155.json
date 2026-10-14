@@ -1,7 +1,7 @@
 {
   "browser": "Chrome/155.0.8059.79",
   "v8": "15.5.35.23",
-  "recordedAt": "2026-10-14T02:54:25.156Z",
+  "recordedAt": "2026-10-14T03:14:26.570Z",
   "fixture": "cases.json",
   "effectiveExtensionFlags": [
     "--disable-extensions",
@@ -17,6 +17,7 @@
       "boxes": [
         {
           "sourceId": 1,
+          "isDocumentRoot": false,
           "rect": {
             "x": 0,
             "y": 0,
@@ -44,6 +45,7 @@
         },
         {
           "sourceId": 2,
+          "isDocumentRoot": false,
           "rect": {
             "x": 0,
             "y": 10,
@@ -71,6 +73,7 @@
         },
         {
           "sourceId": 3,
+          "isDocumentRoot": false,
           "rect": {
             "x": 0,
             "y": 30,
@@ -98,6 +101,7 @@
         },
         {
           "sourceId": 4,
+          "isDocumentRoot": false,
           "rect": {
             "x": 0,
             "y": 0,
@@ -118,6 +122,7 @@
         },
         {
           "sourceId": 5,
+          "isDocumentRoot": false,
           "rect": {
             "x": 0,
             "y": 31,
@@ -150,6 +155,7 @@
       "boxes": [
         {
           "sourceId": 1,
+          "isDocumentRoot": false,
           "rect": {
             "x": 30,
             "y": 40,
@@ -177,6 +183,7 @@
         },
         {
           "sourceId": 2,
+          "isDocumentRoot": false,
           "rect": {
             "x": 30,
             "y": 60,
@@ -209,6 +216,7 @@
       "boxes": [
         {
           "sourceId": 1,
+          "isDocumentRoot": false,
           "rect": {
             "x": -7.2031941413879395,
             "y": -19.882686614990234,
@@ -236,6 +244,7 @@
         },
         {
           "sourceId": 2,
+          "isDocumentRoot": false,
           "rect": {
             "x": 8.698729515075684,
             "y": -19.650634765625,
@@ -268,6 +277,7 @@
       "boxes": [
         {
           "sourceId": 1,
+          "isDocumentRoot": false,
           "rect": {
             "x": 0,
             "y": 0,
@@ -295,6 +305,7 @@
         },
         {
           "sourceId": 2,
+          "isDocumentRoot": false,
           "rect": {
             "x": 0,
             "y": 0,
@@ -327,6 +338,7 @@
       "boxes": [
         {
           "sourceId": 1,
+          "isDocumentRoot": false,
           "rect": {
             "x": 0,
             "y": 0,
@@ -354,6 +366,7 @@
         },
         {
           "sourceId": 2,
+          "isDocumentRoot": false,
           "rect": {
             "x": 7,
             "y": 7,
@@ -386,6 +399,7 @@
       "boxes": [
         {
           "sourceId": 1,
+          "isDocumentRoot": false,
           "rect": {
             "x": 20,
             "y": 50,
@@ -418,6 +432,7 @@
       "boxes": [
         {
           "sourceId": 1,
+          "isDocumentRoot": false,
           "rect": {
             "x": 0,
             "y": 0,
@@ -445,6 +460,7 @@
         },
         {
           "sourceId": 2,
+          "isDocumentRoot": false,
           "rect": {
             "x": 7,
             "y": 38,
@@ -477,6 +493,7 @@
       "boxes": [
         {
           "sourceId": 1,
+          "isDocumentRoot": false,
           "rect": {
             "x": 10,
             "y": 20,
@@ -509,6 +526,7 @@
       "boxes": [
         {
           "sourceId": 1,
+          "isDocumentRoot": false,
           "rect": {
             "x": 0,
             "y": 0,
@@ -541,6 +559,7 @@
       "boxes": [
         {
           "sourceId": 1,
+          "isDocumentRoot": false,
           "rect": {
             "x": 0,
             "y": 0,
@@ -573,6 +592,7 @@
       "boxes": [
         {
           "sourceId": 1,
+          "isDocumentRoot": false,
           "rect": {
             "x": 0,
             "y": 0,
@@ -605,6 +625,7 @@
       "boxes": [
         {
           "sourceId": 1,
+          "isDocumentRoot": false,
           "rect": {
             "x": 0,
             "y": 0,
@@ -637,6 +658,7 @@
       "boxes": [
         {
           "sourceId": 1,
+          "isDocumentRoot": false,
           "rect": {
             "x": 0,
             "y": 0,
@@ -669,6 +691,7 @@
       "boxes": [
         {
           "sourceId": 1,
+          "isDocumentRoot": false,
           "rect": {
             "x": 0,
             "y": 0,
@@ -701,6 +724,7 @@
       "boxes": [
         {
           "sourceId": 1,
+          "isDocumentRoot": false,
           "rect": {
             "x": 0,
             "y": 0,
@@ -733,6 +757,7 @@
       "boxes": [
         {
           "sourceId": 1,
+          "isDocumentRoot": false,
           "rect": {
             "x": 0,
             "y": 0,
@@ -765,6 +790,7 @@
       "boxes": [
         {
           "sourceId": 1,
+          "isDocumentRoot": false,
           "rect": {
             "x": 0,
             "y": 0,
@@ -797,6 +823,7 @@
       "boxes": [
         {
           "sourceId": 1,
+          "isDocumentRoot": false,
           "rect": {
             "x": 0,
             "y": 0,
@@ -829,6 +856,7 @@
       "boxes": [
         {
           "sourceId": 1,
+          "isDocumentRoot": false,
           "rect": {
             "x": 0,
             "y": 0,
@@ -861,6 +889,7 @@
       "boxes": [
         {
           "sourceId": 1,
+          "isDocumentRoot": false,
           "rect": {
             "x": 30,
             "y": 40,
@@ -888,6 +917,7 @@
         },
         {
           "sourceId": 2,
+          "isDocumentRoot": false,
           "rect": {
             "x": 37,
             "y": 47,
@@ -915,6 +945,7 @@
         },
         {
           "sourceId": 3,
+          "isDocumentRoot": false,
           "rect": {
             "x": 37,
             "y": 67,
@@ -942,6 +973,7 @@
         },
         {
           "sourceId": 4,
+          "isDocumentRoot": false,
           "rect": {
             "x": 37,
             "y": 79,
@@ -974,6 +1006,7 @@
       "boxes": [
         {
           "sourceId": 1,
+          "isDocumentRoot": false,
           "rect": {
             "x": 0,
             "y": 0,
@@ -1001,6 +1034,7 @@
         },
         {
           "sourceId": 2,
+          "isDocumentRoot": false,
           "rect": {
             "x": 0,
             "y": 0,
@@ -1033,6 +1067,7 @@
       "boxes": [
         {
           "sourceId": 1,
+          "isDocumentRoot": false,
           "rect": {
             "x": 0,
             "y": 0,
@@ -1060,6 +1095,7 @@
         },
         {
           "sourceId": 2,
+          "isDocumentRoot": false,
           "rect": {
             "x": 0,
             "y": 0,
@@ -1092,6 +1128,7 @@
       "boxes": [
         {
           "sourceId": 1,
+          "isDocumentRoot": false,
           "rect": {
             "x": 0,
             "y": 0,
@@ -1119,6 +1156,7 @@
         },
         {
           "sourceId": 2,
+          "isDocumentRoot": false,
           "rect": {
             "x": 0,
             "y": 0,
@@ -1151,6 +1189,7 @@
       "boxes": [
         {
           "sourceId": 1,
+          "isDocumentRoot": false,
           "rect": {
             "x": 0,
             "y": 0,
@@ -1178,6 +1217,7 @@
         },
         {
           "sourceId": 2,
+          "isDocumentRoot": false,
           "rect": {
             "x": 0,
             "y": 0,
@@ -1210,6 +1250,7 @@
       "boxes": [
         {
           "sourceId": 1,
+          "isDocumentRoot": false,
           "rect": {
             "x": 0,
             "y": 0,
@@ -1237,6 +1278,7 @@
         },
         {
           "sourceId": 2,
+          "isDocumentRoot": false,
           "rect": {
             "x": 0,
             "y": 0,
@@ -1269,6 +1311,7 @@
       "boxes": [
         {
           "sourceId": 1,
+          "isDocumentRoot": false,
           "rect": {
             "x": 0,
             "y": 0,
@@ -1296,6 +1339,7 @@
         },
         {
           "sourceId": 2,
+          "isDocumentRoot": false,
           "rect": {
             "x": 0,
             "y": 0,
@@ -1328,6 +1372,7 @@
       "boxes": [
         {
           "sourceId": 1,
+          "isDocumentRoot": false,
           "rect": {
             "x": 0,
             "y": 0,
@@ -1355,6 +1400,7 @@
         },
         {
           "sourceId": 2,
+          "isDocumentRoot": false,
           "rect": {
             "x": 0,
             "y": 0,
@@ -1387,6 +1433,7 @@
       "boxes": [
         {
           "sourceId": 1,
+          "isDocumentRoot": false,
           "rect": {
             "x": 0,
             "y": 0,
@@ -1414,6 +1461,7 @@
         },
         {
           "sourceId": 2,
+          "isDocumentRoot": false,
           "rect": {
             "x": 0,
             "y": 0,
@@ -1446,6 +1494,7 @@
       "boxes": [
         {
           "sourceId": 1,
+          "isDocumentRoot": false,
           "rect": {
             "x": 0,
             "y": 0,
@@ -1473,6 +1522,7 @@
         },
         {
           "sourceId": 2,
+          "isDocumentRoot": false,
           "rect": {
             "x": 0,
             "y": 0,
@@ -1505,6 +1555,7 @@
       "boxes": [
         {
           "sourceId": 1,
+          "isDocumentRoot": false,
           "rect": {
             "x": 0,
             "y": 0,
@@ -1532,6 +1583,7 @@
         },
         {
           "sourceId": 2,
+          "isDocumentRoot": false,
           "rect": {
             "x": 0,
             "y": 0,
@@ -1564,6 +1616,7 @@
       "boxes": [
         {
           "sourceId": 1,
+          "isDocumentRoot": false,
           "rect": {
             "x": 0,
             "y": 0,
@@ -1591,6 +1644,7 @@
         },
         {
           "sourceId": 2,
+          "isDocumentRoot": false,
           "rect": {
             "x": 0,
             "y": 0,
@@ -1623,6 +1677,7 @@
       "boxes": [
         {
           "sourceId": 1,
+          "isDocumentRoot": false,
           "rect": {
             "x": 0,
             "y": 0,
@@ -1650,6 +1705,7 @@
         },
         {
           "sourceId": 2,
+          "isDocumentRoot": false,
           "rect": {
             "x": 0,
             "y": 0,
@@ -1682,6 +1738,7 @@
       "boxes": [
         {
           "sourceId": 1,
+          "isDocumentRoot": false,
           "rect": {
             "x": 0,
             "y": 0,
@@ -1709,6 +1766,7 @@
         },
         {
           "sourceId": 2,
+          "isDocumentRoot": false,
           "rect": {
             "x": 0,
             "y": 0,
@@ -1741,6 +1799,7 @@
       "boxes": [
         {
           "sourceId": 1,
+          "isDocumentRoot": false,
           "rect": {
             "x": 0,
             "y": 0,
@@ -1768,6 +1827,7 @@
         },
         {
           "sourceId": 2,
+          "isDocumentRoot": false,
           "rect": {
             "x": 0,
             "y": 0,
@@ -1800,6 +1860,7 @@
       "boxes": [
         {
           "sourceId": 1,
+          "isDocumentRoot": false,
           "rect": {
             "x": 0,
             "y": 0,
@@ -1827,6 +1888,7 @@
         },
         {
           "sourceId": 2,
+          "isDocumentRoot": false,
           "rect": {
             "x": 0,
             "y": 0,
@@ -1859,6 +1921,7 @@
       "boxes": [
         {
           "sourceId": 1,
+          "isDocumentRoot": false,
           "rect": {
             "x": 0,
             "y": 0,
@@ -1886,6 +1949,7 @@
         },
         {
           "sourceId": 2,
+          "isDocumentRoot": false,
           "rect": {
             "x": 0,
             "y": 0,
@@ -1918,6 +1982,7 @@
       "boxes": [
         {
           "sourceId": 1,
+          "isDocumentRoot": false,
           "rect": {
             "x": 0,
             "y": 0,
@@ -1945,6 +2010,7 @@
         },
         {
           "sourceId": 2,
+          "isDocumentRoot": false,
           "rect": {
             "x": 0,
             "y": 0,
@@ -1977,6 +2043,7 @@
       "boxes": [
         {
           "sourceId": 1,
+          "isDocumentRoot": false,
           "rect": {
             "x": 0,
             "y": 0,
@@ -2004,6 +2071,7 @@
         },
         {
           "sourceId": 2,
+          "isDocumentRoot": false,
           "rect": {
             "x": 0,
             "y": 0,
@@ -2036,6 +2104,7 @@
       "boxes": [
         {
           "sourceId": 1,
+          "isDocumentRoot": false,
           "rect": {
             "x": 0,
             "y": 0,
@@ -2063,6 +2132,7 @@
         },
         {
           "sourceId": 2,
+          "isDocumentRoot": false,
           "rect": {
             "x": 122,
             "y": 92,
@@ -2095,6 +2165,7 @@
       "boxes": [
         {
           "sourceId": 1,
+          "isDocumentRoot": false,
           "rect": {
             "x": 0,
             "y": 0,
@@ -2122,6 +2193,7 @@
         },
         {
           "sourceId": 2,
+          "isDocumentRoot": false,
           "rect": {
             "x": -48,
             "y": -38,
@@ -2154,6 +2226,7 @@
       "boxes": [
         {
           "sourceId": 1,
+          "isDocumentRoot": false,
           "rect": {
             "x": 0,
             "y": 0,
@@ -2181,6 +2254,7 @@
         },
         {
           "sourceId": 2,
+          "isDocumentRoot": false,
           "rect": {
             "x": 29.5,
             "y": 24.5,
@@ -2213,6 +2287,7 @@
       "boxes": [
         {
           "sourceId": 1,
+          "isDocumentRoot": false,
           "rect": {
             "x": 0,
             "y": 0,
@@ -2240,6 +2315,7 @@
         },
         {
           "sourceId": 2,
+          "isDocumentRoot": false,
           "rect": {
             "x": 2,
             "y": 72,
@@ -2272,6 +2348,7 @@
       "boxes": [
         {
           "sourceId": 1,
+          "isDocumentRoot": false,
           "rect": {
             "x": 0,
             "y": 0,
@@ -2299,6 +2376,7 @@
         },
         {
           "sourceId": 2,
+          "isDocumentRoot": false,
           "rect": {
             "x": 0,
             "y": 0,
@@ -2331,6 +2409,7 @@
       "boxes": [
         {
           "sourceId": 1,
+          "isDocumentRoot": false,
           "rect": {
             "x": 0,
             "y": 0,
@@ -2358,6 +2437,7 @@
         },
         {
           "sourceId": 2,
+          "isDocumentRoot": false,
           "rect": {
             "x": 0,
             "y": 0,
@@ -2390,6 +2470,7 @@
       "boxes": [
         {
           "sourceId": 1,
+          "isDocumentRoot": false,
           "rect": {
             "x": 0,
             "y": 0,
@@ -2417,6 +2498,7 @@
         },
         {
           "sourceId": 2,
+          "isDocumentRoot": false,
           "rect": {
             "x": 0,
             "y": 0,
@@ -2449,6 +2531,7 @@
       "boxes": [
         {
           "sourceId": 1,
+          "isDocumentRoot": false,
           "rect": {
             "x": 0,
             "y": 0,
@@ -2476,6 +2559,7 @@
         },
         {
           "sourceId": 2,
+          "isDocumentRoot": false,
           "rect": {
             "x": 0,
             "y": 0,
@@ -2508,6 +2592,7 @@
       "boxes": [
         {
           "sourceId": 1,
+          "isDocumentRoot": false,
           "rect": {
             "x": 5,
             "y": 0,
@@ -2535,6 +2620,7 @@
         },
         {
           "sourceId": 2,
+          "isDocumentRoot": false,
           "rect": {
             "x": 5,
             "y": 0,
@@ -2567,6 +2653,7 @@
       "boxes": [
         {
           "sourceId": 1,
+          "isDocumentRoot": false,
           "rect": {
             "x": 5,
             "y": 0,
@@ -2594,6 +2681,7 @@
         },
         {
           "sourceId": 2,
+          "isDocumentRoot": false,
           "rect": {
             "x": 0,
             "y": 0,
@@ -2626,6 +2714,7 @@
       "boxes": [
         {
           "sourceId": 1,
+          "isDocumentRoot": false,
           "rect": {
             "x": 0,
             "y": 0,
@@ -2653,6 +2742,7 @@
         },
         {
           "sourceId": 2,
+          "isDocumentRoot": false,
           "rect": {
             "x": 2,
             "y": 2,
@@ -2685,6 +2775,7 @@
       "boxes": [
         {
           "sourceId": 1,
+          "isDocumentRoot": false,
           "rect": {
             "x": 0,
             "y": 0,
@@ -2712,6 +2803,7 @@
         },
         {
           "sourceId": 2,
+          "isDocumentRoot": false,
           "rect": {
             "x": 68,
             "y": 49,
@@ -2744,6 +2836,7 @@
       "boxes": [
         {
           "sourceId": 1,
+          "isDocumentRoot": false,
           "rect": {
             "x": 0,
             "y": 0,
@@ -2771,6 +2864,7 @@
         },
         {
           "sourceId": 2,
+          "isDocumentRoot": false,
           "rect": {
             "x": 2,
             "y": 2,
@@ -2803,6 +2897,7 @@
       "boxes": [
         {
           "sourceId": 1,
+          "isDocumentRoot": false,
           "rect": {
             "x": 0,
             "y": 0,
@@ -2830,6 +2925,7 @@
         },
         {
           "sourceId": 3,
+          "isDocumentRoot": false,
           "rect": {
             "x": 7,
             "y": 7,
@@ -2857,6 +2953,7 @@
         },
         {
           "sourceId": 2,
+          "isDocumentRoot": false,
           "rect": {
             "x": 57,
             "y": 47,
@@ -2880,6 +2977,865 @@
           "offset": {
             "width": 55,
             "height": 45
+          }
+        }
+      ]
+    },
+    {
+      "name": "invalid-inset",
+      "boxes": [
+        {
+          "sourceId": 1,
+          "isDocumentRoot": false,
+          "rect": {
+            "x": 0,
+            "y": 0,
+            "width": 100,
+            "height": 80
+          },
+          "clientRects": [
+            {
+              "x": 0,
+              "y": 0,
+              "width": 100,
+              "height": 80
+            }
+          ],
+          "client": {
+            "left": 0,
+            "top": 0,
+            "width": 100,
+            "height": 80
+          },
+          "offset": {
+            "width": 100,
+            "height": 80
+          }
+        },
+        {
+          "sourceId": 2,
+          "isDocumentRoot": false,
+          "rect": {
+            "x": 7,
+            "y": 8,
+            "width": 10,
+            "height": 10
+          },
+          "clientRects": [
+            {
+              "x": 7,
+              "y": 8,
+              "width": 10,
+              "height": 10
+            }
+          ],
+          "client": {
+            "left": 0,
+            "top": 0,
+            "width": 10,
+            "height": 10
+          },
+          "offset": {
+            "width": 10,
+            "height": 10
+          }
+        }
+      ]
+    },
+    {
+      "name": "invalid-css-wide-inset",
+      "boxes": [
+        {
+          "sourceId": 1,
+          "isDocumentRoot": false,
+          "rect": {
+            "x": 0,
+            "y": 0,
+            "width": 100,
+            "height": 80
+          },
+          "clientRects": [
+            {
+              "x": 0,
+              "y": 0,
+              "width": 100,
+              "height": 80
+            }
+          ],
+          "client": {
+            "left": 0,
+            "top": 0,
+            "width": 100,
+            "height": 80
+          },
+          "offset": {
+            "width": 100,
+            "height": 80
+          }
+        },
+        {
+          "sourceId": 2,
+          "isDocumentRoot": false,
+          "rect": {
+            "x": 7,
+            "y": 8,
+            "width": 10,
+            "height": 10
+          },
+          "clientRects": [
+            {
+              "x": 7,
+              "y": 8,
+              "width": 10,
+              "height": 10
+            }
+          ],
+          "client": {
+            "left": 0,
+            "top": 0,
+            "width": 10,
+            "height": 10
+          },
+          "offset": {
+            "width": 10,
+            "height": 10
+          }
+        }
+      ]
+    },
+    {
+      "name": "inherited-variable-inset",
+      "boxes": [
+        {
+          "sourceId": 1,
+          "isDocumentRoot": false,
+          "rect": {
+            "x": 0,
+            "y": 0,
+            "width": 100,
+            "height": 80
+          },
+          "clientRects": [
+            {
+              "x": 0,
+              "y": 0,
+              "width": 100,
+              "height": 80
+            }
+          ],
+          "client": {
+            "left": 0,
+            "top": 0,
+            "width": 100,
+            "height": 80
+          },
+          "offset": {
+            "width": 100,
+            "height": 80
+          }
+        },
+        {
+          "sourceId": 2,
+          "isDocumentRoot": false,
+          "rect": {
+            "x": 7,
+            "y": 3,
+            "width": 10,
+            "height": 10
+          },
+          "clientRects": [
+            {
+              "x": 7,
+              "y": 3,
+              "width": 10,
+              "height": 10
+            }
+          ],
+          "client": {
+            "left": 0,
+            "top": 0,
+            "width": 10,
+            "height": 10
+          },
+          "offset": {
+            "width": 10,
+            "height": 10
+          }
+        }
+      ]
+    },
+    {
+      "name": "variable-before-longhand",
+      "boxes": [
+        {
+          "sourceId": 1,
+          "isDocumentRoot": false,
+          "rect": {
+            "x": 0,
+            "y": 0,
+            "width": 100,
+            "height": 80
+          },
+          "clientRects": [
+            {
+              "x": 0,
+              "y": 0,
+              "width": 100,
+              "height": 80
+            }
+          ],
+          "client": {
+            "left": 0,
+            "top": 0,
+            "width": 100,
+            "height": 80
+          },
+          "offset": {
+            "width": 100,
+            "height": 80
+          }
+        },
+        {
+          "sourceId": 2,
+          "isDocumentRoot": false,
+          "rect": {
+            "x": 20,
+            "y": 3,
+            "width": 10,
+            "height": 10
+          },
+          "clientRects": [
+            {
+              "x": 20,
+              "y": 3,
+              "width": 10,
+              "height": 10
+            }
+          ],
+          "client": {
+            "left": 0,
+            "top": 0,
+            "width": 10,
+            "height": 10
+          },
+          "offset": {
+            "width": 10,
+            "height": 10
+          }
+        }
+      ]
+    },
+    {
+      "name": "variable-important-longhand",
+      "boxes": [
+        {
+          "sourceId": 1,
+          "isDocumentRoot": false,
+          "rect": {
+            "x": 0,
+            "y": 0,
+            "width": 100,
+            "height": 80
+          },
+          "clientRects": [
+            {
+              "x": 0,
+              "y": 0,
+              "width": 100,
+              "height": 80
+            }
+          ],
+          "client": {
+            "left": 0,
+            "top": 0,
+            "width": 100,
+            "height": 80
+          },
+          "offset": {
+            "width": 100,
+            "height": 80
+          }
+        },
+        {
+          "sourceId": 2,
+          "isDocumentRoot": false,
+          "rect": {
+            "x": 20,
+            "y": 3,
+            "width": 10,
+            "height": 10
+          },
+          "clientRects": [
+            {
+              "x": 20,
+              "y": 3,
+              "width": 10,
+              "height": 10
+            }
+          ],
+          "client": {
+            "left": 0,
+            "top": 0,
+            "width": 10,
+            "height": 10
+          },
+          "offset": {
+            "width": 10,
+            "height": 10
+          }
+        }
+      ]
+    },
+    {
+      "name": "variable-important-shorthand",
+      "boxes": [
+        {
+          "sourceId": 1,
+          "isDocumentRoot": false,
+          "rect": {
+            "x": 0,
+            "y": 0,
+            "width": 100,
+            "height": 80
+          },
+          "clientRects": [
+            {
+              "x": 0,
+              "y": 0,
+              "width": 100,
+              "height": 80
+            }
+          ],
+          "client": {
+            "left": 0,
+            "top": 0,
+            "width": 100,
+            "height": 80
+          },
+          "offset": {
+            "width": 100,
+            "height": 80
+          }
+        },
+        {
+          "sourceId": 2,
+          "isDocumentRoot": false,
+          "rect": {
+            "x": 7,
+            "y": 3,
+            "width": 10,
+            "height": 10
+          },
+          "clientRects": [
+            {
+              "x": 7,
+              "y": 3,
+              "width": 10,
+              "height": 10
+            }
+          ],
+          "client": {
+            "left": 0,
+            "top": 0,
+            "width": 10,
+            "height": 10
+          },
+          "offset": {
+            "width": 10,
+            "height": 10
+          }
+        }
+      ]
+    },
+    {
+      "name": "unset-missing-variable",
+      "boxes": [
+        {
+          "sourceId": 1,
+          "isDocumentRoot": false,
+          "rect": {
+            "x": 0,
+            "y": 0,
+            "width": 100,
+            "height": 80
+          },
+          "clientRects": [
+            {
+              "x": 0,
+              "y": 0,
+              "width": 100,
+              "height": 80
+            }
+          ],
+          "client": {
+            "left": 0,
+            "top": 0,
+            "width": 100,
+            "height": 80
+          },
+          "offset": {
+            "width": 100,
+            "height": 80
+          }
+        },
+        {
+          "sourceId": 2,
+          "isDocumentRoot": false,
+          "rect": {
+            "x": 0,
+            "y": 0,
+            "width": 10,
+            "height": 10
+          },
+          "clientRects": [
+            {
+              "x": 0,
+              "y": 0,
+              "width": 10,
+              "height": 10
+            }
+          ],
+          "client": {
+            "left": 0,
+            "top": 0,
+            "width": 10,
+            "height": 10
+          },
+          "offset": {
+            "width": 10,
+            "height": 10
+          }
+        }
+      ]
+    },
+    {
+      "name": "absolute-border-box-child-stretch",
+      "boxes": [
+        {
+          "sourceId": 1,
+          "isDocumentRoot": false,
+          "rect": {
+            "x": 0,
+            "y": 0,
+            "width": 114,
+            "height": 94
+          },
+          "clientRects": [
+            {
+              "x": 0,
+              "y": 0,
+              "width": 114,
+              "height": 94
+            }
+          ],
+          "client": {
+            "left": 2,
+            "top": 2,
+            "width": 110,
+            "height": 90
+          },
+          "offset": {
+            "width": 114,
+            "height": 94
+          }
+        },
+        {
+          "sourceId": 2,
+          "isDocumentRoot": false,
+          "rect": {
+            "x": 2,
+            "y": 2,
+            "width": 110,
+            "height": 90
+          },
+          "clientRects": [
+            {
+              "x": 2,
+              "y": 2,
+              "width": 110,
+              "height": 90
+            }
+          ],
+          "client": {
+            "left": 1,
+            "top": 1,
+            "width": 108,
+            "height": 88
+          },
+          "offset": {
+            "width": 110,
+            "height": 90
+          }
+        }
+      ]
+    },
+    {
+      "name": "invalid-border-width",
+      "boxes": [
+        {
+          "sourceId": 1,
+          "isDocumentRoot": false,
+          "rect": {
+            "x": 0,
+            "y": 0,
+            "width": 109,
+            "height": 84
+          },
+          "clientRects": [
+            {
+              "x": 0,
+              "y": 0,
+              "width": 109,
+              "height": 84
+            }
+          ],
+          "client": {
+            "left": 7,
+            "top": 2,
+            "width": 100,
+            "height": 80
+          },
+          "offset": {
+            "width": 109,
+            "height": 84
+          }
+        }
+      ]
+    },
+    {
+      "name": "invalid-border-style",
+      "boxes": [
+        {
+          "sourceId": 1,
+          "isDocumentRoot": false,
+          "rect": {
+            "x": 0,
+            "y": 0,
+            "width": 109,
+            "height": 84
+          },
+          "clientRects": [
+            {
+              "x": 0,
+              "y": 0,
+              "width": 109,
+              "height": 84
+            }
+          ],
+          "client": {
+            "left": 7,
+            "top": 2,
+            "width": 100,
+            "height": 80
+          },
+          "offset": {
+            "width": 109,
+            "height": 84
+          }
+        }
+      ]
+    },
+    {
+      "name": "invalid-border-color",
+      "boxes": [
+        {
+          "sourceId": 1,
+          "isDocumentRoot": false,
+          "rect": {
+            "x": 0,
+            "y": 0,
+            "width": 109,
+            "height": 84
+          },
+          "clientRects": [
+            {
+              "x": 0,
+              "y": 0,
+              "width": 109,
+              "height": 84
+            }
+          ],
+          "client": {
+            "left": 7,
+            "top": 2,
+            "width": 100,
+            "height": 80
+          },
+          "offset": {
+            "width": 109,
+            "height": 84
+          }
+        }
+      ]
+    },
+    {
+      "name": "document-root-empty-body",
+      "boxes": [
+        {
+          "sourceId": 1,
+          "isDocumentRoot": true,
+          "rect": {
+            "x": 0,
+            "y": 0,
+            "width": 200,
+            "height": 40
+          },
+          "clientRects": [
+            {
+              "x": 0,
+              "y": 0,
+              "width": 200,
+              "height": 40
+            }
+          ],
+          "client": {
+            "left": 0,
+            "top": 0,
+            "width": 200,
+            "height": 200
+          },
+          "offset": {
+            "width": 200,
+            "height": 40
+          }
+        },
+        {
+          "sourceId": 2,
+          "isDocumentRoot": false,
+          "rect": {
+            "x": 12,
+            "y": 12,
+            "width": 176,
+            "height": 16
+          },
+          "clientRects": [
+            {
+              "x": 12,
+              "y": 12,
+              "width": 176,
+              "height": 16
+            }
+          ],
+          "client": {
+            "left": 3,
+            "top": 3,
+            "width": 170,
+            "height": 10
+          },
+          "offset": {
+            "width": 176,
+            "height": 16
+          }
+        }
+      ]
+    },
+    {
+      "name": "document-root-content-body",
+      "boxes": [
+        {
+          "sourceId": 1,
+          "isDocumentRoot": true,
+          "rect": {
+            "x": 0,
+            "y": 0,
+            "width": 200,
+            "height": 60
+          },
+          "clientRects": [
+            {
+              "x": 0,
+              "y": 0,
+              "width": 200,
+              "height": 60
+            }
+          ],
+          "client": {
+            "left": 0,
+            "top": 0,
+            "width": 200,
+            "height": 200
+          },
+          "offset": {
+            "width": 200,
+            "height": 60
+          }
+        },
+        {
+          "sourceId": 2,
+          "isDocumentRoot": false,
+          "rect": {
+            "x": 12,
+            "y": 12,
+            "width": 176,
+            "height": 36
+          },
+          "clientRects": [
+            {
+              "x": 12,
+              "y": 12,
+              "width": 176,
+              "height": 36
+            }
+          ],
+          "client": {
+            "left": 3,
+            "top": 3,
+            "width": 170,
+            "height": 30
+          },
+          "offset": {
+            "width": 176,
+            "height": 36
+          }
+        },
+        {
+          "sourceId": 3,
+          "isDocumentRoot": false,
+          "rect": {
+            "x": 20,
+            "y": 20,
+            "width": 160,
+            "height": 20
+          },
+          "clientRects": [
+            {
+              "x": 20,
+              "y": 20,
+              "width": 160,
+              "height": 20
+            }
+          ],
+          "client": {
+            "left": 0,
+            "top": 0,
+            "width": 160,
+            "height": 20
+          },
+          "offset": {
+            "width": 160,
+            "height": 20
+          }
+        }
+      ]
+    },
+    {
+      "name": "document-root-own-frame",
+      "boxes": [
+        {
+          "sourceId": 1,
+          "isDocumentRoot": true,
+          "rect": {
+            "x": 3,
+            "y": 3,
+            "width": 194,
+            "height": 46
+          },
+          "clientRects": [
+            {
+              "x": 3,
+              "y": 3,
+              "width": 194,
+              "height": 46
+            }
+          ],
+          "client": {
+            "left": 1,
+            "top": 1,
+            "width": 200,
+            "height": 200
+          },
+          "offset": {
+            "width": 194,
+            "height": 46
+          }
+        },
+        {
+          "sourceId": 2,
+          "isDocumentRoot": false,
+          "rect": {
+            "x": 18,
+            "y": 18,
+            "width": 164,
+            "height": 16
+          },
+          "clientRects": [
+            {
+              "x": 18,
+              "y": 18,
+              "width": 164,
+              "height": 16
+            }
+          ],
+          "client": {
+            "left": 3,
+            "top": 3,
+            "width": 158,
+            "height": 10
+          },
+          "offset": {
+            "width": 164,
+            "height": 16
+          }
+        }
+      ]
+    },
+    {
+      "name": "document-root-negative-bottom",
+      "boxes": [
+        {
+          "sourceId": 1,
+          "isDocumentRoot": true,
+          "rect": {
+            "x": 0,
+            "y": 0,
+            "width": 200,
+            "height": 24
+          },
+          "clientRects": [
+            {
+              "x": 0,
+              "y": 0,
+              "width": 200,
+              "height": 24
+            }
+          ],
+          "client": {
+            "left": 0,
+            "top": 0,
+            "width": 200,
+            "height": 200
+          },
+          "offset": {
+            "width": 200,
+            "height": 24
+          }
+        },
+        {
+          "sourceId": 2,
+          "isDocumentRoot": false,
+          "rect": {
+            "x": 0,
+            "y": 12,
+            "width": 200,
+            "height": 16
+          },
+          "clientRects": [
+            {
+              "x": 0,
+              "y": 12,
+              "width": 200,
+              "height": 16
+            }
+          ],
+          "client": {
+            "left": 3,
+            "top": 3,
+            "width": 194,
+            "height": 10
+          },
+          "offset": {
+            "width": 200,
+            "height": 16
           }
         }
       ]

@@ -52,6 +52,12 @@ resolver; the snapshot does not execute scripts or fetch resources.
 
 ## Geometry and fragment ownership
 
+Top-level HTML elements in the live forest retain document-root formatting
+boundaries: body margins stay inside the root and first/last margins contribute
+to its box. Nested HTML elements retain ordinary element flow. Root client sizes
+are a CSSOM View viewport special case; the snapshot reports actual box metrics
+and supplies its viewport separately.
+
 Live absolute descendants use the actual padding-box containing block, including
 percentage sizes, insets and measured auto-height parents. Plain fixed descendants
 resolve against the viewport. Fixed descendants under transformed ancestors need
@@ -100,13 +106,13 @@ and nonfinite/nonpositive viewport dimensions. `UnsupportedFixedContainingBlock`
 rejects a fixed descendant of a valid transformed ancestor before returning any
 snapshot, through unmapped/static ancestors and identity transforms alike.
 Transform siblings, `none`, invalid transform declarations and excluded subtrees
-do not trigger this admission error. Both entry points share this validation. Eighteen authored offline contracts
+do not trigger this admission error. Both entry points share this validation. Twenty authored offline contracts
 cover identity after moves, path validation, partial maps, generated and anonymous
 ownership, all text lines, transforms, hidden flow, definite heights, replaced
 sizes, and unchanged legacy PDF filtering/caps. A further shared fixture compares
-52 authored graphs against the independently installed Chrome
+67 authored graphs against the independently installed Chrome
 `155.0.8059.79` / V8 `15.5.35.23` numeric oracle, recorded on macOS ARM64. The
-control compares 50 supported graphs numerically and verifies explicit rejection
+control compares 65 supported graphs numerically and verifies explicit rejection
 of two transformed-ancestor fixed-position graphs. The geometry tolerance is 0.001 CSS pixels (affine Float32 rounding); font-free
 control graphs avoid attributing font differences to box geometry.
 

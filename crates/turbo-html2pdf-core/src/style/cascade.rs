@@ -394,15 +394,6 @@ fn push_decls(
             property: d.property.clone(),
             value: d.value.clone(),
         });
-        // Expand before choosing winners so longhands retain declaration order,
-        // origin, specificity and !important from the actual shorthand.
-        if let Some(longhands) = super::quad_shorthand::expand(&d.property, &d.value) {
-            out.extend(longhands.map(|(property, value)| Cand {
-                key,
-                property: property.into(),
-                value: value.into(),
-            }));
-        }
     }
 }
 
@@ -758,6 +749,60 @@ fn resolve_one_var(
     }
 }
 
+fn quad_variable_context(cands: &[Cand], parent: &ComputedStyle) -> BTreeMap<String, String> {
+    let custom: Vec<_> = cands
+        .iter()
+        .filter(|cand| cand.property.starts_with("--"))
+        .map(|cand| Cand {
+            key: cand.key,
+            property: cand.property.clone(),
+            value: cand.value.clone(),
+        })
+        .collect();
+    let mut variables: BTreeMap<_, _> = parent
+        .map
+        .iter()
+        .filter(|(name, _)| name.starts_with("--"))
+        .map(|(name, value)| (name.clone(), value.clone()))
+        .collect();
+    variables.extend(pick_winners(custom));
+    resolve_explicit_inherit(&mut variables, parent);
+    variables
+}
+
+fn expand_quad_candidates(cands: Vec<Cand>, parent: &ComputedStyle) -> Vec<Cand> {
+    let variables = quad_variable_context(&cands, parent);
+    let mut expanded = Vec::new();
+    for cand in cands {
+        let value = substitute_vars(&cand.value, &variables, 0, &[]);
+        let longhands = resolved_quad(&cand.property, &cand.value, &value);
+        if let Some(longhands) = longhands {
+            expanded.extend(longhands.map(|(property, value)| Cand {
+                key: cand.key,
+                property: property.into(),
+                value: value.into(),
+            }));
+        }
+        expanded.push(cand);
+    }
+    expanded
+}
+
+fn resolved_quad<'a>(
+    property: &str,
+    original: &str,
+    value: &'a str,
+) -> Option<[(&'static str, &'a str); 4]> {
+    super::quad_shorthand::expand(property, value).or_else(|| {
+        // Invalid-at-computed-value-time variables unset the winning longhands;
+        // they do not resurrect earlier declarations.
+        original
+            .contains("var(")
+            .then(|| super::quad_shorthand::expand(property, "unset"))
+            .flatten()
+    })
+}
+
 fn resolve_style(
     element: &Element,
     path: &[Ctx],
@@ -770,7 +815,7 @@ fn resolve_style(
     collect_rules(cascade, path, &mut cands);
     collect_tokens(element, cascade, &mut cands);
     collect_inline(element, &mut cands);
-    inherit(pick_winners(cands), parent)
+    inherit(pick_winners(expand_quad_candidates(cands, parent)), parent)
 }
 
 // --------------------------------------------------------------------------

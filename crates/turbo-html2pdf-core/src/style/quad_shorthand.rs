@@ -1,3 +1,7 @@
+use crate::layout::value::{parse_color, parse_length_pct, parse_px, DEFAULT_FONT_SIZE};
+
+type Validator = fn(&str) -> bool;
+
 const LONGHANDS: &[(&str, [&str; 4])] = &[
     ("inset", ["top", "right", "bottom", "left"]),
     (
@@ -32,6 +36,9 @@ const LONGHANDS: &[(&str, [&str; 4])] = &[
 pub(super) fn expand<'a>(property: &str, value: &'a str) -> Option<[(&'static str, &'a str); 4]> {
     let names = LONGHANDS.iter().find(|(name, _)| *name == property)?.1;
     let parts = components(value)?;
+    if !admitted(property, &parts) {
+        return None;
+    }
     let values = match parts.as_slice() {
         [a] => [*a; 4],
         [a, b] => [*a, *b, *a, *b],
@@ -40,6 +47,67 @@ pub(super) fn expand<'a>(property: &str, value: &'a str) -> Option<[(&'static st
         _ => return None,
     };
     Some(std::array::from_fn(|i| (names[i], values[i])))
+}
+
+fn admitted(property: &str, parts: &[&str]) -> bool {
+    if parts.len() == 1 && css_wide(parts[0]) {
+        return true;
+    }
+    if parts.iter().any(|part| css_wide(part)) {
+        return false;
+    }
+    let validators: &[(&str, Validator)] = &[
+        ("inset", inset),
+        ("border-width", border_width),
+        ("border-style", border_style),
+        ("border-color", border_color),
+    ];
+    let validate = validators.iter().find(|v| v.0 == property).unwrap().1;
+    parts
+        .iter()
+        .all(|part| validate(&part.to_ascii_lowercase()))
+}
+
+fn css_wide(value: &str) -> bool {
+    ["initial", "inherit", "unset", "revert", "revert-layer"]
+        .iter()
+        .any(|keyword| value.eq_ignore_ascii_case(keyword))
+}
+
+fn inset(value: &str) -> bool {
+    value == "auto" || valid_length(value, true, false)
+}
+
+fn border_width(value: &str) -> bool {
+    ["thin", "medium", "thick"].contains(&value) || valid_length(value, false, true)
+}
+
+fn border_style(value: &str) -> bool {
+    [
+        "none", "hidden", "dotted", "dashed", "solid", "double", "groove", "ridge", "inset",
+        "outset",
+    ]
+    .contains(&value)
+}
+
+fn border_color(value: &str) -> bool {
+    value == "currentcolor" || parse_color(value).is_some()
+}
+
+fn valid_length(value: &str, percentage: bool, nonnegative: bool) -> bool {
+    if let Ok(number) = value.parse::<f32>() {
+        return number == 0.0;
+    }
+    length_value(value, percentage)
+        .is_some_and(|value| value.is_finite() && (!nonnegative || value >= 0.0))
+}
+
+fn length_value(value: &str, percentage: bool) -> Option<f32> {
+    if percentage {
+        parse_length_pct(value, DEFAULT_FONT_SIZE)?.resolve(1.0)
+    } else {
+        parse_px(value, DEFAULT_FONT_SIZE)
+    }
 }
 
 fn components(value: &str) -> Option<Vec<&str>> {
@@ -95,5 +163,28 @@ mod tests {
             assert!(expand("inset", value).is_none());
         }
         assert!(expand("width", "1px").is_none());
+    }
+
+    #[test]
+    fn complete_quad_grammar_is_validated_before_expansion() {
+        for (property, value) in [
+            ("inset", "10px bogus"),
+            ("inset", "initial auto"),
+            ("border-width", "3px red"),
+            ("border-width", "-1px"),
+            ("border-width", "3%"),
+            ("border-style", "solid bogus"),
+            ("border-color", "red bogus"),
+        ] {
+            assert!(expand(property, value).is_none(), "{property}:{value}");
+        }
+        for (property, value) in [
+            ("inset", "auto 0 -2px 4%"),
+            ("border-width", "thin medium thick 0"),
+            ("border-style", "solid dotted double groove"),
+            ("border-color", "red currentColor #fff rgb(0, 0, 0)"),
+        ] {
+            assert!(expand(property, value).is_some(), "{property}:{value}");
+        }
     }
 }

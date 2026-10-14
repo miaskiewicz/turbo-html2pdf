@@ -710,6 +710,14 @@ fn child_leading(kid: &LayoutBox, kbs: &BoxStyle, cw: f32, fs: f32, suppressed: 
     }
 }
 
+fn root_trailing_margin(margin: f32, root: bool) -> f32 {
+    if root {
+        margin
+    } else {
+        0.0
+    }
+}
+
 fn layout_block_flow(
     kids: &[LayoutBox],
     cx: f32,
@@ -717,7 +725,7 @@ fn layout_block_flow(
     cw: f32,
     bs: &BoxStyle,
     ctx: &mut Ctx,
-    suppress_first_leading: bool,
+    boundaries: (bool, bool),
 ) -> (Vec<Fragment>, f32) {
     let fs = bs.font_size;
     let mut frags = Vec::new();
@@ -753,14 +761,14 @@ fn layout_block_flow(
         // child when this container hoists it out its own top edge (parent/child
         // collapse), else the child's `margin-top` collapsed with any margins that
         // escape ITS borderless top.
-        let leading = child_leading(kid, &kbs, cw, fs, first_inflow && suppress_first_leading);
+        let leading = child_leading(kid, &kbs, cw, fs, first_inflow && boundaries.0);
         first_inflow = false;
         frags.push(layout_in_flow_kid(kid, leading, cx, cw, fs, &mut flow, ctx));
     }
     // Height is the in-flow content only. Floats are contained by their BFC (see
     // `layout_box_sized`), not by every block they pass through — a non-BFC block
     // does not grow to enclose a float, so following content wraps beside it.
-    let content_h = flow.cursor - cy;
+    let content_h = flow.cursor - cy + root_trailing_margin(flow.pending, boundaries.1);
     place_deferred_abs(
         &deferred,
         cw,
@@ -985,8 +993,12 @@ fn auto_x_margins(s: &crate::style::ComputedStyle) -> bool {
 /// are isolated from the outer context (they don't wrap outer floats, and they
 /// grow this box). Floats, out-of-flow boxes, non-`visible` `overflow`, and the
 /// independent formatting roots (flex/grid/table) all qualify.
+fn intrinsic_formatting_root(lb: &LayoutBox, bs: &BoxStyle) -> bool {
+    lb.document_root || bs.float != Float::None || bs.position.is_out_of_flow()
+}
+
 fn establishes_bfc(lb: &LayoutBox, bs: &BoxStyle) -> bool {
-    if bs.float != Float::None || bs.position.is_out_of_flow() {
+    if intrinsic_formatting_root(lb, bs) {
         return true;
     }
     if matches!(
@@ -1164,7 +1176,15 @@ fn layout_content(
             // leading margin is applied by THIS box's own caller (via `leading_margin`)
             // — so suppress it inside to avoid double-counting.
             let suppress_first = top_margins_collapse_through(lb, bs);
-            layout_block_flow(kids, cx, cy, cw, bs, ctx, suppress_first)
+            layout_block_flow(
+                kids,
+                cx,
+                cy,
+                cw,
+                bs,
+                ctx,
+                (suppress_first, lb.document_root),
+            )
         }
         BoxKind::Flex(kids) => super::flex::layout_flex(lb, kids, cx, cy, cw, bs.font_size, ctx),
         BoxKind::Grid(kids) => super::flex::layout_grid(lb, kids, cx, cy, cw, bs.font_size, ctx),

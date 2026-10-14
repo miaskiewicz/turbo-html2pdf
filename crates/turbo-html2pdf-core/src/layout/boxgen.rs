@@ -25,6 +25,7 @@ use super::value::{
 #[derive(Debug, Clone)]
 pub struct LayoutBox {
     pub node_id: NodeId,
+    pub(crate) document_root: bool,
     pub style: ComputedStyle,
     /// Source element attributes (e.g. `colspan`, `href`); empty for anonymous
     /// boxes. Layout/emit read HTML attributes that are not CSS properties here.
@@ -226,6 +227,7 @@ enum Level {
 struct Ids {
     next: u32,
     sources: Option<BuildSources>,
+    document_roots: std::collections::HashSet<usize>,
 }
 
 impl Ids {
@@ -460,6 +462,7 @@ fn build_block_box(el: &StyledElement, ids: &mut Ids) -> LayoutBox {
     if let Tag::Directive(kind) = &el.tag {
         return LayoutBox {
             node_id,
+            document_root: false,
             style: el.style.clone(),
             attrs: el.attrs.clone(),
             display: Display::Block,
@@ -481,6 +484,9 @@ fn build_block_box(el: &StyledElement, ids: &mut Ids) -> LayoutBox {
     let kind = box_kind_for(display, el, ids);
     LayoutBox {
         node_id,
+        document_root: ids
+            .document_roots
+            .contains(&(el as *const StyledElement as usize)),
         style: el.style.clone(),
         attrs: el.attrs.clone(),
         display,
@@ -642,6 +648,7 @@ fn anon_lines_box(
     };
     LayoutBox {
         node_id: ids.alloc(),
+        document_root: false,
         style,
         attrs: Vec::new(),
         display: Display::Block,
@@ -722,6 +729,7 @@ pub fn build_box_tree(styled: &[StyledNode]) -> LayoutBox {
     let mut ids = Ids {
         next: 0,
         sources: None,
+        document_roots: Default::default(),
     };
     build_root(styled, &mut ids)
 }
@@ -734,9 +742,18 @@ pub(crate) fn build_sourced_tree(
     let mut ids = Ids {
         next: 0,
         sources: Some(sources),
+        document_roots: html_document_roots(styled),
     };
     let root = build_root(styled, &mut ids);
     (root, ids.sources.expect("source mode installed").records)
+}
+
+fn html_document_roots(styled: &[StyledNode]) -> std::collections::HashSet<usize> {
+    styled.iter().filter_map(|node| match node {
+        StyledNode::Element(element) if matches!(&element.tag, Tag::Html(name) if name.eq_ignore_ascii_case("html")) =>
+            Some(element as *const StyledElement as usize),
+        _ => None,
+    }).collect()
 }
 
 fn build_root(styled: &[StyledNode], ids: &mut Ids) -> LayoutBox {
@@ -745,6 +762,7 @@ fn build_root(styled: &[StyledNode], ids: &mut Ids) -> LayoutBox {
     let kind = build_flow(styled, &style, ids);
     LayoutBox {
         node_id,
+        document_root: false,
         style,
         attrs: Vec::new(),
         display: Display::Block,

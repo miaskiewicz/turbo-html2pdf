@@ -43,7 +43,11 @@ async function collect(fixture) {
     const elements = [];
     const ready = [];
     const node = (definition) => {
-      const element = document.createElement(definition.tag);
+      const element =
+        test.documentRoot && definition.tag === "html"
+          ? document.documentElement
+          : document.createElement(definition.tag);
+      if (element === document.documentElement) element.replaceChildren();
       element.style.cssText = definition.style;
       elements.push({ sourceId: definition.sourceId, element });
       for (const child of definition.children) element.append(node(child));
@@ -58,12 +62,16 @@ async function collect(fixture) {
       }
       return element;
     };
-    for (const definition of test.nodes) document.body.append(node(definition));
+    for (const definition of test.nodes) {
+      const element = node(definition);
+      if (element !== document.documentElement) document.body.append(element);
+    }
     await Promise.all(ready);
     cases.push({
       name: test.name,
       boxes: elements.map(({ sourceId, element }) => ({
         sourceId,
+        isDocumentRoot: element === document.documentElement,
         rect: rect(element.getBoundingClientRect()),
         clientRects: Array.from(element.getClientRects(), rect),
         client: {
