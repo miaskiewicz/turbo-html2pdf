@@ -720,3 +720,33 @@ fn directive_fragments_keep_actual_source_identity_and_category() {
     assert!(fragment.used_box.is_none());
     assert_eq!(fragment.source_id, Some(SourceId(51)));
 }
+
+#[test]
+fn zero_fragment_provenance_distinguishes_excluded_subtrees_from_empty_visible_inlines() {
+    let nodes = vec![
+        element(
+            "div",
+            "display:none",
+            vec![element("span", "", vec![Node::Text("hidden".into())])],
+        ),
+        element("span", "", Vec::new()),
+    ];
+    // The hiding ancestor is intentionally unmapped: its policy must still reach
+    // the caller's mapped descendants without manufacturing a visible rectangle.
+    let snapshot = capture(
+        &nodes,
+        &[
+            identity(1, &[0, 0]),
+            identity(2, &[0, 0, 0]),
+            identity(3, &[1]),
+        ],
+    );
+    for id in [1, 2] {
+        let source = snapshot.source(SourceId(id)).unwrap();
+        assert!(source.excluded_from_layout);
+        assert!(source.fragment_indices.is_empty());
+    }
+    let empty = snapshot.source(SourceId(3)).unwrap();
+    assert!(!empty.excluded_from_layout);
+    assert!(empty.fragment_indices.is_empty());
+}

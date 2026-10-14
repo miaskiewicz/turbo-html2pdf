@@ -1,6 +1,7 @@
 use super::{
     SnapshotError, SnapshotFragment, SnapshotSource, SourceId, SourceIdentity, SourceKind,
 };
+use crate::layout::value::{display_of, Display};
 use crate::{NodeId, StyledNode};
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 
@@ -35,7 +36,7 @@ pub(crate) fn prepare(
         nodes: HashMap::new(),
         sources: Vec::new(),
     };
-    walker.visit(styled, &mut Vec::new(), &[]);
+    walker.visit(styled, &mut Vec::new(), &[], false);
     check_found(&wanted, &walker.sources)?;
     Ok((
         BuildSources {
@@ -82,15 +83,29 @@ struct Walker<'a> {
 }
 
 impl Walker<'_> {
-    fn visit(&mut self, nodes: &[StyledNode], path: &mut Vec<usize>, ancestors: &[SourceId]) {
+    fn visit(
+        &mut self,
+        nodes: &[StyledNode],
+        path: &mut Vec<usize>,
+        ancestors: &[SourceId],
+        excluded: bool,
+    ) {
         for (i, node) in nodes.iter().enumerate() {
             path.push(i);
-            self.node(node, path, ancestors);
+            self.node(node, path, ancestors, excluded);
             path.pop();
         }
     }
 
-    fn node(&mut self, node: &StyledNode, path: &mut Vec<usize>, ancestors: &[SourceId]) {
+    fn node(
+        &mut self,
+        node: &StyledNode,
+        path: &mut Vec<usize>,
+        ancestors: &[SourceId],
+        excluded: bool,
+    ) {
+        let excluded = excluded
+            || matches!(node, StyledNode::Element(element) if display_of(&element.style) == Display::None);
         let id = self.wanted.get(path).copied();
         let (key, kind) = node_key(node);
         self.nodes.insert(
@@ -105,11 +120,12 @@ impl Walker<'_> {
                 id,
                 path: path.clone(),
                 kind,
+                excluded_from_layout: excluded,
                 fragment_indices: Vec::new(),
                 descendant_fragment_indices: Vec::new(),
             });
         }
-        self.children(node, path, ancestors, id);
+        self.children(node, path, ancestors, id, excluded);
     }
 
     fn children(
@@ -118,13 +134,14 @@ impl Walker<'_> {
         path: &mut Vec<usize>,
         ancestors: &[SourceId],
         id: Option<SourceId>,
+        excluded: bool,
     ) {
         let StyledNode::Element(element) = node else {
             return;
         };
         let mut next = ancestors.to_vec();
         next.extend(id);
-        self.visit(&element.children, path, &next);
+        self.visit(&element.children, path, &next, excluded);
     }
 }
 

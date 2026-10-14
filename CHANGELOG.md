@@ -9,9 +9,11 @@ PyPI, and crates.io packages release in lockstep from a `v*` tag (PyPI on `pyv*`
 - Add native live-tree layout snapshots with caller-owned source IDs, all-fragment
   provenance, nested affine transforms and real block/replaced geometry. The live
   path retains nonpainting layout boxes and removes PDF image-fit caps while
-  existing PDF APIs preserve their previous behavior. Fifteen offline contracts
+  existing PDF APIs preserve their previous behavior. Sixteen offline contracts
   and 20 independently recorded Chrome 155 geometry cases cover the seam; full
-  inline/caret/scroll geometry remains explicit follow-up work.
+  inline/caret/scroll geometry remains explicit follow-up work. Distinguish actual
+  display-none exclusion through unmapped ancestors from visible empty/flattened
+  inlines so callers cannot invent zero rectangles from absent fragments.
 
 ## [0.3.4] — searchable and copyable text in ordinary PDFs
 

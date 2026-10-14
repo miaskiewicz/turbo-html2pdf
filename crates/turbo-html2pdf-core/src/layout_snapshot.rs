@@ -100,6 +100,10 @@ pub struct SnapshotSource {
     pub id: SourceId,
     pub path: Vec<usize>,
     pub kind: SourceKind,
+    /// Actual display:none exclusion, including an unmapped ancestor. A visible
+    /// flattened/empty inline also has no box fragments, so absence alone cannot
+    /// justify manufacturing a zero CSSOM rectangle.
+    pub excluded_from_layout: bool,
     pub fragment_indices: Vec<usize>,
     pub descendant_fragment_indices: Vec<usize>,
 }

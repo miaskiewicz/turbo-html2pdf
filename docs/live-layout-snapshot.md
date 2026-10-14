@@ -144,3 +144,8 @@ page/probe/target capture error; failed captures are retained for diagnosis. The
 standalone PDF, N-API, WASM and Python APIs retain their existing behavior.
 This source checkpoint does not release a new crate version; consumers need a
 separately reviewed additive dependency/version checkpoint before using it.
+
+Source records expose actual `excluded_from_layout` provenance, including unmapped
+`display:none` ancestors. Zero fragments alone cannot distinguish exclusion from
+a visible empty/flattened inline, so embedders must not invent a zero rectangle
+from fragment absence.
