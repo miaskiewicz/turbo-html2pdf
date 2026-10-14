@@ -165,3 +165,43 @@ Source records expose actual `excluded_from_layout` provenance, including unmapp
 `display:none` ancestors. Zero fragments alone cannot distinguish exclusion from
 a visible empty/flattened inline, so embedders must not invent a zero rectangle
 from fragment absence.
+
+
+## Optional native text-source provenance (unreleased)
+
+`snapshot_live_tree_with_text` and `snapshot_styled_tree_with_text` return the same
+immutable snapshot with `text_runs()`. Each record identifies an actual native
+text fragment, the caller's source ID/ancestors and its positioned glyphs. Every
+glyph carries the real shaper byte cluster converted to original input UTF-16
+ranges, pen position and advance. Fragment origin and composed transform remain
+in `fragments()[run.fragment_index]`. These are actual shaping records, not equally
+spaced positions derived from a line rectangle.
+
+`layout::inline::layout_paragraph_in_with_sources` exposes the native paragraph
+and parallel per-line/per-run/per-glyph source data without changing the existing
+public paragraph/glyph structs. The text-enabled route shapes clusters in the
+primary face before choosing a fallback: normalization can produce a valid glyph
+for a base-plus-mark sequence even when that individual mark has no cmap entry.
+The existing PDF/box-only itemization and entry points retain their behavior.
+
+The native capture refuses layout-ID overflow or more than one million captured
+glyph records. `TextSnapshotError` wraps the existing viewport/source validation
+errors and reports that additional capacity bound. Original box-only snapshots
+retain their error type and allocate no glyph provenance. Text metadata holds
+native values and font/source IDs, with no script references or guest attributes.
+
+The authored `scripts/text-source-chrome-control.mjs` serves the exact bundled
+Go-Regular.ttf and captures Range rectangles and caret queries in independent
+Chrome. Its saved font hash is
+`197d9f3703b4c00af609178876a8d73e396f64fe438b2c871778566632374be3`.
+Six controlled-face graphs check exact horizontal cluster positions/advances,
+including combining text, collapsed leading whitespace, wrapping and transforms.
+A seventh graph preserves the uncontrolled installed emoji fallback result; its
+numeric metrics are not certified. The capture requires zero errors and records
+localhost-only extension flags. Native tests separately verify astral UTF-16
+ranges, source ownership and repeated wrapped runs.
+
+Caret selection, range vertical/font boxes, whitespace gap provenance, bidi/CJK
+itemization, fragmented inline borders and complete font-fallback behavior remain
+unfinished. The collector preserves these fields for subsequent implementation;
+passing horizontal cluster checks does not establish complete caret geometry.

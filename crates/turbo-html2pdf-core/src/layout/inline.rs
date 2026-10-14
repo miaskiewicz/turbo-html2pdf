@@ -128,11 +128,40 @@ pub struct ParagraphLayout {
     pub height: f32,
 }
 
+/// Actual shaper cluster and pen advance for one positioned glyph. Byte and
+/// UTF-16 ranges refer to its original InlineRun text, not normalized glyph text.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct GlyphSourceCluster {
+    pub byte_start: usize,
+    pub byte_end: usize,
+    pub utf16_start: usize,
+    pub utf16_end: usize,
+    pub pen_x: f32,
+    pub advance: f32,
+}
+
+/// Native output and parallel per-line, per-run, per-glyph source records.
+#[derive(Debug, Clone)]
+pub struct ParagraphSourceLayout {
+    pub layout: ParagraphLayout,
+    pub clusters: Vec<Vec<Vec<GlyphSourceCluster>>>,
+}
+struct SourceRun {
+    run: GlyphRun,
+    clusters: Vec<GlyphSourceCluster>,
+}
+struct SourceLine {
+    line: InlineLine,
+    clusters: Vec<Vec<GlyphSourceCluster>>,
+}
+
 // --------------------------------------------------------------------------
 // itemization: chars -> per-glyph fallback faces
 // --------------------------------------------------------------------------
 
 struct CharInfo {
+    byte_offset: usize,
+    utf16_offset: usize,
     ch: char,
     run: usize,
     face: FontFace,
@@ -149,14 +178,51 @@ fn resolve_face(ch: char, run: &InlineRun, reg: &FontRegistry) -> (FontFace, boo
     }
 }
 
-fn flatten_chars(runs: &[InlineRun], reg: &FontRegistry, diags: &mut Diagnostics) -> Vec<CharInfo> {
+// A font may shape a whole combining cluster through normalization even when
+// its cmap does not contain an individual mark. Native text snapshots consult
+// real primary-font shaping before character fallback; the legacy PDF route
+// keeps its existing itemization policy.
+fn primary_cluster_coverage(run: &InlineRun, enabled: bool) -> Vec<(usize, bool)> {
+    if !enabled {
+        return Vec::new();
+    }
+    let mut coverage = std::collections::BTreeMap::new();
+    for glyph in run.face.shape(&run.text) {
+        *coverage.entry(glyph.cluster as usize).or_insert(true) &= glyph.glyph_id != 0;
+    }
+    coverage.into_iter().collect()
+}
+fn primary_covers(coverage: &[(usize, bool)], byte: usize) -> bool {
+    let index = coverage.partition_point(|value| value.0 <= byte);
+    index.checked_sub(1).is_some_and(|index| coverage[index].1)
+}
+
+fn flatten_chars(
+    runs: &[InlineRun],
+    reg: &FontRegistry,
+    diags: &mut Diagnostics,
+    capture_sources: bool,
+) -> Vec<CharInfo> {
     let mut out = Vec::new();
     for (i, run) in runs.iter().enumerate() {
         let mut missing = false;
-        for ch in run.text.chars() {
-            let (face, notdef) = resolve_face(ch, run, reg);
+        let coverage = primary_cluster_coverage(run, capture_sources);
+        let mut utf16_offset = 0;
+        for (byte_offset, ch) in run.text.char_indices() {
+            let (face, notdef) = if primary_covers(&coverage, byte_offset) {
+                (run.face.clone(), false)
+            } else {
+                resolve_face(ch, run, reg)
+            };
             missing |= notdef;
-            out.push(CharInfo { ch, run: i, face });
+            out.push(CharInfo {
+                byte_offset,
+                utf16_offset,
+                ch,
+                run: i,
+                face,
+            });
+            utf16_offset += ch.len_utf16();
         }
         if missing {
             diags.push(
@@ -174,6 +240,8 @@ fn flatten_chars(runs: &[InlineRun], reg: &FontRegistry, diags: &mut Diagnostics
 // --------------------------------------------------------------------------
 
 struct Seg {
+    source_bytes: usize,
+    source_utf16: usize,
     face: FontFace,
     text: String,
     font_size: f32,
@@ -211,6 +279,8 @@ fn make_seg(chars: &[CharInfo], runs: &[InlineRun]) -> Seg {
     let face = chars[0].face.clone();
     let width = face.measure(&text, run.font_size, run.letter_spacing);
     Seg {
+        source_bytes: chars[0].byte_offset,
+        source_utf16: chars[0].utf16_offset,
         face,
         text,
         font_size: run.font_size,
@@ -284,14 +354,19 @@ fn build_words(chars: &[CharInfo], runs: &[InlineRun]) -> Vec<Word> {
 /// Build the word list from inline pieces in document order: consecutive text
 /// runs are grouped (so a word may still span adjacent runs, e.g. `<b>x</b>y`),
 /// and each atom becomes an unbreakable atom-word at its position.
-fn build_pieces(pieces: &[Piece], reg: &FontRegistry, diags: &mut Diagnostics) -> Vec<Word> {
+fn build_pieces(
+    pieces: &[Piece],
+    reg: &FontRegistry,
+    diags: &mut Diagnostics,
+    capture_sources: bool,
+) -> Vec<Word> {
     let mut words = Vec::new();
     let mut group: Vec<InlineRun> = Vec::new();
     for piece in pieces {
         match piece {
             Piece::Run(run) => group.push(run.clone()),
             Piece::Atom(atom) => {
-                flush_run_group(&mut group, reg, diags, &mut words);
+                flush_run_group(&mut group, reg, diags, &mut words, capture_sources);
                 words.push(Word {
                     segs: Vec::new(),
                     // The atom occupies its MARGIN box inline, so horizontal margins
@@ -303,12 +378,12 @@ fn build_pieces(pieces: &[Piece], reg: &FontRegistry, diags: &mut Diagnostics) -
                 });
             }
             Piece::Break => {
-                flush_run_group(&mut group, reg, diags, &mut words);
+                flush_run_group(&mut group, reg, diags, &mut words, capture_sources);
                 words.push(break_word());
             }
         }
     }
-    flush_run_group(&mut group, reg, diags, &mut words);
+    flush_run_group(&mut group, reg, diags, &mut words, capture_sources);
     words
 }
 
@@ -319,9 +394,10 @@ fn flush_run_group(
     reg: &FontRegistry,
     diags: &mut Diagnostics,
     out: &mut Vec<Word>,
+    capture_sources: bool,
 ) {
     if !group.is_empty() {
-        let chars = flatten_chars(group, reg, diags);
+        let chars = flatten_chars(group, reg, diags, capture_sources);
         hand_off_leading_space(&chars, group, out);
         out.extend(build_words(&chars, group));
         group.clear();
@@ -363,7 +439,8 @@ struct Placer<'a> {
     /// The block's line-box strut height — the minimum height of every line box,
     /// so an empty line (from consecutive `<br>`) is exactly one strut tall.
     strut: f32,
-    out: Vec<InlineLine>,
+    capture_sources: bool,
+    out: Vec<SourceLine>,
     cur: Vec<Word>,
     y: f32,
     indent: f32,
@@ -372,12 +449,13 @@ struct Placer<'a> {
 }
 
 impl<'a> Placer<'a> {
-    fn new(align: Align, region: LineRegion<'a>, strut: f32) -> Self {
+    fn new(align: Align, region: LineRegion<'a>, strut: f32, capture_sources: bool) -> Self {
         let (indent, lw) = region(0.0);
         Placer {
             align,
             region,
             strut,
+            capture_sources,
             out: Vec::new(),
             cur: Vec::new(),
             y: 0.0,
@@ -398,10 +476,11 @@ impl<'a> Placer<'a> {
             self.lw,
             self.align,
             self.strut,
+            self.capture_sources,
         );
-        line.top = self.y;
-        line.indent = self.indent;
-        self.y += line.height;
+        line.line.top = self.y;
+        line.line.indent = self.indent;
+        self.y += line.line.height;
         self.out.push(line);
         (self.indent, self.lw) = (self.region)(self.y);
         self.x = 0.0;
@@ -421,7 +500,7 @@ impl<'a> Placer<'a> {
         }
     }
 
-    fn finish(mut self) -> Vec<InlineLine> {
+    fn finish(mut self) -> Vec<SourceLine> {
         self.flush();
         self.out
     }
@@ -433,8 +512,9 @@ fn wrap_and_place(
     align: Align,
     region: LineRegion,
     strut: f32,
-) -> Vec<InlineLine> {
-    let mut placer = Placer::new(align, region, strut);
+    capture_sources: bool,
+) -> Vec<SourceLine> {
+    let mut placer = Placer::new(align, region, strut, capture_sources);
     for word in words {
         placer.add(word);
     }
@@ -526,12 +606,55 @@ fn line_used_width(words: &[Word]) -> f32 {
     w
 }
 
-fn shape_seg(seg: &Seg, pen_x: f32, baseline: f32) -> GlyphRun {
+fn shape_seg(seg: &Seg, pen_x: f32, baseline: f32, capture_sources: bool) -> SourceRun {
     let scale = seg.face.scale(seg.font_size);
     let seg_baseline = baseline - valign_shift(seg.valign, seg.font_size);
     let mut glyphs = Vec::new();
+    let mut clusters = Vec::new();
     let mut x = pen_x;
-    for g in seg.face.shape(&seg.text) {
+    let shaped = seg.face.shape(&seg.text);
+    let (boundaries, utf16) = if capture_sources {
+        let mut boundaries: Vec<_> = shaped.iter().map(|glyph| glyph.cluster as usize).collect();
+        boundaries.push(seg.text.len());
+        boundaries.sort_unstable();
+        boundaries.dedup();
+        let mut offset = 0;
+        let mut utf16: Vec<_> = seg
+            .text
+            .char_indices()
+            .map(|(byte, character)| {
+                let result = (byte, offset);
+                offset += character.len_utf16();
+                result
+            })
+            .collect();
+        utf16.push((seg.text.len(), offset));
+        (boundaries, utf16)
+    } else {
+        (Vec::new(), Vec::new())
+    };
+    for g in shaped {
+        if capture_sources {
+            let start = g.cluster as usize;
+            let end = boundaries[boundaries
+                .binary_search(&start)
+                .expect("shaper cluster exists")
+                + 1];
+            let offset = |byte| {
+                utf16[utf16
+                    .binary_search_by_key(&byte, |value| value.0)
+                    .expect("shaper cluster is a character boundary")]
+                .1
+            };
+            clusters.push(GlyphSourceCluster {
+                byte_start: seg.source_bytes + start,
+                byte_end: seg.source_bytes + end,
+                utf16_start: seg.source_utf16 + offset(start),
+                utf16_end: seg.source_utf16 + offset(end),
+                pen_x: x,
+                advance: scale * g.x_advance as f32 + seg.letter_spacing,
+            });
+        }
         glyphs.push(PositionedGlyph {
             glyph_id: g.glyph_id,
             x: x + scale * g.x_offset as f32,
@@ -539,12 +662,15 @@ fn shape_seg(seg: &Seg, pen_x: f32, baseline: f32) -> GlyphRun {
         });
         x += scale * g.x_advance as f32 + seg.letter_spacing;
     }
-    GlyphRun {
-        node_id: seg.node_id,
-        glyphs,
-        face: seg.face.clone(),
-        font_size: seg.font_size,
-        color: seg.color,
+    SourceRun {
+        clusters,
+        run: GlyphRun {
+            node_id: seg.node_id,
+            glyphs,
+            face: seg.face.clone(),
+            font_size: seg.font_size,
+            color: seg.color,
+        },
     }
 }
 
@@ -559,11 +685,14 @@ fn can_merge(a: &GlyphRun, b: &GlyphRun) -> bool {
         && same_face(&a.face, &b.face)
 }
 
-fn merge_runs(runs: Vec<GlyphRun>) -> Vec<GlyphRun> {
-    let mut out: Vec<GlyphRun> = Vec::new();
+fn merge_runs(runs: Vec<SourceRun>) -> Vec<SourceRun> {
+    let mut out: Vec<SourceRun> = Vec::new();
     for run in runs {
         match out.last_mut() {
-            Some(last) if can_merge(last, &run) => last.glyphs.extend(run.glyphs),
+            Some(last) if can_merge(&last.run, &run.run) => {
+                last.run.glyphs.extend(run.run.glyphs);
+                last.clusters.extend(run.clusters);
+            }
             _ => out.push(run),
         }
     }
@@ -586,7 +715,13 @@ fn atom_margin_top(atom: &InlineAtom, height: f32, baseline: f32) -> f32 {
     }
 }
 
-fn place_line(words: Vec<Word>, max_width: f32, align: Align, strut: f32) -> InlineLine {
+fn place_line(
+    words: Vec<Word>,
+    max_width: f32,
+    align: Align,
+    strut: f32,
+    capture_sources: bool,
+) -> SourceLine {
     let m = line_metrics(&words, strut);
     let baseline = m.ascent + (m.height - m.ascent - m.descent) / 2.0;
     let width = line_used_width(&words);
@@ -604,33 +739,48 @@ fn place_line(words: Vec<Word>, max_width: f32, align: Align, strut: f32) -> Inl
             pen += atom.width + atom.margin_left + atom.margin_right;
         } else {
             for seg in &word.segs {
-                runs.push(shape_seg(seg, pen, baseline));
+                runs.push(shape_seg(seg, pen, baseline, capture_sources));
                 pen += seg.width;
             }
         }
         pen += word.space_after;
     }
-    InlineLine {
-        runs: merge_runs(runs),
-        atoms,
-        width,
-        top: 0.0,
-        height: m.height,
-        indent: 0.0,
+    let (runs, clusters) = merge_runs(runs)
+        .into_iter()
+        .map(|value| (value.run, value.clusters))
+        .unzip();
+    SourceLine {
+        clusters,
+        line: InlineLine {
+            runs,
+            atoms,
+            width,
+            top: 0.0,
+            height: m.height,
+            indent: 0.0,
+        },
     }
 }
 
-fn finalize(lines: Vec<InlineLine>) -> ParagraphLayout {
+fn finalize(lines: Vec<SourceLine>) -> ParagraphSourceLayout {
     let mut height = 0.0_f32;
     let mut width = 0.0_f32;
-    for line in &lines {
+    for source in &lines {
+        let line = &source.line;
         height = height.max(line.top + line.height);
         width = width.max(line.indent + line.width);
     }
-    ParagraphLayout {
-        lines,
-        width,
-        height,
+    let (lines, clusters) = lines
+        .into_iter()
+        .map(|value| (value.line, value.clusters))
+        .unzip();
+    ParagraphSourceLayout {
+        clusters,
+        layout: ParagraphLayout {
+            lines,
+            width,
+            height,
+        },
     }
 }
 
@@ -661,8 +811,23 @@ pub fn layout_paragraph_in(
     region: LineRegion,
     strut: f32,
 ) -> ParagraphLayout {
-    let words = build_pieces(pieces, reg, diags);
-    finalize(wrap_and_place(words, align, region, strut))
+    let words = build_pieces(pieces, reg, diags, false);
+    finalize(wrap_and_place(words, align, region, strut, false)).layout
+}
+
+/// The same native shaping and line-breaking result with glyph source offsets.
+/// Offsets address the original input run, including collapsed whitespace; this
+/// exposes real clusters rather than dividing line rectangles into guessed carets.
+pub fn layout_paragraph_in_with_sources(
+    pieces: &[Piece],
+    reg: &FontRegistry,
+    align: Align,
+    diags: &mut Diagnostics,
+    region: LineRegion,
+    strut: f32,
+) -> ParagraphSourceLayout {
+    let words = build_pieces(pieces, reg, diags, true);
+    finalize(wrap_and_place(words, align, region, strut, true))
 }
 
 /// Lay out a paragraph of text runs only (no atoms) — a convenience for callers

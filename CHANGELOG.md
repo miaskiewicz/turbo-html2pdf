@@ -4,6 +4,19 @@ All notable changes to turbo-html2pdf are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/); versions follow SemVer. The npm,
 PyPI, and crates.io packages release in lockstep from a `v*` tag (PyPI on `pyv*`).
 
+## [Unreleased]
+
+- Add optional live-tree snapshots with genuine glyph/source cluster provenance,
+  original byte/UTF-16 ranges and real pen advances. Metadata follows unique
+  private native text-fragment IDs through wrapping, transforms and inline atoms,
+  while caller-owned source IDs retain the original text node. Existing public
+  Fragment/GlyphRun layouts and PDF itemization remain unchanged.
+- The text-enabled path checks actual primary-font shaping before per-character
+  fallback, retaining normalized combining clusters even when an individual mark
+  is absent from the font cmap. Authored Chrome controls with the identical bundled
+  font verify horizontal cluster geometry. This is groundwork for genuine Range/
+  caret and fragmented inline geometry, not complete CSSOM View support.
+
 ## [0.3.5] — 2026-10-14
 
 - Ship the MIT license and existing embedded-font notices with the actual npm,

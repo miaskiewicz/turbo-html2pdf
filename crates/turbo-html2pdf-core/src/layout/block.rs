@@ -57,6 +57,7 @@ pub(crate) struct Ctx<'a> {
     /// Live snapshots use viewport geometry rather than pagination image caps.
     pub(crate) live_geometry: bool,
     pub(crate) used_metrics: Option<HashMap<NodeId, UsedBoxMetrics>>,
+    pub(crate) text_capture: Option<crate::layout_snapshot::text::TextCapture>,
     /// Floats active in the current **block formatting context**, in absolute
     /// galley coordinates. In-flow content within the same BFC flows in the
     /// inline region these leave free (a `float:right` infobox narrows the text
@@ -469,9 +470,18 @@ pub(crate) fn build_runs(
         .collect()
 }
 
-fn lines_to_fragments(para: &inline::ParagraphLayout, cx: f32, cy: f32, out: &mut Vec<Fragment>) {
-    for line in &para.lines {
-        for gr in &line.runs {
+fn lines_to_fragments(
+    para: &inline::ParagraphSourceLayout,
+    cx: f32,
+    cy: f32,
+    out: &mut Vec<Fragment>,
+    capture: &mut Option<crate::layout_snapshot::text::TextCapture>,
+) {
+    for (line_index, line) in para.layout.lines.iter().enumerate() {
+        for (run_index, gr) in line.runs.iter().enumerate() {
+            let node_id = capture.as_mut().map_or(gr.node_id, |capture| {
+                capture.record(gr.node_id, &para.clusters[line_index][run_index])
+            });
             let content = FragmentContent::TextLine {
                 glyphs: gr.glyphs.clone(),
                 face: gr.face.clone(),
@@ -479,7 +489,7 @@ fn lines_to_fragments(para: &inline::ParagraphLayout, cx: f32, cy: f32, out: &mu
                 color: gr.color,
             };
             out.push(Fragment::new(
-                gr.node_id,
+                node_id,
                 cx + line.indent,
                 cy + line.top,
                 line.width,
@@ -558,12 +568,32 @@ fn layout_lines(
         (rx - cx, rw)
     };
     let strut = line_strut(bs, fonts);
-    let para =
-        inline::layout_paragraph_in(&pieces, fonts, bs.text_align, ctx.diags, &region, strut);
+    let para = if ctx.text_capture.is_some() {
+        inline::layout_paragraph_in_with_sources(
+            &pieces,
+            fonts,
+            bs.text_align,
+            ctx.diags,
+            &region,
+            strut,
+        )
+    } else {
+        inline::ParagraphSourceLayout {
+            layout: inline::layout_paragraph_in(
+                &pieces,
+                fonts,
+                bs.text_align,
+                ctx.diags,
+                &region,
+                strut,
+            ),
+            clusters: Vec::new(),
+        }
+    };
     let mut frags = Vec::new();
-    lines_to_fragments(&para, cx, cy, &mut frags);
+    lines_to_fragments(&para, cx, cy, &mut frags, &mut ctx.text_capture);
     // Translate each pre-laid atom to where it landed within its line.
-    for line in &para.lines {
+    for line in &para.layout.lines {
         for placed in &line.atoms {
             let mut f = atom_frags[placed.id].clone();
             f.translate(cx + line.indent + placed.x, cy + line.top + placed.y);
@@ -571,7 +601,7 @@ fn layout_lines(
         }
     }
     frags.extend(directives);
-    (frags, para.height)
+    (frags, para.layout.height)
 }
 
 /// Pre-lay the inline sequence in document order, returning `(pieces, atoms,
@@ -1674,29 +1704,46 @@ pub fn layout_tree_with_images(
     images: &ImageCtx,
     diags: &mut Diagnostics,
 ) -> Fragment {
-    layout_tree_policy(root, cb_width, 0.0, false, fonts, images, diags).0
+    layout_tree_policy(root, cb_width, 0.0, (false, None), fonts, images, diags).0
 }
 
 pub(crate) fn layout_tree_live(
     root: &LayoutBox,
-    width: f32,
-    height: f32,
+    viewport: (f32, f32),
     fonts: &FontRegistry,
     images: &ImageCtx,
     diags: &mut Diagnostics,
-) -> (Fragment, HashMap<NodeId, UsedBoxMetrics>) {
-    layout_tree_policy(root, width, height, true, fonts, images, diags)
+    text_start: Option<u32>,
+) -> (
+    Fragment,
+    HashMap<NodeId, UsedBoxMetrics>,
+    Option<crate::layout_snapshot::text::TextCapture>,
+) {
+    layout_tree_policy(
+        root,
+        viewport.0,
+        viewport.1,
+        (true, text_start),
+        fonts,
+        images,
+        diags,
+    )
 }
 
 fn layout_tree_policy(
     root: &LayoutBox,
     cb_width: f32,
     viewport_height: f32,
-    live_geometry: bool,
+    policy: (bool, Option<u32>),
     fonts: &FontRegistry,
     images: &ImageCtx,
     diags: &mut Diagnostics,
-) -> (Fragment, HashMap<NodeId, UsedBoxMetrics>) {
+) -> (
+    Fragment,
+    HashMap<NodeId, UsedBoxMetrics>,
+    Option<crate::layout_snapshot::text::TextCapture>,
+) {
+    let (live_geometry, text_start) = policy;
     let mut ctx = Ctx {
         fonts,
         images,
@@ -1711,6 +1758,7 @@ fn layout_tree_policy(
         root_h: viewport_height,
         live_geometry,
         used_metrics: live_geometry.then(HashMap::new),
+        text_capture: text_start.map(crate::layout_snapshot::text::TextCapture::new),
         floats: Vec::new(),
     };
     stamp_intrinsic_widths(root, images);
@@ -1722,7 +1770,7 @@ fn layout_tree_policy(
     if float_bottom > frag.height {
         frag.height = float_bottom;
     }
-    (frag, ctx.used_metrics.unwrap_or_default())
+    (frag, ctx.used_metrics.unwrap_or_default(), ctx.text_capture)
 }
 
 #[cfg(test)]

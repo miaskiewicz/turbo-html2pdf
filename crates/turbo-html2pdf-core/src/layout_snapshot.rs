@@ -8,13 +8,15 @@
 //!
 //! This is a provenance seam, not a complete CSSOM View implementation. In
 //! particular a text-line fragment's rectangle is its line container, not a
-//! Range rectangle. Original UTF-16 offsets, caret boxes, scrollbars, clipping,
-//! and fragmented inline border boxes require further layout support.
+//! Range rectangle. The optional text-enabled API preserves actual shaper
+//! clusters and original UTF-16 offsets; complete caret boxes, whitespace/bidi
+//! mapping, scrollbars, clipping and fragmented inline borders remain separate.
 
 mod fixed_containing;
 mod geometry;
 mod metrics;
 pub(crate) mod sources;
+pub(crate) mod text;
 
 use crate::layout::{block, boxgen};
 use crate::{Cascade, Diagnostics, FontRegistry, Fragment, ImageCtx, Node, NodeId, StyledNode};
@@ -22,6 +24,7 @@ use std::collections::BTreeMap;
 
 pub use geometry::{Point, Rect};
 pub use metrics::UsedBoxMetrics;
+pub use text::{SnapshotTextGlyph, SnapshotTextRun};
 
 /// A stable identity from the caller's source tree, independent of its position.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -117,9 +120,14 @@ pub struct LayoutSnapshot {
     sources: Vec<SnapshotSource>,
     source_index: BTreeMap<SourceId, usize>,
     viewport: (f32, f32),
+    text_runs: Vec<SnapshotTextRun>,
 }
 
 impl LayoutSnapshot {
+    /// Actual per-glyph source metadata; empty for the original box-only API.
+    pub fn text_runs(&self) -> &[SnapshotTextRun] {
+        &self.text_runs
+    }
     pub fn galley(&self) -> &Fragment {
         &self.galley
     }
@@ -160,29 +168,85 @@ pub fn snapshot_styled_tree(
     inputs: &SnapshotInputs,
     diags: &mut Diagnostics,
 ) -> Result<LayoutSnapshot, SnapshotError> {
+    capture_styled(styled, identities, inputs, diags, false).map(|(snapshot, _)| snapshot)
+}
+
+/// Failures specific to optional text provenance do not change the original API.
+#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
+pub enum TextSnapshotError {
+    #[error(transparent)]
+    Snapshot(#[from] SnapshotError),
+    #[error("native text provenance exceeds its glyph or layout-ID budget")]
+    Budget,
+}
+
+/// Capture real shaping clusters/UTF-16 offsets alongside native source fragments.
+/// This API keeps original Fragment/GlyphRun output types and the PDF path intact.
+pub fn snapshot_styled_tree_with_text(
+    styled: &[StyledNode],
+    identities: &[SourceIdentity],
+    inputs: &SnapshotInputs,
+    diags: &mut Diagnostics,
+) -> Result<LayoutSnapshot, TextSnapshotError> {
+    let (snapshot, exceeded) = capture_styled(styled, identities, inputs, diags, true)?;
+    if exceeded {
+        Err(TextSnapshotError::Budget)
+    } else {
+        Ok(snapshot)
+    }
+}
+
+/// Style a borrowed live forest and capture actual native glyph source metadata.
+pub fn snapshot_live_tree_with_text(
+    nodes: &[Node],
+    identities: &[SourceIdentity],
+    cascade: &Cascade,
+    inputs: &SnapshotInputs,
+    diags: &mut Diagnostics,
+) -> Result<LayoutSnapshot, TextSnapshotError> {
+    validate_viewport(inputs)?;
+    crate::style::set_layout_viewport(inputs.width, inputs.height);
+    let styled = crate::style_tree(nodes, cascade);
+    snapshot_styled_tree_with_text(&styled, identities, inputs, diags)
+}
+
+fn capture_styled(
+    styled: &[StyledNode],
+    identities: &[SourceIdentity],
+    inputs: &SnapshotInputs,
+    diags: &mut Diagnostics,
+    capture_text: bool,
+) -> Result<(LayoutSnapshot, bool), SnapshotError> {
     validate_viewport(inputs)?;
     crate::style::set_layout_viewport(inputs.width, inputs.height);
     fixed_containing::validate(styled, false)?;
     let (build_sources, mut sources) = sources::prepare(styled, identities)?;
-    let (tree, records) = boxgen::build_sourced_tree(styled, build_sources);
-    let (galley, metrics) = block::layout_tree_live(
+    let (tree, mut records, next_id) = boxgen::build_sourced_tree(styled, build_sources);
+    let (galley, metrics, text) = block::layout_tree_live(
         &tree,
-        inputs.width,
-        inputs.height,
+        (inputs.width, inputs.height),
         inputs.fonts,
         inputs.images,
         diags,
+        capture_text.then_some(next_id),
     );
+    text::alias_sources(text.as_ref(), &mut records);
     let fragments = geometry::collect(&galley, &records, &metrics);
     let source_index = sources.iter().enumerate().map(|(i, s)| (s.id, i)).collect();
     sources::index_fragments(&mut sources, &source_index, &fragments);
-    Ok(LayoutSnapshot {
-        galley,
-        fragments,
-        sources,
-        source_index,
-        viewport: (inputs.width, inputs.height),
-    })
+    let exceeded = text.as_ref().is_some_and(|text| text.exceeded);
+    let text_runs = text.map_or_else(Vec::new, |text| text.collect(&galley, &fragments));
+    Ok((
+        LayoutSnapshot {
+            galley,
+            fragments,
+            sources,
+            source_index,
+            viewport: (inputs.width, inputs.height),
+            text_runs,
+        },
+        exceeded,
+    ))
 }
 
 fn validate_viewport(inputs: &SnapshotInputs) -> Result<(), SnapshotError> {

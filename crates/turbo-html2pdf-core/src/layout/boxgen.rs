@@ -738,14 +738,22 @@ pub fn build_box_tree(styled: &[StyledNode]) -> LayoutBox {
 pub(crate) fn build_sourced_tree(
     styled: &[StyledNode],
     sources: BuildSources,
-) -> (LayoutBox, std::collections::HashMap<NodeId, SourceRecord>) {
+) -> (
+    LayoutBox,
+    std::collections::HashMap<NodeId, SourceRecord>,
+    u32,
+) {
     let mut ids = Ids {
         next: 0,
         sources: Some(sources),
         document_roots: html_document_roots(styled),
     };
     let root = build_root(styled, &mut ids);
-    (root, ids.sources.expect("source mode installed").records)
+    (
+        root,
+        ids.sources.expect("source mode installed").records,
+        ids.next,
+    )
 }
 
 fn html_document_roots(styled: &[StyledNode]) -> std::collections::HashSet<usize> {
