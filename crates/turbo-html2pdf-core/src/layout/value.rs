@@ -6,6 +6,10 @@
 //! (`1pt = 1/72in`, `1in = 96px`); `em` resolves against the parent font size and
 //! `%` against the containing-block width at resolution time.
 
+#[path = "value_affine.rs"]
+mod affine;
+pub(crate) use affine::{native_transform, NativeTransform};
+
 use crate::style::ComputedStyle;
 
 /// Pixels per inch for absolute-unit conversion (the CSS reference pixel).

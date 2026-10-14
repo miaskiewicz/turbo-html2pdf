@@ -1,5 +1,5 @@
 {
-  "purpose": "Native continuous-HTML font-metric rounding and macOS legacy-family ascent adjustment; existing PDF metrics unchanged.",
+  "purpose": "Native continuous HTML font metric rounding at physical scale, floor leading, macOS legacy-family ascent adjustment and source Range LayoutUnit encompasses; existing PDF policies unchanged.",
   "license": "Blink-font-metrics.LICENSE",
   "sources": [
     {
@@ -13,6 +13,23 @@
     {
       "source": "https://chromium.googlesource.com/chromium/src/+/refs/tags/155.0.8059.79/third_party/blink/renderer/platform/fonts/simple_font_data.cc",
       "sha256": "9c986ecb53e232243d0d28ad8b9c45e0835a3e62cfded1f359e01f7a9284adc4"
+    },
+    {
+      "source": "https://chromium.googlesource.com/chromium/src/+/refs/tags/155.0.8059.79/third_party/blink/renderer/core/layout/inline/inline_box_state.cc",
+      "sha256": "4dacd389be262c85e29c27b61a888bb1dd38e4eaf04ddd7bb33842a8a2860e3d"
+    },
+    {
+      "source": "https://chromium.googlesource.com/chromium/src/+/refs/tags/155.0.8059.79/third_party/blink/renderer/core/layout/inline/line_utils.cc",
+      "sha256": "34854a9e571f4f47f12a8405366355773a7b87c809c98bc8fa8fe7a41f245350"
+    },
+    {
+      "source": "https://chromium.googlesource.com/chromium/src/+/refs/tags/155.0.8059.79/third_party/blink/renderer/core/layout/inline/fragment_item.cc",
+      "sha256": "84b18c2d6258babb6b10618962a625770b45852e34d0b51e6708848c273da75c"
+    },
+    {
+      "source": "https://chromium.googlesource.com/chromium/src/+/refs/tags/155.0.8059.79/third_party/blink/renderer/platform/geometry/layout_unit.h",
+      "sha256": "fdc4e8d9386923943ec92a6868dcf59b34c741d52b19d0ee41c255092ff23624"
     }
-  ]
+  ],
+  "leadingLicense": "../layout/Blink-layout-unit.LICENSE"
 }

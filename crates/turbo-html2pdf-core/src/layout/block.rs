@@ -59,6 +59,8 @@ pub(crate) struct Ctx<'a> {
     pub(crate) used_metrics: Option<HashMap<NodeId, UsedBoxMetrics>>,
     pub(crate) text_capture: Option<crate::layout_snapshot::text::TextCapture>,
     pub(crate) html_font_metrics: bool,
+    pub(crate) html_font_scale: Option<f32>,
+    pub(crate) native_transforms: Option<HashMap<NodeId, super::value::NativeTransform>>,
     /// Floats active in the current **block formatting context**, in absolute
     /// galley coordinates. In-flow content within the same BFC flows in the
     /// inline region these leave free (a `float:right` infobox narrows the text
@@ -574,13 +576,14 @@ fn layout_lines(
     };
     let strut = line_strut(bs, fonts);
     let para = if ctx.html_font_metrics {
-        inline::layout_html_paragraph_in_with_sources(
+        inline::layout_html_paragraph_in_with_sources_at_scale(
             &pieces,
             fonts,
             bs.text_align,
             ctx.diags,
             &region,
             strut,
+            ctx.html_font_scale,
         )
     } else if ctx.text_capture.is_some() {
         inline::layout_paragraph_in_with_sources(
@@ -1690,6 +1693,17 @@ fn image_fragment(lb: &LayoutBox, bx: f32, by: f32, sized: &SizedImage, bs: &Box
 }
 
 fn record_metrics(lb: &LayoutBox, bs: &BoxStyle, width: f32, height: f32, ctx: &mut Ctx) {
+    if let Some(transforms) = &mut ctx.native_transforms {
+        let border = bs.border.widths();
+        if let Some(transform) = super::value::native_transform(
+            &lb.style,
+            bs,
+            width + bs.padding.horizontal() + border.horizontal(),
+            height + bs.padding.vertical() + border.vertical(),
+        ) {
+            transforms.insert(lb.node_id, transform);
+        }
+    }
     if let Some(metrics) = &mut ctx.used_metrics {
         metrics.insert(
             lb.node_id,
@@ -1769,11 +1783,12 @@ pub(crate) fn layout_tree_live(
     fonts: &FontRegistry,
     images: &ImageCtx,
     diags: &mut Diagnostics,
-    text_start: Option<(u32, bool)>,
+    text_start: Option<(u32, bool, Option<f32>)>,
 ) -> (
     Fragment,
     HashMap<NodeId, UsedBoxMetrics>,
     Option<crate::layout_snapshot::text::TextCapture>,
+    HashMap<NodeId, super::value::NativeTransform>,
 ) {
     layout_tree_policy(
         root,
@@ -1790,7 +1805,7 @@ fn layout_tree_policy(
     root: &LayoutBox,
     cb_width: f32,
     viewport_height: f32,
-    policy: (bool, Option<(u32, bool)>),
+    policy: (bool, Option<(u32, bool, Option<f32>)>),
     fonts: &FontRegistry,
     images: &ImageCtx,
     diags: &mut Diagnostics,
@@ -1798,6 +1813,7 @@ fn layout_tree_policy(
     Fragment,
     HashMap<NodeId, UsedBoxMetrics>,
     Option<crate::layout_snapshot::text::TextCapture>,
+    HashMap<NodeId, super::value::NativeTransform>,
 ) {
     let (live_geometry, text_start) = policy;
     let mut ctx = Ctx {
@@ -1815,6 +1831,8 @@ fn layout_tree_policy(
         live_geometry,
         used_metrics: live_geometry.then(HashMap::new),
         html_font_metrics: text_start.is_some_and(|value| value.1),
+        html_font_scale: text_start.and_then(|value| value.2),
+        native_transforms: live_geometry.then(HashMap::new),
         text_capture: text_start
             .map(|value| crate::layout_snapshot::text::TextCapture::new(value.0)),
         floats: Vec::new(),
@@ -1828,7 +1846,12 @@ fn layout_tree_policy(
     if float_bottom > frag.height {
         frag.height = float_bottom;
     }
-    (frag, ctx.used_metrics.unwrap_or_default(), ctx.text_capture)
+    (
+        frag,
+        ctx.used_metrics.unwrap_or_default(),
+        ctx.text_capture,
+        ctx.native_transforms.unwrap_or_default(),
+    )
 }
 
 #[cfg(test)]

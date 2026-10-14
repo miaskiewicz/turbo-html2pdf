@@ -7,7 +7,7 @@ pub enum TextGeometryError {
     MissingSource(SourceId),
     #[error("caret point coordinates must be finite")]
     InvalidPoint,
-    #[error("caret transform is rotated, skewed or degenerate")]
+    #[error("caret transform is degenerate or unrepresentable")]
     UnsupportedCaretTransform,
     #[error("text selection offsets are outside the original UTF-16 source")]
     InvalidOffsets,
@@ -35,6 +35,7 @@ pub(crate) fn ranges(
     let mut boxes = selected_boxes(&cells, start, end);
     append_placed_gaps(&mut boxes, &cells, &text, start, end);
     append_empty_boundaries(&mut boxes, &cells, &text, start, end)?;
+    encompass_native_edges(snapshot, &mut boxes);
     transform_boxes(snapshot, &mut boxes);
     Ok(boxes)
 }
@@ -122,10 +123,33 @@ fn append_empty_boundaries(
     Ok(())
 }
 
+// Chrome's source-scoped FragmentItem selection encompasses nonempty offsets,
+// while equal offsets retain one floored LayoutUnit edge. Quantize within the
+// native fragment before transforms; generic/PDF source queries keep raw units.
+fn encompass_native_edges(snapshot: &LayoutSnapshot, boxes: &mut [SourceRangeBox]) {
+    let Some(scale) = snapshot.html_layout_scale else {
+        return;
+    };
+    let units = scale * 64.0;
+    for box_ in boxes {
+        let origin = snapshot.fragments()[box_.fragment_index].rect.x;
+        let left = box_.rect.x - origin;
+        let right = left + box_.rect.width;
+        let begin = (left * units).floor() / units;
+        let end = if left == right {
+            begin
+        } else {
+            (right * units).ceil() / units
+        };
+        box_.rect.x = origin + begin;
+        box_.rect.width = end - begin;
+    }
+}
+
 fn transform_boxes(snapshot: &LayoutSnapshot, boxes: &mut [SourceRangeBox]) {
     boxes.sort_by_key(|box_| box_.fragment_index);
     for box_ in boxes {
-        let matrix = snapshot.fragments()[box_.fragment_index].world_transform;
+        let matrix = snapshot.native_transforms[box_.fragment_index];
         box_.transformed_bounds = geometry::bounds(
             geometry::rect_quad(box_.rect).map(|point| geometry::transform(point, matrix)),
         );

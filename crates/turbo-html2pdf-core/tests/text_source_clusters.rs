@@ -317,12 +317,7 @@ fn atom_cloning_and_positioning_preserve_real_nested_text_source_clusters() {
 
 #[test]
 fn native_cluster_advances_match_independent_chrome_ranges_with_the_same_real_font() {
-    use turbo_html2pdf_core::layout_snapshot::{
-        snapshot_html_live_tree_with_text, SnapshotInputs, SourceId, SourceIdentity,
-    };
-    use turbo_html2pdf_core::{
-        build_cascade, Attr, Element, FontFace, ImageCtx, NoImages, Node, Tag,
-    };
+    use turbo_html2pdf_core::{FontFace, ImageCtx, NoImages};
     let oracle: serde_json::Value =
         serde_json::from_str(include_str!("fixtures/text-source-chrome155.json")).unwrap();
     assert_eq!(
@@ -347,40 +342,116 @@ fn native_cluster_advances_match_independent_chrome_ranges_with_the_same_real_fo
         // Chrome uses an installed emoji fallback outside the controlled Go face.
         // The source-offset regression covers astral text; this assertion certifies
         // actual controlled-face cluster advances, not unknown fallback metrics.
-        if case["name"] == "astral-fallback" {
+        if ["astral-fallback", "font13", "font15"]
+            .iter()
+            .any(|name| case["name"] == *name)
+        {
             continue;
         }
-        let width = case["width"].as_f64().unwrap();
-        let font_size = case["fontSize"].as_f64().unwrap_or(64.0);
-        let line_height = case["lineHeight"].as_f64().unwrap_or(80.0);
-        let transform = case["transform"].as_str().unwrap_or("none");
-        let nodes=[Node::Element(Element{tag:Tag::Html("div".into()),attrs:vec![Attr{name:"style".into(),value:format!("font-family:ParityGo;font-size:{font_size}px;line-height:{line_height}px;width:{width}px;transform:{transform};transform-origin:0 0")}],children:vec![Node::Text(case["text"].as_str().unwrap().into())]})];
-        let ids = [
-            SourceIdentity {
-                id: SourceId(99),
-                path: vec![0],
-            },
-            SourceIdentity {
-                id: SourceId(100),
-                path: vec![0, 0],
-            },
-        ];
-        let native = snapshot_html_live_tree_with_text(
-            &nodes,
-            &ids,
-            &build_cascade("", "", Default::default()),
-            &SnapshotInputs {
-                width: 400.0,
-                height: 300.0,
-                fonts: &fonts,
-                images: &images,
-            },
-            &mut Diagnostics::default(),
-        )
-        .unwrap();
+        let native = controlled_font_snapshot(case, &fonts, &images);
         assert_cluster_geometry(&native, case);
         assert_range_geometry(&native, case);
         assert_caret_geometry(&native, case);
+    }
+}
+
+fn controlled_font_snapshot(
+    case: &serde_json::Value,
+    fonts: &FontRegistry,
+    images: &turbo_html2pdf_core::ImageCtx<'_>,
+) -> turbo_html2pdf_core::layout_snapshot::LayoutSnapshot {
+    use turbo_html2pdf_core::layout_snapshot::{
+        snapshot_html_live_tree_with_svg_viewports, SnapshotInputs, SourceId, SourceIdentity,
+    };
+    use turbo_html2pdf_core::{build_cascade, Attr, Element, Node, Tag};
+    let width = case["width"].as_f64().unwrap();
+    let font_size = case["fontSize"].as_f64().unwrap_or(64.0);
+    let line_height = case["lineHeight"].as_f64().unwrap_or(80.0);
+    let transform = case["transform"].as_str().unwrap_or("none");
+    let mut nodes=vec![Node::Element(Element{tag:Tag::Html("div".into()),attrs:vec![Attr{name:"style".into(),value:format!("font-family:ParityGo;font-size:{font_size}px;line-height:{line_height}px;width:{width}px;transform:{transform};transform-origin:0 0")}],children:vec![Node::Text(case["text"].as_str().unwrap().into())]})];
+    let mut ids = [
+        SourceIdentity {
+            id: SourceId(99),
+            path: vec![0],
+        },
+        SourceIdentity {
+            id: SourceId(100),
+            path: vec![0, 0],
+        },
+    ];
+    if let Some(style) = case["outerStyle"].as_str() {
+        nodes = vec![Node::Element(Element {
+            tag: Tag::Html("div".into()),
+            attrs: vec![Attr {
+                name: "style".into(),
+                value: style.into(),
+            }],
+            children: nodes,
+        })];
+        for identity in &mut ids {
+            identity.path.insert(0, 0);
+        }
+    }
+    snapshot_html_live_tree_with_svg_viewports(
+        &nodes,
+        &ids,
+        &[],
+        2.0,
+        &build_cascade("", "", Default::default()),
+        &SnapshotInputs {
+            width: 400.0,
+            height: 300.0,
+            fonts,
+            images,
+        },
+        &mut Diagnostics::default(),
+    )
+    .unwrap()
+}
+
+#[test]
+fn physical_font_metrics_and_leading_match_small_controlled_chrome_fonts() {
+    use turbo_html2pdf_core::{FontFace, ImageCtx, NoImages};
+    let oracle: serde_json::Value =
+        serde_json::from_str(include_str!("fixtures/text-source-chrome155.json")).unwrap();
+    let mut fonts = FontRegistry::new();
+    fonts.add(
+        FontFace::from_bytes(
+            include_bytes!("../assets/fonts/Go-Regular.ttf").to_vec(),
+            "ParityGo",
+            400,
+            false,
+        )
+        .unwrap(),
+    );
+    let images = ImageCtx {
+        resolver: &NoImages,
+        body_height: None,
+    };
+    for case in oracle["result"]["cases"].as_array().unwrap() {
+        if !["font13", "font15"]
+            .iter()
+            .any(|name| case["name"] == *name)
+        {
+            continue;
+        }
+        let native = controlled_font_snapshot(case, &fonts, &images);
+        assert_range_geometry(&native, case);
+        assert_caret_geometry(&native, case);
+        // Cluster records retain unrounded real shaper pen advances. Selection
+        // boxes apply native LayoutUnit encompasses before the affine transform.
+        for box_ in native.text_cluster_boxes() {
+            let expected =
+                &case["ranges"][format!("{}:{}", box_.utf16_start, box_.utf16_end)]["rect"];
+            assert_eq!(
+                f64::from(box_.transformed_bounds.y),
+                expected["y"].as_f64().unwrap()
+            );
+            assert_eq!(
+                f64::from(box_.transformed_bounds.height),
+                expected["height"].as_f64().unwrap()
+            );
+        }
     }
 }
 
@@ -725,11 +796,8 @@ fn nonfinite_caret_input_and_unsupported_real_transforms_are_explicit() {
             Err(TextGeometryError::InvalidPoint)
         );
     }
-    for style in [
-        "transform:rotate(30deg)",
-        "transform:skewX(15deg)",
-        "transform:scaleX(0)",
-    ] {
+    {
+        let style = "transform:scaleX(0)";
         let transformed = capture_snapshot_style(&["ab"], 80.0, true, style);
         assert_eq!(
             transformed.text_caret_offset_from_point(SourceId(100), Point { x: 5.0, y: 7.0 }),
@@ -850,4 +918,72 @@ fn html_negative_leading_keeps_native_font_boxes_without_changing_pdf_line_heigh
         pdf.lines[0].runs[0].glyphs,
         traced_pdf.layout.lines[0].runs[0].glyphs
     );
+}
+
+#[test]
+fn physical_font_overflow_fails_before_any_source_geometry_can_be_published() {
+    use turbo_html2pdf_core::layout_snapshot::{
+        snapshot_html_live_tree_with_svg_viewports, SnapshotInputs, SvgSnapshotError,
+        TextSnapshotError,
+    };
+    use turbo_html2pdf_core::{build_cascade, parse_html, ImageCtx, NoImages};
+    let nodes =
+        parse_html("<div style='font-size:300000000000000000000000000000000000000px'>ab</div>")
+            .unwrap();
+    let fonts = FontRegistry::new();
+    let images = ImageCtx {
+        resolver: &NoImages,
+        body_height: None,
+    };
+    let result = snapshot_html_live_tree_with_svg_viewports(
+        &nodes,
+        &[],
+        &[],
+        16.0,
+        &build_cascade("", "", Default::default()),
+        &SnapshotInputs {
+            width: 400.0,
+            height: 300.0,
+            fonts: &fonts,
+            images: &images,
+        },
+        &mut Diagnostics::default(),
+    );
+    assert!(matches!(
+        result,
+        Err(SvgSnapshotError::Text(TextSnapshotError::NonFiniteGeometry))
+    ));
+}
+
+#[test]
+fn html_flex_intrinsic_measurement_preserves_physical_font_policy_and_negative_leading() {
+    use turbo_html2pdf_core::layout_snapshot::SourceId;
+    use turbo_html2pdf_core::{FontFace, ImageCtx, NoImages};
+    let oracle: serde_json::Value =
+        serde_json::from_str(include_str!("fixtures/text-review-chrome155.json")).unwrap();
+    let case = oracle["result"]["cases"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|case| case["name"] == "font13-flex")
+        .unwrap();
+    let mut fonts = FontRegistry::new();
+    fonts.add(
+        FontFace::from_bytes(
+            include_bytes!("../assets/fonts/Go-Regular.ttf").to_vec(),
+            "ParityGo",
+            400,
+            false,
+        )
+        .unwrap(),
+    );
+    let images = ImageCtx {
+        resolver: &NoImages,
+        body_height: None,
+    };
+    let native = controlled_font_snapshot(case, &fonts, &images);
+    assert_range_geometry(&native, case);
+    assert_caret_geometry(&native, case);
+    let fragment = &native.fragments()[native.source(SourceId(99)).unwrap().fragment_indices[0]];
+    assert_eq!(fragment.rect.height, 10.0);
 }

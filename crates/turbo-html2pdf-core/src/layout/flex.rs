@@ -620,8 +620,9 @@ fn measure_item(
     fs: f32,
     fonts: &FontRegistry,
     images: &ImageCtx,
-    live_geometry: bool,
+    policy: (bool, bool, Option<f32>),
 ) -> Size<f32> {
+    let (live_geometry, html_font_metrics, html_font_scale) = policy;
     // A replaced `<img>` sizes from its intrinsic (or explicit) width; other items
     // from a max-content measurement of their content.
     let w = replaced_probe_width(item, images, fs)
@@ -653,7 +654,9 @@ fn measure_item(
             live_geometry,
             used_metrics: None,
             text_capture: None,
-            html_font_metrics: false,
+            html_font_metrics,
+            html_font_scale,
+            native_transforms: None,
             floats: Vec::new(),
         };
         let frag = block::layout_box_sized_isolated(item, &bs, 0.0, 0.0, w, &mut mctx);
@@ -701,7 +704,11 @@ fn solve(
             fs,
             ctx.fonts,
             ctx.images,
-            ctx.live_geometry,
+            (
+                ctx.live_geometry,
+                ctx.html_font_metrics,
+                ctx.html_font_scale,
+            ),
         )
     })
     .expect("flex layout");

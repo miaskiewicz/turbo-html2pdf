@@ -17,10 +17,11 @@ pub(crate) fn offset(
     let mut best = None;
     for cell in snapshot.text_cluster_boxes_for_source(id).iter() {
         let fragment = &snapshot.fragments()[cell.fragment_index];
-        let matrix = fragment.world_transform;
-        let local = local_point(point, matrix)?;
-        let distance = vertical_distance(local.y, cell.rect) * matrix[3].abs();
-        let edge = nearest_edge(local.x, cell);
+        let matrix = snapshot.native_transforms[fragment.index];
+        let local = local_point(point, matrix, snapshot.html_layout_scale)?;
+        let distance = vertical_distance(local.y, cell.rect) * matrix[2].hypot(matrix[3]) as f32;
+        let mut edge = nearest_edge(local.x, cell);
+        edge.0 *= matrix[0].hypot(matrix[1]) as f32;
         consider(
             &mut best,
             distance,
@@ -41,20 +42,28 @@ fn validate_point(point: Point) -> Result<(), TextGeometryError> {
     }
 }
 
-fn local_point(point: Point, matrix: [f32; 6]) -> Result<Point, TextGeometryError> {
-    if unsupported_transform(matrix) {
+fn local_point(
+    point: Point,
+    matrix: [f64; 6],
+    scale: Option<f32>,
+) -> Result<Point, TextGeometryError> {
+    let [a, b, c, d, e, f] = matrix;
+    let determinant = a * d - b * c;
+    if determinant == 0.0 || !determinant.is_finite() {
         return Err(TextGeometryError::UnsupportedCaretTransform);
     }
-    let local = Point {
-        x: (point.x - matrix[4]) / matrix[0],
-        y: (point.y - matrix[5]) / matrix[3],
+    let (x, y) = (f64::from(point.x) - e, f64::from(point.y) - f);
+    let mut local = Point {
+        x: ((d * x - c * y) / determinant) as f32,
+        y: ((a * y - b * x) / determinant) as f32,
     };
     validate_point(local)?;
+    if let Some(scale) = scale {
+        let units = scale * 64.0;
+        local.x = (local.x * units).trunc() / units;
+        local.y = (local.y * units).trunc() / units;
+    }
     Ok(local)
-}
-
-fn unsupported_transform(matrix: [f32; 6]) -> bool {
-    matrix[1] != 0.0 || matrix[2] != 0.0 || matrix[0] == 0.0 || matrix[3] == 0.0
 }
 
 fn vertical_distance(y: f32, rect: Rect) -> f32 {

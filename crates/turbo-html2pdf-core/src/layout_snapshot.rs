@@ -19,6 +19,7 @@ pub(crate) mod sources;
 mod svg_viewports;
 pub(crate) mod text;
 mod text_carets;
+mod text_finite;
 mod text_geometry;
 mod text_ranges;
 
@@ -124,15 +125,23 @@ pub struct SnapshotSource {
 pub struct LayoutSnapshot {
     galley: Fragment,
     fragments: Vec<SnapshotFragment>,
+    native_transforms: Vec<[f64; 6]>,
     sources: Vec<SnapshotSource>,
     source_index: BTreeMap<SourceId, usize>,
     viewport: (f32, f32),
     text_runs: Vec<SnapshotTextRun>,
     text_sources: Vec<SnapshotTextSource>,
+    html_layout_scale: Option<f32>,
     unsupported_svg_sources: std::collections::BTreeSet<SourceId>,
 }
 
 impl LayoutSnapshot {
+    /// Native affine composition retains double precision until final float points.
+    /// The legacy fragment matrix remains available with its original float type.
+    pub fn native_world_transform(&self, fragment_index: usize) -> Option<[f64; 6]> {
+        self.native_transforms.get(fragment_index).copied()
+    }
+
     /// SVG shape/nested-viewport identities stay present, but this viewport-only
     /// producer cannot supply their geometry. Absence is never a zero rectangle.
     pub fn unsupported_svg_source_geometry(&self, source: SourceId) -> bool {
@@ -229,6 +238,8 @@ pub enum TextSnapshotError {
     Snapshot(#[from] SnapshotError),
     #[error("native text provenance exceeds its source-byte, glyph or layout-ID budget")]
     Budget,
+    #[error("native text provenance contains unrepresentable geometry")]
+    NonFiniteGeometry,
 }
 
 fn checked_text_capture(
@@ -237,6 +248,8 @@ fn checked_text_capture(
 ) -> Result<LayoutSnapshot, TextSnapshotError> {
     if exceeded {
         Err(TextSnapshotError::Budget)
+    } else if !text_finite::valid(&snapshot) {
+        Err(TextSnapshotError::NonFiniteGeometry)
     } else {
         Ok(snapshot)
     }
@@ -371,23 +384,26 @@ fn capture_styled_with_plan(
     let (mut build_sources, mut sources) =
         sources::prepare(styled, identities, html_text_metrics.is_some())?;
     let mut unsupported_svg_sources = std::collections::BTreeSet::new();
+    let mut font_layout_scale = None;
     if let Some(plan) = plan {
         build_sources.svg_viewports = plan.keys;
         build_sources.svg_layout_scale = plan.layout_scale;
+        font_layout_scale = Some(plan.layout_scale);
         unsupported_svg_sources = plan.unsupported;
     }
     let text_sources = std::mem::take(&mut build_sources.text_sources);
     let (tree, mut records, next_id) = boxgen::build_sourced_tree(styled, build_sources);
-    let (galley, metrics, text) = block::layout_tree_live(
+    let (galley, metrics, text, transforms) = block::layout_tree_live(
         &tree,
         (inputs.width, inputs.height),
         inputs.fonts,
         inputs.images,
         diags,
-        html_text_metrics.map(|html| (next_id, html)),
+        html_text_metrics.map(|html| (next_id, html, font_layout_scale)),
     );
     text::alias_sources(text.as_ref(), &mut records);
-    let fragments = geometry::collect(&galley, &records, &metrics);
+    let (fragments, native_transforms) =
+        geometry::collect(&galley, &records, &metrics, &transforms);
     let source_index = sources.iter().enumerate().map(|(i, s)| (s.id, i)).collect();
     sources::index_fragments(&mut sources, &source_index, &fragments);
     let exceeded = text.as_ref().is_some_and(|text| text.exceeded);
@@ -396,11 +412,13 @@ fn capture_styled_with_plan(
         LayoutSnapshot {
             galley,
             fragments,
+            native_transforms,
             sources,
             source_index,
             viewport: (inputs.width, inputs.height),
             text_runs,
             text_sources,
+            html_layout_scale: font_layout_scale,
             unsupported_svg_sources,
         },
         exceeded,

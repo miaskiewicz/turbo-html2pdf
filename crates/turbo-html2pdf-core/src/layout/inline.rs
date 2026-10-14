@@ -466,6 +466,7 @@ struct Placer<'a> {
     strut: f32,
     capture_sources: bool,
     html_font_metrics: bool,
+    html_font_scale: Option<f32>,
     out: Vec<SourceLine>,
     cur: Vec<Word>,
     y: f32,
@@ -475,8 +476,13 @@ struct Placer<'a> {
 }
 
 impl<'a> Placer<'a> {
-    fn new(align: Align, region: LineRegion<'a>, strut: f32, policy: (bool, bool)) -> Self {
-        let (capture_sources, html_font_metrics) = policy;
+    fn new(
+        align: Align,
+        region: LineRegion<'a>,
+        strut: f32,
+        policy: (bool, bool, Option<f32>),
+    ) -> Self {
+        let (capture_sources, html_font_metrics, html_font_scale) = policy;
         let (indent, lw) = region(0.0);
         Placer {
             align,
@@ -484,6 +490,7 @@ impl<'a> Placer<'a> {
             strut,
             capture_sources,
             html_font_metrics,
+            html_font_scale,
             out: Vec::new(),
             cur: Vec::new(),
             y: 0.0,
@@ -504,7 +511,11 @@ impl<'a> Placer<'a> {
             self.lw,
             self.align,
             self.strut,
-            (self.capture_sources, self.html_font_metrics),
+            (
+                self.capture_sources,
+                self.html_font_metrics,
+                self.html_font_scale,
+            ),
         );
         line.line.top = self.y;
         line.line.indent = self.indent;
@@ -540,7 +551,7 @@ fn wrap_and_place(
     align: Align,
     region: LineRegion,
     strut: f32,
-    policy: (bool, bool),
+    policy: (bool, bool, Option<f32>),
 ) -> Vec<SourceLine> {
     let mut placer = Placer::new(align, region, strut, policy);
     for word in words {
@@ -575,10 +586,23 @@ struct Metrics {
     height: f32,
 }
 
-fn fold_seg_metrics(seg: &Seg, m: &mut Metrics, capture_sources: bool) {
+// Source pins and the Chromium leading-policy attribution are recorded in
+// text/html-font-metrics-provenance.json. Quantize actual font metrics before
+// placement so physical-scale geometry never rewrites returned rectangles.
+fn source_font_metrics(seg: &Seg, scale: Option<f32>) -> crate::text::HtmlFontMetrics {
+    let scale = scale.unwrap_or(1.0);
+    let metrics = seg.face.html_metrics(seg.font_size * scale);
+    crate::text::HtmlFontMetrics {
+        ascent: metrics.ascent / scale,
+        descent: metrics.descent / scale,
+        line_gap: metrics.line_gap / scale,
+    }
+}
+
+fn fold_seg_metrics(seg: &Seg, m: &mut Metrics, capture_sources: bool, scale: Option<f32>) {
     let shift = valign_shift(seg.valign, seg.font_size);
     let (ascent, descent, normal) = if capture_sources {
-        let metrics = seg.face.html_metrics(seg.font_size);
+        let metrics = source_font_metrics(seg, scale);
         (
             metrics.ascent,
             metrics.descent,
@@ -617,7 +641,7 @@ fn fold_atom_metrics(atom: &InlineAtom, m: &mut Metrics) {
 /// `<br><br>` gap — is exactly one strut tall), then each word's text segments and
 /// atoms grow it. The PDF policy floors the height at the font box; explicit
 /// HTML line-height permits negative leading and overlapping glyph font boxes.
-fn line_metrics(words: &[Word], strut: f32, capture_sources: bool) -> Metrics {
+fn line_metrics(words: &[Word], strut: f32, capture_sources: bool, scale: Option<f32>) -> Metrics {
     let mut m = Metrics {
         ascent: 0.0,
         descent: 0.0,
@@ -625,7 +649,7 @@ fn line_metrics(words: &[Word], strut: f32, capture_sources: bool) -> Metrics {
     };
     for word in words {
         for seg in &word.segs {
-            fold_seg_metrics(seg, &mut m, capture_sources);
+            fold_seg_metrics(seg, &mut m, capture_sources, scale);
         }
         if let Some(atom) = word.atom {
             fold_atom_metrics(&atom, &mut m);
@@ -664,8 +688,8 @@ fn source_shaper_is_rtl(text: &str, enabled: bool) -> bool {
     buffer.direction() == rustybuzz::Direction::RightToLeft
 }
 
-fn shape_seg(seg: &Seg, pen_x: f32, baseline: f32, policy: (bool, bool)) -> SourceRun {
-    let (capture_sources, html_font_metrics) = policy;
+fn shape_seg(seg: &Seg, pen_x: f32, baseline: f32, policy: (bool, bool, Option<f32>)) -> SourceRun {
+    let (capture_sources, html_font_metrics, html_font_scale) = policy;
     let scale = seg.face.scale(seg.font_size);
     let seg_baseline = baseline - valign_shift(seg.valign, seg.font_size);
     let mut glyphs = Vec::new();
@@ -724,7 +748,7 @@ fn shape_seg(seg: &Seg, pen_x: f32, baseline: f32, policy: (bool, bool)) -> Sour
         x += scale * g.x_advance as f32 + seg.letter_spacing;
     }
     let (ascent, descent) = if html_font_metrics {
-        let metrics = seg.face.html_metrics(seg.font_size);
+        let metrics = source_font_metrics(seg, html_font_scale);
         (metrics.ascent, metrics.descent)
     } else {
         (
@@ -805,10 +829,14 @@ fn place_line(
     max_width: f32,
     align: Align,
     strut: f32,
-    policy: (bool, bool),
+    policy: (bool, bool, Option<f32>),
 ) -> SourceLine {
-    let m = line_metrics(&words, strut, policy.1);
-    let baseline = m.ascent + (m.height - m.ascent - m.descent) / 2.0;
+    let m = line_metrics(&words, strut, policy.1, policy.2);
+    let half_leading = (m.height - m.ascent - m.descent) / 2.0;
+    let leading = policy
+        .2
+        .map_or(half_leading, |scale| (half_leading * scale).floor() / scale);
+    let baseline = m.ascent + leading;
     let width = line_used_width(&words);
     let mut pen = align_offset(align, width, max_width);
     let mut runs = Vec::new();
@@ -907,7 +935,14 @@ pub fn layout_paragraph_in(
     strut: f32,
 ) -> ParagraphLayout {
     let words = build_pieces(pieces, reg, diags, false);
-    finalize(wrap_and_place(words, align, region, strut, (false, false))).layout
+    finalize(wrap_and_place(
+        words,
+        align,
+        region,
+        strut,
+        (false, false, None),
+    ))
+    .layout
 }
 
 /// The same native shaping and line-breaking result with glyph source offsets.
@@ -922,7 +957,13 @@ pub fn layout_paragraph_in_with_sources(
     strut: f32,
 ) -> ParagraphSourceLayout {
     let words = build_pieces(pieces, reg, diags, true);
-    finalize(wrap_and_place(words, align, region, strut, (true, false)))
+    finalize(wrap_and_place(
+        words,
+        align,
+        region,
+        strut,
+        (true, false, None),
+    ))
 }
 
 /// Continuous HTML text geometry with actual source clusters and rounded native
@@ -936,7 +977,32 @@ pub fn layout_html_paragraph_in_with_sources(
     strut: f32,
 ) -> ParagraphSourceLayout {
     let words = build_pieces(pieces, reg, diags, true);
-    finalize(wrap_and_place(words, align, region, strut, (true, true)))
+    finalize(wrap_and_place(
+        words,
+        align,
+        region,
+        strut,
+        (true, true, None),
+    ))
+}
+
+pub(crate) fn layout_html_paragraph_in_with_sources_at_scale(
+    pieces: &[Piece],
+    reg: &FontRegistry,
+    align: Align,
+    diags: &mut Diagnostics,
+    region: LineRegion,
+    strut: f32,
+    scale: Option<f32>,
+) -> ParagraphSourceLayout {
+    let words = build_pieces(pieces, reg, diags, true);
+    finalize(wrap_and_place(
+        words,
+        align,
+        region,
+        strut,
+        (true, true, scale),
+    ))
 }
 
 /// Lay out a paragraph of text runs only (no atoms) — a convenience for callers

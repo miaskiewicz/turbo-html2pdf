@@ -1,15 +1,20 @@
 # Native text geometry consumer handoff
 
-This additive seam is on draft PR20 (`codex/live-text-provenance`), prepared as
-`turbo-html2pdf-core 0.3.6`. The published 0.3.5 provides box snapshots; these
-text/SVG APIs require the separately reviewed and published dependency update.
-No release tag is authorized by this document.
+The text/SVG provenance APIs ship in `turbo-html2pdf-core 0.3.6` from merged
+PR20. The physical-scale font/leading and fractional Range corrections are
+prepared separately as 0.3.7. No release tag is authorized by this document.
 
 Build the actual borrowed source forest and `SourceIdentity` paths, including
 all text nodes. Load the actual font programs into `FontRegistry`; caller aliases
 cannot substitute browser-installed font metrics. Capture with
 `snapshot_html_live_tree_with_text` or `snapshot_html_styled_tree_with_text` to use
 the HTML font policy. The generic text APIs keep the PDF font/line policy.
+
+Native used transforms are captured during actual box placement with double
+precision CSS coefficients/composition until the final float points.
+`native_world_transform(fragment_index)` exposes that matrix; the existing
+`SnapshotFragment.world_transform` and public `Fragment`/PDF matrices retain their
+original float type. Inner image paint fragments inherit the box matrix once.
 
 The new queries are methods on that immutable `LayoutSnapshot`:
 
@@ -24,6 +29,12 @@ let offset = snapshot.text_caret_offset_from_point(
 let cells = snapshot.text_cluster_boxes_for_source(text_id);
 ```
 
+For the explicit physical-scale HTML/SVG capture path, ascent/descent are
+rounded at physical font size and half-leading is floored before line placement.
+Source Range edges then encompass nonempty offsets in native LayoutUnits and
+floor equal offsets before affine transforms. Raw cluster records retain their
+real pen advances. Generic/PDF source APIs keep the existing float policy.
+
 `SourceRangeBox` exposes `fragment_index`, the actual local `rect`, and
 `transformed_bounds`. Offsets address the original source's UTF-16 encoding,
 including collapsed whitespace. Genuine combining/shaping clusters retain their
@@ -34,7 +45,8 @@ queries filter native runs before materializing cells for the chosen source.
 
 Caret input uses document coordinates before the embedding DOM's scroll/frame
 projection. The caller must select the visible text source through genuine hit
-testing. Rotated, skewed or degenerate caret transforms return
+testing. Finite invertible rotation/skew/scale transforms use real native affine
+inversion for caret queries. Degenerate or unrepresentable transforms return
 `UnsupportedCaretTransform`. Missing sources, unplaced/hidden sources, invalid
 UTF-16 bounds and nonfinite points remain distinct errors. Range transforms can
 produce actual affine bounds even when that caret query is unsupported.
@@ -49,11 +61,11 @@ uncontrolled fallback-font geometry remain open. Atomic-inline line metrics
 retain their existing policy; the new negative-leading control covers pure text.
 
 The independent fixture `tests/fixtures/text-source-chrome155.json` under the core
-crate records real Chrome155, the exact bundled Go font hash, final collector,
-probe and runner source hashes, and all offsets/queries. Twelve controlled-font
-graphs certify 144 Range client-rectangle lists and 89 caret hits, including
-negative leading. The thirteenth emoji-fallback graph is retained but excluded
-from numerical certification. Native regressions separately cover real fallback
+crate records real Chrome 155, the exact bundled Go font hash, final collector,
+probe and runner source hashes, and all offsets/queries. Sixteen controlled-font
+graphs certify 168 exact Range client-rectangle lists and 107 caret hits, including
+negative leading, 13/15px physical font metrics, rotation and skew. The emoji-fallback graph is
+retained but excluded from numerical certification. Native regressions separately cover real fallback
 run competition, combining-cluster edges, source ownership, hidden/missing data,
 invalid inputs and unchanged PDF behavior.
 
@@ -69,3 +81,12 @@ geometry request. Full source paths/IDs are retained; shape/nested/foreignObject
 geometry is not synthesized. Native viewport output can contribute to a genuine
 HTML parent's layout while these per-source limits remain explicit. See the
 SVG section in `docs/live-layout-snapshot.md` and its separate reproducible oracle.
+
+The optional `--adversarial` collector mode also records real Go 13 flex intrinsic
+negative-leading controls and fractional padding/relative/text-indent origins.
+HTML flex scratch measurement keeps the same physical font policy as final
+placement. General HTML fractional used-value quantization and first-line
+indentation remain separate producer gaps; the two fractional origin graphs are
+retained as evidence and are not included in the numerical certification above.
+Text-enabled snapshots fail with `NonFiniteGeometry` before exposing overflowed
+font, fragment, glyph or transform metadata.
