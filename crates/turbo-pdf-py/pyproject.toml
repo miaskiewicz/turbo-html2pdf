@@ -34,3 +34,5 @@ python-source = "python"
 module-name = "turbo_html2pdf._turbo_html2pdf"
 # Build the stable-ABI (abi3) wheel matching the crate's pyo3 features.
 features = ["pyo3/extension-module"]
+
+include = [{ path = "python/turbo_html2pdf/THIRD_PARTY_NOTICES.md", format = ["sdist", "wheel"] }, { path = "LICENSE", format = ["sdist", "wheel"] }]

@@ -62,6 +62,7 @@ RUSTFLAGS="-D warnings" cargo clippy --workspace --all-targets -- -D warnings
 cargo test --workspace
 cargo run --manifest-path tools/cc-check/Cargo.toml -- --max 5 crates   # cc < 6
 cargo tarpaulin                                                          # 100% gate
+node scripts/package-notices.mjs --check                                # packaged notices
 ```
 
 `release.yml`'s `gate` job runs only fmt/clippy/test — so a red `cc-check` or

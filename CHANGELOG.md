@@ -6,6 +6,9 @@ PyPI, and crates.io packages release in lockstep from a `v*` tag (PyPI on `pyv*`
 
 ## [0.3.5] — 2026-10-14
 
+- Ship the MIT license and existing embedded-font notices with the actual npm,
+  Python and MCP binary artifacts; validate their reproducible source copies.
+
 - Add native live-tree layout snapshots with caller-owned source IDs, all-fragment
   provenance, nested affine transforms and real block/replaced geometry. The live
   path retains nonpainting layout boxes and removes PDF image-fit caps while

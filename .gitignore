@@ -27,6 +27,7 @@ index.generated.js
 # ---- WASM ----
 pkg/
 pkg-node/
+pkg-fonts/
 *.wasm
 
 # ---- Python / PyO3 (maturin) ----

@@ -1,7 +1,7 @@
 {
   "name": "turbo-html2pdf",
   "version": "0.3.5",
-  "description": "Fast native HTML/CSS + Jinja templating to PDF for Node — no headless browser, no Chromium.",
+  "description": "Fast native HTML/CSS + Jinja templating to PDF for Node \u2014 no headless browser, no Chromium.",
   "license": "MIT",
   "main": "index.js",
   "types": "index.d.ts",
@@ -25,7 +25,9 @@
     "Cargo.toml",
     "src/*.rs",
     "LICENSE",
-    "README.md"
+    "README.md",
+    "THIRD_PARTY_NOTICES.md",
+    "assets/fonts/Go-Font-LICENSE"
   ],
   "napi": {
     "name": "turbo-pdf-napi",
