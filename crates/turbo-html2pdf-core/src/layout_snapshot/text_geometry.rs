@@ -1,6 +1,7 @@
 //! Advance/font boxes from real glyph clusters, not line-container rectangles.
 use super::{geometry, LayoutSnapshot, Point, Rect, SourceId};
 use std::collections::BTreeMap;
+use std::sync::Arc;
 
 /// One actual shaper cluster's native advance/font box and composed transform.
 /// It may span several UTF-16 units; this is not an interpolated caret position.
@@ -8,7 +9,7 @@ use std::collections::BTreeMap;
 pub struct SourceClusterBox {
     pub fragment_index: usize,
     pub source_id: Option<SourceId>,
-    pub source_ancestors: Vec<SourceId>,
+    pub source_ancestors: Arc<[SourceId]>,
     pub right_to_left: bool,
     pub utf16_start: usize,
     pub utf16_end: usize,
@@ -21,6 +22,7 @@ pub(crate) fn cluster_boxes(snapshot: &LayoutSnapshot) -> Vec<SourceClusterBox> 
     let mut boxes = Vec::new();
     for run in snapshot.text_runs() {
         let fragment = &snapshot.fragments()[run.fragment_index];
+        let ancestry: Arc<[SourceId]> = run.source_ancestors.clone().into();
         let mut groups = BTreeMap::<(usize, usize), (f32, f32, bool)>::new();
         for glyph in &run.glyphs {
             let source = glyph.source;
@@ -46,7 +48,7 @@ pub(crate) fn cluster_boxes(snapshot: &LayoutSnapshot) -> Vec<SourceClusterBox> 
                 right_to_left,
                 fragment_index: fragment.index,
                 source_id: run.source_id,
-                source_ancestors: run.source_ancestors.clone(),
+                source_ancestors: Arc::clone(&ancestry),
                 utf16_start: start,
                 utf16_end: end,
                 rect,

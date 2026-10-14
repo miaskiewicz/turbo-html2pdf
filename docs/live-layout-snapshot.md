@@ -194,7 +194,9 @@ using the font program's real family rather than a caller alias. The generic
 text entry points preserve their fractional/PDF metrics. `SourceFontBox` retains
 the actual run baseline and metrics. `text_cluster_boxes()` combines genuine
 shaper advances with these font boxes and the fragment's composed transform.
-Each result keeps source ownership and UTF-16 bounds; it is not an interpolated
+Cluster cells share immutable native ancestry rather than copying a deep
+ancestor vector for every glyph. Each result keeps source ownership and UTF-16
+bounds; it is not an interpolated
 caret position or a glyph ink rectangle.
 
 `text_sources()` preserves each mapped text node's actual native UTF-8 input

@@ -581,3 +581,20 @@ fn source_character_work_has_a_bound_even_below_the_byte_budget() {
     );
     assert!(matches!(result, Err(TextSnapshotError::Budget)));
 }
+
+#[test]
+fn cluster_geometry_shares_immutable_native_ancestry_and_survives_snapshot_drop() {
+    use std::sync::Arc;
+    use turbo_html2pdf_core::layout_snapshot::SourceId;
+    let native = capture_snapshot(&["ab"], 80.0, true);
+    let cells = native.text_cluster_boxes();
+    assert_eq!(cells.len(), 2);
+    assert!(Arc::ptr_eq(
+        &cells[0].source_ancestors,
+        &cells[1].source_ancestors
+    ));
+    drop(native);
+    assert_eq!(cells[0].source_ancestors.as_ref(), &[SourceId(99)]);
+    assert_eq!(cells[1].source_id, Some(SourceId(100)));
+    assert_eq!(cells[1].utf16_start, 1);
+}

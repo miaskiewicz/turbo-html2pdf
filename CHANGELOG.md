@@ -26,6 +26,9 @@ PyPI, and crates.io packages release in lockstep from a `v*` tag (PyPI on `pyv*`
   all Unicode whitespace; two additional authored Chrome controls reproduce the
   old defect and verify the correction. Full whitespace-mode/line-breaking and
   caret semantics remain open.
+- Share immutable source ancestry between native cluster boxes rather than copying
+  an ancestor vector for every glyph; retained geometry remains valid after the
+  snapshot is dropped.
 - Bound shared native font-shaping memoization to 128 entries/8 MiB per face,
   releasing old run payloads during churn and skipping oversized cache entries
   while returning their genuine glyph results.
