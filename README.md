@@ -484,5 +484,6 @@ MIT (engine + bindings). Bundled fonts are SIL OFL 1.1 — see
 The core's additive `layout_snapshot` API preserves caller-owned source IDs across
 all native layout fragments and composes nested transforms. Its continuous-media
 path retains nonpainting boxes and sizes replaced images without PDF page-fit
-caps. Existing PDF APIs are unchanged; see [the API contract, Chrome controls and
+caps. PDF filtering, page-fit and legacy layout policies are preserved; shared CSS
+cascade fixes also improve valid PDF output. see [the API contract, Chrome controls and
 remaining geometry boundaries](docs/live-layout-snapshot.md).

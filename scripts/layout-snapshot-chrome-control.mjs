@@ -1,5 +1,6 @@
 // Run authored layout controls in the independent installed-Chrome CDP oracle.
 import { spawn } from "node:child_process";
+import { createHash } from "node:crypto";
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { createServer } from "node:http";
 import { tmpdir } from "node:os";
@@ -39,6 +40,9 @@ async function collect(fixture) {
   const rect = (r) => ({ x: r.x, y: r.y, width: r.width, height: r.height });
   const cases = [];
   for (const test of fixture.cases) {
+    // Each graph starts with the same document, including after real-root cases.
+    document.documentElement.style.cssText = "margin:0;padding:0;height:100%;";
+    document.body.style.cssText = "margin:0;padding:0;height:100%;";
     document.body.replaceChildren();
     const elements = [];
     const ready = [];
@@ -119,6 +123,17 @@ try {
     v8: trace.browserV8Version,
     recordedAt: new Date().toISOString(),
     fixture: "cases.json",
+    fixtureSha256: createHash("sha256")
+      .update(
+        readFileSync(
+          join(root, "crates/turbo-html2pdf-core/tests/fixtures/layout-snapshot/cases.json"),
+        ),
+      )
+      .digest("hex"),
+    probeSha256: createHash("sha256").update(readFileSync(probe)).digest("hex"),
+    collectorSha256: createHash("sha256")
+      .update(readFileSync(fileURLToPath(import.meta.url)))
+      .digest("hex"),
     effectiveExtensionFlags: trace.effectiveExtensionFlags,
     ...result.result,
   };

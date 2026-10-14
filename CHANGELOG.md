@@ -9,8 +9,8 @@ PyPI, and crates.io packages release in lockstep from a `v*` tag (PyPI on `pyv*`
 - Add native live-tree layout snapshots with caller-owned source IDs, all-fragment
   provenance, nested affine transforms and real block/replaced geometry. The live
   path retains nonpainting layout boxes and removes PDF image-fit caps while
-  existing PDF APIs preserve their previous behavior. Twenty-one offline contracts
-  and 67 independently recorded Chrome 155 geometry cases cover the seam; full
+  existing PDF filtering, image page-fit and root layout policy remain unchanged. Twenty-one offline contracts
+  and 69 independently recorded Chrome 155 geometry cases cover the seam; full
   inline/caret/scroll geometry remains explicit follow-up work. Distinguish actual
   display-none exclusion through unmapped ancestors from visible empty/flattened
   inlines so callers cannot invent zero rectangles from absent fragments.
@@ -20,7 +20,7 @@ PyPI, and crates.io packages release in lockstep from a `v*` tag (PyPI on `pyv*`
 - Fix live absolute positioning to use the padding-box containing block, including
   percentage dimensions, opposing insets and measured auto-height parents.
   Explicitly reject fixed descendants of transformed ancestors in both snapshot
-  APIs until their full containing-block geometry is implemented; 65 supported
+  APIs until their full containing-block geometry is implemented; 67 supported
   Chrome graphs match numerically and two unsupported controls verify admission.
 - Expand inset and quad border declarations before cascade winner selection so
   their side values retain declaration order, specificity and importance.

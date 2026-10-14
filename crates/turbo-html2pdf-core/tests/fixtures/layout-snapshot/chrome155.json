@@ -1,8 +1,11 @@
 {
   "browser": "Chrome/155.0.8059.79",
   "v8": "15.5.35.23",
-  "recordedAt": "2026-10-14T03:14:26.570Z",
+  "recordedAt": "2026-10-14T03:30:54.287Z",
   "fixture": "cases.json",
+  "fixtureSha256": "3d3691a8fbd308178f80fed676f0adf48a68cb698f8b9c74ecf6c59197331ce5",
+  "probeSha256": "2d2ef6e852e10f776b6d02a61f644e26e83aac73606bc49337762d557680114b",
+  "collectorSha256": "78fb2730fcf5d56439e415c2067cbe755d72bffdb01c6bcb1d339f2ed0040931",
   "effectiveExtensionFlags": [
     "--disable-extensions",
     "--disable-component-extensions-with-background-pages"
@@ -3836,6 +3839,128 @@
           "offset": {
             "width": 200,
             "height": 16
+          }
+        }
+      ]
+    },
+    {
+      "name": "local-variable-override",
+      "boxes": [
+        {
+          "sourceId": 1,
+          "isDocumentRoot": false,
+          "rect": {
+            "x": 0,
+            "y": 0,
+            "width": 100,
+            "height": 80
+          },
+          "clientRects": [
+            {
+              "x": 0,
+              "y": 0,
+              "width": 100,
+              "height": 80
+            }
+          ],
+          "client": {
+            "left": 0,
+            "top": 0,
+            "width": 100,
+            "height": 80
+          },
+          "offset": {
+            "width": 100,
+            "height": 80
+          }
+        },
+        {
+          "sourceId": 2,
+          "isDocumentRoot": false,
+          "rect": {
+            "x": 9,
+            "y": 4,
+            "width": 10,
+            "height": 10
+          },
+          "clientRects": [
+            {
+              "x": 9,
+              "y": 4,
+              "width": 10,
+              "height": 10
+            }
+          ],
+          "client": {
+            "left": 0,
+            "top": 0,
+            "width": 10,
+            "height": 10
+          },
+          "offset": {
+            "width": 10,
+            "height": 10
+          }
+        }
+      ]
+    },
+    {
+      "name": "explicit-custom-property-inherit",
+      "boxes": [
+        {
+          "sourceId": 1,
+          "isDocumentRoot": false,
+          "rect": {
+            "x": 0,
+            "y": 0,
+            "width": 100,
+            "height": 80
+          },
+          "clientRects": [
+            {
+              "x": 0,
+              "y": 0,
+              "width": 100,
+              "height": 80
+            }
+          ],
+          "client": {
+            "left": 0,
+            "top": 0,
+            "width": 100,
+            "height": 80
+          },
+          "offset": {
+            "width": 100,
+            "height": 80
+          }
+        },
+        {
+          "sourceId": 2,
+          "isDocumentRoot": false,
+          "rect": {
+            "x": 7,
+            "y": 3,
+            "width": 10,
+            "height": 10
+          },
+          "clientRects": [
+            {
+              "x": 7,
+              "y": 3,
+              "width": 10,
+              "height": 10
+            }
+          ],
+          "client": {
+            "left": 0,
+            "top": 0,
+            "width": 10,
+            "height": 10
+          },
+          "offset": {
+            "width": 10,
+            "height": 10
           }
         }
       ]

@@ -110,9 +110,9 @@ do not trigger this admission error. Both entry points share this validation. Tw
 cover identity after moves, path validation, partial maps, generated and anonymous
 ownership, all text lines, transforms, hidden flow, definite heights, replaced
 sizes, and unchanged legacy PDF filtering/caps. A further shared fixture compares
-67 authored graphs against the independently installed Chrome
+69 authored graphs against the independently installed Chrome
 `155.0.8059.79` / V8 `15.5.35.23` numeric oracle, recorded on macOS ARM64. The
-control compares 65 supported graphs numerically and verifies explicit rejection
+control compares 67 supported graphs numerically and verifies explicit rejection
 of two transformed-ancestor fixed-position graphs. The geometry tolerance is 0.001 CSS pixels (affine Float32 rounding); font-free
 control graphs avoid attributing font differences to box geometry.
 

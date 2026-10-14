@@ -1147,6 +1147,42 @@
           ]
         }
       ]
+    },
+    {
+      "name": "local-variable-override",
+      "nodes": [
+        {
+          "sourceId": 1,
+          "tag": "div",
+          "style": "position:relative;width:100px;height:80px;--edges:3px 7px",
+          "children": [
+            {
+              "sourceId": 2,
+              "tag": "div",
+              "style": "position:absolute;width:10px;height:10px;--edges:4px 9px;inset:var(--edges)",
+              "children": []
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "explicit-custom-property-inherit",
+      "nodes": [
+        {
+          "sourceId": 1,
+          "tag": "div",
+          "style": "position:relative;width:100px;height:80px;--edges:3px 7px",
+          "children": [
+            {
+              "sourceId": 2,
+              "tag": "div",
+              "style": "position:absolute;width:10px;height:10px;--edges:inherit;inset:var(--edges)",
+              "children": []
+            }
+          ]
+        }
+      ]
     }
   ]
 }

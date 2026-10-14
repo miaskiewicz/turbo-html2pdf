@@ -886,6 +886,8 @@ fn invalid_quad_declarations_preserve_prior_valid_sides_and_inherited_variables_
         ("left:20px!important;inset:var(--edges)", 20.0, 3.0),
         ("left:20px;inset:var(--edges)!important", 7.0, 3.0),
         ("left:20px;inset:var(--missing)", 0.0, 0.0),
+        ("--edges:4px 9px;inset:var(--edges)", 9.0, 4.0),
+        ("--edges:inherit;inset:var(--edges)", 7.0, 3.0),
     ] {
         let nodes = vec![element(
             "div",
