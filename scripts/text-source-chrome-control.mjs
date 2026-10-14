@@ -31,6 +31,8 @@ async function collect() {
   document.body.style.cssText = "margin:0;padding:0";
   const definitions = [
     { name: "ascii", text: "ab", width: 400 },
+    { name: "nonbreaking-space", text: "a\u00a0b", width: 50 },
+    { name: "em-space", text: "a\u2003b", width: 400 },
     { name: "font32", text: "ab", width: 400, fontSize: 32, lineHeight: 48 },
     { name: "font96", text: "ab", width: 400, fontSize: 96, lineHeight: 128 },
     { name: "font128", text: "ab", width: 400, fontSize: 128, lineHeight: 180 },

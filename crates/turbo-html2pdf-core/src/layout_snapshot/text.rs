@@ -137,6 +137,7 @@ mod tests {
     use super::*;
     fn cluster() -> GlyphSourceCluster {
         GlyphSourceCluster {
+            right_to_left: false,
             byte_start: 0,
             byte_end: 1,
             utf16_start: 0,
@@ -178,4 +179,54 @@ mod tests {
         );
         assert!(capacity.exceeded && capacity.runs.is_empty());
     }
+}
+
+/// One mapped text node's actual native UTF-8 input, retained before whitespace
+/// collapsing or fallback itemization. UTF-16 offsets index this same source.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SnapshotTextSource {
+    pub source_id: SourceId,
+    pub text: String,
+}
+
+pub(crate) fn validate_source_budget(
+    styled: &[crate::StyledNode],
+) -> Result<(), super::TextSnapshotError> {
+    let mut counts = (0, 0);
+    count_source_bytes(styled, &mut counts)
+}
+
+fn count_source_bytes(
+    nodes: &[crate::StyledNode],
+    counts: &mut (usize, usize),
+) -> Result<(), super::TextSnapshotError> {
+    for node in nodes {
+        match node {
+            crate::StyledNode::Text(text) => charge_source_input(counts, text)?,
+            crate::StyledNode::Element(element) => count_source_bytes(&element.children, counts)?,
+        }
+    }
+    Ok(())
+}
+
+fn charge_source_input(
+    counts: &mut (usize, usize),
+    text: &str,
+) -> Result<(), super::TextSnapshotError> {
+    charge_source_count(&mut counts.0, text.len(), 16 * 1024 * 1024)?;
+    charge_source_count(&mut counts.1, text.chars().count(), 1_000_000)
+}
+
+fn charge_source_count(
+    count: &mut usize,
+    amount: usize,
+    limit: usize,
+) -> Result<(), super::TextSnapshotError> {
+    *count = count
+        .checked_add(amount)
+        .ok_or(super::TextSnapshotError::Budget)?;
+    if *count > limit {
+        return Err(super::TextSnapshotError::Budget);
+    }
+    Ok(())
 }

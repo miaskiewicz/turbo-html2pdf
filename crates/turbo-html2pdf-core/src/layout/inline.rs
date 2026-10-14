@@ -138,6 +138,8 @@ pub struct GlyphSourceCluster {
     pub utf16_end: usize,
     pub pen_x: f32,
     pub advance: f32,
+    /// The direction selected by the actual native shaper for this segment.
+    pub right_to_left: bool,
 }
 
 /// Native output and parallel per-line, per-run, per-glyph source records.
@@ -341,10 +343,17 @@ fn space_width(c: &CharInfo, runs: &[InlineRun]) -> f32 {
     run.face.measure(" ", run.font_size, run.letter_spacing)
 }
 
-fn build_words(chars: &[CharInfo], runs: &[InlineRun]) -> Vec<Word> {
+fn collapsible_space(character: char, capture_sources: bool) -> bool {
+    if !capture_sources {
+        return character.is_whitespace();
+    }
+    matches!(character, ' ' | '\t' | '\n' | '\r' | '\u{c}')
+}
+
+fn build_words(chars: &[CharInfo], runs: &[InlineRun], capture_sources: bool) -> Vec<Word> {
     // A space is a line-break opportunity only when its run wraps; a `nowrap` run's
     // spaces stay inside the word so its whole text is one unbreakable unit.
-    let breakable = |c: &CharInfo| c.ch.is_whitespace() && !runs[c.run].nowrap;
+    let breakable = |c: &CharInfo| collapsible_space(c.ch, capture_sources) && !runs[c.run].nowrap;
     let mut words = Vec::new();
     let mut i = 0;
     while i < chars.len() {
@@ -409,8 +418,8 @@ fn flush_run_group(
 ) {
     if !group.is_empty() {
         let chars = flatten_chars(group, reg, diags, capture_sources);
-        hand_off_leading_space(&chars, group, out);
-        out.extend(build_words(&chars, group));
+        hand_off_leading_space(&chars, group, out, capture_sources);
+        out.extend(build_words(&chars, group, capture_sources));
         group.clear();
     }
 }
@@ -420,11 +429,16 @@ fn flush_run_group(
 /// atom before text (`<img> caption`). `build_words` drops leading whitespace, so
 /// hand its collapsed space to that preceding word; otherwise the ~4px
 /// inter-inline-block gap a browser paints would vanish.
-fn hand_off_leading_space(chars: &[CharInfo], group: &[InlineRun], out: &mut [Word]) {
+fn hand_off_leading_space(
+    chars: &[CharInfo],
+    group: &[InlineRun],
+    out: &mut [Word],
+    capture_sources: bool,
+) {
     let (Some(first), Some(last)) = (chars.first(), out.last_mut()) else {
         return;
     };
-    let breakable = first.ch.is_whitespace() && !group[first.run].nowrap;
+    let breakable = collapsible_space(first.ch, capture_sources) && !group[first.run].nowrap;
     if breakable && last.space_after == 0.0 {
         last.space_after = space_width(first, group);
     }
@@ -632,6 +646,17 @@ fn line_used_width(words: &[Word]) -> f32 {
     w
 }
 
+fn source_shaper_is_rtl(text: &str, enabled: bool) -> bool {
+    if !enabled {
+        return false;
+    }
+    let mut buffer = rustybuzz::UnicodeBuffer::new();
+    buffer.push_str(text);
+    // rustybuzz::shape applies this same native property selection before shaping.
+    buffer.guess_segment_properties();
+    buffer.direction() == rustybuzz::Direction::RightToLeft
+}
+
 fn shape_seg(seg: &Seg, pen_x: f32, baseline: f32, policy: (bool, bool)) -> SourceRun {
     let (capture_sources, html_font_metrics) = policy;
     let scale = seg.face.scale(seg.font_size);
@@ -640,6 +665,7 @@ fn shape_seg(seg: &Seg, pen_x: f32, baseline: f32, policy: (bool, bool)) -> Sour
     let mut clusters = Vec::new();
     let mut x = pen_x;
     let shaped = seg.face.shape(&seg.text);
+    let right_to_left = source_shaper_is_rtl(&seg.text, capture_sources);
     let (boundaries, utf16) = if capture_sources {
         let mut boundaries: Vec<_> = shaped.iter().map(|glyph| glyph.cluster as usize).collect();
         boundaries.push(seg.text.len());
@@ -674,6 +700,7 @@ fn shape_seg(seg: &Seg, pen_x: f32, baseline: f32, policy: (bool, bool)) -> Sour
                 .1
             };
             clusters.push(GlyphSourceCluster {
+                right_to_left,
                 byte_start: seg.source_bytes + start,
                 byte_end: seg.source_bytes + end,
                 utf16_start: seg.source_utf16 + offset(start),

@@ -25,7 +25,7 @@ use std::collections::BTreeMap;
 
 pub use geometry::{Point, Rect};
 pub use metrics::UsedBoxMetrics;
-pub use text::{SnapshotTextGlyph, SnapshotTextRun};
+pub use text::{SnapshotTextGlyph, SnapshotTextRun, SnapshotTextSource};
 pub use text_geometry::SourceClusterBox;
 
 /// A stable identity from the caller's source tree, independent of its position.
@@ -123,16 +123,21 @@ pub struct LayoutSnapshot {
     source_index: BTreeMap<SourceId, usize>,
     viewport: (f32, f32),
     text_runs: Vec<SnapshotTextRun>,
+    text_sources: Vec<SnapshotTextSource>,
 }
 
 impl LayoutSnapshot {
-    /// Actual per-glyph source metadata; empty for the original box-only API.
     /// Actual glyph advance/font boxes, preserving source ranges and transforms.
     pub fn text_cluster_boxes(&self) -> Vec<SourceClusterBox> {
         text_geometry::cluster_boxes(self)
     }
+    /// Actual per-glyph source metadata; empty for the original box-only API.
     pub fn text_runs(&self) -> &[SnapshotTextRun] {
         &self.text_runs
+    }
+    /// Mapped native text before whitespace collapse; empty for box-only snapshots.
+    pub fn text_sources(&self) -> &[SnapshotTextSource] {
+        &self.text_sources
     }
     pub fn galley(&self) -> &Fragment {
         &self.galley
@@ -182,7 +187,7 @@ pub fn snapshot_styled_tree(
 pub enum TextSnapshotError {
     #[error(transparent)]
     Snapshot(#[from] SnapshotError),
-    #[error("native text provenance exceeds its glyph or layout-ID budget")]
+    #[error("native text provenance exceeds its source-byte, glyph or layout-ID budget")]
     Budget,
 }
 
@@ -194,6 +199,8 @@ pub fn snapshot_styled_tree_with_text(
     inputs: &SnapshotInputs,
     diags: &mut Diagnostics,
 ) -> Result<LayoutSnapshot, TextSnapshotError> {
+    validate_viewport(inputs)?;
+    text::validate_source_budget(styled)?;
     let (snapshot, exceeded) = capture_styled(styled, identities, inputs, diags, Some(false))?;
     if exceeded {
         Err(TextSnapshotError::Budget)
@@ -224,6 +231,8 @@ pub fn snapshot_html_styled_tree_with_text(
     inputs: &SnapshotInputs,
     diags: &mut Diagnostics,
 ) -> Result<LayoutSnapshot, TextSnapshotError> {
+    validate_viewport(inputs)?;
+    text::validate_source_budget(styled)?;
     let (snapshot, exceeded) = capture_styled(styled, identities, inputs, diags, Some(true))?;
     if exceeded {
         Err(TextSnapshotError::Budget)
@@ -256,7 +265,9 @@ fn capture_styled(
     validate_viewport(inputs)?;
     crate::style::set_layout_viewport(inputs.width, inputs.height);
     fixed_containing::validate(styled, false)?;
-    let (build_sources, mut sources) = sources::prepare(styled, identities)?;
+    let (mut build_sources, mut sources) =
+        sources::prepare(styled, identities, html_text_metrics.is_some())?;
+    let text_sources = std::mem::take(&mut build_sources.text_sources);
     let (tree, mut records, next_id) = boxgen::build_sourced_tree(styled, build_sources);
     let (galley, metrics, text) = block::layout_tree_live(
         &tree,
@@ -280,6 +291,7 @@ fn capture_styled(
             source_index,
             viewport: (inputs.width, inputs.height),
             text_runs,
+            text_sources,
         },
         exceeded,
     ))

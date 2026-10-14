@@ -197,26 +197,40 @@ shaper advances with these font boxes and the fragment's composed transform.
 Each result keeps source ownership and UTF-16 bounds; it is not an interpolated
 caret position or a glyph ink rectangle.
 
-The native capture refuses layout-ID overflow or more than one million captured
+`text_sources()` preserves each mapped text node's actual native UTF-8 input
+before whitespace collapse, together with its stable source ID. This provides
+original whitespace/UTF-16 ownership for subsequent Range algorithms without
+reading a guest getter or reconstructing text from rendered glyphs. Cluster
+records also retain the native shaper's selected direction; this does not imply
+complete CSS bidi itemization.
+
+The native capture refuses more than 16 MiB or one million Unicode scalars of
+input text before source copying/layout capture, layout-ID overflow or more than
+one million captured
 glyph records. `TextSnapshotError` wraps the existing viewport/source validation
 errors and reports that additional capacity bound. Original box-only snapshots
 retain their error type and allocate no glyph provenance. Text metadata holds
 native values and font/source IDs, with no script references or guest attributes.
+Shared loaded-font memoization is separately bounded to 128 entries and 8 MiB
+of logical run-text/glyph payload per face; oversized actual shaping results are
+returned without persistent caching. Eviction leaves real shaping output unchanged.
 
 The authored `scripts/text-source-chrome-control.mjs` serves the exact bundled
 Go-Regular.ttf and captures Range rectangles and caret queries in independent
 Chrome. Its saved font hash is
 `197d9f3703b4c00af609178876a8d73e396f64fe438b2c871778566632374be3`.
-Nine controlled-face graphs check exact native cluster x/y/width/height,
+Eleven controlled-face graphs check exact native cluster x/y/width/height,
 including combining text, collapsed leading whitespace, wrapping, transforms
-and four font sizes. A tenth graph preserves the uncontrolled installed emoji
+and four font sizes. NBSP/em-space retain their actual shaped advances, and
+NBSP remains unbroken when its word overflows. A twelfth graph preserves the uncontrolled installed emoji
 fallback result; its
 numeric metrics are not certified. The capture requires zero errors and records
 localhost-only extension flags. Native tests separately verify astral UTF-16
 ranges, source ownership and repeated wrapped runs.
 
 Caret selection, partial-cluster ranges, whitespace gap provenance, bidi/CJK
-itemization, fragmented inline borders and complete font-fallback behavior remain
+itemization, fragmented inline borders, full CSS whitespace-mode/Unicode line
+breaking and complete font-fallback behavior remain
 unfinished. The collector preserves these fields for subsequent implementation.
 The controlled-font box comparisons do not certify installed fallback fonts,
 platform-specific hinted metrics or complete Range/caret geometry.

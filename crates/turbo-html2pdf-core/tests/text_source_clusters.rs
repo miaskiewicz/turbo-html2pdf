@@ -494,3 +494,90 @@ fn font_alias_does_not_select_a_foreign_legacy_metric_adjustment() {
         assert_eq!(face.html_metrics(size), renamed.html_metrics(size));
     }
 }
+
+#[test]
+fn actual_text_source_keeps_collapsed_whitespace_and_distinct_owner_inputs() {
+    use turbo_html2pdf_core::layout_snapshot::SourceId;
+    let native = capture_snapshot(&["  a  b ", "é😀"], 80.0, true);
+    let inputs = native.text_sources();
+    assert_eq!(inputs.len(), 2);
+    assert_eq!(inputs[0].source_id, SourceId(100));
+    assert_eq!(inputs[0].text, "  a  b ");
+    assert_eq!(inputs[1].source_id, SourceId(101));
+    assert_eq!(inputs[1].text.encode_utf16().count(), 3);
+    assert!(capture_snapshot(&["  a  b "], 80.0, false)
+        .text_sources()
+        .is_empty());
+}
+
+#[test]
+fn whitespace_only_source_bytes_have_a_bound_before_native_layout_capture() {
+    use turbo_html2pdf_core::layout_snapshot::{
+        snapshot_styled_tree_with_text, SnapshotInputs, TextSnapshotError,
+    };
+    use turbo_html2pdf_core::{ImageCtx, NoImages, StyledNode};
+    let nodes = [StyledNode::Text(" ".repeat(16 * 1024 * 1024 + 1))];
+    let fonts = FontRegistry::new();
+    let images = ImageCtx {
+        resolver: &NoImages,
+        body_height: None,
+    };
+    let result = snapshot_styled_tree_with_text(
+        &nodes,
+        &[],
+        &SnapshotInputs {
+            width: 200.0,
+            height: 200.0,
+            fonts: &fonts,
+            images: &images,
+        },
+        &mut Diagnostics::default(),
+    );
+    assert!(matches!(result, Err(TextSnapshotError::Budget)));
+}
+
+#[test]
+fn source_clusters_preserve_native_shaper_direction_without_claiming_bidi_itemization() {
+    let fonts = FontRegistry::new();
+    let pieces = [run(&fonts, 17, "ab"), Piece::Break, run(&fonts, 99, "אב")];
+    let native = layout_paragraph_in_with_sources(
+        &pieces,
+        &fonts,
+        Align::Left,
+        &mut Diagnostics::default(),
+        &|_| (0.0, 200.0),
+        24.0,
+    );
+    assert!(native.clusters[0]
+        .iter()
+        .flatten()
+        .all(|c| !c.right_to_left));
+    assert!(!native.clusters[1].is_empty());
+    assert!(native.clusters[1].iter().flatten().all(|c| c.right_to_left));
+}
+
+#[test]
+fn source_character_work_has_a_bound_even_below_the_byte_budget() {
+    use turbo_html2pdf_core::layout_snapshot::{
+        snapshot_styled_tree_with_text, SnapshotInputs, TextSnapshotError,
+    };
+    use turbo_html2pdf_core::{ImageCtx, NoImages, StyledNode};
+    let nodes = [StyledNode::Text("é".repeat(1_000_001))];
+    let fonts = FontRegistry::new();
+    let images = ImageCtx {
+        resolver: &NoImages,
+        body_height: None,
+    };
+    let result = snapshot_styled_tree_with_text(
+        &nodes,
+        &[],
+        &SnapshotInputs {
+            width: 200.0,
+            height: 200.0,
+            fonts: &fonts,
+            images: &images,
+        },
+        &mut Diagnostics::default(),
+    );
+    assert!(matches!(result, Err(TextSnapshotError::Budget)));
+}

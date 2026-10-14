@@ -119,7 +119,7 @@ pub struct FontFace {
     /// shapes each run at least twice (measuring its width, then emitting its
     /// glyphs) plus once more for every repeated string (table cells, labels);
     /// caching by text collapses those to one shape per *distinct* run.
-    shape_cache: Arc<Mutex<HashMap<String, Vec<ShapedGlyph>>>>,
+    shape_cache: Arc<Mutex<ShapeCache>>,
 }
 
 impl std::fmt::Debug for FontFace {
@@ -169,7 +169,7 @@ impl FontFace {
             descent,
             line_gap,
             mac_ascent_adjustment,
-            shape_cache: Arc::new(Mutex::new(HashMap::new())),
+            shape_cache: Arc::new(Mutex::new(ShapeCache::default())),
         })
     }
 
@@ -334,6 +334,7 @@ impl FontFace {
         self.shape_cache
             .lock()
             .expect("shape cache not poisoned")
+            .entries
             .get(text)
             .cloned()
     }
@@ -342,7 +343,7 @@ impl FontFace {
         self.shape_cache
             .lock()
             .expect("shape cache not poisoned")
-            .insert(text.to_string(), glyphs.to_vec());
+            .insert(text, glyphs);
     }
 
     /// Measure the advance width of `text` in pixels at `font_size`, adding
@@ -352,6 +353,41 @@ impl FontFace {
         let advance: i64 = glyphs.iter().map(|g| i64::from(g.x_advance)).sum();
         advance as f32 * self.scale(font_size) + letter_spacing * glyphs.len() as f32
     }
+}
+
+const SHAPE_CACHE_ENTRIES: usize = 128;
+const SHAPE_CACHE_BYTES: usize = 8 * 1024 * 1024;
+
+#[derive(Default)]
+struct ShapeCache {
+    entries: HashMap<String, Vec<ShapedGlyph>>,
+    bytes: usize,
+}
+impl ShapeCache {
+    fn insert(&mut self, text: &str, glyphs: &[ShapedGlyph]) {
+        let Some(bytes) = shape_payload_bytes(text, glyphs) else {
+            return;
+        };
+        if self.entries.contains_key(text) {
+            return;
+        }
+        self.make_room(bytes);
+        self.entries.insert(text.to_string(), glyphs.to_vec());
+        self.bytes += bytes;
+    }
+    fn make_room(&mut self, bytes: usize) {
+        if self.entries.len() >= SHAPE_CACHE_ENTRIES || self.bytes + bytes > SHAPE_CACHE_BYTES {
+            self.entries.clear();
+            self.bytes = 0;
+        }
+    }
+}
+fn shape_payload_bytes(text: &str, glyphs: &[ShapedGlyph]) -> Option<usize> {
+    let bytes = glyphs
+        .len()
+        .checked_mul(std::mem::size_of::<ShapedGlyph>())?
+        .checked_add(text.len())?;
+    (bytes <= SHAPE_CACHE_BYTES).then_some(bytes)
 }
 
 fn collect_glyphs(shaped: &rustybuzz::GlyphBuffer) -> Vec<ShapedGlyph> {
@@ -457,5 +493,30 @@ mod tests {
         // re-parsing the shared bytes selects the same face.
         assert_eq!(face.index(), 0);
         assert_eq!(retagged.index(), face.index());
+    }
+    #[test]
+    fn shared_shape_cache_releases_churn_without_changing_native_results() {
+        let face = FontFace::from_bytes(ROBOTO.to_vec(), "Roboto", 400, false).unwrap();
+        let alias = face.with_family("sans-serif");
+        let expected = face.shape("retained glyph output");
+        for index in 0..512 {
+            alias.shape(&format!("unique actual run {index}"));
+            let cache = face.shape_cache.lock().unwrap();
+            assert!(cache.entries.len() <= SHAPE_CACHE_ENTRIES);
+            assert!(cache.bytes <= SHAPE_CACHE_BYTES);
+        }
+        assert!(face.cached_shape("retained glyph output").is_none());
+        assert_eq!(face.shape("retained glyph output"), expected);
+    }
+
+    #[test]
+    fn oversized_real_shaping_results_are_returned_without_persistent_memoization() {
+        let face = FontFace::from_bytes(ROBOTO.to_vec(), "Roboto", 400, false).unwrap();
+        let input = "a".repeat(450_000);
+        let glyphs = face.shape(&input);
+        assert_eq!(glyphs.len(), input.len());
+        assert!(glyphs.iter().all(|glyph| glyph.glyph_id != 0));
+        assert!(face.cached_shape(&input).is_none());
+        assert_eq!(face.shape_cache.lock().unwrap().bytes, 0);
     }
 }

@@ -19,6 +19,16 @@ PyPI, and crates.io packages release in lockstep from a `v*` tag (PyPI on `pyv*`
   transformed cluster boxes, keeping generic/PDF metrics unchanged. This is
   groundwork for genuine Range/
   caret and fragmented inline geometry, not complete CSSOM View support.
+- Retain bounded original native text inputs and actual shaper direction for
+  Range/caret groundwork. Reject more than 16 MiB or one million Unicode scalars
+  of source text before capture.
+  The source-enabled route preserves NBSP/em-space glyphs rather than collapsing
+  all Unicode whitespace; two additional authored Chrome controls reproduce the
+  old defect and verify the correction. Full whitespace-mode/line-breaking and
+  caret semantics remain open.
+- Bound shared native font-shaping memoization to 128 entries/8 MiB per face,
+  releasing old run payloads during churn and skipping oversized cache entries
+  while returning their genuine glyph results.
 - Attribute the HTML font-metric policy to pinned Blink155 sources and include
   their BSD notice in the reproducible npm, Python, WASM and binary notices.
 

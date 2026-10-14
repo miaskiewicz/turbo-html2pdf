@@ -9,6 +9,7 @@ pub struct SourceClusterBox {
     pub fragment_index: usize,
     pub source_id: Option<SourceId>,
     pub source_ancestors: Vec<SourceId>,
+    pub right_to_left: bool,
     pub utf16_start: usize,
     pub utf16_end: usize,
     pub rect: Rect,
@@ -20,18 +21,18 @@ pub(crate) fn cluster_boxes(snapshot: &LayoutSnapshot) -> Vec<SourceClusterBox> 
     let mut boxes = Vec::new();
     for run in snapshot.text_runs() {
         let fragment = &snapshot.fragments()[run.fragment_index];
-        let mut groups = BTreeMap::<(usize, usize), (f32, f32)>::new();
+        let mut groups = BTreeMap::<(usize, usize), (f32, f32, bool)>::new();
         for glyph in &run.glyphs {
             let source = glyph.source;
             let begin = source.pen_x.min(source.pen_x + source.advance);
             let end = source.pen_x.max(source.pen_x + source.advance);
             let edges = groups
                 .entry((source.utf16_start, source.utf16_end))
-                .or_insert((begin, end));
+                .or_insert((begin, end, source.right_to_left));
             edges.0 = edges.0.min(begin);
             edges.1 = edges.1.max(end);
         }
-        for ((start, end), (left, right)) in groups {
+        for ((start, end), (left, right, right_to_left)) in groups {
             let font = run.font_box;
             let rect = Rect {
                 x: fragment.rect.x + left,
@@ -42,6 +43,7 @@ pub(crate) fn cluster_boxes(snapshot: &LayoutSnapshot) -> Vec<SourceClusterBox> 
             let quad = geometry::rect_quad(rect)
                 .map(|point| geometry::transform(point, fragment.world_transform));
             boxes.push(SourceClusterBox {
+                right_to_left,
                 fragment_index: fragment.index,
                 source_id: run.source_id,
                 source_ancestors: run.source_ancestors.clone(),
