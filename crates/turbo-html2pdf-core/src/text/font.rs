@@ -132,6 +132,14 @@ impl std::fmt::Debug for FontFace {
     }
 }
 
+fn html_legacy_ascent(ascent: f32, descent: f32, enabled: bool) -> f32 {
+    if enabled {
+        ascent + ((ascent + descent) * 0.15 + 0.5).floor()
+    } else {
+        ascent
+    }
+}
+
 impl FontFace {
     /// Load a face from font bytes, tagging it with a family/weight/style so the
     /// registry can select it. Returns `None` if the bytes are not a valid font.
@@ -179,11 +187,13 @@ impl FontFace {
     /// Attribution/source pins are in html-font-metrics-provenance.json and
     /// Blink-font-metrics.LICENSE. Existing PDF/tiny-font canvas metrics stay intact.
     pub fn html_metrics(&self, size: f32) -> HtmlFontMetrics {
-        let mut ascent = self.ascent_px(size).round();
+        let ascent = self.ascent_px(size).round();
         let descent = self.descent_px(size).round();
-        if cfg!(target_os = "macos") && self.mac_ascent_adjustment {
-            ascent += ((ascent + descent) * 0.15 + 0.5).floor();
-        }
+        let ascent = html_legacy_ascent(
+            ascent,
+            descent,
+            cfg!(target_os = "macos") && self.mac_ascent_adjustment,
+        );
         HtmlFontMetrics {
             ascent,
             descent,
@@ -518,5 +528,50 @@ mod tests {
         assert!(glyphs.iter().all(|glyph| glyph.glyph_id != 0));
         assert!(face.cached_shape(&input).is_none());
         assert_eq!(face.shape_cache.lock().unwrap().bytes, 0);
+    }
+}
+
+#[cfg(test)]
+mod html_metric_policy_contracts {
+    #[test]
+    fn mac_legacy_policy_and_unmodified_platform_metrics_use_the_same_real_font_tables() {
+        let face = super::FontFace::from_bytes(
+            include_bytes!("../../assets/fonts/Go-Regular.ttf").to_vec(),
+            "Go",
+            400,
+            false,
+        )
+        .unwrap();
+        let ascent = face.ascent_px(64.0).round();
+        let descent = face.descent_px(64.0).round();
+        assert_eq!(super::html_legacy_ascent(ascent, descent, false), ascent);
+        assert_eq!((ascent, descent), (60.0, 14.0));
+        assert_eq!(super::html_legacy_ascent(ascent, descent, true), 71.0);
+        assert_eq!(
+            face.html_metrics(64.0).ascent,
+            ascent,
+            "Go is not a physical legacy-family face"
+        );
+    }
+    #[test]
+    fn duplicate_native_shaping_results_do_not_double_account_shared_cache_payloads() {
+        let face = super::FontFace::from_bytes(
+            include_bytes!("../../assets/fonts/Go-Regular.ttf").to_vec(),
+            "Go",
+            400,
+            false,
+        )
+        .unwrap();
+        let glyphs = face.shape("cache race");
+        let original_bytes = face.shape_cache.lock().unwrap().bytes;
+        face.shape_cache
+            .lock()
+            .unwrap()
+            .insert("cache race", &glyphs);
+        let cache = face.shape_cache.lock().unwrap();
+        assert_eq!(cache.entries.len(), 1);
+        assert_eq!(cache.bytes, original_bytes);
+        drop(cache);
+        assert_eq!(face.shape("cache race"), glyphs);
     }
 }

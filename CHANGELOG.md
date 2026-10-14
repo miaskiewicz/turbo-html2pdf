@@ -44,6 +44,22 @@ PyPI, and crates.io packages release in lockstep from a `v*` tag (PyPI on `pyv*`
 - Bound shared native font-shaping memoization to 128 entries/8 MiB per face,
   releasing old run payloads during churn and skipping oversized cache entries
   while returning their genuine glyph results.
+- Add an explicit outer-SVG viewport snapshot route with real native replaced
+  sizing, CSS/attribute/intrinsic ratio handling and source ownership. Preserve
+  every SVG descendant identity while marking shape/nested/foreignObject geometry
+  unsupported. Forty-nine independently captured Chrome graphs verify full
+  parent/viewport rectangles and client sizes. Physical layout scale is measured
+  separately from JS DPR; native used-size conversion precedes fragment allocation
+  and leaves returned affine geometry and existing PDF policies intact.
+- Treat invalid CSS declaration fallback separately from computed variable
+  invalidation and SVG animated-length defaults; parse real viewBox numeric
+  grammar without accepting malformed repeated/trailing commas. Fresh browser
+  controls retain invalid, signed, exponent, decimal and mixed-calc cases.
+- Reject incomplete nonwhitespace glyph coverage instead of returning partial
+  source selections. Verify real captured glyph-loss/capacity boundaries and
+  cross-platform font policy; duplicate concurrent native shaping results leave
+  shared cache accounting unchanged.
+- Package the pinned Blink155 layout-unit notice with native viewport attribution.
 - Attribute the HTML font-metric policy to pinned Blink155 sources and include
   their BSD notice in the reproducible npm, Python, WASM and binary notices.
 

@@ -31,6 +31,7 @@ pub(crate) fn ranges(
 ) -> Result<Vec<SourceRangeBox>, TextGeometryError> {
     let text = source_text(snapshot, id, start, end)?;
     let cells = source_cells(snapshot, id);
+    validate_source_coverage(&cells, &text, start, end)?;
     let mut boxes = selected_boxes(&cells, start, end);
     append_placed_gaps(&mut boxes, &cells, &text, start, end);
     append_empty_boundaries(&mut boxes, &cells, &text, start, end)?;
@@ -57,7 +58,35 @@ fn source_text(
 }
 
 fn source_cells(snapshot: &LayoutSnapshot, id: SourceId) -> Vec<SourceClusterBox> {
-    snapshot.text_cluster_boxes_for_source(id)
+    let mut cells = snapshot.text_cluster_boxes_for_source(id);
+    cells.sort_by_key(|cell| (cell.utf16_start, cell.utf16_end));
+    cells
+}
+
+fn validate_source_coverage(
+    cells: &[SourceClusterBox],
+    text: &[u16],
+    start: usize,
+    end: usize,
+) -> Result<(), TextGeometryError> {
+    let mut covered = start;
+    for cell in cells
+        .iter()
+        .filter(|cell| cell.utf16_end > start && cell.utf16_start < end)
+    {
+        let next = cell.utf16_start.min(end).max(covered);
+        require_collapsible(&text[covered..next])?;
+        covered = covered.max(cell.utf16_end.min(end));
+    }
+    require_collapsible(&text[covered..end])
+}
+
+fn require_collapsible(text: &[u16]) -> Result<(), TextGeometryError> {
+    if text.iter().all(|unit| is_collapsible(*unit)) {
+        Ok(())
+    } else {
+        Err(TextGeometryError::UnresolvedSource)
+    }
 }
 
 fn selected_boxes(cells: &[SourceClusterBox], start: usize, end: usize) -> Vec<SourceRangeBox> {
@@ -128,17 +157,26 @@ fn boundary_cells<'a>(
     let after = cells.iter().find(|cell| cell.utf16_start >= end);
     let gap_start = before.map_or(0, |cell| cell.utf16_end);
     let gap_end = after.map_or(text.len(), |cell| cell.utf16_start);
-    if !text[gap_start..gap_end]
-        .iter()
-        .all(|unit| is_collapsible(*unit))
-    {
-        return Err(TextGeometryError::UnresolvedSource);
-    }
-    match (before, after) {
-        (Some(a), Some(b)) => gap_edges(a, b, start, end),
-        (Some(_), None) => Ok(vec![(last, false)]),
-        (None, Some(_)) => Ok(vec![(first, true)]),
-        (None, None) => Err(TextGeometryError::UnresolvedSource),
+    require_collapsible(&text[gap_start..gap_end])?;
+    boundary_edges(before, after, first, last, start, end)
+}
+
+fn boundary_edges<'a>(
+    before: Option<&'a SourceClusterBox>,
+    after: Option<&'a SourceClusterBox>,
+    first: &'a SourceClusterBox,
+    last: &'a SourceClusterBox,
+    start: usize,
+    end: usize,
+) -> Result<Vec<(&'a SourceClusterBox, bool)>, TextGeometryError> {
+    match before {
+        // With no selected cell, absent preceding cells identify the real first
+        // edge. Both neighbours cannot be absent when the cell list is nonempty.
+        None => Ok(vec![(first, true)]),
+        Some(a) => match after {
+            Some(b) => gap_edges(a, b, start, end),
+            None => Ok(vec![(last, false)]),
+        },
     }
 }
 
@@ -152,12 +190,9 @@ fn gap_edges<'a>(
         return Ok(vec![collapsed_edge(before, after, start)]);
     }
     if before.fragment_index == after.fragment_index {
-        let edge = if start > before.utf16_end {
-            (after, true)
-        } else {
-            (before, false)
-        };
-        return Ok(vec![edge]);
+        // A selection starting at the preceding edge already appended the
+        // actual placed pen gap. Only subsequent zero-advance spaces reach here.
+        return Ok(vec![(after, true)]);
     }
     Ok(vec![(before, false), (after, true)])
 }
@@ -244,4 +279,59 @@ fn selected_gap(
         && text[a.utf16_end..b.utf16_start]
             .iter()
             .all(|unit| is_collapsible(*unit))
+}
+
+#[cfg(test)]
+mod native_capture_loss_contracts {
+    #[test]
+    fn missing_actual_source_glyphs_fail_closed_instead_of_publishing_partial_ranges() {
+        use super::*;
+        use crate::layout_snapshot::{
+            snapshot_html_live_tree_with_text, SnapshotInputs, SourceIdentity,
+        };
+        use crate::{build_cascade, Diagnostics, FontRegistry, ImageCtx, NoImages, Node};
+        let nodes = [Node::Text("ab".into())];
+        let fonts = FontRegistry::new();
+        let images = ImageCtx {
+            resolver: &NoImages,
+            body_height: None,
+        };
+        let mut native = snapshot_html_live_tree_with_text(
+            &nodes,
+            &[SourceIdentity {
+                id: SourceId(100),
+                path: vec![0],
+            }],
+            &build_cascade("", "", Default::default()),
+            &SnapshotInputs {
+                width: 200.0,
+                height: 80.0,
+                fonts: &fonts,
+                images: &images,
+            },
+            &mut Diagnostics::default(),
+        )
+        .unwrap();
+        assert_eq!(
+            native.text_range_boxes(SourceId(100), 0, 2).unwrap().len(),
+            1
+        );
+        // Remove an actual captured glyph to model an incomplete provider result;
+        // the remaining font/glyph/source positions are the real native output.
+        native.text_runs[0]
+            .glyphs
+            .retain(|glyph| glyph.source.utf16_end <= 1);
+        assert_eq!(
+            native.text_range_boxes(SourceId(100), 0, 2),
+            Err(TextGeometryError::UnresolvedSource)
+        );
+        assert_eq!(
+            native.text_range_boxes(SourceId(100), 1, 1),
+            Err(TextGeometryError::UnresolvedSource)
+        );
+        assert_eq!(
+            native.text_range_boxes(SourceId(100), 0, 1).unwrap().len(),
+            1
+        );
+    }
 }

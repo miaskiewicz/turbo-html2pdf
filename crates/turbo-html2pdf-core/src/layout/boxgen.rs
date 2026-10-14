@@ -35,6 +35,7 @@ pub struct LayoutBox {
     /// A raster image this box paints (§7.4): a replaced `<img>` (which also
     /// sizes the box) or a `background-image` (painted behind the box content).
     pub image: Option<ImageSource>,
+    pub(crate) svg_viewport: Option<Box<super::svg_viewport::SvgViewport>>,
     /// A `mask-image: url(...)` (or `-webkit-mask-image`): the icon technique where
     /// an SVG is used as an alpha mask and the box's paint (its `background-color`,
     /// falling back to `color`) shows through only where the mask is opaque. Ubiquitous
@@ -65,7 +66,7 @@ pub struct LayoutBox {
     /// per solve (min/max-content, then the resolved width) and each probe does a
     /// FULL sub-layout, so a deeply nested flex tree is exponential without this —
     /// keyed by the rounded proposed width (a handful of distinct values per box).
-    measure_cache: RefCell<Vec<(u32, (f32, f32))>>,
+    measure_cache: RefCell<Option<Box<MeasuredSizes>>>,
     /// The PDF/UA structure role derived from this box's HTML tag (`pdf-ua`),
     /// carried down to the fragment so the emitter can tag it (AC-11.1).
     #[cfg(feature = "pdf-ua")]
@@ -74,6 +75,13 @@ pub struct LayoutBox {
     /// figure's struct element (`pdf-ua`).
     #[cfg(feature = "pdf-ua")]
     pub ua_alt: Option<String>,
+}
+
+// Lazily boxed so optional viewport data does not enlarge the public inline
+// item enum or force allocations for boxes that never need measurement caching.
+#[derive(Debug, Clone)]
+struct MeasuredSizes {
+    values: Vec<(u32, (f32, f32))>,
 }
 
 /// Per-box cache of the resolved style and its context-independence verdict.
@@ -89,6 +97,10 @@ enum StyleCache {
 }
 
 impl LayoutBox {
+    pub(crate) fn is_replaced(&self) -> bool {
+        self.svg_viewport.is_some() || self.image.as_ref().is_some_and(|source| source.replaced)
+    }
+
     /// The memoized max-content width, computing it once via `f` on a miss.
     pub(crate) fn natural_cached(&self, f: impl FnOnce() -> f32) -> f32 {
         match self.natural_cache.get() {
@@ -119,23 +131,34 @@ impl LayoutBox {
         let key = w.round().clamp(0.0, u32::MAX as f32) as u32;
         // Scope the immutable borrow to this `let` so it is dropped before `f()` (a
         // recursive sub-layout) or the `borrow_mut` below can run.
-        let hit = self
-            .measure_cache
-            .borrow()
-            .iter()
-            .find(|(k, _)| *k == key)
-            .map(|(_, s)| *s);
+        let hit = self.measure_cache.borrow().as_ref().and_then(|cache| {
+            cache
+                .values
+                .iter()
+                .find(|(k, _)| *k == key)
+                .map(|(_, size)| *size)
+        });
         if let Some(size) = hit {
             return size;
         }
         let size = f();
-        self.measure_cache.borrow_mut().push((key, size));
+        let mut storage = self.measure_cache.borrow_mut();
+        let cache = storage.get_or_insert_with(|| Box::new(MeasuredSizes { values: Vec::new() }));
+        cache.values.push((key, size));
         size
     }
 
     /// Resolve this box's [`BoxStyle`] for `ctx`, reusing the cached resolution
     /// when the style is context-independent.
     pub(crate) fn resolved(&self, ctx: ResolveCtx) -> BoxStyle {
+        let style = self.resolved_base(ctx);
+        match &self.svg_viewport {
+            Some(viewport) => viewport.apply_attributes(style),
+            None => style,
+        }
+    }
+
+    pub(crate) fn resolved_base(&self, ctx: ResolveCtx) -> BoxStyle {
         match &*self.style_cache.borrow() {
             StyleCache::Cached(bs) => return bs.as_ref().clone(),
             StyleCache::Dependent => return resolve_box_style(&self.style, ctx),
@@ -247,6 +270,14 @@ impl Ids {
 
     fn element(&mut self, element: &StyledElement) -> NodeId {
         self.sourced(element as *const StyledElement as usize)
+    }
+
+    fn is_svg_viewport(&self, element: &StyledElement) -> bool {
+        self.sources.as_ref().is_some_and(|sources| {
+            sources
+                .svg_viewports
+                .contains(&(element as *const _ as usize))
+        })
     }
 
     fn hidden(&self, style: &ComputedStyle) -> bool {
@@ -393,6 +424,15 @@ fn classify_html(el: &StyledElement, ids: &mut Ids) -> Option<Level> {
     }
 }
 
+fn classify_svg_viewport(element: &StyledElement, ids: &mut Ids) -> Level {
+    match super::svg_viewport::display(element) {
+        Display::Inline | Display::InlineBlock => {
+            Level::Inline(vec![InlineItem::Atomic(build_block_box(element, ids))])
+        }
+        _ => Level::Block(build_block_box(element, ids)),
+    }
+}
+
 fn classify(node: &StyledNode, parent_style: &ComputedStyle, ids: &mut Ids) -> Option<Level> {
     let el = match node {
         StyledNode::Text(t) => {
@@ -405,6 +445,13 @@ fn classify(node: &StyledNode, parent_style: &ComputedStyle, ids: &mut Ids) -> O
     if ids.sources.is_some() && ids.hidden(&el.style) {
         return None;
     }
+    if ids.is_svg_viewport(el) {
+        return Some(classify_svg_viewport(el, ids));
+    }
+    classify_element(el, ids)
+}
+
+fn classify_element(el: &StyledElement, ids: &mut Ids) -> Option<Level> {
     match &el.tag {
         Tag::Directive(kind) => Some(directive_level(*kind, el, ids)),
         Tag::Html(_) => classify_html(el, ids),
@@ -468,20 +515,31 @@ fn build_block_box(el: &StyledElement, ids: &mut Ids) -> LayoutBox {
             display: Display::Block,
             kind: BoxKind::Directive(*kind),
             image: None,
+            svg_viewport: None,
             mask: None,
             style_cache: RefCell::new(StyleCache::Unknown),
             natural_cache: std::cell::Cell::new(None),
             min_content_cache: std::cell::Cell::new(None),
             intrinsic_w: std::cell::Cell::new(None),
-            measure_cache: RefCell::new(Vec::new()),
+            measure_cache: RefCell::new(None),
             #[cfg(feature = "pdf-ua")]
             ua_role: None,
             #[cfg(feature = "pdf-ua")]
             ua_alt: None,
         };
     }
-    let display = display_of(&el.style);
-    let kind = box_kind_for(display, el, ids);
+    let svg_viewport = ids.is_svg_viewport(el).then(|| {
+        Box::new(super::svg_viewport::SvgViewport::from_element(
+            el,
+            ids.sources.as_ref().unwrap().svg_layout_scale,
+        ))
+    });
+    let (display, kind) = if svg_viewport.is_some() {
+        (super::svg_viewport::display(el), BoxKind::Lines(Vec::new()))
+    } else {
+        let display = display_of(&el.style);
+        (display, box_kind_for(display, el, ids))
+    };
     LayoutBox {
         node_id,
         document_root: ids
@@ -492,12 +550,13 @@ fn build_block_box(el: &StyledElement, ids: &mut Ids) -> LayoutBox {
         display,
         kind,
         image: image_of(el),
+        svg_viewport,
         mask: mask_image(&el.style),
         style_cache: RefCell::new(StyleCache::Unknown),
         natural_cache: std::cell::Cell::new(None),
         min_content_cache: std::cell::Cell::new(None),
         intrinsic_w: std::cell::Cell::new(None),
-        measure_cache: RefCell::new(Vec::new()),
+        measure_cache: RefCell::new(None),
         #[cfg(feature = "pdf-ua")]
         ua_role: ua::role_of(el),
         #[cfg(feature = "pdf-ua")]
@@ -654,12 +713,13 @@ fn anon_lines_box(
         display: Display::Block,
         kind: BoxKind::Lines(items),
         image: None,
+        svg_viewport: None,
         mask: None,
         style_cache: RefCell::new(StyleCache::Unknown),
         natural_cache: std::cell::Cell::new(None),
         min_content_cache: std::cell::Cell::new(None),
         intrinsic_w: std::cell::Cell::new(None),
-        measure_cache: RefCell::new(Vec::new()),
+        measure_cache: RefCell::new(None),
         // An anonymous block wrapping an inline run reads as a paragraph of text.
         #[cfg(feature = "pdf-ua")]
         ua_role: Some(crate::layout::fragment::UaRole::Paragraph),
@@ -776,12 +836,13 @@ fn build_root(styled: &[StyledNode], ids: &mut Ids) -> LayoutBox {
         display: Display::Block,
         kind,
         image: None,
+        svg_viewport: None,
         mask: None,
         style_cache: RefCell::new(StyleCache::Unknown),
         natural_cache: std::cell::Cell::new(None),
         min_content_cache: std::cell::Cell::new(None),
         intrinsic_w: std::cell::Cell::new(None),
-        measure_cache: RefCell::new(Vec::new()),
+        measure_cache: RefCell::new(None),
         // The synthetic document root maps to the `Document` structure element.
         #[cfg(feature = "pdf-ua")]
         ua_role: Some(crate::layout::fragment::UaRole::Group),

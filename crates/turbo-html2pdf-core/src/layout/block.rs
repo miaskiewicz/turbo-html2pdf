@@ -300,7 +300,7 @@ fn layout_positioned(
 ) -> Fragment {
     let mut bs = resolve(lb, width, fs);
     let width = out_of_flow_width(&bs, width, ctx);
-    if !ctx.live_geometry || lb.image.as_ref().is_some_and(|image| image.replaced) {
+    if !ctx.live_geometry || lb.is_replaced() {
         return layout_box(lb, origin.0, origin.1, width, fs, ctx);
     }
     bs = resolve(lb, width, fs);
@@ -530,7 +530,7 @@ fn anchor_directive_frag(
 /// fill the line); replaced/explicit-width boxes size themselves normally.
 fn lay_atomic(b: &LayoutBox, cw: f32, fs: f32, ctx: &mut Ctx) -> Fragment {
     let bs = resolve(b, cw, fs);
-    let replaced = b.image.as_ref().is_some_and(|s| s.replaced);
+    let replaced = b.is_replaced();
     if !replaced && bs.width.resolve(cw).is_none() {
         // Shrink-to-fit, then honor `min-width`/`max-width` — google's header "Sign in"
         // pill has `min-width:85px`; unclamped it shrank to its ~68px text and, nearly
@@ -1000,7 +1000,7 @@ fn flow_region(
     cw: f32,
     flow_y: f32,
 ) -> (f32, f32) {
-    let avoids_floats = establishes_bfc(kid, kbs) || kid.image.as_ref().is_some_and(|s| s.replaced);
+    let avoids_floats = establishes_bfc(kid, kbs) || kid.is_replaced();
     if avoids_floats {
         inline_region(ctx, cx, cw, flow_y)
     } else {
@@ -1128,7 +1128,7 @@ fn place_float(
     y0: f32,
     ctx: &mut Ctx,
 ) -> Fragment {
-    let replaced = kid.image.as_ref().is_some_and(|s| s.replaced);
+    let replaced = kid.is_replaced();
     let (w, shrink) = float_width(kid, kbs, cw, ctx.fonts, replaced);
     // A float is offset from its packing edge by its own margins (CSS 9.5): its
     // border box drops below preceding floats plus `margin-top`, and packs inside
@@ -1568,6 +1568,15 @@ pub(crate) fn stamp_intrinsic_widths(lb: &LayoutBox, images: &ImageCtx) {
 
 /// Stamp one box's `intrinsic_w` if it is a resolvable replaced image.
 fn stamp_replaced_intrinsic(lb: &LayoutBox, images: &ImageCtx) {
+    if let Some(viewport) = &lb.svg_viewport {
+        let style = lb.resolved(ResolveCtx {
+            parent_font_size: super::value::DEFAULT_FONT_SIZE,
+            cb_width: 0.0,
+        });
+        lb.intrinsic_w
+            .set(Some(viewport.natural_width(style.font_size)));
+        return;
+    }
     let Some(src) = lb.image.as_ref().filter(|s| s.replaced) else {
         return;
     };
@@ -1595,6 +1604,11 @@ fn replaced_image_box(
     cb_width: f32,
     ctx: &mut Ctx,
 ) -> Option<Fragment> {
+    if let Some(viewport) = &lb.svg_viewport {
+        return Some(svg_viewport_fragment(
+            lb, viewport, bs, bx, by, cb_width, ctx,
+        ));
+    }
     let src = lb.image.as_ref().filter(|s| s.replaced)?;
     let intrinsic = probe_source(src, ctx)?;
     let sizing = size_ctx(bs, cb_width, ctx);
@@ -1605,6 +1619,33 @@ fn replaced_image_box(
     }
     let sized = size_replaced(src.name.clone(), intrinsic, &sizing);
     Some(image_fragment(lb, bx, by, &sized, bs))
+}
+
+fn svg_viewport_fragment(
+    lb: &LayoutBox,
+    viewport: &super::svg_viewport::SvgViewport,
+    style: &BoxStyle,
+    x: f32,
+    y: f32,
+    width: f32,
+    ctx: &mut Ctx,
+) -> Fragment {
+    let (content_width, content_height) = viewport.size(&size_ctx(style, width, ctx));
+    record_metrics(lb, style, content_width, content_height, ctx);
+    let width = content_width + style.padding.horizontal() + style.border.widths().horizontal();
+    let height = content_height + style.padding.vertical() + style.border.widths().vertical();
+    let mut fragment = Fragment::new(
+        lb.node_id,
+        x,
+        y,
+        width,
+        height,
+        content_kind(lb, style, width, height),
+    );
+    fragment.break_meta = break_meta_of(style);
+    fragment.z_index = style.z_index;
+    fragment.is_positioned = style.position != Position::Static;
+    fragment
 }
 
 /// Assemble the [`SizeCtx`] for the image sizer from a box's style and the

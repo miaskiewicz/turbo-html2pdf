@@ -19,6 +19,11 @@ const notices =
     join(root, "crates/turbo-html2pdf-core/src/text/Blink-font-metrics.LICENSE"),
     "utf8",
   ) +
+  "\n## Blink SVG viewport layout-unit policy\n\n" +
+  readFileSync(
+    join(root, "crates/turbo-html2pdf-core/src/layout/Blink-layout-unit.LICENSE"),
+    "utf8",
+  ) +
   "\n## Embedded fonts\n\n" +
   readFileSync(join(fonts, "NOTICE.md"), "utf8") +
   "\n" +

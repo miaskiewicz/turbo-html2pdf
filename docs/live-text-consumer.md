@@ -56,3 +56,16 @@ negative leading. The thirteenth emoji-fallback graph is retained but excluded
 from numerical certification. Native regressions separately cover real fallback
 run competition, combining-cluster edges, source ownership, hidden/missing data,
 invalid inputs and unchanged PDF behavior.
+
+
+For mixed HTML/SVG forests, the new
+`snapshot_html_live_tree_with_svg_viewports` / already-styled variant takes
+`viewports: &[SourceId]` followed by `layout_scale: f32`, before the ordinary
+cascade/inputs/diagnostics arguments. Declare only actual outer SVG namespace
+nodes. The current independently measured profile uses scale 2; use the recorded
+calibration rather than equating this value to JS DPR. Check
+`unsupported_svg_source_geometry(source)` before answering any SVG descendant
+geometry request. Full source paths/IDs are retained; shape/nested/foreignObject
+geometry is not synthesized. Native viewport output can contribute to a genuine
+HTML parent's layout while these per-source limits remain explicit. See the
+SVG section in `docs/live-layout-snapshot.md` and its separate reproducible oracle.

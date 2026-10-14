@@ -16,6 +16,8 @@ pub(crate) struct BuildSources {
     // Addresses are used only inside the one borrowed styled-tree construction.
     // They never escape as IDs; generated input labels cannot alias live nodes.
     nodes: HashMap<usize, SourceRecord>,
+    pub(crate) svg_viewports: std::collections::HashSet<usize>,
+    pub(crate) svg_layout_scale: f32,
     pub(crate) records: HashMap<NodeId, SourceRecord>,
     pub(crate) text_sources: Vec<SnapshotTextSource>,
 }
@@ -46,6 +48,8 @@ pub(crate) fn prepare(
     Ok((
         BuildSources {
             nodes: walker.nodes,
+            svg_viewports: std::collections::HashSet::new(),
+            svg_layout_scale: 1.0,
             records: HashMap::new(),
             text_sources: walker.text_sources,
         },

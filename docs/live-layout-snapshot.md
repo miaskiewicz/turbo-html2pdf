@@ -261,3 +261,55 @@ fragmented inline borders, CSS whitespace modes/Unicode line breaking and comple
 font-fallback behavior remain unfinished. The controlled-font comparisons do not
 certify installed fallback fonts, platform-specific hinted metrics or complete
 CSSOM View behavior.
+
+## Explicit outer SVG viewports (unreleased)
+
+`snapshot_html_live_tree_with_svg_viewports` and its already-styled counterpart
+accept the complete original forest, source identities, explicit outer-SVG
+`SourceId` declarations and a physical `layout_scale`. The embedding caller
+supplies identities from its actual SVG namespace. A supplied declaration must
+identify an SVG element; duplicate/nested declarations and invalid scale fail
+before layout. Qualified SVG names retain their original source identity.
+
+This route builds an actual atomic replaced viewport with float intrinsic size
+and native CSS width/height, constraints, padding/borders and transforms. It reads
+case-sensitive native attributes, resolves percentage geometry against the real
+containing block, and distinguishes CSS `auto` from intrinsic attribute sizes.
+Intrinsic width/height ratio precedes a viewBox-only ratio. Missing natural axes
+use the real default 300×150 sizing; viewBox-only sizing uses the containing
+width. There is no fabricated raster image, injected attribute or rewritten tag.
+
+Every original source/path remains in the snapshot. SVG shape, nested SVG and
+foreignObject descendants have `unsupported_svg_source_geometry(id) == true`;
+they have no manufactured fragment or zero rectangle. The supported outer SVG
+has its genuine border fragment and used content metrics. Display-none exclusion
+remains independently recorded through actual source ancestry. The normal
+box-only/PDF and generic text APIs retain their previous policy.
+
+Before allocating viewport fragments, native replaced sizing converts used
+content dimensions through the pinned Blink155 six-bit LayoutUnit model at the
+caller's measured physical layout scale. That scale is separate from JavaScript
+`devicePixelRatio`; the oracle measures it with independent ordinary HTML input
+sizes. The current profile's 32.51→32.5078125 and 32.504→32.5 observations uniquely
+match scale 2 among the tested 1/2/4/8 candidates. An explicit DPR 1 comparison
+retains the same observations as DPR 2. No returned rectangle or affine quad is
+postprocessed to match a hash. Source attribution/license is in
+`src/layout/svg-layout-provenance.json` and the packaged notices.
+
+`scripts/svg-viewport-chrome-control.mjs` retains actual Chrome/V8, source hashes,
+DPR, scale-calibration inputs/results and full parent/viewport/shape measurements.
+Forty-nine independent graphs verify the complete supported parent and viewport
+rectangles/client dimensions, including fractional sizes, ratio precedence,
+case sensitivity, invalid CSS versus computed-variable invalidation, malformed/
+negative/mixed-calc attributes, strict signed/exponent/decimal viewBox grammar,
+CSS overrides/auto, percentages, padding/borders, transforms, flex controls,
+hidden flow and margins. Shape measurements remain recorded and explicitly
+outside this viewport producer. Native contracts also verify declarations,
+nested-source admission, preserved identities and bounded/configurable scale.
+
+The native engine's remaining general CSS subset and float layout policy still
+apply outside this scoped used-size conversion. This does not supply SVG shape
+layout/painting, foreignObject layout, nested viewport transforms, full CSS zoom,
+all flex/grid/table sizing or browser hit-test stacking. Embedders must retain
+those limits and use real loaded resources/fonts; this seam does not certify a
+complete mixed SVG/browser implementation.
