@@ -1,9 +1,9 @@
 # Native text geometry consumer handoff
 
-This additive seam is on draft PR20 (`codex/live-text-provenance`). The published
-`turbo-html2pdf-core 0.3.5` provides box snapshots; these text APIs require a
-separately reviewed and published dependency update. This document does not
-change release versions or authorize a tag.
+This additive seam is on draft PR20 (`codex/live-text-provenance`), prepared as
+`turbo-html2pdf-core 0.3.6`. The published 0.3.5 provides box snapshots; these
+text/SVG APIs require the separately reviewed and published dependency update.
+No release tag is authorized by this document.
 
 Build the actual borrowed source forest and `SourceIdentity` paths, including
 all text nodes. Load the actual font programs into `FontRegistry`; caller aliases
