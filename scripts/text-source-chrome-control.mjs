@@ -74,6 +74,109 @@ async function collect(adversarial) {
           "padding-left:3.145px;padding-top:2.17px;position:relative;left:.31px;top:1.24px;text-indent:2.61px",
       },
       {
+        name: "fractional-negative-indent",
+        text: "ab",
+        width: 400,
+        fontSize: 13,
+        lineHeight: 24,
+        extraStyle:
+          "padding-left:8.145px;padding-top:8.17px;position:relative;left:-.31px;top:-1.24px;text-indent:-2.61px",
+      },
+      {
+        name: "fractional-percent-indent",
+        text: "ab",
+        width: 41.145,
+        fontSize: 13,
+        lineHeight: 24,
+        extraStyle: "text-indent:10%",
+      },
+      {
+        name: "fractional-indent-wrapped",
+        text: "ab ab ab",
+        width: 24,
+        fontSize: 13,
+        lineHeight: 24,
+        extraStyle:
+          "padding-left:3.145px;padding-top:2.17px;position:relative;left:.31px;top:1.24px;text-indent:2.61px",
+      },
+      {
+        name: "fractional-narrow-float",
+        text: "ab",
+        width: 100,
+        fontSize: 13,
+        lineHeight: 24,
+        extraStyle: "text-indent:2.61px",
+        floatStyle: "float:left;width:5px;height:37.145px",
+      },
+      {
+        name: "fractional-unbreakable-zero-float",
+        text: "abcdefabcdef",
+        width: 40,
+        fontSize: 13,
+        lineHeight: 24,
+        floatStyle: "float:left;width:10px;height:0px",
+      },
+      {
+        name: "fractional-indent-after-float",
+        text: "ab ab",
+        width: 40.145,
+        fontSize: 13,
+        lineHeight: 24,
+        extraStyle: "text-indent:2.61px",
+        floatStyle: "float:left;width:100%;height:37.145px",
+      },
+      {
+        name: "fractional-negative-transformed",
+        text: "ab",
+        width: 400,
+        fontSize: 13,
+        lineHeight: 24,
+        extraStyle:
+          "padding-left:1.145px;padding-top:1.17px;position:relative;left:-3.31px;top:-3.24px;text-indent:-2.61px",
+        transform: "translate(20px,20px) rotate(10deg)",
+      },
+      {
+        name: "fractional-scale-x",
+        text: "ab",
+        width: 400,
+        fontSize: 13,
+        lineHeight: 24,
+        extraStyle:
+          "padding-left:3.145px;padding-top:2.17px;position:relative;left:.31px;top:1.24px;text-indent:2.61px",
+        transform: "translate(.1px,1.3px) scaleX(1.5)",
+      },
+      {
+        name: "fractional-scale-y",
+        text: "ab",
+        width: 400,
+        fontSize: 13,
+        lineHeight: 24,
+        extraStyle:
+          "padding-left:3.145px;padding-top:2.17px;position:relative;left:.31px;top:1.24px;text-indent:2.61px",
+        transform: "translate(.1px,1.3px) scaleY(1.5)",
+      },
+      {
+        name: "fractional-translation",
+        text: "ab",
+        width: 400,
+        fontSize: 13,
+        lineHeight: 24,
+        extraStyle:
+          "padding-left:1.145px;padding-top:1.17px;position:relative;left:-3.31px;top:-3.24px;text-indent:-2.61px",
+        transform: "translate(20px,20px)",
+      },
+      {
+        name: "fractional-nested-transforms",
+        text: "ab",
+        width: 400,
+        fontSize: 13,
+        lineHeight: 24,
+        outerStyle:
+          "padding-left:3.145px;padding-top:2.17px;position:relative;left:.31px;top:1.24px;transform:rotate(10deg);transform-origin:0 0",
+        extraStyle: "position:relative;left:.31px;top:1.24px;text-indent:2.61px",
+        transform: "scale(1.5)",
+      },
+      {
         name: "fractional-transformed",
         text: "ab",
         width: 400,
@@ -92,6 +195,11 @@ async function collect(adversarial) {
     element.style.cssText = `font-family:ParityGo;font-size:${definition.fontSize ?? 64}px;line-height:${definition.lineHeight ?? 80}px;width:${definition.width}px;${definition.transform ? `transform:${definition.transform};transform-origin:0 0;` : ""}`;
     element.style.cssText += definition.extraStyle || "";
     const text = document.createTextNode(definition.text);
+    if (definition.floatStyle) {
+      const float = document.createElement("div");
+      float.style.cssText = definition.floatStyle;
+      element.append(float);
+    }
     element.append(text);
     if (definition.outerStyle) {
       const outer = document.createElement("div");
@@ -125,7 +233,30 @@ async function collect(adversarial) {
         offset: caret?.offset ?? null,
       });
     }
-    cases.push({ ...definition, ranges, hits });
+    const canvas = document.createElement("canvas");
+    const context = canvas.getContext("2d");
+    context.font = `${definition.fontSize ?? 64}px ParityGo`;
+    const measuredGlyphs = Array.from(definition.text, (character) => ({
+      character,
+      width: context.measureText(character).width,
+    }));
+    const sweep = [];
+    if (adversarial && definition.name.startsWith("fractional-")) {
+      for (const hit of hits) {
+        for (const delta of [-0.03, -0.015, -0.007, 0, 0.007, 0.015, 0.03]) {
+          const point = { x: hit.point.x + delta, y: hit.point.y };
+          const caret = document.caretPositionFromPoint(point.x, point.y);
+          sweep.push({
+            range: hit.range,
+            delta,
+            point,
+            sameText: caret?.offsetNode === text,
+            offset: caret?.offset ?? null,
+          });
+        }
+      }
+    }
+    cases.push({ ...definition, ranges, hits, measuredGlyphs, sweep });
   }
   return { font: "ParityGo", fontSize: 64, lineHeight: 80, cases };
 }

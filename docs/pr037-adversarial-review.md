@@ -27,10 +27,28 @@ item height. Text-enabled snapshots reject nonfinite metadata before publishing
 fragment, font, glyph or transform geometry. Layout scale remains bounded to
 finite values from 0.25 through 16.
 
-The fractional padding/relative/text-indent controls expose separate general
-HTML used-value/indentation gaps. They remain recorded in the optional
-`--adversarial` fixture and are outside this patch's numerical certification.
-They must be resolved by actual producer placement, not rectangle adjustments.
+The previously recorded fractional used-value and indentation failures are now
+resolved by native placement. Typed lengths quantize before layout, while float
+clearance preserves indentation on the first formatted line below y=0. Negative
+and percentage indentation, fractional padding/relative origins, one-axis scales,
+pure translation and nested rotation controls pass. The 30 controlled graphs
+cover 391 Range lists, 273 caret points and 1141 fractional sweeps. Policy reuse
+checks HTML scale 2 → generic/PDF → HTML scale 1/2 against fresh intrinsic caches.
+
+Native paint hit scopes follow the pinned Blink paint-property source: rounded
+origins discard residuals only on non-propagating transform axes. No global query
+pre-floor remains; float WebIDL input survives inverse mapping to local physical
+LayoutUnits. The separate hit transform does not change layout/Range matrices.
+Containment/isolation, masks, opacity/compositing and animation remain outside this
+certified hit scope.
+
+The stronger original-unit control found a real scalar projection loss and invalid
+font fallback. The additive unit input preserves native identity and raw cache keys;
+safe CoreText cascade wrappers select actual Lucida Grande/Menlo/STIX fallback faces
+using their real glyph metrics. MacRoman-only names are retained privately without
+changing scalar/PDF family resolution. The independent mixed source keeps all 26
+original-versus-replacement Range differences and twelve font/size controls. Unknown,
+duplicate, mismatched or over-budget original inputs fail before layout.
 
 The clarified div/img rotation controls further found float origin/composition
 drift and incorrect BODY hit ancestry in the embedding. Native CSS transform

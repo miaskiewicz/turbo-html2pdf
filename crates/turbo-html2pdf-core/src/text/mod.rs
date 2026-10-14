@@ -6,6 +6,7 @@
 mod bundled;
 mod font;
 mod inline;
+mod platform_fallback;
 mod registry;
 
 pub use font::{FontFace, HtmlFontMetrics, ShapedGlyph};

@@ -19,20 +19,45 @@ pub struct Rect {
     pub height: f32,
 }
 
+pub(crate) type CollectedGeometry = (Vec<SnapshotFragment>, Vec<[f64; 6]>, Vec<[f64; 6]>);
+
+struct Capture<'a> {
+    sources: &'a HashMap<NodeId, SourceRecord>,
+    metrics: &'a HashMap<NodeId, super::UsedBoxMetrics>,
+    transforms: &'a HashMap<NodeId, crate::layout::value::NativeTransform>,
+    scale: Option<f32>,
+}
+
+#[derive(Clone, Copy)]
+struct Inherited {
+    layout: [f64; 6],
+    hit: [f64; 6],
+    paint_scope: [f32; 2],
+}
+
 pub(crate) fn collect(
     galley: &Fragment,
     sources: &HashMap<NodeId, SourceRecord>,
     metrics: &HashMap<NodeId, super::UsedBoxMetrics>,
     transforms: &HashMap<NodeId, crate::layout::value::NativeTransform>,
-) -> (Vec<SnapshotFragment>, Vec<[f64; 6]>) {
-    let mut fragments = (Vec::new(), Vec::new());
-    append(
-        galley,
-        None,
-        IDENTITY,
+    scale: Option<f32>,
+) -> CollectedGeometry {
+    let mut fragments = (Vec::new(), Vec::new(), Vec::new());
+    let capture = Capture {
         sources,
         metrics,
         transforms,
+        scale,
+    };
+    append(
+        galley,
+        None,
+        Inherited {
+            layout: IDENTITY,
+            hit: IDENTITY,
+            paint_scope: [0.0, 0.0],
+        },
+        &capture,
         &mut fragments,
     );
     fragments
@@ -41,21 +66,23 @@ pub(crate) fn collect(
 fn append(
     fragment: &Fragment,
     parent: Option<usize>,
-    inherited: [f64; 6],
-    sources: &HashMap<NodeId, SourceRecord>,
-    metrics: &HashMap<NodeId, super::UsedBoxMetrics>,
-    transforms: &HashMap<NodeId, crate::layout::value::NativeTransform>,
-    out: &mut (Vec<SnapshotFragment>, Vec<[f64; 6]>),
+    inherited: Inherited,
+    capture: &Capture<'_>,
+    out: &mut CollectedGeometry,
 ) {
-    let source = sources.get(&fragment.node_id);
-    let own = transforms
+    let source = capture.sources.get(&fragment.node_id);
+    let own = capture
+        .transforms
         .get(&fragment.node_id)
         .filter(|_| matches!(fragment.content, FragmentContent::Box { .. }))
         .map_or_else(
             || own_matrix(fragment),
             |transform| about_native_origin(*transform, fragment.x, fragment.y),
         );
-    let matrix = multiply(inherited, own);
+    let matrix = multiply(inherited.layout, own);
+    let (paint, paint_scope) =
+        super::hit_geometry::own_matrix(fragment, own, inherited.paint_scope, capture.scale);
+    let hit = multiply(inherited.hit, paint);
     let rect = Rect {
         x: fragment.x,
         y: fragment.y,
@@ -65,6 +92,7 @@ fn append(
     let quad = rect_quad(rect).map(|point| transform(point, matrix));
     let index = out.0.len();
     out.1.push(matrix);
+    out.2.push(hit);
     out.0.push(SnapshotFragment {
         index,
         parent,
@@ -75,22 +103,19 @@ fn append(
             |s| s.ancestors.clone(),
         ),
         kind: kind(&fragment.content),
-        used_box: used_box(fragment, metrics),
+        used_box: used_box(fragment, capture.metrics),
         rect,
         world_transform: matrix.map(|value| value as f32),
         quad,
         transformed_bounds: bounds(quad),
     });
+    let inherited = Inherited {
+        layout: matrix,
+        hit,
+        paint_scope,
+    };
     for i in fragment.paint_order() {
-        append(
-            &fragment.children[i],
-            Some(index),
-            matrix,
-            sources,
-            metrics,
-            transforms,
-            out,
-        );
+        append(&fragment.children[i], Some(index), inherited, capture, out);
     }
 }
 

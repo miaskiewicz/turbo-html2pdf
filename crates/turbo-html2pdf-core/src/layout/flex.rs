@@ -22,7 +22,7 @@ use taffy::{
 
 use crate::error::Diagnostics;
 use crate::style::ComputedStyle;
-use crate::text::{Align, FontRegistry};
+use crate::text::FontRegistry;
 
 use super::block::{self, Ctx};
 use super::boxgen::{BoxKind, InlineItem, LayoutBox};
@@ -424,7 +424,12 @@ fn atomics_natural(items: &[InlineItem], fonts: &FontRegistry) -> f32 {
         .sum()
 }
 
-fn lines_natural(items: &[InlineItem], fs: f32, fonts: &FontRegistry) -> f32 {
+fn lines_natural(
+    items: &[InlineItem],
+    fs: f32,
+    fonts: &FontRegistry,
+    original: Option<&crate::layout_snapshot::text_units::NativeUnitMap>,
+) -> f32 {
     let runs = block::build_runs(items, fs, 0.0, fonts);
     let mut scratch = Diagnostics::default();
     // Round the max-content width UP: a box shrink-wrapped to a fractional text width
@@ -432,7 +437,7 @@ fn lines_natural(items: &[InlineItem], fs: f32, fonts: &FontRegistry) -> f32 {
     // wraps a word onto a second line even though it "fit" the measurement (nike's
     // "Find a Store" utility links, google's footer). A whole-pixel max-content leaves
     // room for the rounding.
-    let text = inline::layout_runs(&runs, fonts, f32::MAX, Align::Left, &mut scratch).width;
+    let text = inline::layout_runs_with_units(&runs, fonts, f32::MAX, &mut scratch, original).width;
     text.ceil() + atomics_natural(items, fonts)
 }
 
@@ -499,7 +504,9 @@ pub(crate) fn natural_width(lb: &LayoutBox, fonts: &FontRegistry) -> f32 {
             return iw + frame;
         }
         let inner = match &lb.kind {
-            BoxKind::Lines(items) => lines_natural(items, bs.font_size, fonts),
+            BoxKind::Lines(items) => {
+                lines_natural(items, bs.font_size, fonts, lb.original_units().as_deref())
+            }
             BoxKind::Flex(k) => flex_natural(k, &lb.style, fonts),
             BoxKind::Block(k) | BoxKind::Grid(k) | BoxKind::Table(k) => kids_natural(k, fonts),
             BoxKind::Directive(_) => 0.0,
@@ -510,10 +517,15 @@ pub(crate) fn natural_width(lb: &LayoutBox, fonts: &FontRegistry) -> f32 {
 
 /// The widest single unbreakable piece (max word / longest line at zero available
 /// width) of an inline run â the text's min-content width.
-fn lines_min(items: &[InlineItem], fs: f32, fonts: &FontRegistry) -> f32 {
+fn lines_min(
+    items: &[InlineItem],
+    fs: f32,
+    fonts: &FontRegistry,
+    original: Option<&crate::layout_snapshot::text_units::NativeUnitMap>,
+) -> f32 {
     let runs = block::build_runs(items, fs, 0.0, fonts);
     let mut scratch = Diagnostics::default();
-    let text = inline::layout_runs(&runs, fonts, 0.0, Align::Left, &mut scratch).width;
+    let text = inline::layout_runs_with_units(&runs, fonts, 0.0, &mut scratch, original).width;
     // An atomic doesn't break, so it contributes its own min-content; the line can
     // wrap between pieces, so its min-content is the widest single piece.
     let atom = items
@@ -544,7 +556,9 @@ pub(crate) fn min_content_width(lb: &LayoutBox, fonts: &FontRegistry) -> f32 {
             return natural_width(lb, fonts); // replaced image: intrinsic/declared size
         }
         let inner = match &lb.kind {
-            BoxKind::Lines(items) => lines_min(items, bs.font_size, fonts),
+            BoxKind::Lines(items) => {
+                lines_min(items, bs.font_size, fonts, lb.original_units().as_deref())
+            }
             BoxKind::Flex(k) | BoxKind::Block(k) | BoxKind::Grid(k) | BoxKind::Table(k) => k
                 .iter()
                 .map(|c| min_content_width(c, fonts))
@@ -620,9 +634,14 @@ fn measure_item(
     fs: f32,
     fonts: &FontRegistry,
     images: &ImageCtx,
-    policy: (bool, bool, Option<f32>),
+    policy: (
+        bool,
+        bool,
+        Option<f32>,
+        Option<&crate::layout_snapshot::text_units::NativeUnitMap>,
+    ),
 ) -> Size<f32> {
-    let (live_geometry, html_font_metrics, html_font_scale) = policy;
+    let (live_geometry, html_font_metrics, html_font_scale, original_units) = policy;
     // A replaced `<img>` sizes from its intrinsic (or explicit) width; other items
     // from a max-content measurement of their content.
     let w = replaced_probe_width(item, images, fs)
@@ -656,6 +675,7 @@ fn measure_item(
             text_capture: None,
             html_font_metrics,
             html_font_scale,
+            original_units,
             native_transforms: None,
             floats: Vec::new(),
         };
@@ -708,6 +728,7 @@ fn solve(
                 ctx.live_geometry,
                 ctx.html_font_metrics,
                 ctx.html_font_scale,
+                ctx.original_units,
             ),
         )
     })

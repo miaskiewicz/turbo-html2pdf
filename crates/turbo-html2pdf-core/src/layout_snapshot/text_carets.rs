@@ -17,7 +17,7 @@ pub(crate) fn offset(
     let mut best = None;
     for cell in snapshot.text_cluster_boxes_for_source(id).iter() {
         let fragment = &snapshot.fragments()[cell.fragment_index];
-        let matrix = snapshot.native_transforms[fragment.index];
+        let matrix = snapshot.native_hit_transforms[fragment.index];
         let local = local_point(point, matrix, snapshot.html_layout_scale)?;
         let distance = vertical_distance(local.y, cell.rect) * matrix[2].hypot(matrix[3]) as f32;
         let mut edge = nearest_edge(local.x, cell);
@@ -53,17 +53,29 @@ fn local_point(
         return Err(TextGeometryError::UnsupportedCaretTransform);
     }
     let (x, y) = (f64::from(point.x) - e, f64::from(point.y) - f);
-    let mut local = Point {
+    let local = Point {
         x: ((d * x - c * y) / determinant) as f32,
         y: ((a * y - b * x) / determinant) as f32,
     };
     validate_point(local)?;
-    if let Some(scale) = scale {
-        let units = scale * 64.0;
-        local.x = (local.x * units).trunc() / units;
-        local.y = (local.y * units).trunc() / units;
-    }
+    let local = physical_hit_point(local, scale);
+    validate_point(local)?;
     Ok(local)
+}
+
+// A transformed HitTestLocation preserves the original PointF through inverse
+// projection, then floors the resulting local PhysicalOffset.
+fn physical_hit_point(point: Point, scale: Option<f32>) -> Point {
+    match scale {
+        Some(scale) => {
+            let units = 64.0 * scale;
+            Point {
+                x: (point.x * units).floor() / units,
+                y: (point.y * units).floor() / units,
+            }
+        }
+        None => point,
+    }
 }
 
 fn vertical_distance(y: f32, rect: Rect) -> f32 {

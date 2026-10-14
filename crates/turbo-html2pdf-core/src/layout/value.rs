@@ -1529,6 +1529,44 @@ fn font_size_absolute(s: &ComputedStyle) -> bool {
     )
 }
 
+// Typed HTML lengths become physical LayoutUnits before box placement. The
+// cached unquantized style and generic/PDF policy remain reusable.
+pub(crate) fn html_used_value(value: f32, scale: Option<f32>) -> f32 {
+    match scale {
+        Some(scale) => (value * (64.0 * scale)).trunc() / (64.0 * scale),
+        None => value,
+    }
+}
+
+pub(crate) fn quantize_html_box_style(style: &mut BoxStyle, scale: Option<f32>) {
+    for edges in [&mut style.margin, &mut style.padding] {
+        for value in [
+            &mut edges.top,
+            &mut edges.right,
+            &mut edges.bottom,
+            &mut edges.left,
+        ] {
+            *value = html_used_value(*value, scale);
+        }
+    }
+    for length in [
+        &mut style.inset_top,
+        &mut style.inset_right,
+        &mut style.inset_bottom,
+        &mut style.inset_left,
+        &mut style.width,
+        &mut style.height,
+        &mut style.min_width,
+        &mut style.max_width,
+        &mut style.min_height,
+        &mut style.max_height,
+    ] {
+        if let LengthPct::Px(value) = length {
+            *value = html_used_value(*value, scale);
+        }
+    }
+}
+
 #[cfg(test)]
 mod calc_aspect_tests {
     use super::*;

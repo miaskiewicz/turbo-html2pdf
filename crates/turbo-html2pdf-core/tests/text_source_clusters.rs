@@ -368,7 +368,8 @@ fn controlled_font_snapshot(
     let font_size = case["fontSize"].as_f64().unwrap_or(64.0);
     let line_height = case["lineHeight"].as_f64().unwrap_or(80.0);
     let transform = case["transform"].as_str().unwrap_or("none");
-    let mut nodes=vec![Node::Element(Element{tag:Tag::Html("div".into()),attrs:vec![Attr{name:"style".into(),value:format!("font-family:ParityGo;font-size:{font_size}px;line-height:{line_height}px;width:{width}px;transform:{transform};transform-origin:0 0")}],children:vec![Node::Text(case["text"].as_str().unwrap().into())]})];
+    let extra = case["extraStyle"].as_str().unwrap_or("");
+    let mut nodes=vec![Node::Element(Element{tag:Tag::Html("div".into()),attrs:vec![Attr{name:"style".into(),value:format!("font-family:ParityGo;font-size:{font_size}px;line-height:{line_height}px;width:{width}px;transform:{transform};transform-origin:0 0;{extra}")}],children:vec![Node::Text(case["text"].as_str().unwrap().into())]})];
     let mut ids = [
         SourceIdentity {
             id: SourceId(99),
@@ -379,6 +380,23 @@ fn controlled_font_snapshot(
             path: vec![0, 0],
         },
     ];
+    if let Some(style) = case["floatStyle"].as_str() {
+        let Node::Element(element) = &mut nodes[0] else {
+            unreachable!()
+        };
+        element.children.insert(
+            0,
+            Node::Element(Element {
+                tag: Tag::Html("div".into()),
+                attrs: vec![Attr {
+                    name: "style".into(),
+                    value: style.into(),
+                }],
+                children: Vec::new(),
+            }),
+        );
+        ids[1].path[1] = 1;
+    }
     if let Some(style) = case["outerStyle"].as_str() {
         nodes = vec![Node::Element(Element {
             tag: Tag::Html("div".into()),
@@ -723,7 +741,12 @@ fn assert_caret_geometry(
     case: &serde_json::Value,
 ) {
     use turbo_html2pdf_core::layout_snapshot::{Point, SourceId};
-    for hit in case["hits"].as_array().unwrap() {
+    let hits = case["hits"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .chain(case["sweep"].as_array().into_iter().flatten());
+    for hit in hits {
         let point = Point {
             x: hit["point"]["x"].as_f64().unwrap() as f32,
             y: hit["point"]["y"].as_f64().unwrap() as f32,
@@ -986,4 +1009,33 @@ fn html_flex_intrinsic_measurement_preserves_physical_font_policy_and_negative_l
     assert_caret_geometry(&native, case);
     let fragment = &native.fragments()[native.source(SourceId(99)).unwrap().fragment_indices[0]];
     assert_eq!(fragment.rect.height, 10.0);
+}
+
+#[test]
+fn fractional_html_used_values_and_indent_match_chrome_before_affine_projection() {
+    use turbo_html2pdf_core::{FontFace, ImageCtx, NoImages};
+    let oracle: serde_json::Value =
+        serde_json::from_str(include_str!("fixtures/text-review-chrome155.json")).unwrap();
+    let mut fonts = FontRegistry::new();
+    fonts.add(
+        FontFace::from_bytes(
+            include_bytes!("../assets/fonts/Go-Regular.ttf").to_vec(),
+            "ParityGo",
+            400,
+            false,
+        )
+        .unwrap(),
+    );
+    let images = ImageCtx {
+        resolver: &NoImages,
+        body_height: None,
+    };
+    for case in oracle["result"]["cases"].as_array().unwrap() {
+        if !case["name"].as_str().unwrap().starts_with("fractional-") {
+            continue;
+        }
+        let native = controlled_font_snapshot(case, &fonts, &images);
+        assert_range_geometry(&native, case);
+        assert_caret_geometry(&native, case);
+    }
 }

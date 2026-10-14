@@ -7,6 +7,7 @@ pub(super) fn valid(snapshot: &LayoutSnapshot) -> bool {
         && snapshot
             .native_transforms
             .iter()
+            .chain(&snapshot.native_hit_transforms)
             .flatten()
             .all(|value| value.is_finite())
 }

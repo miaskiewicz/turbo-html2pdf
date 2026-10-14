@@ -50,6 +50,23 @@ pub fn describe(bytes: &[u8], index: u32) -> Option<(String, u16, bool)> {
     Some((family, face.weight().to_number(), face.is_italic()))
 }
 
+/// Names exposed only through native platform fallback, avoiding a change to
+/// the existing scalar/PDF registry's family selection.
+pub(super) fn describe_platform(bytes: &[u8], index: u32) -> Option<(String, u16, bool)> {
+    let face = TtfFace::parse(bytes, index).ok()?;
+    let family = face.names().into_iter().find(|name| {
+        name.name_id == 1
+            && name.platform_id == rustybuzz::ttf_parser::name::PlatformId::Macintosh
+            && name.encoding_id == 0
+    })?;
+    let (name, _, _) = encoding_rs::MACINTOSH.decode(family.name);
+    Some((
+        name.into_owned(),
+        face.weight().to_number(),
+        face.is_italic(),
+    ))
+}
+
 /// The face's English family name: the typographic family (name id 16) if
 /// present, else the legacy font family (name id 1).
 fn family_name(face: &TtfFace) -> Option<String> {
@@ -201,6 +218,24 @@ impl FontFace {
         }
     }
 
+    #[cfg(target_os = "macos")]
+    pub(super) fn native_postscript_name(&self) -> Option<String> {
+        self.ttf()
+            .names()
+            .into_iter()
+            .filter(|name| name.name_id == 6)
+            .find_map(|name| {
+                if name.is_unicode() {
+                    name.to_string()
+                } else if name.platform_id == rustybuzz::ttf_parser::name::PlatformId::Macintosh
+                    && name.encoding_id == 0
+                {
+                    Some(encoding_rs::MACINTOSH.decode(name.name).0.into_owned())
+                } else {
+                    None
+                }
+            })
+    }
     pub fn family(&self) -> &str {
         &self.family
     }
@@ -365,12 +400,16 @@ impl FontFace {
     }
 }
 
+#[path = "font_utf16.rs"]
+mod utf16;
+
 const SHAPE_CACHE_ENTRIES: usize = 128;
 const SHAPE_CACHE_BYTES: usize = 8 * 1024 * 1024;
 
 #[derive(Default)]
 struct ShapeCache {
     entries: HashMap<String, Vec<ShapedGlyph>>,
+    units_entries: HashMap<Vec<u16>, Vec<ShapedGlyph>>,
     bytes: usize,
 }
 impl ShapeCache {
@@ -385,9 +424,23 @@ impl ShapeCache {
         self.entries.insert(text.to_string(), glyphs.to_vec());
         self.bytes += bytes;
     }
+    fn insert_units(&mut self, units: &[u16], glyphs: &[ShapedGlyph]) {
+        let Some(bytes) = unit_payload_bytes(units, glyphs) else {
+            return;
+        };
+        if self.units_entries.contains_key(units) {
+            return;
+        }
+        self.make_room(bytes);
+        self.units_entries.insert(units.to_vec(), glyphs.to_vec());
+        self.bytes += bytes;
+    }
     fn make_room(&mut self, bytes: usize) {
-        if self.entries.len() >= SHAPE_CACHE_ENTRIES || self.bytes + bytes > SHAPE_CACHE_BYTES {
+        if self.entries.len() + self.units_entries.len() >= SHAPE_CACHE_ENTRIES
+            || self.bytes + bytes > SHAPE_CACHE_BYTES
+        {
             self.entries.clear();
+            self.units_entries.clear();
             self.bytes = 0;
         }
     }
@@ -397,6 +450,14 @@ fn shape_payload_bytes(text: &str, glyphs: &[ShapedGlyph]) -> Option<usize> {
         .len()
         .checked_mul(std::mem::size_of::<ShapedGlyph>())?
         .checked_add(text.len())?;
+    (bytes <= SHAPE_CACHE_BYTES).then_some(bytes)
+}
+
+fn unit_payload_bytes(units: &[u16], glyphs: &[ShapedGlyph]) -> Option<usize> {
+    let bytes = glyphs
+        .len()
+        .checked_mul(std::mem::size_of::<ShapedGlyph>())?
+        .checked_add(units.len().checked_mul(2)?)?;
     (bytes <= SHAPE_CACHE_BYTES).then_some(bytes)
 }
 
@@ -471,6 +532,28 @@ mod tests {
         assert_eq!(face_count(b"not a font"), 1);
     }
 
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn native_collection_name_decoding_accepts_unicode_and_rejects_other_legacy_encodings() {
+        let face = FontFace::from_bytes(ROBOTO.to_vec(), "author alias", 400, false).unwrap();
+        assert!(face.native_postscript_name().unwrap().contains("Roboto"));
+        let mut bytes = ROBOTO.to_vec();
+        let tables = u16::from_be_bytes([bytes[4], bytes[5]]) as usize;
+        let table = (0..tables)
+            .map(|index| 12 + index * 16)
+            .find(|&record| &bytes[record..record + 4] == b"name")
+            .unwrap();
+        let offset = u32::from_be_bytes(bytes[table + 8..table + 12].try_into().unwrap()) as usize;
+        let count = u16::from_be_bytes([bytes[offset + 2], bytes[offset + 3]]) as usize;
+        for record in (0..count).map(|index| offset + 6 + index * 12) {
+            if u16::from_be_bytes([bytes[record + 6], bytes[record + 7]]) == 6 {
+                bytes[record..record + 2].copy_from_slice(&1u16.to_be_bytes());
+                bytes[record + 2..record + 4].copy_from_slice(&1u16.to_be_bytes());
+            }
+        }
+        let unsupported = FontFace::from_bytes(bytes, "author alias", 400, false).unwrap();
+        assert_eq!(unsupported.native_postscript_name(), None);
+    }
     #[test]
     fn describe_reads_family_weight_italic() {
         let (family, weight, italic) = describe(ROBOTO, 0).expect("Roboto describes");

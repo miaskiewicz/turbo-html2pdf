@@ -82,11 +82,33 @@ geometry is not synthesized. Native viewport output can contribute to a genuine
 HTML parent's layout while these per-source limits remain explicit. See the
 SVG section in `docs/live-layout-snapshot.md` and its separate reproducible oracle.
 
-The optional `--adversarial` collector mode also records real Go 13 flex intrinsic
-negative-leading controls and fractional padding/relative/text-indent origins.
-HTML flex scratch measurement keeps the same physical font policy as final
-placement. General HTML fractional used-value quantization and first-line
-indentation remain separate producer gaps; the two fractional origin graphs are
-retained as evidence and are not included in the numerical certification above.
-Text-enabled snapshots fail with `NonFiniteGeometry` before exposing overflowed
-font, fragment, glyph or transform metadata.
+The optional `--adversarial` collector records 31 graphs. The 30 controlled
+Go-font graphs match all 391 Range lists, 273 caret hits and 1141 fractional
+caret sweeps. Real used-value placement quantizes typed lengths before layout;
+first-line indentation survives float clearance, including negative and percentage
+indentation. Reused layout trees reset font/physical/source policies and intrinsic
+caches against fresh controls. Text snapshots reject nonfinite metadata.
+
+The native `snapshot_html_styled_tree_with_native_text` / live-tree variant accepts
+`NativeTextOptions` with original `SourceTextUnits`, actual SVG identities and the
+measured physical scale. Existing Node/InlineRun/Fragment variants and scalar/PDF
+entry points remain unchanged. Unknown/duplicate identities, projection mismatches
+and more than two million supplied UTF-16 units fail before layout. Obtain actual
+retained units with `text_original_units`; scalar UTF-8 cluster byte indices still
+refer to the validated scalar projection. Raw-unit shaping cache keys distinguish
+lones from literal replacement characters.
+
+On macOS the native source route consults the safe CoreText cascade and real font
+coverage/metrics, including MacRoman-only installed face names. Original invalid
+units remain separate through script segmentation and font selection; the selected
+font shapes the UTF-16 replacement glyph. A fresh independent Chrome control retains
+all 26 mixed astral/lone Range differences and twelve font/size controls. Source-line
+Range boxes span adjacent fallback runs; original glyph advances remain untouched.
+
+`native_hit_transform` separately captures paint offsets: transform paint scopes
+round origins and discard residuals only on axes that cannot propagate them. Layout
+and Range geometry retain `native_world_transform`. This supports measured ordinary
+invertible div/img rotations, skews, nested transforms and one-axis scaling. Paint
+isolation from containment, masks, opacity/compositing and animations is outside the
+certified hit scope. The retained old uncontrolled astral-fallback graph remains
+outside the Go numerical contract; it is not a claim of full Unicode/bidi/font parity.
