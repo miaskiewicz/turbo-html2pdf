@@ -628,6 +628,265 @@
           ]
         }
       ]
+    },
+    {
+      "name": "absolute-padding-overflow",
+      "nodes": [
+        {
+          "sourceId": 1,
+          "tag": "div",
+          "style": "position:relative;width:100px;height:80px;padding:5px;border:2px solid black;overflow:auto",
+          "children": [
+            {
+              "sourceId": 2,
+              "tag": "div",
+              "style": "position:absolute;left:120px;top:90px;width:30px;height:20px",
+              "children": []
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "absolute-padding-negative",
+      "nodes": [
+        {
+          "sourceId": 1,
+          "tag": "div",
+          "style": "position:relative;width:100px;height:80px;padding:5px;border:2px solid black;overflow:auto",
+          "children": [
+            {
+              "sourceId": 2,
+              "tag": "div",
+              "style": "position:absolute;left:-50px;top:-40px;width:20px;height:20px",
+              "children": []
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "absolute-padding-percentage",
+      "nodes": [
+        {
+          "sourceId": 1,
+          "tag": "div",
+          "style": "position:relative;width:100px;height:80px;padding:5px;border:2px solid black;overflow:auto",
+          "children": [
+            {
+              "sourceId": 2,
+              "tag": "div",
+              "style": "position:absolute;left:25%;top:25%;width:50%;height:50%",
+              "children": []
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "absolute-padding-bottom",
+      "nodes": [
+        {
+          "sourceId": 1,
+          "tag": "div",
+          "style": "position:relative;width:100px;height:80px;padding:5px;border:2px solid black;overflow:auto",
+          "children": [
+            {
+              "sourceId": 2,
+              "tag": "div",
+              "style": "position:absolute;left:0;bottom:0;width:30px;height:20px",
+              "children": []
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "fixed-transform-none",
+      "nodes": [
+        {
+          "sourceId": 1,
+          "tag": "div",
+          "style": "width:100px;height:100px;transform:none",
+          "children": [
+            {
+              "sourceId": 2,
+              "tag": "div",
+              "style": "position:fixed;left:0;top:0;width:20px;height:50%",
+              "children": []
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "fixed-transform-bogus(0)",
+      "nodes": [
+        {
+          "sourceId": 1,
+          "tag": "div",
+          "style": "width:100px;height:100px;transform:bogus(0)",
+          "children": [
+            {
+              "sourceId": 2,
+              "tag": "div",
+              "style": "position:fixed;left:0;top:0;width:20px;height:50%",
+              "children": []
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "fixed-transform-translateX(foo)",
+      "nodes": [
+        {
+          "sourceId": 1,
+          "tag": "div",
+          "style": "width:100px;height:100px;transform:translateX(foo)",
+          "children": [
+            {
+              "sourceId": 2,
+              "tag": "div",
+              "style": "position:fixed;left:0;top:0;width:20px;height:50%",
+              "children": []
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "fixed-transform-translateX(0px)",
+      "nodes": [
+        {
+          "sourceId": 1,
+          "tag": "div",
+          "style": "width:100px;height:100px;transform:translateX(0px)",
+          "children": [
+            {
+              "sourceId": 2,
+              "tag": "div",
+              "style": "position:fixed;left:0;top:0;width:20px;height:50%",
+              "children": []
+            }
+          ]
+        }
+      ],
+      "nativeAdmission": "unsupported-fixed-containing-block"
+    },
+    {
+      "name": "fixed-transform-translateX(5px)",
+      "nodes": [
+        {
+          "sourceId": 1,
+          "tag": "div",
+          "style": "width:100px;height:100px;transform:translateX(5px)",
+          "children": [
+            {
+              "sourceId": 2,
+              "tag": "div",
+              "style": "position:fixed;left:0;top:0;width:20px;height:50%",
+              "children": []
+            }
+          ]
+        }
+      ],
+      "nativeAdmission": "unsupported-fixed-containing-block"
+    },
+    {
+      "name": "fixed-transform-sibling",
+      "nodes": [
+        {
+          "sourceId": 1,
+          "tag": "div",
+          "style": "height:10px;transform:translateX(5px)",
+          "children": []
+        },
+        {
+          "sourceId": 2,
+          "tag": "div",
+          "style": "position:fixed;left:0;top:0;width:20px;height:50%",
+          "children": []
+        }
+      ]
+    },
+    {
+      "name": "absolute-padding-inset",
+      "nodes": [
+        {
+          "sourceId": 1,
+          "tag": "div",
+          "style": "position:relative;width:100px;height:80px;padding:5px;border:2px solid black",
+          "children": [
+            {
+              "sourceId": 2,
+              "tag": "div",
+              "style": "position:absolute;inset:0",
+              "children": []
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "absolute-asymmetric-padding",
+      "nodes": [
+        {
+          "sourceId": 1,
+          "tag": "div",
+          "style": "position:relative;width:100px;height:80px;padding:3px 7px 11px 13px;border-style:solid;border-width:2px 4px 6px 8px",
+          "children": [
+            {
+              "sourceId": 2,
+              "tag": "div",
+              "style": "position:absolute;left:50%;top:50%;width:50%;height:50%",
+              "children": []
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "absolute-border-box-inset",
+      "nodes": [
+        {
+          "sourceId": 1,
+          "tag": "div",
+          "style": "position:relative;box-sizing:border-box;width:100px;height:80px;padding:5px;border:2px solid black",
+          "children": [
+            {
+              "sourceId": 2,
+              "tag": "div",
+              "style": "position:absolute;inset:0",
+              "children": []
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "absolute-auto-height-padding",
+      "nodes": [
+        {
+          "sourceId": 1,
+          "tag": "div",
+          "style": "position:relative;width:100px;padding:5px;border:2px solid black",
+          "children": [
+            {
+              "sourceId": 3,
+              "tag": "div",
+              "style": "height:80px",
+              "children": []
+            },
+            {
+              "sourceId": 2,
+              "tag": "div",
+              "style": "position:absolute;left:50%;bottom:0;width:50%;height:50%",
+              "children": []
+            }
+          ]
+        }
+      ]
     }
   ]
 }

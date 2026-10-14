@@ -112,7 +112,7 @@ fn out_of_flow_origin(
     // a `top:calc(66% - 48px)` overlay on a card must land at that fraction of the
     // card's height. When the CB height is still indefinite the box is deferred
     // (`place_deferred_abs`), so `abs_cb_h` here is definite.
-    let cbh = ctx.abs_cb_h;
+    let cbh = out_of_flow_height(bs, ctx);
     let y = match (bs.inset_top.resolve(cbh), bs.inset_bottom.resolve(cbh)) {
         (Some(t), _) => cby + t,
         // A `bottom`-only box needs its own (laid) height to anchor; the caller's
@@ -248,6 +248,115 @@ fn resolved_content_height(bs: &BoxStyle, auto_height: f32, ctx: &Ctx) -> f32 {
     let max = live_height(bs.max_height, basis, inset).unwrap_or(f32::INFINITY);
     let min = live_height(bs.min_height, basis, inset).unwrap_or(0.0);
     content.min(max).max(min)
+}
+
+// Absolute positioning uses the padding box; normal-flow children use content.
+fn positioned_child_block(
+    bs: &BoxStyle,
+    frame: (f32, f32, f32),
+    content: (f32, f32, f32),
+    ctx: &Ctx,
+) -> (f32, f32, f32, f32) {
+    if !ctx.live_geometry {
+        return (
+            content.0,
+            content.1,
+            content.2,
+            definite_content_height(bs, ctx.abs_cb_h),
+        );
+    }
+    let border = bs.border.widths();
+    let inset = match bs.box_sizing {
+        BoxSizing::BorderBox => border.vertical() + bs.padding.vertical(),
+        BoxSizing::ContentBox => 0.0,
+    };
+    let height = live_height(bs.height, live_height_basis(bs, ctx), inset)
+        .map(|h| h + bs.padding.vertical())
+        .unwrap_or(0.0);
+    (
+        frame.0 + border.left,
+        frame.1 + border.top,
+        frame.2 - border.horizontal(),
+        height,
+    )
+}
+
+fn deferred_cb_height(content: f32, bs: &BoxStyle, ctx: &Ctx) -> f32 {
+    if ctx.live_geometry {
+        content + bs.padding.vertical()
+    } else {
+        content
+    }
+}
+
+fn layout_positioned(
+    lb: &LayoutBox,
+    origin: (f32, f32),
+    width: f32,
+    fs: f32,
+    ctx: &mut Ctx,
+) -> Fragment {
+    let mut bs = resolve(lb, width, fs);
+    let width = out_of_flow_width(&bs, width, ctx);
+    if !ctx.live_geometry || lb.image.as_ref().is_some_and(|image| image.replaced) {
+        return layout_box(lb, origin.0, origin.1, width, fs, ctx);
+    }
+    bs = resolve(lb, width, fs);
+    let border = bs.border.widths();
+    let frame = match bs.box_sizing {
+        BoxSizing::ContentBox => (
+            bs.padding.horizontal() + border.horizontal(),
+            bs.padding.vertical() + border.vertical(),
+        ),
+        BoxSizing::BorderBox => (0.0, 0.0),
+    };
+    bs.width = stretch_insets(
+        bs.width,
+        (bs.inset_left, bs.inset_right),
+        width,
+        bs.margin.horizontal() + frame.0,
+    );
+    bs.height = stretch_insets(
+        bs.height,
+        (bs.inset_top, bs.inset_bottom),
+        out_of_flow_height(&bs, ctx),
+        bs.margin.vertical() + frame.1,
+    );
+    let border_width = border_box_width(&bs, width);
+    layout_box_sized(lb, &bs, origin.0, origin.1, border_width, ctx)
+}
+
+fn stretch_insets(
+    value: LengthPct,
+    insets: (LengthPct, LengthPct),
+    basis: f32,
+    frame: f32,
+) -> LengthPct {
+    if value != LengthPct::Auto {
+        return value;
+    }
+    let available = insets
+        .0
+        .resolve(basis)
+        .zip(insets.1.resolve(basis))
+        .map(|(start, end)| (basis - start - end - frame).max(0.0));
+    available.map(LengthPct::Px).unwrap_or(value)
+}
+
+fn out_of_flow_width(bs: &BoxStyle, width: f32, ctx: &Ctx) -> f32 {
+    if ctx.live_geometry {
+        containing_block(bs, ctx).2
+    } else {
+        width
+    }
+}
+
+fn out_of_flow_height(bs: &BoxStyle, ctx: &Ctx) -> f32 {
+    if ctx.live_geometry {
+        live_height_basis(bs, ctx)
+    } else {
+        ctx.abs_cb_h
+    }
 }
 
 fn live_height_basis(bs: &BoxStyle, ctx: &Ctx) -> f32 {
@@ -652,7 +761,14 @@ fn layout_block_flow(
     // `layout_box_sized`), not by every block they pass through — a non-BFC block
     // does not grow to enclose a float, so following content wraps beside it.
     let content_h = flow.cursor - cy;
-    place_deferred_abs(&deferred, cw, fs, content_h, &mut frags, ctx);
+    place_deferred_abs(
+        &deferred,
+        cw,
+        fs,
+        deferred_cb_height(content_h, bs, ctx),
+        &mut frags,
+        ctx,
+    );
     (frags, content_h)
 }
 
@@ -682,7 +798,7 @@ fn place_deferred_abs(
     for (kid, static_pos) in deferred {
         let kbs = resolve(kid, cw, fs);
         let (bx, by) = out_of_flow_origin(&kbs, cw, ctx, *static_pos);
-        let mut frag = layout_box(kid, bx, by, cw, fs, ctx);
+        let mut frag = layout_positioned(kid, (bx, by), cw, fs, ctx);
         anchor_bottom(&mut frag, &kbs, content_h, ctx);
         frags.push(frag);
     }
@@ -698,7 +814,12 @@ fn anchor_bottom(frag: &mut Fragment, kbs: &BoxStyle, content_h: f32, ctx: &Ctx)
     let Some(bottom) = kbs.inset_bottom.resolve(content_h) else {
         return;
     };
-    let target_y = ctx.abs_cb_y + content_h - bottom - frag.height - kbs.margin.bottom;
+    let origin_y = if ctx.live_geometry {
+        containing_block(kbs, ctx).1
+    } else {
+        ctx.abs_cb_y
+    };
+    let target_y = origin_y + content_h - bottom - frag.height - kbs.margin.bottom;
     frag.translate(0.0, target_y - frag.y);
 }
 
@@ -723,14 +844,15 @@ fn place_special_kid(
             flow.cursor + collapse_margins(flow.pending, kbs.margin.top),
         );
         let (bx, by) = out_of_flow_origin(kbs, cw, ctx, static_pos);
-        let mut frag = layout_box(kid, bx, by, cw, fs, ctx);
+        let mut frag = layout_positioned(kid, (bx, by), cw, fs, ctx);
         // A `bottom`-anchored (auto `top`) box left at its static y by
         // `out_of_flow_origin` — because its height wasn't known there — is pulled
         // to the CB bottom now, when the CB height is DEFINITE. (An indefinite-height
         // CB defers its absolute children instead, via `place_deferred_abs`, so the
         // `> 0` guard keeps this off that path.)
-        if ctx.abs_cb_h > 0.0 {
-            anchor_bottom(&mut frag, kbs, ctx.abs_cb_h, ctx);
+        let height = out_of_flow_height(kbs, ctx);
+        if height > 0.0 {
+            anchor_bottom(&mut frag, kbs, height, ctx);
         }
         return Some(frag);
     }
@@ -1195,13 +1317,8 @@ fn layout_box_sized_impl(
     // descendants (its content box). Save/restore around the child layout.
     let saved_cb = (ctx.abs_cb_x, ctx.abs_cb_y, ctx.abs_cb_w, ctx.abs_cb_h);
     if bs.position != Position::Static {
-        ctx.abs_cb_x = content_x;
-        ctx.abs_cb_y = content_y;
-        ctx.abs_cb_w = content_w;
-        // Expose this box's height to `%`-height / `inset:0` descendants only when
-        // it's definite (explicit px, or `%` resolved against a known outer CB) —
-        // an auto height derived from content would be circular.
-        ctx.abs_cb_h = definite_content_height(bs, saved_cb.3);
+        (ctx.abs_cb_x, ctx.abs_cb_y, ctx.abs_cb_w, ctx.abs_cb_h) =
+            positioned_child_block(bs, (bx, by, bbw), (content_x, content_y, content_w), ctx);
     }
     // In-flow `%`-height CB: expose this box's own definite content height to its
     // children (any box, not just positioned) so a `height:100%`/`max-height:100%`

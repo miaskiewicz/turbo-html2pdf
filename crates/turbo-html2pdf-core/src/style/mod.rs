@@ -3,6 +3,7 @@
 
 mod cascade;
 mod parser;
+mod quad_shorthand;
 mod selector;
 mod token;
 

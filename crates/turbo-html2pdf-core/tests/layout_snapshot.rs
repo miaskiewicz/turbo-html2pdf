@@ -553,15 +553,21 @@ fn authored_live_boxes_match_independently_recorded_chrome155_geometry() {
             .enumerate()
             .map(|(i, n)| fixture_node(n, &[i], &mut identities))
             .collect();
-        let snapshot = snapshot_live_tree(
+        let result = snapshot_live_tree(
             &nodes,
             &identities,
             &build_cascade("", "", Default::default()),
             &inputs,
             &mut Diagnostics::default(),
-        )
-        .unwrap();
-        compare_chrome_boxes(&snapshot, chrome);
+        );
+        if test["nativeAdmission"] == "unsupported-fixed-containing-block" {
+            assert!(matches!(
+                result,
+                Err(SnapshotError::UnsupportedFixedContainingBlock)
+            ));
+        } else {
+            compare_chrome_boxes(&result.unwrap(), chrome);
+        }
     }
 }
 
@@ -783,4 +789,76 @@ fn hidden_directives_and_their_descendants_have_no_live_geometry() {
         &mut Diagnostics::default(),
     );
     assert!(!galley.children.is_empty());
+}
+
+#[test]
+fn transformed_fixed_admission_is_identity_independent_and_shared_by_both_entry_points() {
+    let nodes = vec![element(
+        "div",
+        "transform:translateX(0px)",
+        vec![element(
+            "div",
+            "",
+            vec![element("div", "position:fixed;height:50%", Vec::new())],
+        )],
+    )];
+    let fonts = FontRegistry::new();
+    let images = ImageCtx {
+        resolver: &NoImages,
+        body_height: None,
+    };
+    let inputs = SnapshotInputs {
+        width: 200.0,
+        height: 200.0,
+        fonts: &fonts,
+        images: &images,
+    };
+    let cascade = build_cascade("", "", Default::default());
+    let result = snapshot_live_tree(&nodes, &[], &cascade, &inputs, &mut Diagnostics::default());
+    assert!(matches!(
+        result,
+        Err(SnapshotError::UnsupportedFixedContainingBlock)
+    ));
+    let styled = style_tree(&nodes, &cascade);
+    let result = snapshot_styled_tree(&styled, &[], &inputs, &mut Diagnostics::default());
+    assert!(matches!(
+        result,
+        Err(SnapshotError::UnsupportedFixedContainingBlock)
+    ));
+    let hidden = vec![element(
+        "div",
+        "display:none;transform:translateX(0px)",
+        vec![element("div", "position:fixed", Vec::new())],
+    )];
+    assert!(capture(&hidden, &[])
+        .fragments()
+        .iter()
+        .all(|f| f.source_id.is_none()));
+    let text = vec![Node::Text("test".into())];
+    assert!(!capture(&text, &[]).fragments().is_empty());
+}
+
+#[test]
+fn positioned_shorthands_keep_cascade_order_and_importance() {
+    for (css, x) in [
+        ("left:20px;inset:0", 2.0),
+        ("inset:0;left:20px", 22.0),
+        ("left:20px!important;inset:0", 22.0),
+        ("inset:0!important;left:20px", 2.0),
+    ] {
+        let nodes = vec![element(
+            "div",
+            "position:relative;width:100px;height:80px;padding:5px;border:2px solid black",
+            vec![element(
+                "div",
+                &format!("position:absolute;width:10px;height:10px;{css}"),
+                Vec::new(),
+            )],
+        )];
+        assert_eq!(
+            border(&capture(&nodes, &[identity(1, &[0, 0])]), 1).rect.x,
+            x,
+            "{css}"
+        );
+    }
 }

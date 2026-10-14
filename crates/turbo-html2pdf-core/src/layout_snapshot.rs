@@ -11,6 +11,7 @@
 //! Range rectangle. Original UTF-16 offsets, caret boxes, scrollbars, clipping,
 //! and fragmented inline border boxes require further layout support.
 
+mod fixed_containing;
 mod geometry;
 mod metrics;
 pub(crate) mod sources;
@@ -54,6 +55,8 @@ pub struct SnapshotInputs<'a> {
 pub enum SnapshotError {
     #[error("viewport dimensions must be finite and greater than zero")]
     InvalidViewport,
+    #[error("fixed descendants of transformed ancestors require an unsupported containing block")]
+    UnsupportedFixedContainingBlock,
     #[error("source ID {0:?} is assigned more than once")]
     DuplicateId(SourceId),
     #[error("source path {0:?} is assigned more than once")]
@@ -159,6 +162,7 @@ pub fn snapshot_styled_tree(
 ) -> Result<LayoutSnapshot, SnapshotError> {
     validate_viewport(inputs)?;
     crate::style::set_layout_viewport(inputs.width, inputs.height);
+    fixed_containing::validate(styled, false)?;
     let (build_sources, mut sources) = sources::prepare(styled, identities)?;
     let (tree, records) = boxgen::build_sourced_tree(styled, build_sources);
     let (galley, metrics) = block::layout_tree_live(

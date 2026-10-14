@@ -394,6 +394,15 @@ fn push_decls(
             property: d.property.clone(),
             value: d.value.clone(),
         });
+        // Expand before choosing winners so longhands retain declaration order,
+        // origin, specificity and !important from the actual shorthand.
+        if let Some(longhands) = super::quad_shorthand::expand(&d.property, &d.value) {
+            out.extend(longhands.map(|(property, value)| Cand {
+                key,
+                property: property.into(),
+                value: value.into(),
+            }));
+        }
     }
 }
 
