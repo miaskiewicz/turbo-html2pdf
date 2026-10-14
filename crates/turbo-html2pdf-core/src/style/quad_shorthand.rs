@@ -33,6 +33,10 @@ const LONGHANDS: &[(&str, [&str; 4])] = &[
     ),
 ];
 
+pub(super) fn is_quad(property: &str) -> bool {
+    LONGHANDS.iter().any(|(name, _)| *name == property)
+}
+
 pub(super) fn expand<'a>(property: &str, value: &'a str) -> Option<[(&'static str, &'a str); 4]> {
     let names = LONGHANDS.iter().find(|(name, _)| *name == property)?.1;
     let parts = components(value)?;

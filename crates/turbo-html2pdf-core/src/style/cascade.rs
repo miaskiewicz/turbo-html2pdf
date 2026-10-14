@@ -771,21 +771,33 @@ fn quad_variable_context(cands: &[Cand], parent: &ComputedStyle) -> BTreeMap<Str
 }
 
 fn expand_quad_candidates(cands: Vec<Cand>, parent: &ComputedStyle) -> Vec<Cand> {
+    if !cands
+        .iter()
+        .any(|cand| super::quad_shorthand::is_quad(&cand.property))
+    {
+        return cands;
+    }
     let variables = quad_variable_context(&cands, parent);
     let mut expanded = Vec::new();
     for cand in cands {
-        let value = substitute_vars(&cand.value, &variables, 0, &[]);
-        let longhands = resolved_quad(&cand.property, &cand.value, &value);
-        if let Some(longhands) = longhands {
-            expanded.extend(longhands.map(|(property, value)| Cand {
-                key: cand.key,
-                property: property.into(),
-                value: value.into(),
-            }));
-        }
+        expanded.extend(expanded_quad(&cand, &variables).into_iter().flatten());
         expanded.push(cand);
     }
     expanded
+}
+
+fn expanded_quad(cand: &Cand, variables: &BTreeMap<String, String>) -> Option<[Cand; 4]> {
+    if !super::quad_shorthand::is_quad(&cand.property) {
+        return None;
+    }
+    let value = substitute_vars(&cand.value, variables, 0, &[]);
+    resolved_quad(&cand.property, &cand.value, &value).map(|longhands| {
+        longhands.map(|(property, value)| Cand {
+            key: cand.key,
+            property: property.into(),
+            value: value.into(),
+        })
+    })
 }
 
 fn resolved_quad<'a>(
