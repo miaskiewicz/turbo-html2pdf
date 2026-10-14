@@ -158,3 +158,53 @@ fn original_script_fallback_ranges_match_chrome_without_changing_replacement_pro
         }
     }
 }
+
+#[test]
+fn real_registered_fallback_tables_keep_source_line_ranges_on_hosts_without_coretext() {
+    let primary = FontFace::from_bytes(
+        include_bytes!("../assets/fonts/liberation-serif/LiberationSerif-Regular.ttf").to_vec(),
+        "Primary",
+        400,
+        false,
+    )
+    .unwrap();
+    let fallback = FontFace::from_bytes(
+        include_bytes!("../assets/fonts/Go-Regular.ttf").to_vec(),
+        "Fallback",
+        400,
+        false,
+    )
+    .unwrap();
+    let character = (0x20..0x10000)
+        .filter_map(char::from_u32)
+        .find(|&ch| ch.is_alphabetic() && !primary.has_glyph(ch) && fallback.has_glyph(ch))
+        .expect("real font coverage differs");
+    let mut fonts = FontRegistry::new();
+    fonts.add(primary.clone());
+    fonts.add(fallback.clone());
+    assert!(
+        !primary.has_glyph(char::REPLACEMENT_CHARACTER),
+        "real primary coverage must require replacement fallback"
+    );
+    let invalid = snapshot(&[0x61, 0xd800, 0x62, 0xdcff, 0x63], &fonts, "Primary").unwrap();
+    assert_eq!(
+        invalid.text_original_units(SourceId(7)),
+        Some([0x61, 0xd800, 0x62, 0xdcff, 0x63].as_slice())
+    );
+    assert!(!invalid
+        .text_range_boxes(SourceId(7), 0, 5)
+        .unwrap()
+        .is_empty());
+    let units: Vec<u16> = format!("a{character}{character}b").encode_utf16().collect();
+    let captured = snapshot(&units, &fonts, "Primary").unwrap();
+    let cells = captured.text_cluster_boxes_for_source(SourceId(7));
+    assert_eq!(cells.len(), 4);
+    let width = fallback.measure(&character.to_string(), 64.0, 0.0);
+    assert!((cells[1].rect.width - width).abs() < 0.0001);
+    assert!((cells[2].rect.width - width).abs() < 0.0001);
+    assert!(captured.text_runs().len() > 1);
+    let boxes = captured.text_range_boxes(SourceId(7), 0, 4).unwrap();
+    assert_eq!(boxes.len(), 1);
+    let expected = primary.measure("a", 64.0, 0.0) + 2.0 * width + primary.measure("b", 64.0, 0.0);
+    assert!((boxes[0].rect.width - expected).abs() <= 1.0 / 128.0);
+}

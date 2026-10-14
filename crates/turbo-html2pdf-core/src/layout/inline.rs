@@ -234,7 +234,7 @@ fn flatten_chars(
             .map(std::sync::Arc::as_ref);
         let coverage =
             primary_cluster_coverage(run, capture_sources || original.is_some(), original);
-        let mut native_faces = Vec::<FontFace>::new();
+        let mut native_faces = NativeFallbacks::default();
         let mut utf16_offset = 0;
         for (byte_offset, ch) in run.text.char_indices() {
             let invalid_unit = invalid_source_unit(original, utf16_offset, ch);
@@ -284,7 +284,7 @@ struct CharacterSelection<'a> {
 }
 fn select_character_face(
     selection: CharacterSelection<'_>,
-    previous: &mut Vec<FontFace>,
+    previous: &mut NativeFallbacks,
 ) -> (FontFace, bool) {
     let CharacterSelection {
         ch,
@@ -312,30 +312,54 @@ fn invalid_source_unit(original: Option<&[u16]>, offset: usize, character: char)
         .filter(|unit| (0xd800..=0xdfff).contains(unit))
 }
 
+#[derive(Default)]
+struct NativeFallbacks {
+    faces: Vec<FontFace>,
+    invalid: Option<(FontFace, bool)>,
+}
+
+impl NativeFallbacks {
+    fn cached(&self, ch: char, invalid: bool) -> Option<(FontFace, bool)> {
+        if invalid {
+            self.invalid.clone()
+        } else {
+            self.faces
+                .iter()
+                .find(|face| face.has_glyph(ch))
+                .map(|face| (face.clone(), false))
+        }
+    }
+    fn retain(&mut self, invalid: bool, selected: &(FontFace, bool)) {
+        if invalid {
+            self.invalid = Some(selected.clone());
+        } else if !selected.1 {
+            self.faces.push(selected.0.clone());
+        }
+    }
+}
+fn registered_fallback(ch: char, run: &InlineRun, fonts: &FontRegistry) -> Option<FontFace> {
+    let (face, missing) = resolve_face(ch, run, fonts);
+    (!missing).then_some(face)
+}
 fn native_character_face(
     ch: char,
     unit: Option<u16>,
     run: &InlineRun,
     fonts: &FontRegistry,
-    previous: &mut Vec<FontFace>,
+    previous: &mut NativeFallbacks,
 ) -> (FontFace, bool) {
-    // Invalid units have their own unknown-script segment in Blink; scalar
-    // common characters can reuse a fallback selected for the shaped run.
-    if unit.is_none() {
-        if let Some(face) = previous.iter().find(|face| face.has_glyph(ch)) {
-            return (face.clone(), false);
-        }
+    // Unknown-script original units do not compete with scalar fallback runs.
+    if let Some(face) = previous.cached(ch, unit.is_some()) {
+        return face;
     }
-    let face = fonts.native_fallback(&run.face, ch, run.weight, run.italic);
-    match face {
-        Some(face) => {
-            if unit.is_none() {
-                previous.push(face.clone());
-            }
-            (face, false)
-        }
-        None => resolve_face(ch, run, fonts),
-    }
+    let face = fonts
+        .native_fallback(&run.face, ch, run.weight, run.italic)
+        .or_else(|| registered_fallback(ch, run, fonts));
+    let selected = face
+        .map(|face| (face, false))
+        .unwrap_or_else(|| resolve_face(ch, run, fonts));
+    previous.retain(unit.is_some(), &selected);
+    selected
 }
 
 fn character_face(

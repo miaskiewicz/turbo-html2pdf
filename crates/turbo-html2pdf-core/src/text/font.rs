@@ -555,6 +555,14 @@ mod tests {
         assert_eq!(unsupported.native_postscript_name(), None);
     }
     #[test]
+    fn platform_family_names_decode_real_legacy_font_tables_on_every_host() {
+        let description = describe_platform(LIBERATION, 0).unwrap();
+        assert!(description.0.to_ascii_lowercase().contains("liberation"));
+        assert_eq!(description.1, 400);
+        assert!(!description.2);
+        assert!(describe_platform(b"not a font", 0).is_none());
+    }
+    #[test]
     fn describe_reads_family_weight_italic() {
         let (family, weight, italic) = describe(ROBOTO, 0).expect("Roboto describes");
         assert!(family.eq_ignore_ascii_case("Roboto"), "family = {family}");

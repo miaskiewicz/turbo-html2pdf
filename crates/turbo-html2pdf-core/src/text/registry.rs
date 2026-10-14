@@ -311,18 +311,29 @@ impl FontRegistry {
         if let Some(face) = cache.get(&key) {
             return face.clone();
         }
-        let face = self.native_families(primary).iter().find_map(|family| {
-            self.all()
-                .chain(self.platform_faces.iter())
-                .filter(|face| family_matches(face, family) && face.has_glyph(ch))
-                .min_by_key(|face| score(face, weight, italic))
-                .cloned()
-        });
+        let face =
+            self.glyph_for_native_families(&self.native_families(primary), ch, weight, italic);
         if cache.len() >= 512 {
             cache.clear();
         }
         cache.insert(key, face.clone());
         face
+    }
+
+    fn glyph_for_native_families(
+        &self,
+        families: &[String],
+        ch: char,
+        weight: u16,
+        italic: bool,
+    ) -> Option<FontFace> {
+        families.iter().find_map(|family| {
+            self.all()
+                .chain(self.platform_faces.iter())
+                .filter(|face| family_matches(face, family) && face.has_glyph(ch))
+                .min_by_key(|face| score(face, weight, italic))
+                .cloned()
+        })
     }
 
     /// Resolve the face that should render `ch`, walking the (expanded) family
@@ -427,6 +438,50 @@ mod tests {
         .unwrap();
         assert!(go.native_postscript_name().is_some());
         assert!(!super::super::platform_fallback::families(&go).is_empty());
+    }
+    #[test]
+    fn legacy_only_real_fonts_stay_private_and_invalid_programs_do_not_register() {
+        let mut bytes =
+            include_bytes!("../../assets/fonts/liberation-serif/LiberationSerif-Regular.ttf")
+                .to_vec();
+        let tables = u16::from_be_bytes([bytes[4], bytes[5]]) as usize;
+        let table = (0..tables)
+            .map(|index| 12 + index * 16)
+            .find(|&record| &bytes[record..record + 4] == b"name")
+            .unwrap();
+        let offset = u32::from_be_bytes(bytes[table + 8..table + 12].try_into().unwrap()) as usize;
+        let count = u16::from_be_bytes([bytes[offset + 2], bytes[offset + 3]]) as usize;
+        for record in (0..count).map(|index| offset + 6 + index * 12) {
+            let platform = u16::from_be_bytes([bytes[record], bytes[record + 1]]);
+            let name = u16::from_be_bytes([bytes[record + 6], bytes[record + 7]]);
+            if platform != 1 && matches!(name, 1 | 16) {
+                bytes[record + 6..record + 8].copy_from_slice(&255u16.to_be_bytes());
+            }
+        }
+        assert!(super::super::font::describe(&bytes, 0).is_none());
+        let mut public = Vec::new();
+        let mut private = Vec::new();
+        load_face(&mut public, &mut private, &bytes, 0);
+        assert_eq!(public.len(), 0);
+        assert_eq!(private.len(), 1);
+        assert!(private[0].has_glyph('a'));
+        let family = private[0].family().to_owned();
+        let mut registry = FontRegistry::new();
+        registry.platform_faces = private.clone();
+        let actual = registry
+            .glyph_for_native_families(&["absent".into(), family.clone()], 'a', 400, false)
+            .unwrap();
+        assert_eq!(actual.family(), family);
+        assert_eq!(
+            actual.measure("a", 64.0, 0.0),
+            private[0].measure("a", 64.0, 0.0)
+        );
+        assert!(registry
+            .glyph_for_native_families(&[family], '\u{10ffff}', 400, false)
+            .is_none());
+        load_face(&mut public, &mut private, b"invalid font", 0);
+        assert_eq!(public.len(), 0);
+        assert_eq!(private.len(), 1);
     }
     #[test]
     fn load_font_file_covers_ext_read_and_parse() {
