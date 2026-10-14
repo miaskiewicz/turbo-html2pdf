@@ -3,6 +3,7 @@
 
 mod cascade;
 mod parser;
+mod quad_shorthand;
 mod selector;
 mod token;
 
@@ -283,6 +284,12 @@ fn eval_calc(inner: &str) -> Option<f32> {
         }
     }
     parse_len(inner)
+}
+
+/// Set the validated continuous-media viewport for layout unit resolution.
+pub(crate) fn set_layout_viewport(width: f32, height: f32) {
+    VIEWPORT_WIDTH.set(width);
+    VIEWPORT_HEIGHT.set(height);
 }
 
 /// The user-agent stylesheet, parsed once. It is a fixed constant, so parsing it

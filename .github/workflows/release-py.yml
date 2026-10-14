@@ -1,5 +1,5 @@
 # =============================================================================
-# DRAFT — Python (PyPI) release workflow for `turbo-html2pdf`.
+# Python (PyPI) release workflow for `turbo-html2pdf`.
 #
 # This is a SEPARATE, opt-in workflow that does NOT touch the existing npm
 # `release.yml`. It builds maturin abi3 wheels (CPython 3.8+, one wheel per
@@ -101,7 +101,7 @@ jobs:
           PYPI_TOKEN: ${{ secrets.PYPI_TOKEN }}
         run: |
           if [ -z "$PYPI_TOKEN" ]; then
-            echo "PYPI_TOKEN not set — skipping publish (draft workflow)."
+            echo "PYPI_TOKEN not set — skipping publish (token unavailable)."
             echo "publish=false" >> "$GITHUB_OUTPUT"
           else
             echo "publish=true" >> "$GITHUB_OUTPUT"

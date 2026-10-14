@@ -18,6 +18,14 @@
     "enabled": false
   },
   "files": {
-    "ignore": ["**/dist/**", "**/node_modules/**", "**/target/**", "**/*.node"]
+    "ignore": [
+      "**/dist/**",
+      "**/node_modules/**",
+      "**/target/**",
+      "**/*.node",
+      "**/pkg/**",
+      "**/pkg-node/**",
+      "**/pkg-fonts/**"
+    ]
   }
 }

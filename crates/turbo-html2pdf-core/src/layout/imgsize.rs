@@ -53,6 +53,105 @@ pub fn size_replaced(name: String, intrinsic: Intrinsic, ctx: &SizeCtx) -> Sized
     }
 }
 
+/// Live layout has CSS constraints, but no pagination overflow caps.
+pub(crate) fn size_replaced_live(name: String, intrinsic: Intrinsic, ctx: &SizeCtx) -> SizedImage {
+    let (iw, ih) = (intrinsic.width as f32, intrinsic.height as f32);
+    let frame = live_frame(ctx.style);
+    let width = live_dimension(ctx.style.width, Some(ctx.cb_width), frame.0);
+    let height = live_dimension(ctx.style.height, ctx.cb_height, frame.1);
+    let (w, h) = live_base(iw, ih, width, height);
+    let limits = live_limits(ctx, frame);
+    let (width, height) = constrain_live(w, h, width.is_none(), height.is_none(), limits);
+    SizedImage {
+        width,
+        height,
+        placement: placement_of(name, intrinsic),
+    }
+}
+
+fn live_frame(style: &BoxStyle) -> (f32, f32) {
+    if style.box_sizing == super::value::BoxSizing::ContentBox {
+        return (0.0, 0.0);
+    }
+    (
+        style.padding.horizontal() + style.border.widths().horizontal(),
+        style.padding.vertical() + style.border.widths().vertical(),
+    )
+}
+
+fn live_dimension(value: LengthPct, basis: Option<f32>, frame: f32) -> Option<f32> {
+    resolve_dim(value, basis).map(|v| (v - frame).max(0.0))
+}
+
+fn live_base(iw: f32, ih: f32, width: Option<f32>, height: Option<f32>) -> (f32, f32) {
+    match (width, height) {
+        (Some(w), Some(h)) => (w, h),
+        (Some(w), None) => (w, scale_other(w, iw, ih)),
+        (None, Some(h)) => (scale_other(h, ih, iw), h),
+        (None, None) => (iw, ih),
+    }
+}
+
+struct Limits {
+    min_w: f32,
+    max_w: f32,
+    min_h: f32,
+    max_h: f32,
+}
+
+fn live_limits(ctx: &SizeCtx, frame: (f32, f32)) -> Limits {
+    let s = ctx.style;
+    let min_w = live_dimension(s.min_width, Some(ctx.cb_width), frame.0).unwrap_or(0.0);
+    let min_h = live_dimension(s.min_height, ctx.cb_height, frame.1).unwrap_or(0.0);
+    Limits {
+        min_w,
+        min_h,
+        max_w: live_dimension(s.max_width, Some(ctx.cb_width), frame.0)
+            .unwrap_or(f32::INFINITY)
+            .max(min_w),
+        max_h: live_dimension(s.max_height, ctx.cb_height, frame.1)
+            .unwrap_or(f32::INFINITY)
+            .max(min_h),
+    }
+}
+
+fn constrain_live(w: f32, h: f32, auto_w: bool, auto_h: bool, limits: Limits) -> (f32, f32) {
+    if auto_w && auto_h {
+        return constrain_ratio(w, h, &limits);
+    }
+    let width = w.clamp(limits.min_w, limits.max_w);
+    let height = h.clamp(limits.min_h, limits.max_h);
+    match (auto_w, auto_h) {
+        (true, false) => (
+            scale_other(height, h, w).clamp(limits.min_w, limits.max_w),
+            height,
+        ),
+        (false, true) => (
+            width,
+            scale_other(width, w, h).clamp(limits.min_h, limits.max_h),
+        ),
+        _ => (width, height),
+    }
+}
+
+// CSS 2.2 §10.4: preserve intrinsic ratio for both-auto axes where constraints
+// permit it; conflicting width/height constraints can necessarily break it.
+fn constrain_ratio(w: f32, h: f32, limits: &Limits) -> (f32, f32) {
+    if w <= 0.0 || h <= 0.0 {
+        return (
+            w.clamp(limits.min_w, limits.max_w),
+            h.clamp(limits.min_h, limits.max_h),
+        );
+    }
+    let lower = (limits.min_w / w).max(limits.min_h / h);
+    let upper = (limits.max_w / w).min(limits.max_h / h);
+    let scale = 1.0_f32.min(upper).max(lower);
+    (
+        (w * scale).clamp(limits.min_w, limits.max_w),
+        (h * scale).clamp(limits.min_h, limits.max_h),
+    )
+}
+
 /// The placement an intrinsic-sized image emits (the resolver name plus its
 /// source size and alpha flag).
 pub fn placement_of(name: String, intrinsic: Intrinsic) -> ImagePlacement {
@@ -136,6 +235,42 @@ fn axis_scale(value: f32, cap: f32) -> f32 {
 #[cfg(test)]
 mod coverage_tests {
     use super::*;
+
+    #[test]
+    fn live_degenerate_intrinsic_dimensions_stay_finite_and_honor_css_minimums() {
+        use crate::layout::value::{resolve_box_style, ResolveCtx};
+        use crate::ComputedStyle;
+        let style = resolve_box_style(
+            &ComputedStyle::from_pairs([("min-width", "12px"), ("min-height", "6px")]),
+            ResolveCtx {
+                parent_font_size: 16.0,
+                cb_width: 200.0,
+            },
+        );
+        let ctx = SizeCtx {
+            style: &style,
+            cb_width: 200.0,
+            cb_height: None,
+            body_height: None,
+        };
+        for (width, height, expected) in [
+            (0, 0, (12.0, 6.0)),
+            (0, 20, (12.0, 20.0)),
+            (20, 0, (20.0, 6.0)),
+        ] {
+            let sized = size_replaced_live(
+                "degenerate".into(),
+                Intrinsic {
+                    width,
+                    height,
+                    has_alpha: false,
+                },
+                &ctx,
+            );
+            assert_eq!((sized.width, sized.height), expected);
+            assert!(sized.width.is_finite() && sized.height.is_finite());
+        }
+    }
 
     #[test]
     fn resolve_dim_handles_px_percent_calc_and_auto() {

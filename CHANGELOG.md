@@ -4,6 +4,38 @@ All notable changes to turbo-html2pdf are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/); versions follow SemVer. The npm,
 PyPI, and crates.io packages release in lockstep from a `v*` tag (PyPI on `pyv*`).
 
+## [0.3.5] — 2026-10-14
+
+- Ship the MIT license and existing embedded-font notices with the actual npm,
+  Python and MCP binary artifacts; validate their reproducible source copies.
+
+- Add native live-tree layout snapshots with caller-owned source IDs, all-fragment
+  provenance, nested affine transforms and real block/replaced geometry. The live
+  path retains nonpainting layout boxes and removes PDF image-fit caps while
+  existing PDF filtering, image page-fit and root layout policy remain unchanged. Twenty-one offline contracts
+  and 69 independently recorded Chrome 155 geometry cases cover the seam; full
+  inline/caret/scroll geometry remains explicit follow-up work. Distinguish actual
+  display-none exclusion through unmapped ancestors from visible empty/flattened
+  inlines so callers cannot invent zero rectangles from absent fragments.
+- Fix live relative/sticky percentage heights and min/max heights to use the
+  normal-flow containing block, and fixed boxes to use the viewport. Hidden
+  directives and descendants now agree with their exclusion metadata.
+- Fix live absolute positioning to use the padding-box containing block, including
+  percentage dimensions, opposing insets and measured auto-height parents.
+  Explicitly reject fixed descendants of transformed ancestors in both snapshot
+  APIs until their full containing-block geometry is implemented; 67 supported
+  Chrome graphs match numerically and two unsupported controls verify admission.
+- Expand inset and quad border declarations before cascade winner selection so
+  their side values retain declaration order, specificity and importance.
+  Validate the complete shorthand before applying sides and substitute inherited
+  custom properties before expansion; invalid computed variables unset winning
+  sides instead of reviving older declarations.
+- Retain real live HTML document-root formatting boundaries so body margins do
+  not collapse through the root and both first/last margins contribute to its
+  actual box. Legacy PDF root policy remains covered separately.
+- Correct stale release instructions and remove an unsafe optional regex capture
+  read in the conformance CLI; benchmark detection reports the current release.
+
 ## [0.3.4] — searchable and copyable text in ordinary PDFs
 
 ### Fixed

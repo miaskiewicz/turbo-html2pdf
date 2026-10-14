@@ -13,14 +13,13 @@ Releases are **tag-driven**. Two independent tag prefixes:
 | `vX.Y.Z`  | `.github/workflows/release-crates.yml` | **crates.io**: `turbo-html2pdf-core`, then `turbo-html2pdf-mcp` (ordered — core first). Same `v*` tag as npm |
 | `pyvX.Y.Z`| `.github/workflows/release-py.yml` | **PyPI**: `turbo-html2pdf` (maturin abi3 wheels + sdist)                  |
 
-Required GitHub repo secrets: **`NPM_TOKEN`** (npm automation token, public
-publish), **`PYPI_TOKEN`** (PyPI API token), and **`CARGO_REGISTRY_TOKEN`**
+Required GitHub repo secrets: **`NPM_TOKEN`** (npm token with public-package publish permission), **`PYPI_TOKEN`** (PyPI API token), and **`CARGO_REGISTRY_TOKEN`**
 (crates.io API token). If `PYPI_TOKEN` is unset the PyPI publish self-skips; if
 `CARGO_REGISTRY_TOKEN` is unset the crates.io publish self-skips (verifies the
 package, uploads nothing).
 
 The `turbo-html2pdf-mcp` crate depends on `turbo-html2pdf-core` with an explicit
-`version = "0.2"` (^0.2) alongside its `path` — crates.io requires a version on
+`version = "0.3"` (^0.3) alongside its `path` — crates.io requires a version on
 the dep. It only needs bumping on a **minor** (0.x) change, not every patch;
 keep it in sync with the workspace major.minor when you cross a minor boundary.
 
@@ -45,7 +44,8 @@ Cosmetic version strings to refresh (not functional, but keep in sync):
 - `crates/turbo-pdf-napi/README.md` — the `## Status` line (`vX.Y.Z`). **This
   README ships in the npm tarball**, so a stale version is publicly visible.
 - `benches/competitive/src/adapters/turbopdf.ts` — the `version:` in `detect()`
-- `benches/competitive/RESULTS.md` — the version column (benchmark snapshot)
+- Keep historical `benches/competitive/RESULTS.md` versions tied to the measured
+  release; update them only when rerunning the benchmark.
 
 `Cargo.lock` regenerates on the next `cargo build` — commit the churn.
 
@@ -62,18 +62,25 @@ RUSTFLAGS="-D warnings" cargo clippy --workspace --all-targets -- -D warnings
 cargo test --workspace
 cargo run --manifest-path tools/cc-check/Cargo.toml -- --max 5 crates   # cc < 6
 cargo tarpaulin                                                          # 100% gate
+node scripts/package-notices.mjs --check                                # packaged notices
 ```
 
 `release.yml`'s `gate` job runs only fmt/clippy/test — so a red `cc-check` or
 coverage gate does NOT block a publish. Verify them locally anyway; a tag is
 public and hard to walk back.
 
-### 3. Tag + push
+### 3. Merge, tag the merge commit, and push
 
-```
-git push origin main          # push commits first (CI runs on main)
-git tag -a vX.Y.Z   -m "..."  # npm  → release.yml
-git tag -a pyvX.Y.Z -m "..."  # PyPI → release-py.yml (needs PYPI_TOKEN)
+Commit the version bump and fixes on the release PR. Run the local gates and
+wait for every CI job to pass on that exact head before merging with a merge
+commit. Verify the merge tree matches the tested head and tag that merge SHA,
+not the branch head. Both tags below publish; push only when release is authorized.
+
+```sh
+git fetch origin main
+# Set RELEASE_SHA to the verified merge commit from the merged PR.
+git tag -a vX.Y.Z "$RELEASE_SHA" -m "Release vX.Y.Z"   # npm + crates + MCP
+git tag -a pyvX.Y.Z "$RELEASE_SHA" -m "Python release vX.Y.Z" # PyPI
 git push origin vX.Y.Z pyvX.Y.Z
 ```
 
@@ -104,7 +111,9 @@ crate pins core `default-features = false` (no fonts) + the capability features;
 SDK) over the same core pipeline — a `bin` (`turbo-html2pdf-mcp`) over a testable
 protocol `lib`. It compiles the same full feature set EXCEPT `svg` and exposes
 `render` / `append_pdf` / `check_template` (the union of the napi + py surface).
-It is a Rust binary, NOT an npm/PyPI package: there is no publish job; consumers
+It is a Rust binary, NOT an npm/PyPI package. The `publish-mcp` job ships
+per-platform GitHub Release archives; `release-crates.yml` also publishes the
+crate for `cargo install turbo-html2pdf-mcp`. Local builds use
 `cargo build -p turbo-html2pdf-mcp --release`. It is excluded from the coverage
 gate (`tarpaulin.toml`) like the other bindings; its surface is unit-tested
 in-crate. It inherits the workspace version, so it needs no manual version bump.

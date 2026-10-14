@@ -48,3 +48,13 @@ Fira Code/IBM Plex Mono so documents render with no caller fonts). Opt-in:
 ## License
 
 MIT
+
+## Live-tree layout provenance
+
+The additive `layout_snapshot` API accepts the caller's live `Node` or styled
+forest plus external stable source IDs and retains all native fragments with
+composed transforms. It preserves hidden layout boxes and sizes replaced images
+without PDF page caps. PDF filtering, page-fit and legacy layout policies are preserved; shared CSS
+cascade fixes also improve valid PDF output. See
+[the snapshot contract and current geometry boundaries](../../docs/live-layout-snapshot.md);
+text-line provenance does not imply implemented Range, caret, or scroll metrics.

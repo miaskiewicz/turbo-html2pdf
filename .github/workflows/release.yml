@@ -326,7 +326,8 @@ jobs:
         working-directory: crates/turbo-pdf-wasm/pkg-fonts
         run: |
           VERSION="${GITHUB_REF_NAME#v}"
-          node -e "const fs=require('fs');const p=JSON.parse(fs.readFileSync('package.json'));p.name='turbo-html2pdf-wasm-fonts';p.version='$VERSION';p.repository={type:'git',url:'git+https://github.com/miaskiewicz/turbo-html2pdf.git'};fs.writeFileSync('package.json',JSON.stringify(p,null,2));console.log('publishing',p.name,p.version)"
+          cp ../THIRD_PARTY_NOTICES.md .
+          node -e "const fs=require('fs');const p=JSON.parse(fs.readFileSync('package.json'));p.name='turbo-html2pdf-wasm-fonts';p.files.push('THIRD_PARTY_NOTICES.md');p.version='$VERSION';p.repository={type:'git',url:'git+https://github.com/miaskiewicz/turbo-html2pdf.git'};fs.writeFileSync('package.json',JSON.stringify(p,null,2));console.log('publishing',p.name,p.version)"
 
       - name: Publish turbo-html2pdf-wasm-fonts
         run: npm publish --access public
@@ -500,7 +501,7 @@ jobs:
           mkdir "$STAGE"
           cp "target/${{ matrix.target }}/release/$BIN" "$STAGE"/
           cp crates/turbo-html2pdf-mcp/README.md "$STAGE"/ 2>/dev/null || true
-          [ -f LICENSE ] && cp LICENSE "$STAGE"/ || true
+          cp LICENSE THIRD_PARTY_NOTICES.md "$STAGE"/
           tar -czf "$STAGE.tar.gz" "$STAGE"
           ls -l "$STAGE.tar.gz"
       - name: Upload archive
@@ -543,7 +544,7 @@ jobs:
           mkdir "$STAGE"
           cp target/release/turbo-html2pdf-mcp "$STAGE"/
           cp crates/turbo-html2pdf-mcp/README.md "$STAGE"/ 2>/dev/null || true
-          [ -f LICENSE ] && cp LICENSE "$STAGE"/ || true
+          cp LICENSE THIRD_PARTY_NOTICES.md "$STAGE"/
           tar -czf "$STAGE.tar.gz" "$STAGE"
           ls -l "$STAGE.tar.gz"
       - name: Upload archive

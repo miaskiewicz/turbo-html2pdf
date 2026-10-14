@@ -82,12 +82,15 @@ export function formatFixture(res: FixtureResult): string {
     `  ${"cid".padEnd(10)}${"engine (x,y,w,h)".padEnd(24)}${"chromium (x,y,w,h)".padEnd(24)}${"Δ".padEnd(8)}result`,
   );
   for (const r of res.rows) {
-    const d = r.delta === null ? "—" : `${n(r.delta)}px`;
-    // A miss under a deferred fixture is expected (XFAIL) — it tracks a known gap
-    // rather than reding the build.
-    const fail = res.deferred ? "XFAIL" : "FAIL";
-    const status = r.pass ? "PASS" : `${fail}${r.note ? ` (${r.note})` : ""}`;
-    lines.push(`  ${r.cid.padEnd(10)}${rect(r.engine)}${rect(r.oracle)}${d.padEnd(8)}${status}`);
+    lines.push(formatRow(r, Boolean(res.deferred)));
   }
   return lines.join("\n");
+}
+
+function formatRow(r: Row, deferred: boolean): string {
+  const d = r.delta === null ? "—" : `${n(r.delta)}px`;
+  // A miss under a deferred fixture tracks a known gap as XFAIL.
+  const fail = deferred ? "XFAIL" : "FAIL";
+  const status = r.pass ? "PASS" : `${fail}${r.note ? ` (${r.note})` : ""}`;
+  return `  ${r.cid.padEnd(10)}${rect(r.engine)}${rect(r.oracle)}${d.padEnd(8)}${status}`;
 }

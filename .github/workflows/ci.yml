@@ -49,6 +49,7 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm lint
       - run: pnpm format:check
+      - run: node scripts/package-notices.mjs --check
 
   conformance:
     name: Binding conformance (napi + wasm)

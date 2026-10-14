@@ -22,6 +22,16 @@ impl ComputedStyle {
         self.map.get(property).map(String::as_str)
     }
 
+    /// Anonymous live formatting boxes inherit text properties, never the
+    /// parent's frame/transform/position a second time.
+    pub(crate) fn inherited_only(&self) -> Self {
+        Self::from_pairs(
+            INHERITED
+                .iter()
+                .filter_map(|&name| self.get(name).map(|value| (name, value))),
+        )
+    }
+
     /// Whether no value uses a containing-block-relative (`%`) or font-relative
     /// (`em`/`rem`) unit. When true, the box's resolved metrics do not depend on
     /// the layout context, so they can be resolved once and cached (a `font-size`
@@ -739,6 +749,72 @@ fn resolve_one_var(
     }
 }
 
+fn quad_variable_context(cands: &[Cand], parent: &ComputedStyle) -> BTreeMap<String, String> {
+    let custom: Vec<_> = cands
+        .iter()
+        .filter(|cand| cand.property.starts_with("--"))
+        .map(|cand| Cand {
+            key: cand.key,
+            property: cand.property.clone(),
+            value: cand.value.clone(),
+        })
+        .collect();
+    let mut variables: BTreeMap<_, _> = parent
+        .map
+        .iter()
+        .filter(|(name, _)| name.starts_with("--"))
+        .map(|(name, value)| (name.clone(), value.clone()))
+        .collect();
+    variables.extend(pick_winners(custom));
+    resolve_explicit_inherit(&mut variables, parent);
+    variables
+}
+
+fn expand_quad_candidates(cands: Vec<Cand>, parent: &ComputedStyle) -> Vec<Cand> {
+    if !cands
+        .iter()
+        .any(|cand| super::quad_shorthand::is_quad(&cand.property))
+    {
+        return cands;
+    }
+    let variables = quad_variable_context(&cands, parent);
+    let mut expanded = Vec::new();
+    for cand in cands {
+        expanded.extend(expanded_quad(&cand, &variables).into_iter().flatten());
+        expanded.push(cand);
+    }
+    expanded
+}
+
+fn expanded_quad(cand: &Cand, variables: &BTreeMap<String, String>) -> Option<[Cand; 4]> {
+    if !super::quad_shorthand::is_quad(&cand.property) {
+        return None;
+    }
+    let value = substitute_vars(&cand.value, variables, 0, &[]);
+    resolved_quad(&cand.property, &cand.value, &value).map(|longhands| {
+        longhands.map(|(property, value)| Cand {
+            key: cand.key,
+            property: property.into(),
+            value: value.into(),
+        })
+    })
+}
+
+fn resolved_quad<'a>(
+    property: &str,
+    original: &str,
+    value: &'a str,
+) -> Option<[(&'static str, &'a str); 4]> {
+    super::quad_shorthand::expand(property, value).or_else(|| {
+        // Invalid-at-computed-value-time variables unset the winning longhands;
+        // they do not resurrect earlier declarations.
+        original
+            .contains("var(")
+            .then(|| super::quad_shorthand::expand(property, "unset"))
+            .flatten()
+    })
+}
+
 fn resolve_style(
     element: &Element,
     path: &[Ctx],
@@ -751,7 +827,7 @@ fn resolve_style(
     collect_rules(cascade, path, &mut cands);
     collect_tokens(element, cascade, &mut cands);
     collect_inline(element, &mut cands);
-    inherit(pick_winners(cands), parent)
+    inherit(pick_winners(expand_quad_candidates(cands, parent)), parent)
 }
 
 // --------------------------------------------------------------------------

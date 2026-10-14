@@ -18,6 +18,7 @@ pub mod error;
 pub mod html_layout;
 pub mod image;
 pub mod layout;
+pub mod layout_snapshot;
 pub mod node;
 pub mod options;
 pub mod paginate;

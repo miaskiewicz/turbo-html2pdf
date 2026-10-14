@@ -66,7 +66,7 @@ function listFixtures(filter: string | null): string[] {
 // force it green. Returns the trimmed reason, or null for a normally-gated fixture.
 function deferralReason(raw: string): string | null {
   const m = raw.match(/conformance:defer\s+([\s\S]*?)-->/);
-  return m ? m[1].replace(/\s+/g, " ").trim() : null;
+  return m ? (m[1] ?? "").replace(/\s+/g, " ").trim() : null;
 }
 
 async function main(): Promise<number> {
@@ -107,6 +107,10 @@ async function main(): Promise<number> {
     await oracle.close();
   }
 
+  return summarizeResults(results);
+}
+
+function summarizeResults(results: FixtureResult[]): number {
   // The gate counts only NON-deferred fixtures; deferred ones are reported apart so
   // a documented gap never reds the build (but also never hides silently).
   const gated = results.filter((r) => !r.deferred);

@@ -11,6 +11,8 @@
 
 use std::cell::RefCell;
 
+use crate::layout_snapshot::sources::{BuildSources, SourceRecord};
+
 use crate::node::{Attr, TKind, Tag};
 use crate::style::{ComputedStyle, StyledElement, StyledNode};
 
@@ -23,6 +25,7 @@ use super::value::{
 #[derive(Debug, Clone)]
 pub struct LayoutBox {
     pub node_id: NodeId,
+    pub(crate) document_root: bool,
     pub style: ComputedStyle,
     /// Source element attributes (e.g. `colspan`, `href`); empty for anonymous
     /// boxes. Layout/emit read HTML attributes that are not CSS properties here.
@@ -223,6 +226,8 @@ enum Level {
 /// A monotonic source of pre-order node ids.
 struct Ids {
     next: u32,
+    sources: Option<BuildSources>,
+    document_roots: std::collections::HashSet<usize>,
 }
 
 impl Ids {
@@ -230,6 +235,26 @@ impl Ids {
         let id = NodeId(self.next);
         self.next += 1;
         id
+    }
+
+    fn sourced(&mut self, key: usize) -> NodeId {
+        let id = self.alloc();
+        if let Some(sources) = &mut self.sources {
+            sources.record(id, key);
+        }
+        id
+    }
+
+    fn element(&mut self, element: &StyledElement) -> NodeId {
+        self.sourced(element as *const StyledElement as usize)
+    }
+
+    fn hidden(&self, style: &ComputedStyle) -> bool {
+        if self.sources.is_some() {
+            display_of(style) == Display::None
+        } else {
+            is_hidden(style)
+        }
     }
 }
 
@@ -250,9 +275,9 @@ fn is_directive(el: &StyledElement) -> bool {
     matches!(el.tag, Tag::Directive(_))
 }
 
-fn text_item(text: &str, style: &ComputedStyle, ids: &mut Ids) -> InlineItem {
+fn text_item(node: &StyledNode, text: &str, style: &ComputedStyle, ids: &mut Ids) -> InlineItem {
     InlineItem::Text {
-        node_id: ids.alloc(),
+        node_id: ids.sourced(node as *const StyledNode as usize),
         style: style.clone(),
         text: text.to_string(),
     }
@@ -265,7 +290,7 @@ fn text_item(text: &str, style: &ComputedStyle, ids: &mut Ids) -> InlineItem {
 fn directive_level(kind: TKind, el: &StyledElement, ids: &mut Ids) -> Level {
     if inline_directive(kind) {
         Level::Inline(vec![InlineItem::Directive {
-            node_id: ids.alloc(),
+            node_id: ids.element(el),
             kind,
             #[cfg(feature = "xref")]
             anchor: xref::anchor_name(kind, el),
@@ -343,7 +368,7 @@ fn is_br(el: &StyledElement) -> bool {
 }
 
 fn classify_html(el: &StyledElement, ids: &mut Ids) -> Option<Level> {
-    if is_hidden(&el.style) {
+    if ids.hidden(&el.style) {
         return None;
     }
     if is_br(el) {
@@ -370,9 +395,16 @@ fn classify_html(el: &StyledElement, ids: &mut Ids) -> Option<Level> {
 
 fn classify(node: &StyledNode, parent_style: &ComputedStyle, ids: &mut Ids) -> Option<Level> {
     let el = match node {
-        StyledNode::Text(t) => return Some(Level::Inline(vec![text_item(t, parent_style, ids)])),
+        StyledNode::Text(t) => {
+            return Some(Level::Inline(vec![text_item(node, t, parent_style, ids)]))
+        }
         StyledNode::Element(e) => e,
     };
+    // Live snapshots exclude every display-none subtree, including directives;
+    // the PDF path preserves its existing directive interpretation.
+    if ids.sources.is_some() && ids.hidden(&el.style) {
+        return None;
+    }
     match &el.tag {
         Tag::Directive(kind) => Some(directive_level(*kind, el, ids)),
         Tag::Html(_) => classify_html(el, ids),
@@ -426,10 +458,11 @@ fn input_button_text(el: &StyledElement) -> Option<String> {
 }
 
 fn build_block_box(el: &StyledElement, ids: &mut Ids) -> LayoutBox {
-    let node_id = ids.alloc();
+    let node_id = ids.element(el);
     if let Tag::Directive(kind) = &el.tag {
         return LayoutBox {
             node_id,
+            document_root: false,
             style: el.style.clone(),
             attrs: el.attrs.clone(),
             display: Display::Block,
@@ -451,6 +484,9 @@ fn build_block_box(el: &StyledElement, ids: &mut Ids) -> LayoutBox {
     let kind = box_kind_for(display, el, ids);
     LayoutBox {
         node_id,
+        document_root: ids
+            .document_roots
+            .contains(&(el as *const StyledElement as usize)),
         style: el.style.clone(),
         attrs: el.attrs.clone(),
         display,
@@ -586,7 +622,7 @@ fn child_block_boxes(el: &StyledElement, ids: &mut Ids) -> Vec<LayoutBox> {
 
 fn block_child(node: &StyledNode, ids: &mut Ids) -> Option<LayoutBox> {
     let el = node.as_element()?;
-    if !is_directive(el) && is_hidden(&el.style) {
+    if !is_directive(el) && ids.hidden(&el.style) {
         return None;
     }
     Some(build_block_box(el, ids))
@@ -605,9 +641,15 @@ fn anon_lines_box(
     parent_style: &ComputedStyle,
     ids: &mut Ids,
 ) -> LayoutBox {
+    let style = if ids.sources.is_some() {
+        parent_style.inherited_only()
+    } else {
+        parent_style.clone()
+    };
     LayoutBox {
         node_id: ids.alloc(),
-        style: parent_style.clone(),
+        document_root: false,
+        style,
         attrs: Vec::new(),
         display: Display::Block,
         kind: BoxKind::Lines(items),
@@ -684,12 +726,43 @@ fn build_flow(children: &[StyledNode], parent_style: &ComputedStyle, ids: &mut I
 /// Build the box tree for a document flow. The root is an anonymous block box
 /// (id 0) whose `kind` is the top-level formatting context.
 pub fn build_box_tree(styled: &[StyledNode]) -> LayoutBox {
-    let mut ids = Ids { next: 0 };
+    let mut ids = Ids {
+        next: 0,
+        sources: None,
+        document_roots: Default::default(),
+    };
+    build_root(styled, &mut ids)
+}
+
+/// Geometry uses the identical tree once, with source identities out of band.
+pub(crate) fn build_sourced_tree(
+    styled: &[StyledNode],
+    sources: BuildSources,
+) -> (LayoutBox, std::collections::HashMap<NodeId, SourceRecord>) {
+    let mut ids = Ids {
+        next: 0,
+        sources: Some(sources),
+        document_roots: html_document_roots(styled),
+    };
+    let root = build_root(styled, &mut ids);
+    (root, ids.sources.expect("source mode installed").records)
+}
+
+fn html_document_roots(styled: &[StyledNode]) -> std::collections::HashSet<usize> {
+    styled.iter().filter_map(|node| match node {
+        StyledNode::Element(element) if matches!(&element.tag, Tag::Html(name) if name.eq_ignore_ascii_case("html")) =>
+            Some(element as *const StyledElement as usize),
+        _ => None,
+    }).collect()
+}
+
+fn build_root(styled: &[StyledNode], ids: &mut Ids) -> LayoutBox {
     let node_id = ids.alloc();
     let style = ComputedStyle::default();
-    let kind = build_flow(styled, &style, &mut ids);
+    let kind = build_flow(styled, &style, ids);
     LayoutBox {
         node_id,
+        document_root: false,
         style,
         attrs: Vec::new(),
         display: Display::Block,

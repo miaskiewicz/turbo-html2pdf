@@ -4,7 +4,7 @@ build-backend = "maturin"
 
 [project]
 name = "turbo-html2pdf"
-version = "0.3.4"
+version = "0.3.5"
 description = "Native HTML/CSS-to-PDF engine with a Jinja-compatible templating DSL (PyO3 binding over the turbo-pdf Rust core)."
 readme = "README.md"
 requires-python = ">=3.8"
@@ -34,3 +34,5 @@ python-source = "python"
 module-name = "turbo_html2pdf._turbo_html2pdf"
 # Build the stable-ABI (abi3) wheel matching the crate's pyo3 features.
 features = ["pyo3/extension-module"]
+
+include = [{ path = "python/turbo_html2pdf/THIRD_PARTY_NOTICES.md", format = ["sdist", "wheel"] }, { path = "LICENSE", format = ["sdist", "wheel"] }]

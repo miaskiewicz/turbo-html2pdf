@@ -13,8 +13,10 @@
 
 use crate::error::Diagnostics;
 use crate::image::probe;
+use crate::layout_snapshot::UsedBoxMetrics;
 use crate::node::TKind;
 use crate::text::{Align, FontRegistry};
+use std::collections::HashMap;
 
 use super::boxgen::{BoxKind, ImageSource, InlineItem, LayoutBox};
 use super::fragment::{BreakMeta, Fragment, FragmentContent, ImagePlacement, NodeId, Transform2D};
@@ -51,6 +53,10 @@ pub(crate) struct Ctx<'a> {
     /// The initial containing block width (page content width) — the CB for
     /// `position:fixed` boxes.
     pub(crate) root_w: f32,
+    pub(crate) root_h: f32,
+    /// Live snapshots use viewport geometry rather than pagination image caps.
+    pub(crate) live_geometry: bool,
+    pub(crate) used_metrics: Option<HashMap<NodeId, UsedBoxMetrics>>,
     /// Floats active in the current **block formatting context**, in absolute
     /// galley coordinates. In-flow content within the same BFC flows in the
     /// inline region these leave free (a `float:right` infobox narrows the text
@@ -106,7 +112,7 @@ fn out_of_flow_origin(
     // a `top:calc(66% - 48px)` overlay on a card must land at that fraction of the
     // card's height. When the CB height is still indefinite the box is deferred
     // (`place_deferred_abs`), so `abs_cb_h` here is definite.
-    let cbh = ctx.abs_cb_h;
+    let cbh = out_of_flow_height(bs, ctx);
     let y = match (bs.inset_top.resolve(cbh), bs.inset_bottom.resolve(cbh)) {
         (Some(t), _) => cby + t,
         // A `bottom`-only box needs its own (laid) height to anchor; the caller's
@@ -215,6 +221,157 @@ fn positioned_cb_height(bs: &BoxStyle, ctx: &Ctx) -> f32 {
         ctx.abs_cb_h
     } else {
         0.0
+    }
+}
+
+fn live_child_height(lb: &LayoutBox, bs: &BoxStyle, outer_height: f32, live: bool) -> f32 {
+    // The anonymous galley root represents the initial containing block, not
+    // an auto-height DOM element whose children lose the viewport basis.
+    if live && lb.node_id == NodeId(0) {
+        return outer_height;
+    }
+    definite_content_height(bs, outer_height)
+}
+
+fn resolved_content_height(bs: &BoxStyle, auto_height: f32, ctx: &Ctx) -> f32 {
+    if !ctx.live_geometry {
+        return content_box_height(bs, auto_height, positioned_cb_height(bs, ctx));
+    }
+    let basis = live_height_basis(bs, ctx);
+    let frame = bs.padding.vertical() + bs.border.widths().vertical();
+    let inset = if bs.box_sizing == BoxSizing::BorderBox {
+        frame
+    } else {
+        0.0
+    };
+    let content = live_height(bs.height, basis, inset).unwrap_or(auto_height);
+    let max = live_height(bs.max_height, basis, inset).unwrap_or(f32::INFINITY);
+    let min = live_height(bs.min_height, basis, inset).unwrap_or(0.0);
+    content.min(max).max(min)
+}
+
+// Absolute positioning uses the padding box; normal-flow children use content.
+fn positioned_child_block(
+    bs: &BoxStyle,
+    frame: (f32, f32, f32),
+    content: (f32, f32, f32),
+    ctx: &Ctx,
+) -> (f32, f32, f32, f32) {
+    if !ctx.live_geometry {
+        return (
+            content.0,
+            content.1,
+            content.2,
+            definite_content_height(bs, ctx.abs_cb_h),
+        );
+    }
+    let border = bs.border.widths();
+    let inset = match bs.box_sizing {
+        BoxSizing::BorderBox => border.vertical() + bs.padding.vertical(),
+        BoxSizing::ContentBox => 0.0,
+    };
+    let height = live_height(bs.height, live_height_basis(bs, ctx), inset)
+        .map(|h| h + bs.padding.vertical())
+        .unwrap_or(0.0);
+    (
+        frame.0 + border.left,
+        frame.1 + border.top,
+        frame.2 - border.horizontal(),
+        height,
+    )
+}
+
+fn deferred_cb_height(content: f32, bs: &BoxStyle, ctx: &Ctx) -> f32 {
+    if ctx.live_geometry {
+        content + bs.padding.vertical()
+    } else {
+        content
+    }
+}
+
+fn layout_positioned(
+    lb: &LayoutBox,
+    origin: (f32, f32),
+    width: f32,
+    fs: f32,
+    ctx: &mut Ctx,
+) -> Fragment {
+    let mut bs = resolve(lb, width, fs);
+    let width = out_of_flow_width(&bs, width, ctx);
+    if !ctx.live_geometry || lb.image.as_ref().is_some_and(|image| image.replaced) {
+        return layout_box(lb, origin.0, origin.1, width, fs, ctx);
+    }
+    bs = resolve(lb, width, fs);
+    let border = bs.border.widths();
+    let frame = match bs.box_sizing {
+        BoxSizing::ContentBox => (
+            bs.padding.horizontal() + border.horizontal(),
+            bs.padding.vertical() + border.vertical(),
+        ),
+        BoxSizing::BorderBox => (0.0, 0.0),
+    };
+    bs.width = stretch_insets(
+        bs.width,
+        (bs.inset_left, bs.inset_right),
+        width,
+        bs.margin.horizontal() + frame.0,
+    );
+    bs.height = stretch_insets(
+        bs.height,
+        (bs.inset_top, bs.inset_bottom),
+        out_of_flow_height(&bs, ctx),
+        bs.margin.vertical() + frame.1,
+    );
+    let border_width = border_box_width(&bs, width);
+    layout_box_sized(lb, &bs, origin.0, origin.1, border_width, ctx)
+}
+
+fn stretch_insets(
+    value: LengthPct,
+    insets: (LengthPct, LengthPct),
+    basis: f32,
+    frame: f32,
+) -> LengthPct {
+    if value != LengthPct::Auto {
+        return value;
+    }
+    let available = insets
+        .0
+        .resolve(basis)
+        .zip(insets.1.resolve(basis))
+        .map(|(start, end)| (basis - start - end - frame).max(0.0));
+    available.map(LengthPct::Px).unwrap_or(value)
+}
+
+fn out_of_flow_width(bs: &BoxStyle, width: f32, ctx: &Ctx) -> f32 {
+    if ctx.live_geometry {
+        containing_block(bs, ctx).2
+    } else {
+        width
+    }
+}
+
+fn out_of_flow_height(bs: &BoxStyle, ctx: &Ctx) -> f32 {
+    if ctx.live_geometry {
+        live_height_basis(bs, ctx)
+    } else {
+        ctx.abs_cb_h
+    }
+}
+
+fn live_height_basis(bs: &BoxStyle, ctx: &Ctx) -> f32 {
+    match bs.position {
+        Position::Absolute => ctx.abs_cb_h,
+        Position::Fixed => ctx.root_h,
+        _ => ctx.cb_h,
+    }
+}
+
+fn live_height(value: LengthPct, basis: f32, inset: f32) -> Option<f32> {
+    match value {
+        LengthPct::Px(px) => Some((px - inset).max(0.0)),
+        LengthPct::Auto => None,
+        _ => (basis > 0.0).then(|| (value.resolve(basis).unwrap_or(0.0) - inset).max(0.0)),
     }
 }
 
@@ -553,6 +710,14 @@ fn child_leading(kid: &LayoutBox, kbs: &BoxStyle, cw: f32, fs: f32, suppressed: 
     }
 }
 
+fn root_trailing_margin(margin: f32, root: bool) -> f32 {
+    if root {
+        margin
+    } else {
+        0.0
+    }
+}
+
 fn layout_block_flow(
     kids: &[LayoutBox],
     cx: f32,
@@ -560,7 +725,7 @@ fn layout_block_flow(
     cw: f32,
     bs: &BoxStyle,
     ctx: &mut Ctx,
-    suppress_first_leading: bool,
+    boundaries: (bool, bool),
 ) -> (Vec<Fragment>, f32) {
     let fs = bs.font_size;
     let mut frags = Vec::new();
@@ -596,15 +761,22 @@ fn layout_block_flow(
         // child when this container hoists it out its own top edge (parent/child
         // collapse), else the child's `margin-top` collapsed with any margins that
         // escape ITS borderless top.
-        let leading = child_leading(kid, &kbs, cw, fs, first_inflow && suppress_first_leading);
+        let leading = child_leading(kid, &kbs, cw, fs, first_inflow && boundaries.0);
         first_inflow = false;
         frags.push(layout_in_flow_kid(kid, leading, cx, cw, fs, &mut flow, ctx));
     }
     // Height is the in-flow content only. Floats are contained by their BFC (see
     // `layout_box_sized`), not by every block they pass through — a non-BFC block
     // does not grow to enclose a float, so following content wraps beside it.
-    let content_h = flow.cursor - cy;
-    place_deferred_abs(&deferred, cw, fs, content_h, &mut frags, ctx);
+    let content_h = flow.cursor - cy + root_trailing_margin(flow.pending, boundaries.1);
+    place_deferred_abs(
+        &deferred,
+        cw,
+        fs,
+        deferred_cb_height(content_h, bs, ctx),
+        &mut frags,
+        ctx,
+    );
     (frags, content_h)
 }
 
@@ -634,7 +806,7 @@ fn place_deferred_abs(
     for (kid, static_pos) in deferred {
         let kbs = resolve(kid, cw, fs);
         let (bx, by) = out_of_flow_origin(&kbs, cw, ctx, *static_pos);
-        let mut frag = layout_box(kid, bx, by, cw, fs, ctx);
+        let mut frag = layout_positioned(kid, (bx, by), cw, fs, ctx);
         anchor_bottom(&mut frag, &kbs, content_h, ctx);
         frags.push(frag);
     }
@@ -650,7 +822,12 @@ fn anchor_bottom(frag: &mut Fragment, kbs: &BoxStyle, content_h: f32, ctx: &Ctx)
     let Some(bottom) = kbs.inset_bottom.resolve(content_h) else {
         return;
     };
-    let target_y = ctx.abs_cb_y + content_h - bottom - frag.height - kbs.margin.bottom;
+    let origin_y = if ctx.live_geometry {
+        containing_block(kbs, ctx).1
+    } else {
+        ctx.abs_cb_y
+    };
+    let target_y = origin_y + content_h - bottom - frag.height - kbs.margin.bottom;
     frag.translate(0.0, target_y - frag.y);
 }
 
@@ -675,14 +852,15 @@ fn place_special_kid(
             flow.cursor + collapse_margins(flow.pending, kbs.margin.top),
         );
         let (bx, by) = out_of_flow_origin(kbs, cw, ctx, static_pos);
-        let mut frag = layout_box(kid, bx, by, cw, fs, ctx);
+        let mut frag = layout_positioned(kid, (bx, by), cw, fs, ctx);
         // A `bottom`-anchored (auto `top`) box left at its static y by
         // `out_of_flow_origin` — because its height wasn't known there — is pulled
         // to the CB bottom now, when the CB height is DEFINITE. (An indefinite-height
         // CB defers its absolute children instead, via `place_deferred_abs`, so the
         // `> 0` guard keeps this off that path.)
-        if ctx.abs_cb_h > 0.0 {
-            anchor_bottom(&mut frag, kbs, ctx.abs_cb_h, ctx);
+        let height = out_of_flow_height(kbs, ctx);
+        if height > 0.0 {
+            anchor_bottom(&mut frag, kbs, height, ctx);
         }
         return Some(frag);
     }
@@ -815,8 +993,12 @@ fn auto_x_margins(s: &crate::style::ComputedStyle) -> bool {
 /// are isolated from the outer context (they don't wrap outer floats, and they
 /// grow this box). Floats, out-of-flow boxes, non-`visible` `overflow`, and the
 /// independent formatting roots (flex/grid/table) all qualify.
+fn intrinsic_formatting_root(lb: &LayoutBox, bs: &BoxStyle) -> bool {
+    lb.document_root || bs.float != Float::None || bs.position.is_out_of_flow()
+}
+
 fn establishes_bfc(lb: &LayoutBox, bs: &BoxStyle) -> bool {
-    if bs.float != Float::None || bs.position.is_out_of_flow() {
+    if intrinsic_formatting_root(lb, bs) {
         return true;
     }
     if matches!(
@@ -994,7 +1176,15 @@ fn layout_content(
             // leading margin is applied by THIS box's own caller (via `leading_margin`)
             // — so suppress it inside to avoid double-counting.
             let suppress_first = top_margins_collapse_through(lb, bs);
-            layout_block_flow(kids, cx, cy, cw, bs, ctx, suppress_first)
+            layout_block_flow(
+                kids,
+                cx,
+                cy,
+                cw,
+                bs,
+                ctx,
+                (suppress_first, lb.document_root),
+            )
         }
         BoxKind::Flex(kids) => super::flex::layout_flex(lb, kids, cx, cy, cw, bs.font_size, ctx),
         BoxKind::Grid(kids) => super::flex::layout_grid(lb, kids, cx, cy, cw, bs.font_size, ctx),
@@ -1147,19 +1337,14 @@ fn layout_box_sized_impl(
     // descendants (its content box). Save/restore around the child layout.
     let saved_cb = (ctx.abs_cb_x, ctx.abs_cb_y, ctx.abs_cb_w, ctx.abs_cb_h);
     if bs.position != Position::Static {
-        ctx.abs_cb_x = content_x;
-        ctx.abs_cb_y = content_y;
-        ctx.abs_cb_w = content_w;
-        // Expose this box's height to `%`-height / `inset:0` descendants only when
-        // it's definite (explicit px, or `%` resolved against a known outer CB) —
-        // an auto height derived from content would be circular.
-        ctx.abs_cb_h = definite_content_height(bs, saved_cb.3);
+        (ctx.abs_cb_x, ctx.abs_cb_y, ctx.abs_cb_w, ctx.abs_cb_h) =
+            positioned_child_block(bs, (bx, by, bbw), (content_x, content_y, content_w), ctx);
     }
     // In-flow `%`-height CB: expose this box's own definite content height to its
     // children (any box, not just positioned) so a `height:100%`/`max-height:100%`
     // child resolves against it. 0 (auto) leaves children on their intrinsic size.
     let saved_cb_h = ctx.cb_h;
-    ctx.cb_h = definite_content_height(bs, saved_cb_h);
+    ctx.cb_h = live_child_height(lb, bs, saved_cb_h, ctx.live_geometry);
     // A box that establishes a block formatting context isolates floats: its
     // content does not wrap around outer floats, and the floats placed inside it
     // are contained by (grow) this box rather than escaping to sibling blocks.
@@ -1189,7 +1374,7 @@ fn layout_box_sized_impl(
     let auto_h = aspect_auto_height(bs, content_w)
         .map(|a| a.max(content_h))
         .unwrap_or(content_h);
-    let fill_h = content_box_height(bs, auto_h, positioned_cb_height(bs, ctx));
+    let fill_h = resolved_content_height(bs, auto_h, ctx);
     let bbh = fill_h + bs.padding.vertical() + bw.vertical();
     prepend_mask_image(
         lb,
@@ -1207,6 +1392,7 @@ fn layout_box_sized_impl(
         &*ctx,
         &mut children,
     );
+    record_metrics(lb, bs, content_w, fill_h, ctx);
     Fragment {
         node_id: lb.node_id,
         x: bx,
@@ -1362,11 +1548,17 @@ fn replaced_image_box(
     bx: f32,
     by: f32,
     cb_width: f32,
-    ctx: &Ctx,
+    ctx: &mut Ctx,
 ) -> Option<Fragment> {
     let src = lb.image.as_ref().filter(|s| s.replaced)?;
     let intrinsic = probe_source(src, ctx)?;
-    let sized = size_replaced(src.name.clone(), intrinsic, &size_ctx(bs, cb_width, ctx));
+    let sizing = size_ctx(bs, cb_width, ctx);
+    if ctx.live_geometry {
+        let sized = super::imgsize::size_replaced_live(src.name.clone(), intrinsic, &sizing);
+        record_metrics(lb, bs, sized.width, sized.height, ctx);
+        return Some(live_image_fragment(lb, bx, by, &sized, bs));
+    }
+    let sized = size_replaced(src.name.clone(), intrinsic, &sizing);
     Some(image_fragment(lb, bx, by, &sized, bs))
 }
 
@@ -1411,6 +1603,49 @@ fn image_fragment(lb: &LayoutBox, bx: f32, by: f32, sized: &SizedImage, bs: &Box
     }
 }
 
+fn record_metrics(lb: &LayoutBox, bs: &BoxStyle, width: f32, height: f32, ctx: &mut Ctx) {
+    if let Some(metrics) = &mut ctx.used_metrics {
+        metrics.insert(
+            lb.node_id,
+            UsedBoxMetrics {
+                border: bs.border.widths(),
+                padding: bs.padding,
+                margin: bs.margin,
+                content_width: width,
+                content_height: height,
+                position: bs.position,
+                display: lb.display,
+            },
+        );
+    }
+}
+
+/// Keep the replaced border box distinct from its content image fragment.
+fn live_image_fragment(
+    lb: &LayoutBox,
+    bx: f32,
+    by: f32,
+    sized: &SizedImage,
+    bs: &BoxStyle,
+) -> Fragment {
+    let borders = bs.border.widths();
+    let width = sized.width + bs.padding.horizontal() + borders.horizontal();
+    let height = sized.height + bs.padding.vertical() + borders.vertical();
+    let mut outer = image_fragment(lb, bx, by, sized, bs);
+    outer.width = width;
+    outer.height = height;
+    outer.content = content_kind(lb, bs, width, height);
+    let image = image_fragment(
+        lb,
+        bx + bs.padding.left + borders.left,
+        by + bs.padding.top + borders.top,
+        sized,
+        bs,
+    );
+    outer.children.push(image);
+    outer
+}
+
 /// Probe an image source for its intrinsic size + alpha flag via the resolver,
 /// or `None` if it does not resolve or decode.
 fn probe_source(src: &ImageSource, ctx: &Ctx) -> Option<crate::image::Intrinsic> {
@@ -1439,6 +1674,29 @@ pub fn layout_tree_with_images(
     images: &ImageCtx,
     diags: &mut Diagnostics,
 ) -> Fragment {
+    layout_tree_policy(root, cb_width, 0.0, false, fonts, images, diags).0
+}
+
+pub(crate) fn layout_tree_live(
+    root: &LayoutBox,
+    width: f32,
+    height: f32,
+    fonts: &FontRegistry,
+    images: &ImageCtx,
+    diags: &mut Diagnostics,
+) -> (Fragment, HashMap<NodeId, UsedBoxMetrics>) {
+    layout_tree_policy(root, width, height, true, fonts, images, diags)
+}
+
+fn layout_tree_policy(
+    root: &LayoutBox,
+    cb_width: f32,
+    viewport_height: f32,
+    live_geometry: bool,
+    fonts: &FontRegistry,
+    images: &ImageCtx,
+    diags: &mut Diagnostics,
+) -> (Fragment, HashMap<NodeId, UsedBoxMetrics>) {
     let mut ctx = Ctx {
         fonts,
         images,
@@ -1447,9 +1705,12 @@ pub fn layout_tree_with_images(
         abs_cb_x: 0.0,
         abs_cb_y: 0.0,
         abs_cb_w: cb_width,
-        abs_cb_h: 0.0,
-        cb_h: 0.0,
+        abs_cb_h: viewport_height,
+        cb_h: viewport_height,
         root_w: cb_width,
+        root_h: viewport_height,
+        live_geometry,
+        used_metrics: live_geometry.then(HashMap::new),
         floats: Vec::new(),
     };
     stamp_intrinsic_widths(root, images);
@@ -1461,7 +1722,7 @@ pub fn layout_tree_with_images(
     if float_bottom > frag.height {
         frag.height = float_bottom;
     }
-    frag
+    (frag, ctx.used_metrics.unwrap_or_default())
 }
 
 #[cfg(test)]

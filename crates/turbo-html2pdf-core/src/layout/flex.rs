@@ -601,7 +601,7 @@ fn measure_item(
     fs: f32,
     fonts: &FontRegistry,
     images: &ImageCtx,
-    scratch: &mut Diagnostics,
+    live_geometry: bool,
 ) -> Size<f32> {
     // A replaced `<img>` sizes from its intrinsic (or explicit) width; other items
     // from a max-content measurement of their content.
@@ -630,12 +630,14 @@ fn measure_item(
             abs_cb_h: 0.0,
             cb_h: 0.0,
             root_w: w,
+            root_h: crate::style::viewport_px().1,
+            live_geometry,
+            used_metrics: None,
             floats: Vec::new(),
         };
         let frag = block::layout_box_sized_isolated(item, &bs, 0.0, 0.0, w, &mut mctx);
         (frag.width, frag.height)
     });
-    let _ = scratch;
     Size {
         width: known.width.unwrap_or(cw),
         height: known.height.unwrap_or(ch),
@@ -663,17 +665,23 @@ fn solve(
     items: &[LayoutBox],
     fs: f32,
     cw: f32,
-    fonts: &FontRegistry,
-    images: &ImageCtx,
+    ctx: &Ctx,
 ) {
-    let mut scratch = Diagnostics::default();
     let avail = Size {
         width: AvailableSpace::Definite(cw),
         height: AvailableSpace::MaxContent,
     };
     tree.compute_layout_with_measure(root, avail, |known, av, _node, ctx_idx, _style| {
         let idx = *ctx_idx.expect("leaf context");
-        measure_item(known, av, &items[idx], fs, fonts, images, &mut scratch)
+        measure_item(
+            known,
+            av,
+            &items[idx],
+            fs,
+            ctx.fonts,
+            ctx.images,
+            ctx.live_geometry,
+        )
     })
     .expect("flex layout");
 }
@@ -1130,7 +1138,7 @@ pub(crate) fn layout_grid(
     let root = tree
         .new_with_children(grid_container_style(container, cw, &areas), &leaves)
         .expect("grid root");
-    solve(&mut tree, root, items, fs, cw, ctx.fonts, ctx.images);
+    solve(&mut tree, root, items, fs, cw, ctx);
     let frags = place_items(&tree, &leaves, items, cx, cy, fs, ctx);
     let height = tree.layout(root).expect("root layout").size.height;
     (frags, height)
@@ -1155,7 +1163,7 @@ pub(crate) fn layout_flex(
     let root = tree
         .new_with_children(container_style(container, cw, fs, ctx.cb_h), &leaves)
         .expect("flex root");
-    solve(&mut tree, root, items, fs, cw, ctx.fonts, ctx.images);
+    solve(&mut tree, root, items, fs, cw, ctx);
     let frags = place_items(&tree, &leaves, items, cx, cy, fs, ctx);
     let height = tree.layout(root).expect("root layout").size.height;
     (frags, height)
