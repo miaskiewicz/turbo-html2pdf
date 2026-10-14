@@ -4,16 +4,21 @@ All notable changes to turbo-html2pdf are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/); versions follow SemVer. The npm,
 PyPI, and crates.io packages release in lockstep from a `v*` tag (PyPI on `pyv*`).
 
-## Unreleased
+## [0.3.5] — 2026-10-14
 
 - Add native live-tree layout snapshots with caller-owned source IDs, all-fragment
   provenance, nested affine transforms and real block/replaced geometry. The live
   path retains nonpainting layout boxes and removes PDF image-fit caps while
-  existing PDF APIs preserve their previous behavior. Sixteen offline contracts
-  and 20 independently recorded Chrome 155 geometry cases cover the seam; full
+  existing PDF APIs preserve their previous behavior. Seventeen offline contracts
+  and 38 independently recorded Chrome 155 geometry cases cover the seam; full
   inline/caret/scroll geometry remains explicit follow-up work. Distinguish actual
   display-none exclusion through unmapped ancestors from visible empty/flattened
   inlines so callers cannot invent zero rectangles from absent fragments.
+- Fix live relative/sticky percentage heights and min/max heights to use the
+  normal-flow containing block, and fixed boxes to use the viewport. Hidden
+  directives and descendants now agree with their exclusion metadata.
+- Correct stale release instructions and remove an unsafe optional regex capture
+  read in the conformance CLI; benchmark detection reports the current release.
 
 ## [0.3.4] — searchable and copyable text in ordinary PDFs
 

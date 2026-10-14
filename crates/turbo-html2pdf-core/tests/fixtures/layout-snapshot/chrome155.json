@@ -1,9 +1,12 @@
 {
   "browser": "Chrome/155.0.8059.79",
   "v8": "15.5.35.23",
-  "recordedAt": "2026-10-13T23:11:02.941Z",
+  "recordedAt": "2026-10-14T02:38:55.880Z",
   "fixture": "cases.json",
-  "effectiveExtensionFlags": ["--disable-extensions"],
+  "effectiveExtensionFlags": [
+    "--disable-extensions",
+    "--disable-component-extensions-with-background-pages"
+  ],
   "viewport": {
     "width": 200,
     "height": 200
@@ -962,6 +965,1068 @@
           "offset": {
             "width": 10,
             "height": 10
+          }
+        }
+      ]
+    },
+    {
+      "name": "relative-height-50%",
+      "boxes": [
+        {
+          "sourceId": 1,
+          "rect": {
+            "x": 0,
+            "y": 0,
+            "width": 200,
+            "height": 100
+          },
+          "clientRects": [
+            {
+              "x": 0,
+              "y": 0,
+              "width": 200,
+              "height": 100
+            }
+          ],
+          "client": {
+            "left": 0,
+            "top": 0,
+            "width": 200,
+            "height": 100
+          },
+          "offset": {
+            "width": 200,
+            "height": 100
+          }
+        },
+        {
+          "sourceId": 2,
+          "rect": {
+            "x": 0,
+            "y": 0,
+            "width": 20,
+            "height": 50
+          },
+          "clientRects": [
+            {
+              "x": 0,
+              "y": 0,
+              "width": 20,
+              "height": 50
+            }
+          ],
+          "client": {
+            "left": 0,
+            "top": 0,
+            "width": 20,
+            "height": 50
+          },
+          "offset": {
+            "width": 20,
+            "height": 50
+          }
+        }
+      ]
+    },
+    {
+      "name": "relative-height-90px-max-height-30%",
+      "boxes": [
+        {
+          "sourceId": 1,
+          "rect": {
+            "x": 0,
+            "y": 0,
+            "width": 200,
+            "height": 100
+          },
+          "clientRects": [
+            {
+              "x": 0,
+              "y": 0,
+              "width": 200,
+              "height": 100
+            }
+          ],
+          "client": {
+            "left": 0,
+            "top": 0,
+            "width": 200,
+            "height": 100
+          },
+          "offset": {
+            "width": 200,
+            "height": 100
+          }
+        },
+        {
+          "sourceId": 2,
+          "rect": {
+            "x": 0,
+            "y": 0,
+            "width": 20,
+            "height": 30
+          },
+          "clientRects": [
+            {
+              "x": 0,
+              "y": 0,
+              "width": 20,
+              "height": 30
+            }
+          ],
+          "client": {
+            "left": 0,
+            "top": 0,
+            "width": 20,
+            "height": 30
+          },
+          "offset": {
+            "width": 20,
+            "height": 30
+          }
+        }
+      ]
+    },
+    {
+      "name": "relative-height-10px-min-height-70%",
+      "boxes": [
+        {
+          "sourceId": 1,
+          "rect": {
+            "x": 0,
+            "y": 0,
+            "width": 200,
+            "height": 100
+          },
+          "clientRects": [
+            {
+              "x": 0,
+              "y": 0,
+              "width": 200,
+              "height": 100
+            }
+          ],
+          "client": {
+            "left": 0,
+            "top": 0,
+            "width": 200,
+            "height": 100
+          },
+          "offset": {
+            "width": 200,
+            "height": 100
+          }
+        },
+        {
+          "sourceId": 2,
+          "rect": {
+            "x": 0,
+            "y": 0,
+            "width": 20,
+            "height": 70
+          },
+          "clientRects": [
+            {
+              "x": 0,
+              "y": 0,
+              "width": 20,
+              "height": 70
+            }
+          ],
+          "client": {
+            "left": 0,
+            "top": 0,
+            "width": 20,
+            "height": 70
+          },
+          "offset": {
+            "width": 20,
+            "height": 70
+          }
+        }
+      ]
+    },
+    {
+      "name": "sticky-height-50%",
+      "boxes": [
+        {
+          "sourceId": 1,
+          "rect": {
+            "x": 0,
+            "y": 0,
+            "width": 200,
+            "height": 100
+          },
+          "clientRects": [
+            {
+              "x": 0,
+              "y": 0,
+              "width": 200,
+              "height": 100
+            }
+          ],
+          "client": {
+            "left": 0,
+            "top": 0,
+            "width": 200,
+            "height": 100
+          },
+          "offset": {
+            "width": 200,
+            "height": 100
+          }
+        },
+        {
+          "sourceId": 2,
+          "rect": {
+            "x": 0,
+            "y": 0,
+            "width": 20,
+            "height": 50
+          },
+          "clientRects": [
+            {
+              "x": 0,
+              "y": 0,
+              "width": 20,
+              "height": 50
+            }
+          ],
+          "client": {
+            "left": 0,
+            "top": 0,
+            "width": 20,
+            "height": 50
+          },
+          "offset": {
+            "width": 20,
+            "height": 50
+          }
+        }
+      ]
+    },
+    {
+      "name": "sticky-height-90px-max-height-30%",
+      "boxes": [
+        {
+          "sourceId": 1,
+          "rect": {
+            "x": 0,
+            "y": 0,
+            "width": 200,
+            "height": 100
+          },
+          "clientRects": [
+            {
+              "x": 0,
+              "y": 0,
+              "width": 200,
+              "height": 100
+            }
+          ],
+          "client": {
+            "left": 0,
+            "top": 0,
+            "width": 200,
+            "height": 100
+          },
+          "offset": {
+            "width": 200,
+            "height": 100
+          }
+        },
+        {
+          "sourceId": 2,
+          "rect": {
+            "x": 0,
+            "y": 0,
+            "width": 20,
+            "height": 30
+          },
+          "clientRects": [
+            {
+              "x": 0,
+              "y": 0,
+              "width": 20,
+              "height": 30
+            }
+          ],
+          "client": {
+            "left": 0,
+            "top": 0,
+            "width": 20,
+            "height": 30
+          },
+          "offset": {
+            "width": 20,
+            "height": 30
+          }
+        }
+      ]
+    },
+    {
+      "name": "sticky-height-10px-min-height-70%",
+      "boxes": [
+        {
+          "sourceId": 1,
+          "rect": {
+            "x": 0,
+            "y": 0,
+            "width": 200,
+            "height": 100
+          },
+          "clientRects": [
+            {
+              "x": 0,
+              "y": 0,
+              "width": 200,
+              "height": 100
+            }
+          ],
+          "client": {
+            "left": 0,
+            "top": 0,
+            "width": 200,
+            "height": 100
+          },
+          "offset": {
+            "width": 200,
+            "height": 100
+          }
+        },
+        {
+          "sourceId": 2,
+          "rect": {
+            "x": 0,
+            "y": 0,
+            "width": 20,
+            "height": 70
+          },
+          "clientRects": [
+            {
+              "x": 0,
+              "y": 0,
+              "width": 20,
+              "height": 70
+            }
+          ],
+          "client": {
+            "left": 0,
+            "top": 0,
+            "width": 20,
+            "height": 70
+          },
+          "offset": {
+            "width": 20,
+            "height": 70
+          }
+        }
+      ]
+    },
+    {
+      "name": "absolute-height-50%",
+      "boxes": [
+        {
+          "sourceId": 1,
+          "rect": {
+            "x": 0,
+            "y": 0,
+            "width": 200,
+            "height": 100
+          },
+          "clientRects": [
+            {
+              "x": 0,
+              "y": 0,
+              "width": 200,
+              "height": 100
+            }
+          ],
+          "client": {
+            "left": 0,
+            "top": 0,
+            "width": 200,
+            "height": 100
+          },
+          "offset": {
+            "width": 200,
+            "height": 100
+          }
+        },
+        {
+          "sourceId": 2,
+          "rect": {
+            "x": 0,
+            "y": 0,
+            "width": 20,
+            "height": 50
+          },
+          "clientRects": [
+            {
+              "x": 0,
+              "y": 0,
+              "width": 20,
+              "height": 50
+            }
+          ],
+          "client": {
+            "left": 0,
+            "top": 0,
+            "width": 20,
+            "height": 50
+          },
+          "offset": {
+            "width": 20,
+            "height": 50
+          }
+        }
+      ]
+    },
+    {
+      "name": "absolute-height-90px-max-height-30%",
+      "boxes": [
+        {
+          "sourceId": 1,
+          "rect": {
+            "x": 0,
+            "y": 0,
+            "width": 200,
+            "height": 100
+          },
+          "clientRects": [
+            {
+              "x": 0,
+              "y": 0,
+              "width": 200,
+              "height": 100
+            }
+          ],
+          "client": {
+            "left": 0,
+            "top": 0,
+            "width": 200,
+            "height": 100
+          },
+          "offset": {
+            "width": 200,
+            "height": 100
+          }
+        },
+        {
+          "sourceId": 2,
+          "rect": {
+            "x": 0,
+            "y": 0,
+            "width": 20,
+            "height": 30
+          },
+          "clientRects": [
+            {
+              "x": 0,
+              "y": 0,
+              "width": 20,
+              "height": 30
+            }
+          ],
+          "client": {
+            "left": 0,
+            "top": 0,
+            "width": 20,
+            "height": 30
+          },
+          "offset": {
+            "width": 20,
+            "height": 30
+          }
+        }
+      ]
+    },
+    {
+      "name": "absolute-height-10px-min-height-70%",
+      "boxes": [
+        {
+          "sourceId": 1,
+          "rect": {
+            "x": 0,
+            "y": 0,
+            "width": 200,
+            "height": 100
+          },
+          "clientRects": [
+            {
+              "x": 0,
+              "y": 0,
+              "width": 200,
+              "height": 100
+            }
+          ],
+          "client": {
+            "left": 0,
+            "top": 0,
+            "width": 200,
+            "height": 100
+          },
+          "offset": {
+            "width": 200,
+            "height": 100
+          }
+        },
+        {
+          "sourceId": 2,
+          "rect": {
+            "x": 0,
+            "y": 0,
+            "width": 20,
+            "height": 70
+          },
+          "clientRects": [
+            {
+              "x": 0,
+              "y": 0,
+              "width": 20,
+              "height": 70
+            }
+          ],
+          "client": {
+            "left": 0,
+            "top": 0,
+            "width": 20,
+            "height": 70
+          },
+          "offset": {
+            "width": 20,
+            "height": 70
+          }
+        }
+      ]
+    },
+    {
+      "name": "fixed-height-50%",
+      "boxes": [
+        {
+          "sourceId": 1,
+          "rect": {
+            "x": 0,
+            "y": 0,
+            "width": 200,
+            "height": 100
+          },
+          "clientRects": [
+            {
+              "x": 0,
+              "y": 0,
+              "width": 200,
+              "height": 100
+            }
+          ],
+          "client": {
+            "left": 0,
+            "top": 0,
+            "width": 200,
+            "height": 100
+          },
+          "offset": {
+            "width": 200,
+            "height": 100
+          }
+        },
+        {
+          "sourceId": 2,
+          "rect": {
+            "x": 0,
+            "y": 0,
+            "width": 20,
+            "height": 100
+          },
+          "clientRects": [
+            {
+              "x": 0,
+              "y": 0,
+              "width": 20,
+              "height": 100
+            }
+          ],
+          "client": {
+            "left": 0,
+            "top": 0,
+            "width": 20,
+            "height": 100
+          },
+          "offset": {
+            "width": 20,
+            "height": 100
+          }
+        }
+      ]
+    },
+    {
+      "name": "fixed-height-90px-max-height-30%",
+      "boxes": [
+        {
+          "sourceId": 1,
+          "rect": {
+            "x": 0,
+            "y": 0,
+            "width": 200,
+            "height": 100
+          },
+          "clientRects": [
+            {
+              "x": 0,
+              "y": 0,
+              "width": 200,
+              "height": 100
+            }
+          ],
+          "client": {
+            "left": 0,
+            "top": 0,
+            "width": 200,
+            "height": 100
+          },
+          "offset": {
+            "width": 200,
+            "height": 100
+          }
+        },
+        {
+          "sourceId": 2,
+          "rect": {
+            "x": 0,
+            "y": 0,
+            "width": 20,
+            "height": 60
+          },
+          "clientRects": [
+            {
+              "x": 0,
+              "y": 0,
+              "width": 20,
+              "height": 60
+            }
+          ],
+          "client": {
+            "left": 0,
+            "top": 0,
+            "width": 20,
+            "height": 60
+          },
+          "offset": {
+            "width": 20,
+            "height": 60
+          }
+        }
+      ]
+    },
+    {
+      "name": "fixed-height-10px-min-height-70%",
+      "boxes": [
+        {
+          "sourceId": 1,
+          "rect": {
+            "x": 0,
+            "y": 0,
+            "width": 200,
+            "height": 100
+          },
+          "clientRects": [
+            {
+              "x": 0,
+              "y": 0,
+              "width": 200,
+              "height": 100
+            }
+          ],
+          "client": {
+            "left": 0,
+            "top": 0,
+            "width": 200,
+            "height": 100
+          },
+          "offset": {
+            "width": 200,
+            "height": 100
+          }
+        },
+        {
+          "sourceId": 2,
+          "rect": {
+            "x": 0,
+            "y": 0,
+            "width": 20,
+            "height": 140
+          },
+          "clientRects": [
+            {
+              "x": 0,
+              "y": 0,
+              "width": 20,
+              "height": 140
+            }
+          ],
+          "client": {
+            "left": 0,
+            "top": 0,
+            "width": 20,
+            "height": 140
+          },
+          "offset": {
+            "width": 20,
+            "height": 140
+          }
+        }
+      ]
+    },
+    {
+      "name": "static-parent-relative-height-50%",
+      "boxes": [
+        {
+          "sourceId": 1,
+          "rect": {
+            "x": 0,
+            "y": 0,
+            "width": 200,
+            "height": 100
+          },
+          "clientRects": [
+            {
+              "x": 0,
+              "y": 0,
+              "width": 200,
+              "height": 100
+            }
+          ],
+          "client": {
+            "left": 0,
+            "top": 0,
+            "width": 200,
+            "height": 100
+          },
+          "offset": {
+            "width": 200,
+            "height": 100
+          }
+        },
+        {
+          "sourceId": 2,
+          "rect": {
+            "x": 0,
+            "y": 0,
+            "width": 20,
+            "height": 50
+          },
+          "clientRects": [
+            {
+              "x": 0,
+              "y": 0,
+              "width": 20,
+              "height": 50
+            }
+          ],
+          "client": {
+            "left": 0,
+            "top": 0,
+            "width": 20,
+            "height": 50
+          },
+          "offset": {
+            "width": 20,
+            "height": 50
+          }
+        }
+      ]
+    },
+    {
+      "name": "static-parent-relative-height-90px-max-height-30%",
+      "boxes": [
+        {
+          "sourceId": 1,
+          "rect": {
+            "x": 0,
+            "y": 0,
+            "width": 200,
+            "height": 100
+          },
+          "clientRects": [
+            {
+              "x": 0,
+              "y": 0,
+              "width": 200,
+              "height": 100
+            }
+          ],
+          "client": {
+            "left": 0,
+            "top": 0,
+            "width": 200,
+            "height": 100
+          },
+          "offset": {
+            "width": 200,
+            "height": 100
+          }
+        },
+        {
+          "sourceId": 2,
+          "rect": {
+            "x": 0,
+            "y": 0,
+            "width": 20,
+            "height": 30
+          },
+          "clientRects": [
+            {
+              "x": 0,
+              "y": 0,
+              "width": 20,
+              "height": 30
+            }
+          ],
+          "client": {
+            "left": 0,
+            "top": 0,
+            "width": 20,
+            "height": 30
+          },
+          "offset": {
+            "width": 20,
+            "height": 30
+          }
+        }
+      ]
+    },
+    {
+      "name": "static-parent-relative-height-10px-min-height-70%",
+      "boxes": [
+        {
+          "sourceId": 1,
+          "rect": {
+            "x": 0,
+            "y": 0,
+            "width": 200,
+            "height": 100
+          },
+          "clientRects": [
+            {
+              "x": 0,
+              "y": 0,
+              "width": 200,
+              "height": 100
+            }
+          ],
+          "client": {
+            "left": 0,
+            "top": 0,
+            "width": 200,
+            "height": 100
+          },
+          "offset": {
+            "width": 200,
+            "height": 100
+          }
+        },
+        {
+          "sourceId": 2,
+          "rect": {
+            "x": 0,
+            "y": 0,
+            "width": 20,
+            "height": 70
+          },
+          "clientRects": [
+            {
+              "x": 0,
+              "y": 0,
+              "width": 20,
+              "height": 70
+            }
+          ],
+          "client": {
+            "left": 0,
+            "top": 0,
+            "width": 20,
+            "height": 70
+          },
+          "offset": {
+            "width": 20,
+            "height": 70
+          }
+        }
+      ]
+    },
+    {
+      "name": "static-parent-sticky-height-50%",
+      "boxes": [
+        {
+          "sourceId": 1,
+          "rect": {
+            "x": 0,
+            "y": 0,
+            "width": 200,
+            "height": 100
+          },
+          "clientRects": [
+            {
+              "x": 0,
+              "y": 0,
+              "width": 200,
+              "height": 100
+            }
+          ],
+          "client": {
+            "left": 0,
+            "top": 0,
+            "width": 200,
+            "height": 100
+          },
+          "offset": {
+            "width": 200,
+            "height": 100
+          }
+        },
+        {
+          "sourceId": 2,
+          "rect": {
+            "x": 0,
+            "y": 0,
+            "width": 20,
+            "height": 50
+          },
+          "clientRects": [
+            {
+              "x": 0,
+              "y": 0,
+              "width": 20,
+              "height": 50
+            }
+          ],
+          "client": {
+            "left": 0,
+            "top": 0,
+            "width": 20,
+            "height": 50
+          },
+          "offset": {
+            "width": 20,
+            "height": 50
+          }
+        }
+      ]
+    },
+    {
+      "name": "static-parent-sticky-height-90px-max-height-30%",
+      "boxes": [
+        {
+          "sourceId": 1,
+          "rect": {
+            "x": 0,
+            "y": 0,
+            "width": 200,
+            "height": 100
+          },
+          "clientRects": [
+            {
+              "x": 0,
+              "y": 0,
+              "width": 200,
+              "height": 100
+            }
+          ],
+          "client": {
+            "left": 0,
+            "top": 0,
+            "width": 200,
+            "height": 100
+          },
+          "offset": {
+            "width": 200,
+            "height": 100
+          }
+        },
+        {
+          "sourceId": 2,
+          "rect": {
+            "x": 0,
+            "y": 0,
+            "width": 20,
+            "height": 30
+          },
+          "clientRects": [
+            {
+              "x": 0,
+              "y": 0,
+              "width": 20,
+              "height": 30
+            }
+          ],
+          "client": {
+            "left": 0,
+            "top": 0,
+            "width": 20,
+            "height": 30
+          },
+          "offset": {
+            "width": 20,
+            "height": 30
+          }
+        }
+      ]
+    },
+    {
+      "name": "static-parent-sticky-height-10px-min-height-70%",
+      "boxes": [
+        {
+          "sourceId": 1,
+          "rect": {
+            "x": 0,
+            "y": 0,
+            "width": 200,
+            "height": 100
+          },
+          "clientRects": [
+            {
+              "x": 0,
+              "y": 0,
+              "width": 200,
+              "height": 100
+            }
+          ],
+          "client": {
+            "left": 0,
+            "top": 0,
+            "width": 200,
+            "height": 100
+          },
+          "offset": {
+            "width": 200,
+            "height": 100
+          }
+        },
+        {
+          "sourceId": 2,
+          "rect": {
+            "x": 0,
+            "y": 0,
+            "width": 20,
+            "height": 70
+          },
+          "clientRects": [
+            {
+              "x": 0,
+              "y": 0,
+              "width": 20,
+              "height": 70
+            }
+          ],
+          "client": {
+            "left": 0,
+            "top": 0,
+            "width": 20,
+            "height": 70
+          },
+          "offset": {
+            "width": 20,
+            "height": 70
           }
         }
       ]

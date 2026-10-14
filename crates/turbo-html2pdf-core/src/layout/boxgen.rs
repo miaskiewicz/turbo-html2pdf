@@ -398,6 +398,11 @@ fn classify(node: &StyledNode, parent_style: &ComputedStyle, ids: &mut Ids) -> O
         }
         StyledNode::Element(e) => e,
     };
+    // Live snapshots exclude every display-none subtree, including directives;
+    // the PDF path preserves its existing directive interpretation.
+    if ids.sources.is_some() && ids.hidden(&el.style) {
+        return None;
+    }
     match &el.tag {
         Tag::Directive(kind) => Some(directive_level(*kind, el, ids)),
         Tag::Html(_) => classify_html(el, ids),

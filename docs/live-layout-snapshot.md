@@ -91,11 +91,11 @@ second box tree.
 ## Validation and current boundaries
 
 The public API rejects duplicate source IDs, duplicate paths, missing paths,
-and nonfinite/nonpositive viewport dimensions. Fifteen authored offline contracts
+and nonfinite/nonpositive viewport dimensions. Sixteen authored offline contracts
 cover identity after moves, path validation, partial maps, generated and anonymous
 ownership, all text lines, transforms, hidden flow, definite heights, replaced
 sizes, and unchanged legacy PDF filtering/caps. A further shared fixture compares
-20 authored graphs against the independently installed Chrome
+38 authored graphs against the independently installed Chrome
 `155.0.8059.79` / V8 `15.5.35.23` numeric oracle, recorded on macOS ARM64. The
 geometry tolerance is 0.001 CSS pixels (affine Float32 rounding); font-free
 control graphs avoid attributing font differences to box geometry.

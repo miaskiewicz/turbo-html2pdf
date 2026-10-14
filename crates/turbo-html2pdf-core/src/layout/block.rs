@@ -53,6 +53,7 @@ pub(crate) struct Ctx<'a> {
     /// The initial containing block width (page content width) — the CB for
     /// `position:fixed` boxes.
     pub(crate) root_w: f32,
+    pub(crate) root_h: f32,
     /// Live snapshots use viewport geometry rather than pagination image caps.
     pub(crate) live_geometry: bool,
     pub(crate) used_metrics: Option<HashMap<NodeId, UsedBoxMetrics>>,
@@ -250,10 +251,10 @@ fn resolved_content_height(bs: &BoxStyle, auto_height: f32, ctx: &Ctx) -> f32 {
 }
 
 fn live_height_basis(bs: &BoxStyle, ctx: &Ctx) -> f32 {
-    if bs.position == Position::Static {
-        ctx.cb_h
-    } else {
-        ctx.abs_cb_h
+    match bs.position {
+        Position::Absolute => ctx.abs_cb_h,
+        Position::Fixed => ctx.root_h,
+        _ => ctx.cb_h,
     }
 }
 
@@ -1570,6 +1571,7 @@ fn layout_tree_policy(
         abs_cb_h: viewport_height,
         cb_h: viewport_height,
         root_w: cb_width,
+        root_h: viewport_height,
         live_geometry,
         used_metrics: live_geometry.then(HashMap::new),
         floats: Vec::new(),

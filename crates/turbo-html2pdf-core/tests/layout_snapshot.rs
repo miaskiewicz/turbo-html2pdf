@@ -750,3 +750,37 @@ fn zero_fragment_provenance_distinguishes_excluded_subtrees_from_empty_visible_i
     assert!(!empty.excluded_from_layout);
     assert!(empty.fragment_indices.is_empty());
 }
+
+#[test]
+fn hidden_directives_and_their_descendants_have_no_live_geometry() {
+    let node = Node::Element(Element {
+        tag: Tag::Directive(turbo_html2pdf_core::TKind::Page),
+        attrs: vec![Attr {
+            name: "style".into(),
+            value: "display:none".into(),
+        }],
+        children: vec![element("div", "height:20px", Vec::new())],
+    });
+    let snapshot = capture(
+        std::slice::from_ref(&node),
+        &[identity(1, &[0]), identity(2, &[0, 0])],
+    );
+    for id in [1, 2] {
+        let source = snapshot.source(SourceId(id)).unwrap();
+        assert!(source.excluded_from_layout);
+        assert!(source.fragment_indices.is_empty());
+        assert!(source.descendant_fragment_indices.is_empty());
+    }
+    let styled = style_tree(&[node], &build_cascade("", "", Default::default()));
+    let galley = layout_with_images(
+        &styled,
+        200.0,
+        &FontRegistry::new(),
+        &ImageCtx {
+            resolver: &NoImages,
+            body_height: None,
+        },
+        &mut Diagnostics::default(),
+    );
+    assert!(!galley.children.is_empty());
+}

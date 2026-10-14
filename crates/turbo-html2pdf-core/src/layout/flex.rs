@@ -630,6 +630,7 @@ fn measure_item(
             abs_cb_h: 0.0,
             cb_h: 0.0,
             root_w: w,
+            root_h: crate::style::viewport_px().1,
             live_geometry,
             used_metrics: None,
             floats: Vec::new(),
