@@ -1,0 +1,3848 @@
+{
+  "browser": "Chrome/155.0.8059.79",
+  "v8": "15.5.35.23",
+  "recordedAt": "2026-10-14T11:41:23.461Z",
+  "effectiveExtensionFlags": [
+    "--disable-extensions",
+    "--disable-component-extensions-with-background-pages"
+  ],
+  "collectorSha256": "6eed51d6c943534930a8d0988891a4dcb823d25e06d7a754bf069e02ab2f0fb3",
+  "probeSha256": "fe409c100dad0946353fc84374e2638038ab2221bd6668216f85ebe9448dcc78",
+  "runnerSha256": "ae27ad725fe0fa3d03e9311813895bc38eae384c66bb0b49c0a121f702177c34",
+  "result": {
+    "viewport": {
+      "width": 1280,
+      "height": 800,
+      "deviceScaleFactor": 2
+    },
+    "htmlPrecision": {
+      "x": 0,
+      "y": 0,
+      "width": 32.5078125,
+      "height": 24.2890625
+    },
+    "layoutScaleCalibration": {
+      "observations": [
+        {
+          "input": 32.51,
+          "actual": 32.5078125
+        },
+        {
+          "input": 32.504,
+          "actual": 32.5
+        }
+      ],
+      "matchingScales": [2]
+    },
+    "cases": [
+      {
+        "name": "attributes",
+        "attrs": {
+          "width": "32",
+          "height": "24"
+        },
+        "container": {
+          "rect": {
+            "x": 0,
+            "y": 0,
+            "width": 400,
+            "height": 200
+          },
+          "rects": [
+            {
+              "x": 0,
+              "y": 0,
+              "width": 400,
+              "height": 200
+            }
+          ],
+          "client": {
+            "width": 400,
+            "height": 200,
+            "left": 0,
+            "top": 0
+          }
+        },
+        "viewport": {
+          "rect": {
+            "x": 0,
+            "y": 0,
+            "width": 32,
+            "height": 24
+          },
+          "rects": [
+            {
+              "x": 0,
+              "y": 0,
+              "width": 32,
+              "height": 24
+            }
+          ],
+          "client": {
+            "width": 32,
+            "height": 24,
+            "left": 0,
+            "top": 0
+          }
+        },
+        "shape": {
+          "rect": {
+            "x": 5,
+            "y": 5,
+            "width": 10,
+            "height": 10
+          },
+          "rects": [
+            {
+              "x": 5,
+              "y": 5,
+              "width": 10,
+              "height": 10
+            }
+          ],
+          "client": {
+            "width": 0,
+            "height": 0,
+            "left": 0,
+            "top": 0
+          }
+        },
+        "computedViewport": {
+          "width": "32px",
+          "height": "24px",
+          "zoom": "1"
+        }
+      },
+      {
+        "name": "flex-fixed",
+        "attrs": {
+          "width": "32",
+          "height": "24"
+        },
+        "containerStyle": "display:flex;align-items:flex-start;width:400px;height:200px;font-size:0;line-height:0",
+        "container": {
+          "rect": {
+            "x": 0,
+            "y": 0,
+            "width": 400,
+            "height": 200
+          },
+          "rects": [
+            {
+              "x": 0,
+              "y": 0,
+              "width": 400,
+              "height": 200
+            }
+          ],
+          "client": {
+            "width": 400,
+            "height": 200,
+            "left": 0,
+            "top": 0
+          }
+        },
+        "viewport": {
+          "rect": {
+            "x": 0,
+            "y": 0,
+            "width": 32,
+            "height": 24
+          },
+          "rects": [
+            {
+              "x": 0,
+              "y": 0,
+              "width": 32,
+              "height": 24
+            }
+          ],
+          "client": {
+            "width": 32,
+            "height": 24,
+            "left": 0,
+            "top": 0
+          }
+        },
+        "shape": {
+          "rect": {
+            "x": 5,
+            "y": 5,
+            "width": 10,
+            "height": 10
+          },
+          "rects": [
+            {
+              "x": 5,
+              "y": 5,
+              "width": 10,
+              "height": 10
+            }
+          ],
+          "client": {
+            "width": 0,
+            "height": 0,
+            "left": 0,
+            "top": 0
+          }
+        },
+        "computedViewport": {
+          "width": "32px",
+          "height": "24px",
+          "zoom": "1"
+        }
+      },
+      {
+        "name": "flex-ratio-height",
+        "attrs": {
+          "height": "50",
+          "viewBox": "0 0 2 1"
+        },
+        "containerStyle": "display:flex;align-items:flex-start;width:400px;height:200px;font-size:0;line-height:0",
+        "container": {
+          "rect": {
+            "x": 0,
+            "y": 0,
+            "width": 400,
+            "height": 200
+          },
+          "rects": [
+            {
+              "x": 0,
+              "y": 0,
+              "width": 400,
+              "height": 200
+            }
+          ],
+          "client": {
+            "width": 400,
+            "height": 200,
+            "left": 0,
+            "top": 0
+          }
+        },
+        "viewport": {
+          "rect": {
+            "x": 0,
+            "y": 0,
+            "width": 100,
+            "height": 50
+          },
+          "rects": [
+            {
+              "x": 0,
+              "y": 0,
+              "width": 100,
+              "height": 50
+            }
+          ],
+          "client": {
+            "width": 100,
+            "height": 50,
+            "left": 0,
+            "top": 0
+          }
+        },
+        "shape": {
+          "rect": {
+            "x": 250,
+            "y": 250,
+            "width": 500,
+            "height": 500
+          },
+          "rects": [
+            {
+              "x": 250,
+              "y": 250,
+              "width": 500,
+              "height": 500
+            }
+          ],
+          "client": {
+            "width": 0,
+            "height": 0,
+            "left": 0,
+            "top": 0
+          }
+        },
+        "computedViewport": {
+          "width": "100px",
+          "height": "50px",
+          "zoom": "1"
+        }
+      },
+      {
+        "name": "auto-intrinsic-width",
+        "attrs": {
+          "width": "80",
+          "viewBox": "0 0 2 1"
+        },
+        "style": "width:auto;height:auto",
+        "container": {
+          "rect": {
+            "x": 0,
+            "y": 0,
+            "width": 400,
+            "height": 200
+          },
+          "rects": [
+            {
+              "x": 0,
+              "y": 0,
+              "width": 400,
+              "height": 200
+            }
+          ],
+          "client": {
+            "width": 400,
+            "height": 200,
+            "left": 0,
+            "top": 0
+          }
+        },
+        "viewport": {
+          "rect": {
+            "x": 0,
+            "y": 0,
+            "width": 80,
+            "height": 40
+          },
+          "rects": [
+            {
+              "x": 0,
+              "y": 0,
+              "width": 80,
+              "height": 40
+            }
+          ],
+          "client": {
+            "width": 80,
+            "height": 40,
+            "left": 0,
+            "top": 0
+          }
+        },
+        "shape": {
+          "rect": {
+            "x": 200,
+            "y": 200,
+            "width": 400,
+            "height": 400
+          },
+          "rects": [
+            {
+              "x": 200,
+              "y": 200,
+              "width": 400,
+              "height": 400
+            }
+          ],
+          "client": {
+            "width": 0,
+            "height": 0,
+            "left": 0,
+            "top": 0
+          }
+        },
+        "computedViewport": {
+          "width": "80px",
+          "height": "40px",
+          "zoom": "1"
+        }
+      },
+      {
+        "name": "auto-intrinsic-height",
+        "attrs": {
+          "height": "50",
+          "viewBox": "0 0 2 1"
+        },
+        "style": "width:auto;height:auto",
+        "container": {
+          "rect": {
+            "x": 0,
+            "y": 0,
+            "width": 400,
+            "height": 200
+          },
+          "rects": [
+            {
+              "x": 0,
+              "y": 0,
+              "width": 400,
+              "height": 200
+            }
+          ],
+          "client": {
+            "width": 400,
+            "height": 200,
+            "left": 0,
+            "top": 0
+          }
+        },
+        "viewport": {
+          "rect": {
+            "x": 0,
+            "y": 0,
+            "width": 100,
+            "height": 50
+          },
+          "rects": [
+            {
+              "x": 0,
+              "y": 0,
+              "width": 100,
+              "height": 50
+            }
+          ],
+          "client": {
+            "width": 100,
+            "height": 50,
+            "left": 0,
+            "top": 0
+          }
+        },
+        "shape": {
+          "rect": {
+            "x": 250,
+            "y": 250,
+            "width": 500,
+            "height": 500
+          },
+          "rects": [
+            {
+              "x": 250,
+              "y": 250,
+              "width": 500,
+              "height": 500
+            }
+          ],
+          "client": {
+            "width": 0,
+            "height": 0,
+            "left": 0,
+            "top": 0
+          }
+        },
+        "computedViewport": {
+          "width": "100px",
+          "height": "50px",
+          "zoom": "1"
+        }
+      },
+      {
+        "name": "mixed-calc-attribute",
+        "attrs": {
+          "width": "calc(50% + 10px)",
+          "height": "24"
+        },
+        "container": {
+          "rect": {
+            "x": 0,
+            "y": 0,
+            "width": 400,
+            "height": 200
+          },
+          "rects": [
+            {
+              "x": 0,
+              "y": 0,
+              "width": 400,
+              "height": 200
+            }
+          ],
+          "client": {
+            "width": 400,
+            "height": 200,
+            "left": 0,
+            "top": 0
+          }
+        },
+        "viewport": {
+          "rect": {
+            "x": 0,
+            "y": 0,
+            "width": 210,
+            "height": 24
+          },
+          "rects": [
+            {
+              "x": 0,
+              "y": 0,
+              "width": 210,
+              "height": 24
+            }
+          ],
+          "client": {
+            "width": 210,
+            "height": 24,
+            "left": 0,
+            "top": 0
+          }
+        },
+        "shape": {
+          "rect": {
+            "x": 5,
+            "y": 5,
+            "width": 10,
+            "height": 10
+          },
+          "rects": [
+            {
+              "x": 5,
+              "y": 5,
+              "width": 10,
+              "height": 10
+            }
+          ],
+          "client": {
+            "width": 0,
+            "height": 0,
+            "left": 0,
+            "top": 0
+          }
+        },
+        "computedViewport": {
+          "width": "210px",
+          "height": "24px",
+          "zoom": "1"
+        }
+      },
+      {
+        "name": "missing-css-variable",
+        "attrs": {
+          "width": "32",
+          "height": "24"
+        },
+        "style": "width:var(--missing);height:48px",
+        "container": {
+          "rect": {
+            "x": 0,
+            "y": 0,
+            "width": 400,
+            "height": 200
+          },
+          "rects": [
+            {
+              "x": 0,
+              "y": 0,
+              "width": 400,
+              "height": 200
+            }
+          ],
+          "client": {
+            "width": 400,
+            "height": 200,
+            "left": 0,
+            "top": 0
+          }
+        },
+        "viewport": {
+          "rect": {
+            "x": 0,
+            "y": 0,
+            "width": 64,
+            "height": 48
+          },
+          "rects": [
+            {
+              "x": 0,
+              "y": 0,
+              "width": 64,
+              "height": 48
+            }
+          ],
+          "client": {
+            "width": 64,
+            "height": 48,
+            "left": 0,
+            "top": 0
+          }
+        },
+        "shape": {
+          "rect": {
+            "x": 5,
+            "y": 5,
+            "width": 10,
+            "height": 10
+          },
+          "rects": [
+            {
+              "x": 5,
+              "y": 5,
+              "width": 10,
+              "height": 10
+            }
+          ],
+          "client": {
+            "width": 0,
+            "height": 0,
+            "left": 0,
+            "top": 0
+          }
+        },
+        "computedViewport": {
+          "width": "64px",
+          "height": "48px",
+          "zoom": "1"
+        }
+      },
+      {
+        "name": "exponent-viewbox",
+        "attrs": {
+          "viewBox": "0 0 2e0 1e0"
+        },
+        "container": {
+          "rect": {
+            "x": 0,
+            "y": 0,
+            "width": 400,
+            "height": 200
+          },
+          "rects": [
+            {
+              "x": 0,
+              "y": 0,
+              "width": 400,
+              "height": 200
+            }
+          ],
+          "client": {
+            "width": 400,
+            "height": 200,
+            "left": 0,
+            "top": 0
+          }
+        },
+        "viewport": {
+          "rect": {
+            "x": 0,
+            "y": 0,
+            "width": 400,
+            "height": 200
+          },
+          "rects": [
+            {
+              "x": 0,
+              "y": 0,
+              "width": 400,
+              "height": 200
+            }
+          ],
+          "client": {
+            "width": 400,
+            "height": 200,
+            "left": 0,
+            "top": 0
+          }
+        },
+        "shape": {
+          "rect": {
+            "x": 1000,
+            "y": 1000,
+            "width": 2000,
+            "height": 2000
+          },
+          "rects": [
+            {
+              "x": 1000,
+              "y": 1000,
+              "width": 2000,
+              "height": 2000
+            }
+          ],
+          "client": {
+            "width": 0,
+            "height": 0,
+            "left": 0,
+            "top": 0
+          }
+        },
+        "computedViewport": {
+          "width": "400px",
+          "height": "200px",
+          "zoom": "1"
+        }
+      },
+      {
+        "name": "invalid-exponent-viewbox",
+        "attrs": {
+          "viewBox": "0 0 2e 1"
+        },
+        "container": {
+          "rect": {
+            "x": 0,
+            "y": 0,
+            "width": 400,
+            "height": 200
+          },
+          "rects": [
+            {
+              "x": 0,
+              "y": 0,
+              "width": 400,
+              "height": 200
+            }
+          ],
+          "client": {
+            "width": 400,
+            "height": 200,
+            "left": 0,
+            "top": 0
+          }
+        },
+        "viewport": {
+          "rect": {
+            "x": 0,
+            "y": 0,
+            "width": 300,
+            "height": 150
+          },
+          "rects": [
+            {
+              "x": 0,
+              "y": 0,
+              "width": 300,
+              "height": 150
+            }
+          ],
+          "client": {
+            "width": 300,
+            "height": 150,
+            "left": 0,
+            "top": 0
+          }
+        },
+        "shape": {
+          "rect": {
+            "x": 5,
+            "y": 5,
+            "width": 10,
+            "height": 10
+          },
+          "rects": [
+            {
+              "x": 5,
+              "y": 5,
+              "width": 10,
+              "height": 10
+            }
+          ],
+          "client": {
+            "width": 0,
+            "height": 0,
+            "left": 0,
+            "top": 0
+          }
+        },
+        "computedViewport": {
+          "width": "300px",
+          "height": "150px",
+          "zoom": "1"
+        }
+      },
+      {
+        "name": "decimal-viewbox",
+        "attrs": {
+          "viewBox": "0 0 .2 .1"
+        },
+        "container": {
+          "rect": {
+            "x": 0,
+            "y": 0,
+            "width": 400,
+            "height": 200
+          },
+          "rects": [
+            {
+              "x": 0,
+              "y": 0,
+              "width": 400,
+              "height": 200
+            }
+          ],
+          "client": {
+            "width": 400,
+            "height": 200,
+            "left": 0,
+            "top": 0
+          }
+        },
+        "viewport": {
+          "rect": {
+            "x": 0,
+            "y": 0,
+            "width": 400,
+            "height": 200
+          },
+          "rects": [
+            {
+              "x": 0,
+              "y": 0,
+              "width": 400,
+              "height": 200
+            }
+          ],
+          "client": {
+            "width": 400,
+            "height": 200,
+            "left": 0,
+            "top": 0
+          }
+        },
+        "shape": {
+          "rect": {
+            "x": 10000,
+            "y": 10000,
+            "width": 20000,
+            "height": 20000
+          },
+          "rects": [
+            {
+              "x": 10000,
+              "y": 10000,
+              "width": 20000,
+              "height": 20000
+            }
+          ],
+          "client": {
+            "width": 0,
+            "height": 0,
+            "left": 0,
+            "top": 0
+          }
+        },
+        "computedViewport": {
+          "width": "400px",
+          "height": "200px",
+          "zoom": "1"
+        }
+      },
+      {
+        "name": "invalid-css-width",
+        "attrs": {
+          "width": "32",
+          "height": "24"
+        },
+        "style": "width:nonsense;height:48px",
+        "container": {
+          "rect": {
+            "x": 0,
+            "y": 0,
+            "width": 400,
+            "height": 200
+          },
+          "rects": [
+            {
+              "x": 0,
+              "y": 0,
+              "width": 400,
+              "height": 200
+            }
+          ],
+          "client": {
+            "width": 400,
+            "height": 200,
+            "left": 0,
+            "top": 0
+          }
+        },
+        "viewport": {
+          "rect": {
+            "x": 0,
+            "y": 0,
+            "width": 32,
+            "height": 48
+          },
+          "rects": [
+            {
+              "x": 0,
+              "y": 0,
+              "width": 32,
+              "height": 48
+            }
+          ],
+          "client": {
+            "width": 32,
+            "height": 48,
+            "left": 0,
+            "top": 0
+          }
+        },
+        "shape": {
+          "rect": {
+            "x": 5,
+            "y": 5,
+            "width": 10,
+            "height": 10
+          },
+          "rects": [
+            {
+              "x": 5,
+              "y": 5,
+              "width": 10,
+              "height": 10
+            }
+          ],
+          "client": {
+            "width": 0,
+            "height": 0,
+            "left": 0,
+            "top": 0
+          }
+        },
+        "computedViewport": {
+          "width": "32px",
+          "height": "48px",
+          "zoom": "1"
+        }
+      },
+      {
+        "name": "invalid-css-height",
+        "attrs": {
+          "width": "32",
+          "height": "24"
+        },
+        "style": "width:64px;height:nonsense",
+        "container": {
+          "rect": {
+            "x": 0,
+            "y": 0,
+            "width": 400,
+            "height": 200
+          },
+          "rects": [
+            {
+              "x": 0,
+              "y": 0,
+              "width": 400,
+              "height": 200
+            }
+          ],
+          "client": {
+            "width": 400,
+            "height": 200,
+            "left": 0,
+            "top": 0
+          }
+        },
+        "viewport": {
+          "rect": {
+            "x": 0,
+            "y": 0,
+            "width": 64,
+            "height": 24
+          },
+          "rects": [
+            {
+              "x": 0,
+              "y": 0,
+              "width": 64,
+              "height": 24
+            }
+          ],
+          "client": {
+            "width": 64,
+            "height": 24,
+            "left": 0,
+            "top": 0
+          }
+        },
+        "shape": {
+          "rect": {
+            "x": 5,
+            "y": 5,
+            "width": 10,
+            "height": 10
+          },
+          "rects": [
+            {
+              "x": 5,
+              "y": 5,
+              "width": 10,
+              "height": 10
+            }
+          ],
+          "client": {
+            "width": 0,
+            "height": 0,
+            "left": 0,
+            "top": 0
+          }
+        },
+        "computedViewport": {
+          "width": "64px",
+          "height": "24px",
+          "zoom": "1"
+        }
+      },
+      {
+        "name": "negative-css-width",
+        "attrs": {
+          "width": "32",
+          "height": "24"
+        },
+        "style": "width:-5px;height:48px",
+        "container": {
+          "rect": {
+            "x": 0,
+            "y": 0,
+            "width": 400,
+            "height": 200
+          },
+          "rects": [
+            {
+              "x": 0,
+              "y": 0,
+              "width": 400,
+              "height": 200
+            }
+          ],
+          "client": {
+            "width": 400,
+            "height": 200,
+            "left": 0,
+            "top": 0
+          }
+        },
+        "viewport": {
+          "rect": {
+            "x": 0,
+            "y": 0,
+            "width": 32,
+            "height": 48
+          },
+          "rects": [
+            {
+              "x": 0,
+              "y": 0,
+              "width": 32,
+              "height": 48
+            }
+          ],
+          "client": {
+            "width": 32,
+            "height": 48,
+            "left": 0,
+            "top": 0
+          }
+        },
+        "shape": {
+          "rect": {
+            "x": 5,
+            "y": 5,
+            "width": 10,
+            "height": 10
+          },
+          "rects": [
+            {
+              "x": 5,
+              "y": 5,
+              "width": 10,
+              "height": 10
+            }
+          ],
+          "client": {
+            "width": 0,
+            "height": 0,
+            "left": 0,
+            "top": 0
+          }
+        },
+        "computedViewport": {
+          "width": "32px",
+          "height": "48px",
+          "zoom": "1"
+        }
+      },
+      {
+        "name": "negative-css-calc",
+        "attrs": {
+          "width": "32",
+          "height": "24"
+        },
+        "style": "width:calc(-5px);height:48px",
+        "container": {
+          "rect": {
+            "x": 0,
+            "y": 0,
+            "width": 400,
+            "height": 200
+          },
+          "rects": [
+            {
+              "x": 0,
+              "y": 0,
+              "width": 400,
+              "height": 200
+            }
+          ],
+          "client": {
+            "width": 400,
+            "height": 200,
+            "left": 0,
+            "top": 0
+          }
+        },
+        "viewport": {
+          "rect": {
+            "x": 0,
+            "y": 0,
+            "width": 0,
+            "height": 48
+          },
+          "rects": [
+            {
+              "x": 0,
+              "y": 0,
+              "width": 0,
+              "height": 48
+            }
+          ],
+          "client": {
+            "width": 0,
+            "height": 48,
+            "left": 0,
+            "top": 0
+          }
+        },
+        "shape": {
+          "rect": {
+            "x": 5,
+            "y": 5,
+            "width": 10,
+            "height": 10
+          },
+          "rects": [
+            {
+              "x": 5,
+              "y": 5,
+              "width": 10,
+              "height": 10
+            }
+          ],
+          "client": {
+            "width": 0,
+            "height": 0,
+            "left": 0,
+            "top": 0
+          }
+        },
+        "computedViewport": {
+          "width": "0px",
+          "height": "48px",
+          "zoom": "1"
+        }
+      },
+      {
+        "name": "negative-attribute",
+        "attrs": {
+          "width": "-5",
+          "height": "24"
+        },
+        "container": {
+          "rect": {
+            "x": 0,
+            "y": 0,
+            "width": 400,
+            "height": 200
+          },
+          "rects": [
+            {
+              "x": 0,
+              "y": 0,
+              "width": 400,
+              "height": 200
+            }
+          ],
+          "client": {
+            "width": 400,
+            "height": 200,
+            "left": 0,
+            "top": 0
+          }
+        },
+        "viewport": {
+          "rect": {
+            "x": 0,
+            "y": 0,
+            "width": 0,
+            "height": 24
+          },
+          "rects": [
+            {
+              "x": 0,
+              "y": 0,
+              "width": 0,
+              "height": 24
+            }
+          ],
+          "client": {
+            "width": 0,
+            "height": 24,
+            "left": 0,
+            "top": 0
+          }
+        },
+        "shape": {
+          "rect": {
+            "x": 5,
+            "y": 5,
+            "width": 10,
+            "height": 10
+          },
+          "rects": [
+            {
+              "x": 5,
+              "y": 5,
+              "width": 10,
+              "height": 10
+            }
+          ],
+          "client": {
+            "width": 0,
+            "height": 0,
+            "left": 0,
+            "top": 0
+          }
+        },
+        "computedViewport": {
+          "width": "0px",
+          "height": "24px",
+          "zoom": "1"
+        }
+      },
+      {
+        "name": "malformed-attribute",
+        "attrs": {
+          "width": "nope",
+          "height": "24"
+        },
+        "container": {
+          "rect": {
+            "x": 0,
+            "y": 0,
+            "width": 400,
+            "height": 200
+          },
+          "rects": [
+            {
+              "x": 0,
+              "y": 0,
+              "width": 400,
+              "height": 200
+            }
+          ],
+          "client": {
+            "width": 400,
+            "height": 200,
+            "left": 0,
+            "top": 0
+          }
+        },
+        "viewport": {
+          "rect": {
+            "x": 0,
+            "y": 0,
+            "width": 400,
+            "height": 24
+          },
+          "rects": [
+            {
+              "x": 0,
+              "y": 0,
+              "width": 400,
+              "height": 24
+            }
+          ],
+          "client": {
+            "width": 400,
+            "height": 24,
+            "left": 0,
+            "top": 0
+          }
+        },
+        "shape": {
+          "rect": {
+            "x": 5,
+            "y": 5,
+            "width": 10,
+            "height": 10
+          },
+          "rects": [
+            {
+              "x": 5,
+              "y": 5,
+              "width": 10,
+              "height": 10
+            }
+          ],
+          "client": {
+            "width": 0,
+            "height": 0,
+            "left": 0,
+            "top": 0
+          }
+        },
+        "computedViewport": {
+          "width": "400px",
+          "height": "24px",
+          "zoom": "1"
+        }
+      },
+      {
+        "name": "calc-attribute",
+        "attrs": {
+          "width": "calc(20px + 20px)",
+          "height": "24"
+        },
+        "container": {
+          "rect": {
+            "x": 0,
+            "y": 0,
+            "width": 400,
+            "height": 200
+          },
+          "rects": [
+            {
+              "x": 0,
+              "y": 0,
+              "width": 400,
+              "height": 200
+            }
+          ],
+          "client": {
+            "width": 400,
+            "height": 200,
+            "left": 0,
+            "top": 0
+          }
+        },
+        "viewport": {
+          "rect": {
+            "x": 0,
+            "y": 0,
+            "width": 40,
+            "height": 24
+          },
+          "rects": [
+            {
+              "x": 0,
+              "y": 0,
+              "width": 40,
+              "height": 24
+            }
+          ],
+          "client": {
+            "width": 40,
+            "height": 24,
+            "left": 0,
+            "top": 0
+          }
+        },
+        "shape": {
+          "rect": {
+            "x": 5,
+            "y": 5,
+            "width": 10,
+            "height": 10
+          },
+          "rects": [
+            {
+              "x": 5,
+              "y": 5,
+              "width": 10,
+              "height": 10
+            }
+          ],
+          "client": {
+            "width": 0,
+            "height": 0,
+            "left": 0,
+            "top": 0
+          }
+        },
+        "computedViewport": {
+          "width": "40px",
+          "height": "24px",
+          "zoom": "1"
+        }
+      },
+      {
+        "name": "comma-viewbox",
+        "attrs": {
+          "viewBox": "0,0,2,1"
+        },
+        "container": {
+          "rect": {
+            "x": 0,
+            "y": 0,
+            "width": 400,
+            "height": 200
+          },
+          "rects": [
+            {
+              "x": 0,
+              "y": 0,
+              "width": 400,
+              "height": 200
+            }
+          ],
+          "client": {
+            "width": 400,
+            "height": 200,
+            "left": 0,
+            "top": 0
+          }
+        },
+        "viewport": {
+          "rect": {
+            "x": 0,
+            "y": 0,
+            "width": 400,
+            "height": 200
+          },
+          "rects": [
+            {
+              "x": 0,
+              "y": 0,
+              "width": 400,
+              "height": 200
+            }
+          ],
+          "client": {
+            "width": 400,
+            "height": 200,
+            "left": 0,
+            "top": 0
+          }
+        },
+        "shape": {
+          "rect": {
+            "x": 1000,
+            "y": 1000,
+            "width": 2000,
+            "height": 2000
+          },
+          "rects": [
+            {
+              "x": 1000,
+              "y": 1000,
+              "width": 2000,
+              "height": 2000
+            }
+          ],
+          "client": {
+            "width": 0,
+            "height": 0,
+            "left": 0,
+            "top": 0
+          }
+        },
+        "computedViewport": {
+          "width": "400px",
+          "height": "200px",
+          "zoom": "1"
+        }
+      },
+      {
+        "name": "repeated-comma-viewbox",
+        "attrs": {
+          "viewBox": "0,,0,2,1"
+        },
+        "container": {
+          "rect": {
+            "x": 0,
+            "y": 0,
+            "width": 400,
+            "height": 200
+          },
+          "rects": [
+            {
+              "x": 0,
+              "y": 0,
+              "width": 400,
+              "height": 200
+            }
+          ],
+          "client": {
+            "width": 400,
+            "height": 200,
+            "left": 0,
+            "top": 0
+          }
+        },
+        "viewport": {
+          "rect": {
+            "x": 0,
+            "y": 0,
+            "width": 300,
+            "height": 150
+          },
+          "rects": [
+            {
+              "x": 0,
+              "y": 0,
+              "width": 300,
+              "height": 150
+            }
+          ],
+          "client": {
+            "width": 300,
+            "height": 150,
+            "left": 0,
+            "top": 0
+          }
+        },
+        "shape": {
+          "rect": {
+            "x": 5,
+            "y": 5,
+            "width": 10,
+            "height": 10
+          },
+          "rects": [
+            {
+              "x": 5,
+              "y": 5,
+              "width": 10,
+              "height": 10
+            }
+          ],
+          "client": {
+            "width": 0,
+            "height": 0,
+            "left": 0,
+            "top": 0
+          }
+        },
+        "computedViewport": {
+          "width": "300px",
+          "height": "150px",
+          "zoom": "1"
+        }
+      },
+      {
+        "name": "trailing-comma-viewbox",
+        "attrs": {
+          "viewBox": "0 0 2 1,"
+        },
+        "container": {
+          "rect": {
+            "x": 0,
+            "y": 0,
+            "width": 400,
+            "height": 200
+          },
+          "rects": [
+            {
+              "x": 0,
+              "y": 0,
+              "width": 400,
+              "height": 200
+            }
+          ],
+          "client": {
+            "width": 400,
+            "height": 200,
+            "left": 0,
+            "top": 0
+          }
+        },
+        "viewport": {
+          "rect": {
+            "x": 0,
+            "y": 0,
+            "width": 300,
+            "height": 150
+          },
+          "rects": [
+            {
+              "x": 0,
+              "y": 0,
+              "width": 300,
+              "height": 150
+            }
+          ],
+          "client": {
+            "width": 300,
+            "height": 150,
+            "left": 0,
+            "top": 0
+          }
+        },
+        "shape": {
+          "rect": {
+            "x": 5,
+            "y": 5,
+            "width": 10,
+            "height": 10
+          },
+          "rects": [
+            {
+              "x": 5,
+              "y": 5,
+              "width": 10,
+              "height": 10
+            }
+          ],
+          "client": {
+            "width": 0,
+            "height": 0,
+            "left": 0,
+            "top": 0
+          }
+        },
+        "computedViewport": {
+          "width": "300px",
+          "height": "150px",
+          "zoom": "1"
+        }
+      },
+      {
+        "name": "leading-comma-viewbox",
+        "attrs": {
+          "viewBox": ",0 0 2 1"
+        },
+        "container": {
+          "rect": {
+            "x": 0,
+            "y": 0,
+            "width": 400,
+            "height": 200
+          },
+          "rects": [
+            {
+              "x": 0,
+              "y": 0,
+              "width": 400,
+              "height": 200
+            }
+          ],
+          "client": {
+            "width": 400,
+            "height": 200,
+            "left": 0,
+            "top": 0
+          }
+        },
+        "viewport": {
+          "rect": {
+            "x": 0,
+            "y": 0,
+            "width": 300,
+            "height": 150
+          },
+          "rects": [
+            {
+              "x": 0,
+              "y": 0,
+              "width": 300,
+              "height": 150
+            }
+          ],
+          "client": {
+            "width": 300,
+            "height": 150,
+            "left": 0,
+            "top": 0
+          }
+        },
+        "shape": {
+          "rect": {
+            "x": 5,
+            "y": 5,
+            "width": 10,
+            "height": 10
+          },
+          "rects": [
+            {
+              "x": 5,
+              "y": 5,
+              "width": 10,
+              "height": 10
+            }
+          ],
+          "client": {
+            "width": 0,
+            "height": 0,
+            "left": 0,
+            "top": 0
+          }
+        },
+        "computedViewport": {
+          "width": "300px",
+          "height": "150px",
+          "zoom": "1"
+        }
+      },
+      {
+        "name": "adjacent-sign-viewbox",
+        "attrs": {
+          "viewBox": "0+0+2+1"
+        },
+        "container": {
+          "rect": {
+            "x": 0,
+            "y": 0,
+            "width": 400,
+            "height": 200
+          },
+          "rects": [
+            {
+              "x": 0,
+              "y": 0,
+              "width": 400,
+              "height": 200
+            }
+          ],
+          "client": {
+            "width": 400,
+            "height": 200,
+            "left": 0,
+            "top": 0
+          }
+        },
+        "viewport": {
+          "rect": {
+            "x": 0,
+            "y": 0,
+            "width": 400,
+            "height": 200
+          },
+          "rects": [
+            {
+              "x": 0,
+              "y": 0,
+              "width": 400,
+              "height": 200
+            }
+          ],
+          "client": {
+            "width": 400,
+            "height": 200,
+            "left": 0,
+            "top": 0
+          }
+        },
+        "shape": {
+          "rect": {
+            "x": 1000,
+            "y": 1000,
+            "width": 2000,
+            "height": 2000
+          },
+          "rects": [
+            {
+              "x": 1000,
+              "y": 1000,
+              "width": 2000,
+              "height": 2000
+            }
+          ],
+          "client": {
+            "width": 0,
+            "height": 0,
+            "left": 0,
+            "top": 0
+          }
+        },
+        "computedViewport": {
+          "width": "400px",
+          "height": "200px",
+          "zoom": "1"
+        }
+      },
+      {
+        "name": "extra-number-viewbox",
+        "attrs": {
+          "viewBox": "0 0 2 1 5"
+        },
+        "container": {
+          "rect": {
+            "x": 0,
+            "y": 0,
+            "width": 400,
+            "height": 200
+          },
+          "rects": [
+            {
+              "x": 0,
+              "y": 0,
+              "width": 400,
+              "height": 200
+            }
+          ],
+          "client": {
+            "width": 400,
+            "height": 200,
+            "left": 0,
+            "top": 0
+          }
+        },
+        "viewport": {
+          "rect": {
+            "x": 0,
+            "y": 0,
+            "width": 300,
+            "height": 150
+          },
+          "rects": [
+            {
+              "x": 0,
+              "y": 0,
+              "width": 300,
+              "height": 150
+            }
+          ],
+          "client": {
+            "width": 300,
+            "height": 150,
+            "left": 0,
+            "top": 0
+          }
+        },
+        "shape": {
+          "rect": {
+            "x": 5,
+            "y": 5,
+            "width": 10,
+            "height": 10
+          },
+          "rects": [
+            {
+              "x": 5,
+              "y": 5,
+              "width": 10,
+              "height": 10
+            }
+          ],
+          "client": {
+            "width": 0,
+            "height": 0,
+            "left": 0,
+            "top": 0
+          }
+        },
+        "computedViewport": {
+          "width": "300px",
+          "height": "150px",
+          "zoom": "1"
+        }
+      },
+      {
+        "name": "attribute-ratio-priority",
+        "attrs": {
+          "width": "32",
+          "height": "24",
+          "viewBox": "0 0 40 20"
+        },
+        "style": "width:64px;height:auto",
+        "container": {
+          "rect": {
+            "x": 0,
+            "y": 0,
+            "width": 400,
+            "height": 200
+          },
+          "rects": [
+            {
+              "x": 0,
+              "y": 0,
+              "width": 400,
+              "height": 200
+            }
+          ],
+          "client": {
+            "width": 400,
+            "height": 200,
+            "left": 0,
+            "top": 0
+          }
+        },
+        "viewport": {
+          "rect": {
+            "x": 0,
+            "y": 0,
+            "width": 64,
+            "height": 48
+          },
+          "rects": [
+            {
+              "x": 0,
+              "y": 0,
+              "width": 64,
+              "height": 48
+            }
+          ],
+          "client": {
+            "width": 64,
+            "height": 48,
+            "left": 0,
+            "top": 0
+          }
+        },
+        "shape": {
+          "rect": {
+            "x": 8,
+            "y": 16,
+            "width": 16,
+            "height": 16
+          },
+          "rects": [
+            {
+              "x": 8,
+              "y": 16,
+              "width": 16,
+              "height": 16
+            }
+          ],
+          "client": {
+            "width": 0,
+            "height": 0,
+            "left": 0,
+            "top": 0
+          }
+        },
+        "computedViewport": {
+          "width": "64px",
+          "height": "48px",
+          "zoom": "1"
+        }
+      },
+      {
+        "name": "layout-scale-disambiguation",
+        "attrs": {
+          "width": "32.504",
+          "height": "24.1"
+        },
+        "container": {
+          "rect": {
+            "x": 0,
+            "y": 0,
+            "width": 400,
+            "height": 200
+          },
+          "rects": [
+            {
+              "x": 0,
+              "y": 0,
+              "width": 400,
+              "height": 200
+            }
+          ],
+          "client": {
+            "width": 400,
+            "height": 200,
+            "left": 0,
+            "top": 0
+          }
+        },
+        "viewport": {
+          "rect": {
+            "x": 0,
+            "y": 0,
+            "width": 32.5,
+            "height": 24.09375
+          },
+          "rects": [
+            {
+              "x": 0,
+              "y": 0,
+              "width": 32.5,
+              "height": 24.09375
+            }
+          ],
+          "client": {
+            "width": 33,
+            "height": 24,
+            "left": 0,
+            "top": 0
+          }
+        },
+        "shape": {
+          "rect": {
+            "x": 5,
+            "y": 5,
+            "width": 10,
+            "height": 10
+          },
+          "rects": [
+            {
+              "x": 5,
+              "y": 5,
+              "width": 10,
+              "height": 10
+            }
+          ],
+          "client": {
+            "width": 0,
+            "height": 0,
+            "left": 0,
+            "top": 0
+          }
+        },
+        "computedViewport": {
+          "width": "32.5px",
+          "height": "24.0938px",
+          "zoom": "1"
+        }
+      },
+      {
+        "name": "css-width-only",
+        "attrs": {
+          "width": "32",
+          "height": "24"
+        },
+        "style": "width:64px",
+        "container": {
+          "rect": {
+            "x": 0,
+            "y": 0,
+            "width": 400,
+            "height": 200
+          },
+          "rects": [
+            {
+              "x": 0,
+              "y": 0,
+              "width": 400,
+              "height": 200
+            }
+          ],
+          "client": {
+            "width": 400,
+            "height": 200,
+            "left": 0,
+            "top": 0
+          }
+        },
+        "viewport": {
+          "rect": {
+            "x": 0,
+            "y": 0,
+            "width": 64,
+            "height": 24
+          },
+          "rects": [
+            {
+              "x": 0,
+              "y": 0,
+              "width": 64,
+              "height": 24
+            }
+          ],
+          "client": {
+            "width": 64,
+            "height": 24,
+            "left": 0,
+            "top": 0
+          }
+        },
+        "shape": {
+          "rect": {
+            "x": 5,
+            "y": 5,
+            "width": 10,
+            "height": 10
+          },
+          "rects": [
+            {
+              "x": 5,
+              "y": 5,
+              "width": 10,
+              "height": 10
+            }
+          ],
+          "client": {
+            "width": 0,
+            "height": 0,
+            "left": 0,
+            "top": 0
+          }
+        },
+        "computedViewport": {
+          "width": "64px",
+          "height": "24px",
+          "zoom": "1"
+        }
+      },
+      {
+        "name": "css-auto-width",
+        "attrs": {
+          "width": "32",
+          "height": "24"
+        },
+        "style": "width:auto",
+        "container": {
+          "rect": {
+            "x": 0,
+            "y": 0,
+            "width": 400,
+            "height": 200
+          },
+          "rects": [
+            {
+              "x": 0,
+              "y": 0,
+              "width": 400,
+              "height": 200
+            }
+          ],
+          "client": {
+            "width": 400,
+            "height": 200,
+            "left": 0,
+            "top": 0
+          }
+        },
+        "viewport": {
+          "rect": {
+            "x": 0,
+            "y": 0,
+            "width": 32,
+            "height": 24
+          },
+          "rects": [
+            {
+              "x": 0,
+              "y": 0,
+              "width": 32,
+              "height": 24
+            }
+          ],
+          "client": {
+            "width": 32,
+            "height": 24,
+            "left": 0,
+            "top": 0
+          }
+        },
+        "shape": {
+          "rect": {
+            "x": 5,
+            "y": 5,
+            "width": 10,
+            "height": 10
+          },
+          "rects": [
+            {
+              "x": 5,
+              "y": 5,
+              "width": 10,
+              "height": 10
+            }
+          ],
+          "client": {
+            "width": 0,
+            "height": 0,
+            "left": 0,
+            "top": 0
+          }
+        },
+        "computedViewport": {
+          "width": "32px",
+          "height": "24px",
+          "zoom": "1"
+        }
+      },
+      {
+        "name": "css-auto-both",
+        "attrs": {
+          "width": "32",
+          "height": "24"
+        },
+        "style": "width:auto;height:auto",
+        "container": {
+          "rect": {
+            "x": 0,
+            "y": 0,
+            "width": 400,
+            "height": 200
+          },
+          "rects": [
+            {
+              "x": 0,
+              "y": 0,
+              "width": 400,
+              "height": 200
+            }
+          ],
+          "client": {
+            "width": 400,
+            "height": 200,
+            "left": 0,
+            "top": 0
+          }
+        },
+        "viewport": {
+          "rect": {
+            "x": 0,
+            "y": 0,
+            "width": 32,
+            "height": 24
+          },
+          "rects": [
+            {
+              "x": 0,
+              "y": 0,
+              "width": 32,
+              "height": 24
+            }
+          ],
+          "client": {
+            "width": 32,
+            "height": 24,
+            "left": 0,
+            "top": 0
+          }
+        },
+        "shape": {
+          "rect": {
+            "x": 5,
+            "y": 5,
+            "width": 10,
+            "height": 10
+          },
+          "rects": [
+            {
+              "x": 5,
+              "y": 5,
+              "width": 10,
+              "height": 10
+            }
+          ],
+          "client": {
+            "width": 0,
+            "height": 0,
+            "left": 0,
+            "top": 0
+          }
+        },
+        "computedViewport": {
+          "width": "32px",
+          "height": "24px",
+          "zoom": "1"
+        }
+      },
+      {
+        "name": "fractional-attrs",
+        "attrs": {
+          "width": "32.5",
+          "height": "24.25"
+        },
+        "container": {
+          "rect": {
+            "x": 0,
+            "y": 0,
+            "width": 400,
+            "height": 200
+          },
+          "rects": [
+            {
+              "x": 0,
+              "y": 0,
+              "width": 400,
+              "height": 200
+            }
+          ],
+          "client": {
+            "width": 400,
+            "height": 200,
+            "left": 0,
+            "top": 0
+          }
+        },
+        "viewport": {
+          "rect": {
+            "x": 0,
+            "y": 0,
+            "width": 32.5,
+            "height": 24.25
+          },
+          "rects": [
+            {
+              "x": 0,
+              "y": 0,
+              "width": 32.5,
+              "height": 24.25
+            }
+          ],
+          "client": {
+            "width": 33,
+            "height": 24,
+            "left": 0,
+            "top": 0
+          }
+        },
+        "shape": {
+          "rect": {
+            "x": 5,
+            "y": 5,
+            "width": 10,
+            "height": 10
+          },
+          "rects": [
+            {
+              "x": 5,
+              "y": 5,
+              "width": 10,
+              "height": 10
+            }
+          ],
+          "client": {
+            "width": 0,
+            "height": 0,
+            "left": 0,
+            "top": 0
+          }
+        },
+        "computedViewport": {
+          "width": "32.5px",
+          "height": "24.25px",
+          "zoom": "1"
+        }
+      },
+      {
+        "name": "fractional-layout-unit",
+        "attrs": {
+          "width": "32.51",
+          "height": "24.29"
+        },
+        "container": {
+          "rect": {
+            "x": 0,
+            "y": 0,
+            "width": 400,
+            "height": 200
+          },
+          "rects": [
+            {
+              "x": 0,
+              "y": 0,
+              "width": 400,
+              "height": 200
+            }
+          ],
+          "client": {
+            "width": 400,
+            "height": 200,
+            "left": 0,
+            "top": 0
+          }
+        },
+        "viewport": {
+          "rect": {
+            "x": 0,
+            "y": 0,
+            "width": 32.5078125,
+            "height": 24.2890625
+          },
+          "rects": [
+            {
+              "x": 0,
+              "y": 0,
+              "width": 32.5078125,
+              "height": 24.2890625
+            }
+          ],
+          "client": {
+            "width": 33,
+            "height": 24,
+            "left": 0,
+            "top": 0
+          }
+        },
+        "shape": {
+          "rect": {
+            "x": 5,
+            "y": 5,
+            "width": 10,
+            "height": 10
+          },
+          "rects": [
+            {
+              "x": 5,
+              "y": 5,
+              "width": 10,
+              "height": 10
+            }
+          ],
+          "client": {
+            "width": 0,
+            "height": 0,
+            "left": 0,
+            "top": 0
+          }
+        },
+        "computedViewport": {
+          "width": "32.5078px",
+          "height": "24.2891px",
+          "zoom": "1"
+        }
+      },
+      {
+        "name": "css-fractional-layout-unit",
+        "attrs": {},
+        "style": "width:32.51px;height:24.29px",
+        "container": {
+          "rect": {
+            "x": 0,
+            "y": 0,
+            "width": 400,
+            "height": 200
+          },
+          "rects": [
+            {
+              "x": 0,
+              "y": 0,
+              "width": 400,
+              "height": 200
+            }
+          ],
+          "client": {
+            "width": 400,
+            "height": 200,
+            "left": 0,
+            "top": 0
+          }
+        },
+        "viewport": {
+          "rect": {
+            "x": 0,
+            "y": 0,
+            "width": 32.5078125,
+            "height": 24.2890625
+          },
+          "rects": [
+            {
+              "x": 0,
+              "y": 0,
+              "width": 32.5078125,
+              "height": 24.2890625
+            }
+          ],
+          "client": {
+            "width": 33,
+            "height": 24,
+            "left": 0,
+            "top": 0
+          }
+        },
+        "shape": {
+          "rect": {
+            "x": 5,
+            "y": 5,
+            "width": 10,
+            "height": 10
+          },
+          "rects": [
+            {
+              "x": 5,
+              "y": 5,
+              "width": 10,
+              "height": 10
+            }
+          ],
+          "client": {
+            "width": 0,
+            "height": 0,
+            "left": 0,
+            "top": 0
+          }
+        },
+        "computedViewport": {
+          "width": "32.5078px",
+          "height": "24.2891px",
+          "zoom": "1"
+        }
+      },
+      {
+        "name": "ratio-layout-unit",
+        "attrs": {
+          "width": "80",
+          "viewBox": "0 0 40.1 20"
+        },
+        "container": {
+          "rect": {
+            "x": 0,
+            "y": 0,
+            "width": 400,
+            "height": 200
+          },
+          "rects": [
+            {
+              "x": 0,
+              "y": 0,
+              "width": 400,
+              "height": 200
+            }
+          ],
+          "client": {
+            "width": 400,
+            "height": 200,
+            "left": 0,
+            "top": 0
+          }
+        },
+        "viewport": {
+          "rect": {
+            "x": 0,
+            "y": 0,
+            "width": 80,
+            "height": 39.8984375
+          },
+          "rects": [
+            {
+              "x": 0,
+              "y": 0,
+              "width": 80,
+              "height": 39.8984375
+            }
+          ],
+          "client": {
+            "width": 80,
+            "height": 40,
+            "left": 0,
+            "top": 0
+          }
+        },
+        "shape": {
+          "rect": {
+            "x": 9.97642707824707,
+            "y": 9.974609375,
+            "width": 19.94921875,
+            "height": 19.94921875
+          },
+          "rects": [
+            {
+              "x": 9.97642707824707,
+              "y": 9.974609375,
+              "width": 19.94921875,
+              "height": 19.94921875
+            }
+          ],
+          "client": {
+            "width": 0,
+            "height": 0,
+            "left": 0,
+            "top": 0
+          }
+        },
+        "computedViewport": {
+          "width": "80px",
+          "height": "39.8984px",
+          "zoom": "1"
+        }
+      },
+      {
+        "name": "case-sensitive-viewbox",
+        "attrs": {
+          "viewbox": "0 0 40 20"
+        },
+        "container": {
+          "rect": {
+            "x": 0,
+            "y": 0,
+            "width": 400,
+            "height": 200
+          },
+          "rects": [
+            {
+              "x": 0,
+              "y": 0,
+              "width": 400,
+              "height": 200
+            }
+          ],
+          "client": {
+            "width": 400,
+            "height": 200,
+            "left": 0,
+            "top": 0
+          }
+        },
+        "viewport": {
+          "rect": {
+            "x": 0,
+            "y": 0,
+            "width": 300,
+            "height": 150
+          },
+          "rects": [
+            {
+              "x": 0,
+              "y": 0,
+              "width": 300,
+              "height": 150
+            }
+          ],
+          "client": {
+            "width": 300,
+            "height": 150,
+            "left": 0,
+            "top": 0
+          }
+        },
+        "shape": {
+          "rect": {
+            "x": 5,
+            "y": 5,
+            "width": 10,
+            "height": 10
+          },
+          "rects": [
+            {
+              "x": 5,
+              "y": 5,
+              "width": 10,
+              "height": 10
+            }
+          ],
+          "client": {
+            "width": 0,
+            "height": 0,
+            "left": 0,
+            "top": 0
+          }
+        },
+        "computedViewport": {
+          "width": "300px",
+          "height": "150px",
+          "zoom": "1"
+        }
+      },
+      {
+        "name": "case-sensitive-dimensions",
+        "attrs": {
+          "WIDTH": "32",
+          "HEIGHT": "24"
+        },
+        "container": {
+          "rect": {
+            "x": 0,
+            "y": 0,
+            "width": 400,
+            "height": 200
+          },
+          "rects": [
+            {
+              "x": 0,
+              "y": 0,
+              "width": 400,
+              "height": 200
+            }
+          ],
+          "client": {
+            "width": 400,
+            "height": 200,
+            "left": 0,
+            "top": 0
+          }
+        },
+        "viewport": {
+          "rect": {
+            "x": 0,
+            "y": 0,
+            "width": 300,
+            "height": 150
+          },
+          "rects": [
+            {
+              "x": 0,
+              "y": 0,
+              "width": 300,
+              "height": 150
+            }
+          ],
+          "client": {
+            "width": 300,
+            "height": 150,
+            "left": 0,
+            "top": 0
+          }
+        },
+        "shape": {
+          "rect": {
+            "x": 5,
+            "y": 5,
+            "width": 10,
+            "height": 10
+          },
+          "rects": [
+            {
+              "x": 5,
+              "y": 5,
+              "width": 10,
+              "height": 10
+            }
+          ],
+          "client": {
+            "width": 0,
+            "height": 0,
+            "left": 0,
+            "top": 0
+          }
+        },
+        "computedViewport": {
+          "width": "300px",
+          "height": "150px",
+          "zoom": "1"
+        }
+      },
+      {
+        "name": "default",
+        "attrs": {},
+        "container": {
+          "rect": {
+            "x": 0,
+            "y": 0,
+            "width": 400,
+            "height": 200
+          },
+          "rects": [
+            {
+              "x": 0,
+              "y": 0,
+              "width": 400,
+              "height": 200
+            }
+          ],
+          "client": {
+            "width": 400,
+            "height": 200,
+            "left": 0,
+            "top": 0
+          }
+        },
+        "viewport": {
+          "rect": {
+            "x": 0,
+            "y": 0,
+            "width": 300,
+            "height": 150
+          },
+          "rects": [
+            {
+              "x": 0,
+              "y": 0,
+              "width": 300,
+              "height": 150
+            }
+          ],
+          "client": {
+            "width": 300,
+            "height": 150,
+            "left": 0,
+            "top": 0
+          }
+        },
+        "shape": {
+          "rect": {
+            "x": 5,
+            "y": 5,
+            "width": 10,
+            "height": 10
+          },
+          "rects": [
+            {
+              "x": 5,
+              "y": 5,
+              "width": 10,
+              "height": 10
+            }
+          ],
+          "client": {
+            "width": 0,
+            "height": 0,
+            "left": 0,
+            "top": 0
+          }
+        },
+        "computedViewport": {
+          "width": "300px",
+          "height": "150px",
+          "zoom": "1"
+        }
+      },
+      {
+        "name": "viewbox-only",
+        "attrs": {
+          "viewBox": "0 0 40 20"
+        },
+        "container": {
+          "rect": {
+            "x": 0,
+            "y": 0,
+            "width": 400,
+            "height": 200
+          },
+          "rects": [
+            {
+              "x": 0,
+              "y": 0,
+              "width": 400,
+              "height": 200
+            }
+          ],
+          "client": {
+            "width": 400,
+            "height": 200,
+            "left": 0,
+            "top": 0
+          }
+        },
+        "viewport": {
+          "rect": {
+            "x": 0,
+            "y": 0,
+            "width": 400,
+            "height": 200
+          },
+          "rects": [
+            {
+              "x": 0,
+              "y": 0,
+              "width": 400,
+              "height": 200
+            }
+          ],
+          "client": {
+            "width": 400,
+            "height": 200,
+            "left": 0,
+            "top": 0
+          }
+        },
+        "shape": {
+          "rect": {
+            "x": 50,
+            "y": 50,
+            "width": 100,
+            "height": 100
+          },
+          "rects": [
+            {
+              "x": 50,
+              "y": 50,
+              "width": 100,
+              "height": 100
+            }
+          ],
+          "client": {
+            "width": 0,
+            "height": 0,
+            "left": 0,
+            "top": 0
+          }
+        },
+        "computedViewport": {
+          "width": "400px",
+          "height": "200px",
+          "zoom": "1"
+        }
+      },
+      {
+        "name": "width-only",
+        "attrs": {
+          "width": "40"
+        },
+        "container": {
+          "rect": {
+            "x": 0,
+            "y": 0,
+            "width": 400,
+            "height": 200
+          },
+          "rects": [
+            {
+              "x": 0,
+              "y": 0,
+              "width": 400,
+              "height": 200
+            }
+          ],
+          "client": {
+            "width": 400,
+            "height": 200,
+            "left": 0,
+            "top": 0
+          }
+        },
+        "viewport": {
+          "rect": {
+            "x": 0,
+            "y": 0,
+            "width": 40,
+            "height": 150
+          },
+          "rects": [
+            {
+              "x": 0,
+              "y": 0,
+              "width": 40,
+              "height": 150
+            }
+          ],
+          "client": {
+            "width": 40,
+            "height": 150,
+            "left": 0,
+            "top": 0
+          }
+        },
+        "shape": {
+          "rect": {
+            "x": 5,
+            "y": 5,
+            "width": 10,
+            "height": 10
+          },
+          "rects": [
+            {
+              "x": 5,
+              "y": 5,
+              "width": 10,
+              "height": 10
+            }
+          ],
+          "client": {
+            "width": 0,
+            "height": 0,
+            "left": 0,
+            "top": 0
+          }
+        },
+        "computedViewport": {
+          "width": "40px",
+          "height": "150px",
+          "zoom": "1"
+        }
+      },
+      {
+        "name": "height-only",
+        "attrs": {
+          "height": "30"
+        },
+        "container": {
+          "rect": {
+            "x": 0,
+            "y": 0,
+            "width": 400,
+            "height": 200
+          },
+          "rects": [
+            {
+              "x": 0,
+              "y": 0,
+              "width": 400,
+              "height": 200
+            }
+          ],
+          "client": {
+            "width": 400,
+            "height": 200,
+            "left": 0,
+            "top": 0
+          }
+        },
+        "viewport": {
+          "rect": {
+            "x": 0,
+            "y": 0,
+            "width": 300,
+            "height": 30
+          },
+          "rects": [
+            {
+              "x": 0,
+              "y": 0,
+              "width": 300,
+              "height": 30
+            }
+          ],
+          "client": {
+            "width": 300,
+            "height": 30,
+            "left": 0,
+            "top": 0
+          }
+        },
+        "shape": {
+          "rect": {
+            "x": 5,
+            "y": 5,
+            "width": 10,
+            "height": 10
+          },
+          "rects": [
+            {
+              "x": 5,
+              "y": 5,
+              "width": 10,
+              "height": 10
+            }
+          ],
+          "client": {
+            "width": 0,
+            "height": 0,
+            "left": 0,
+            "top": 0
+          }
+        },
+        "computedViewport": {
+          "width": "300px",
+          "height": "30px",
+          "zoom": "1"
+        }
+      },
+      {
+        "name": "ratio-width",
+        "attrs": {
+          "width": "80",
+          "viewBox": "0 0 40 20"
+        },
+        "container": {
+          "rect": {
+            "x": 0,
+            "y": 0,
+            "width": 400,
+            "height": 200
+          },
+          "rects": [
+            {
+              "x": 0,
+              "y": 0,
+              "width": 400,
+              "height": 200
+            }
+          ],
+          "client": {
+            "width": 400,
+            "height": 200,
+            "left": 0,
+            "top": 0
+          }
+        },
+        "viewport": {
+          "rect": {
+            "x": 0,
+            "y": 0,
+            "width": 80,
+            "height": 40
+          },
+          "rects": [
+            {
+              "x": 0,
+              "y": 0,
+              "width": 80,
+              "height": 40
+            }
+          ],
+          "client": {
+            "width": 80,
+            "height": 40,
+            "left": 0,
+            "top": 0
+          }
+        },
+        "shape": {
+          "rect": {
+            "x": 10,
+            "y": 10,
+            "width": 20,
+            "height": 20
+          },
+          "rects": [
+            {
+              "x": 10,
+              "y": 10,
+              "width": 20,
+              "height": 20
+            }
+          ],
+          "client": {
+            "width": 0,
+            "height": 0,
+            "left": 0,
+            "top": 0
+          }
+        },
+        "computedViewport": {
+          "width": "80px",
+          "height": "40px",
+          "zoom": "1"
+        }
+      },
+      {
+        "name": "ratio-height",
+        "attrs": {
+          "height": "50",
+          "viewBox": "0 0 40 20"
+        },
+        "container": {
+          "rect": {
+            "x": 0,
+            "y": 0,
+            "width": 400,
+            "height": 200
+          },
+          "rects": [
+            {
+              "x": 0,
+              "y": 0,
+              "width": 400,
+              "height": 200
+            }
+          ],
+          "client": {
+            "width": 400,
+            "height": 200,
+            "left": 0,
+            "top": 0
+          }
+        },
+        "viewport": {
+          "rect": {
+            "x": 0,
+            "y": 0,
+            "width": 100,
+            "height": 50
+          },
+          "rects": [
+            {
+              "x": 0,
+              "y": 0,
+              "width": 100,
+              "height": 50
+            }
+          ],
+          "client": {
+            "width": 100,
+            "height": 50,
+            "left": 0,
+            "top": 0
+          }
+        },
+        "shape": {
+          "rect": {
+            "x": 12.5,
+            "y": 12.5,
+            "width": 25,
+            "height": 25
+          },
+          "rects": [
+            {
+              "x": 12.5,
+              "y": 12.5,
+              "width": 25,
+              "height": 25
+            }
+          ],
+          "client": {
+            "width": 0,
+            "height": 0,
+            "left": 0,
+            "top": 0
+          }
+        },
+        "computedViewport": {
+          "width": "100px",
+          "height": "50px",
+          "zoom": "1"
+        }
+      },
+      {
+        "name": "percentage-attributes",
+        "attrs": {
+          "width": "50%",
+          "height": "50%"
+        },
+        "container": {
+          "rect": {
+            "x": 0,
+            "y": 0,
+            "width": 400,
+            "height": 200
+          },
+          "rects": [
+            {
+              "x": 0,
+              "y": 0,
+              "width": 400,
+              "height": 200
+            }
+          ],
+          "client": {
+            "width": 400,
+            "height": 200,
+            "left": 0,
+            "top": 0
+          }
+        },
+        "viewport": {
+          "rect": {
+            "x": 0,
+            "y": 0,
+            "width": 200,
+            "height": 100
+          },
+          "rects": [
+            {
+              "x": 0,
+              "y": 0,
+              "width": 200,
+              "height": 100
+            }
+          ],
+          "client": {
+            "width": 200,
+            "height": 100,
+            "left": 0,
+            "top": 0
+          }
+        },
+        "shape": {
+          "rect": {
+            "x": 5,
+            "y": 5,
+            "width": 10,
+            "height": 10
+          },
+          "rects": [
+            {
+              "x": 5,
+              "y": 5,
+              "width": 10,
+              "height": 10
+            }
+          ],
+          "client": {
+            "width": 0,
+            "height": 0,
+            "left": 0,
+            "top": 0
+          }
+        },
+        "computedViewport": {
+          "width": "200px",
+          "height": "100px",
+          "zoom": "1"
+        }
+      },
+      {
+        "name": "css-dimensions",
+        "attrs": {
+          "width": "32",
+          "height": "24"
+        },
+        "style": "width:64px;height:48px",
+        "container": {
+          "rect": {
+            "x": 0,
+            "y": 0,
+            "width": 400,
+            "height": 200
+          },
+          "rects": [
+            {
+              "x": 0,
+              "y": 0,
+              "width": 400,
+              "height": 200
+            }
+          ],
+          "client": {
+            "width": 400,
+            "height": 200,
+            "left": 0,
+            "top": 0
+          }
+        },
+        "viewport": {
+          "rect": {
+            "x": 0,
+            "y": 0,
+            "width": 64,
+            "height": 48
+          },
+          "rects": [
+            {
+              "x": 0,
+              "y": 0,
+              "width": 64,
+              "height": 48
+            }
+          ],
+          "client": {
+            "width": 64,
+            "height": 48,
+            "left": 0,
+            "top": 0
+          }
+        },
+        "shape": {
+          "rect": {
+            "x": 5,
+            "y": 5,
+            "width": 10,
+            "height": 10
+          },
+          "rects": [
+            {
+              "x": 5,
+              "y": 5,
+              "width": 10,
+              "height": 10
+            }
+          ],
+          "client": {
+            "width": 0,
+            "height": 0,
+            "left": 0,
+            "top": 0
+          }
+        },
+        "computedViewport": {
+          "width": "64px",
+          "height": "48px",
+          "zoom": "1"
+        }
+      },
+      {
+        "name": "border-padding",
+        "attrs": {
+          "width": "40",
+          "height": "20"
+        },
+        "style": "border:2px solid;padding:3px",
+        "container": {
+          "rect": {
+            "x": 0,
+            "y": 0,
+            "width": 400,
+            "height": 200
+          },
+          "rects": [
+            {
+              "x": 0,
+              "y": 0,
+              "width": 400,
+              "height": 200
+            }
+          ],
+          "client": {
+            "width": 400,
+            "height": 200,
+            "left": 0,
+            "top": 0
+          }
+        },
+        "viewport": {
+          "rect": {
+            "x": 0,
+            "y": 0,
+            "width": 50,
+            "height": 30
+          },
+          "rects": [
+            {
+              "x": 0,
+              "y": 0,
+              "width": 50,
+              "height": 30
+            }
+          ],
+          "client": {
+            "width": 46,
+            "height": 26,
+            "left": 2,
+            "top": 2
+          }
+        },
+        "shape": {
+          "rect": {
+            "x": 10,
+            "y": 10,
+            "width": 10,
+            "height": 10
+          },
+          "rects": [
+            {
+              "x": 10,
+              "y": 10,
+              "width": 10,
+              "height": 10
+            }
+          ],
+          "client": {
+            "width": 0,
+            "height": 0,
+            "left": 0,
+            "top": 0
+          }
+        },
+        "computedViewport": {
+          "width": "40px",
+          "height": "20px",
+          "zoom": "1"
+        }
+      },
+      {
+        "name": "css-border-box",
+        "attrs": {},
+        "style": "width:80px;height:60px;box-sizing:border-box;border:2px solid;padding:3px",
+        "container": {
+          "rect": {
+            "x": 0,
+            "y": 0,
+            "width": 400,
+            "height": 200
+          },
+          "rects": [
+            {
+              "x": 0,
+              "y": 0,
+              "width": 400,
+              "height": 200
+            }
+          ],
+          "client": {
+            "width": 400,
+            "height": 200,
+            "left": 0,
+            "top": 0
+          }
+        },
+        "viewport": {
+          "rect": {
+            "x": 0,
+            "y": 0,
+            "width": 80,
+            "height": 60
+          },
+          "rects": [
+            {
+              "x": 0,
+              "y": 0,
+              "width": 80,
+              "height": 60
+            }
+          ],
+          "client": {
+            "width": 76,
+            "height": 56,
+            "left": 2,
+            "top": 2
+          }
+        },
+        "shape": {
+          "rect": {
+            "x": 10,
+            "y": 10,
+            "width": 10,
+            "height": 10
+          },
+          "rects": [
+            {
+              "x": 10,
+              "y": 10,
+              "width": 10,
+              "height": 10
+            }
+          ],
+          "client": {
+            "width": 0,
+            "height": 0,
+            "left": 0,
+            "top": 0
+          }
+        },
+        "computedViewport": {
+          "width": "80px",
+          "height": "60px",
+          "zoom": "1"
+        }
+      },
+      {
+        "name": "zero",
+        "attrs": {
+          "width": "0",
+          "height": "0"
+        },
+        "container": {
+          "rect": {
+            "x": 0,
+            "y": 0,
+            "width": 400,
+            "height": 200
+          },
+          "rects": [
+            {
+              "x": 0,
+              "y": 0,
+              "width": 400,
+              "height": 200
+            }
+          ],
+          "client": {
+            "width": 400,
+            "height": 200,
+            "left": 0,
+            "top": 0
+          }
+        },
+        "viewport": {
+          "rect": {
+            "x": 0,
+            "y": 0,
+            "width": 0,
+            "height": 0
+          },
+          "rects": [
+            {
+              "x": 0,
+              "y": 0,
+              "width": 0,
+              "height": 0
+            }
+          ],
+          "client": {
+            "width": 0,
+            "height": 0,
+            "left": 0,
+            "top": 0
+          }
+        },
+        "shape": {
+          "rect": {
+            "x": 5,
+            "y": 5,
+            "width": 10,
+            "height": 10
+          },
+          "rects": [
+            {
+              "x": 5,
+              "y": 5,
+              "width": 10,
+              "height": 10
+            }
+          ],
+          "client": {
+            "width": 0,
+            "height": 0,
+            "left": 0,
+            "top": 0
+          }
+        },
+        "computedViewport": {
+          "width": "0px",
+          "height": "0px",
+          "zoom": "1"
+        }
+      },
+      {
+        "name": "viewbox-none",
+        "attrs": {
+          "width": "80",
+          "viewBox": "0 0 40 20",
+          "preserveAspectRatio": "none"
+        },
+        "container": {
+          "rect": {
+            "x": 0,
+            "y": 0,
+            "width": 400,
+            "height": 200
+          },
+          "rects": [
+            {
+              "x": 0,
+              "y": 0,
+              "width": 400,
+              "height": 200
+            }
+          ],
+          "client": {
+            "width": 400,
+            "height": 200,
+            "left": 0,
+            "top": 0
+          }
+        },
+        "viewport": {
+          "rect": {
+            "x": 0,
+            "y": 0,
+            "width": 80,
+            "height": 40
+          },
+          "rects": [
+            {
+              "x": 0,
+              "y": 0,
+              "width": 80,
+              "height": 40
+            }
+          ],
+          "client": {
+            "width": 80,
+            "height": 40,
+            "left": 0,
+            "top": 0
+          }
+        },
+        "shape": {
+          "rect": {
+            "x": 10,
+            "y": 10,
+            "width": 20,
+            "height": 20
+          },
+          "rects": [
+            {
+              "x": 10,
+              "y": 10,
+              "width": 20,
+              "height": 20
+            }
+          ],
+          "client": {
+            "width": 0,
+            "height": 0,
+            "left": 0,
+            "top": 0
+          }
+        },
+        "computedViewport": {
+          "width": "80px",
+          "height": "40px",
+          "zoom": "1"
+        }
+      },
+      {
+        "name": "css-transform",
+        "attrs": {
+          "width": "40",
+          "height": "20"
+        },
+        "style": "transform:translate(7px,9px) scale(1.5);transform-origin:0 0",
+        "container": {
+          "rect": {
+            "x": 0,
+            "y": 0,
+            "width": 400,
+            "height": 200
+          },
+          "rects": [
+            {
+              "x": 0,
+              "y": 0,
+              "width": 400,
+              "height": 200
+            }
+          ],
+          "client": {
+            "width": 400,
+            "height": 200,
+            "left": 0,
+            "top": 0
+          }
+        },
+        "viewport": {
+          "rect": {
+            "x": 7,
+            "y": 9,
+            "width": 60,
+            "height": 30
+          },
+          "rects": [
+            {
+              "x": 7,
+              "y": 9,
+              "width": 60,
+              "height": 30
+            }
+          ],
+          "client": {
+            "width": 40,
+            "height": 20,
+            "left": 0,
+            "top": 0
+          }
+        },
+        "shape": {
+          "rect": {
+            "x": 14.5,
+            "y": 16.5,
+            "width": 15,
+            "height": 15
+          },
+          "rects": [
+            {
+              "x": 14.5,
+              "y": 16.5,
+              "width": 15,
+              "height": 15
+            }
+          ],
+          "client": {
+            "width": 0,
+            "height": 0,
+            "left": 0,
+            "top": 0
+          }
+        },
+        "computedViewport": {
+          "width": "40px",
+          "height": "20px",
+          "zoom": "1"
+        }
+      },
+      {
+        "name": "hidden",
+        "attrs": {
+          "width": "40",
+          "height": "20"
+        },
+        "style": "display:none",
+        "container": {
+          "rect": {
+            "x": 0,
+            "y": 0,
+            "width": 400,
+            "height": 200
+          },
+          "rects": [
+            {
+              "x": 0,
+              "y": 0,
+              "width": 400,
+              "height": 200
+            }
+          ],
+          "client": {
+            "width": 400,
+            "height": 200,
+            "left": 0,
+            "top": 0
+          }
+        },
+        "viewport": {
+          "rect": {
+            "x": 0,
+            "y": 0,
+            "width": 0,
+            "height": 0
+          },
+          "rects": [],
+          "client": {
+            "width": 0,
+            "height": 0,
+            "left": 0,
+            "top": 0
+          }
+        },
+        "shape": {
+          "rect": {
+            "x": 0,
+            "y": 0,
+            "width": 0,
+            "height": 0
+          },
+          "rects": [],
+          "client": {
+            "width": 0,
+            "height": 0,
+            "left": 0,
+            "top": 0
+          }
+        },
+        "computedViewport": {
+          "width": "40px",
+          "height": "20px",
+          "zoom": "1"
+        }
+      },
+      {
+        "name": "block",
+        "attrs": {
+          "width": "40",
+          "height": "20"
+        },
+        "style": "display:block;margin:4px 6px",
+        "container": {
+          "rect": {
+            "x": 0,
+            "y": 4,
+            "width": 400,
+            "height": 200
+          },
+          "rects": [
+            {
+              "x": 0,
+              "y": 4,
+              "width": 400,
+              "height": 200
+            }
+          ],
+          "client": {
+            "width": 400,
+            "height": 200,
+            "left": 0,
+            "top": 0
+          }
+        },
+        "viewport": {
+          "rect": {
+            "x": 6,
+            "y": 4,
+            "width": 40,
+            "height": 20
+          },
+          "rects": [
+            {
+              "x": 6,
+              "y": 4,
+              "width": 40,
+              "height": 20
+            }
+          ],
+          "client": {
+            "width": 40,
+            "height": 20,
+            "left": 0,
+            "top": 0
+          }
+        },
+        "shape": {
+          "rect": {
+            "x": 11,
+            "y": 9,
+            "width": 10,
+            "height": 10
+          },
+          "rects": [
+            {
+              "x": 11,
+              "y": 9,
+              "width": 10,
+              "height": 10
+            }
+          ],
+          "client": {
+            "width": 0,
+            "height": 0,
+            "left": 0,
+            "top": 0
+          }
+        },
+        "computedViewport": {
+          "width": "40px",
+          "height": "20px",
+          "zoom": "1"
+        }
+      }
+    ]
+  }
+}

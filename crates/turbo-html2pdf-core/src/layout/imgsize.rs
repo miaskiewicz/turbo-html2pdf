@@ -69,6 +69,86 @@ pub(crate) fn size_replaced_live(name: String, intrinsic: Intrinsic, ctx: &SizeC
     }
 }
 
+pub(crate) fn size_viewport_live(
+    intrinsic_width: Option<f32>,
+    intrinsic_height: Option<f32>,
+    ratio: Option<f32>,
+    layout_scale: f32,
+    ctx: &SizeCtx,
+) -> (f32, f32) {
+    let frame = live_frame(ctx.style);
+    let width = live_dimension(ctx.style.width, Some(ctx.cb_width), frame.0)
+        .map(|value| viewport_layout_unit(value, layout_scale));
+    let height = live_dimension(ctx.style.height, ctx.cb_height, frame.1)
+        .map(|value| viewport_layout_unit(value, layout_scale));
+    let intrinsic_width = intrinsic_width.map(|value| viewport_layout_unit(value, layout_scale));
+    let intrinsic_height = intrinsic_height.map(|value| viewport_layout_unit(value, layout_scale));
+    let base = viewport_base(
+        width,
+        height,
+        intrinsic_width,
+        intrinsic_height,
+        ratio,
+        ctx.cb_width,
+    );
+    let limits = live_limits(ctx, frame);
+    let used = if ratio.is_some() {
+        constrain_live(base.0, base.1, width.is_none(), height.is_none(), limits)
+    } else {
+        (
+            base.0.clamp(limits.min_w, limits.max_w),
+            base.1.clamp(limits.min_h, limits.max_h),
+        )
+    };
+    (
+        viewport_layout_unit(used.0, layout_scale),
+        viewport_layout_unit(used.1, layout_scale),
+    )
+}
+
+// Blink155 LayoutUnit stores six fractional bits, saturates and truncates toward
+// zero. Convert actual used dimensions before producing a native fragment; the
+// caller's measured physical layout scale is separate from JavaScript DPR.
+fn viewport_layout_unit(value: f32, scale: f32) -> f32 {
+    ((value * scale * 64.0) as i32) as f32 / (scale * 64.0)
+}
+
+fn viewport_base(
+    width: Option<f32>,
+    height: Option<f32>,
+    intrinsic_width: Option<f32>,
+    intrinsic_height: Option<f32>,
+    ratio: Option<f32>,
+    containing_width: f32,
+) -> (f32, f32) {
+    match (width, height) {
+        (Some(w), Some(h)) => (w, h),
+        (Some(w), None) => (
+            w,
+            ratio.map_or(intrinsic_height.unwrap_or(150.0), |r| w / r),
+        ),
+        (None, Some(h)) => (ratio.map_or(intrinsic_width.unwrap_or(300.0), |r| h * r), h),
+        (None, None) => {
+            viewport_intrinsic(intrinsic_width, intrinsic_height, ratio, containing_width)
+        }
+    }
+}
+
+fn viewport_intrinsic(
+    width: Option<f32>,
+    height: Option<f32>,
+    ratio: Option<f32>,
+    containing_width: f32,
+) -> (f32, f32) {
+    match (width, height, ratio) {
+        (Some(w), Some(h), _) => (w, h),
+        (Some(w), None, Some(r)) => (w, w / r),
+        (None, Some(h), Some(r)) => (h * r, h),
+        (None, None, Some(r)) => (containing_width, containing_width / r),
+        _ => (width.unwrap_or(300.0), height.unwrap_or(150.0)),
+    }
+}
+
 fn live_frame(style: &BoxStyle) -> (f32, f32) {
     if style.box_sizing == super::value::BoxSizing::ContentBox {
         return (0.0, 0.0);

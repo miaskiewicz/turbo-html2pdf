@@ -9,6 +9,8 @@ pub mod flex;
 pub mod fragment;
 pub mod imgsize;
 pub mod inline;
+mod svg_numbers;
+pub(crate) mod svg_viewport;
 pub mod table;
 pub mod value;
 

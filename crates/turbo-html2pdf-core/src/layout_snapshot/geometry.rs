@@ -112,14 +112,14 @@ fn multiply(a: [f32; 6], b: [f32; 6]) -> [f32; 6] {
     ]
 }
 
-fn transform(point: Point, matrix: [f32; 6]) -> Point {
+pub(crate) fn transform(point: Point, matrix: [f32; 6]) -> Point {
     Point {
         x: matrix[0] * point.x + matrix[2] * point.y + matrix[4],
         y: matrix[1] * point.x + matrix[3] * point.y + matrix[5],
     }
 }
 
-fn rect_quad(rect: Rect) -> [Point; 4] {
+pub(crate) fn rect_quad(rect: Rect) -> [Point; 4] {
     [
         Point {
             x: rect.x,
@@ -140,7 +140,7 @@ fn rect_quad(rect: Rect) -> [Point; 4] {
     ]
 }
 
-fn bounds(quad: [Point; 4]) -> Rect {
+pub(crate) fn bounds(quad: [Point; 4]) -> Rect {
     let x = quad.iter().map(|p| p.x).fold(f32::INFINITY, f32::min);
     let y = quad.iter().map(|p| p.y).fold(f32::INFINITY, f32::min);
     let right = quad.iter().map(|p| p.x).fold(f32::NEG_INFINITY, f32::max);

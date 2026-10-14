@@ -540,7 +540,7 @@ pub(crate) fn min_content_width(lb: &LayoutBox, fonts: &FontRegistry) -> f32 {
         if let LengthPct::Px(w) = bs.width {
             return w + frame;
         }
-        if lb.image.as_ref().is_some_and(|s| s.replaced) {
+        if lb.is_replaced() {
             return natural_width(lb, fonts); // replaced image: intrinsic/declared size
         }
         let inner = match &lb.kind {
@@ -578,6 +578,9 @@ fn measure_width(
 /// against a 0-width containing block in the scratch measurement â and the item (a
 /// logo / hero image) collapsed to nothing.
 fn replaced_probe_width(item: &LayoutBox, images: &ImageCtx, fs: f32) -> Option<f32> {
+    if let Some(viewport) = &item.svg_viewport {
+        return Some(svg_probe_width(item, viewport, fs));
+    }
     let src = item.image.as_ref().filter(|s| s.replaced)?;
     let bs = item.resolved(ResolveCtx {
         parent_font_size: fs,
@@ -592,6 +595,22 @@ fn replaced_probe_width(item: &LayoutBox, images: &ImageCtx, fs: f32) -> Option<
         .resolve(&src.name)
         .and_then(crate::image::probe)?;
     Some(intrinsic.width as f32 + frame)
+}
+
+fn svg_probe_width(
+    item: &LayoutBox,
+    viewport: &super::svg_viewport::SvgViewport,
+    font_size: f32,
+) -> f32 {
+    let style = item.resolved(ResolveCtx {
+        parent_font_size: font_size,
+        cb_width: 0.0,
+    });
+    let frame = style.padding.horizontal() + style.border.widths().horizontal();
+    match style.width {
+        LengthPct::Px(width) => width + frame,
+        _ => viewport.natural_width(style.font_size) + frame,
+    }
 }
 
 fn measure_item(
@@ -633,6 +652,8 @@ fn measure_item(
             root_h: crate::style::viewport_px().1,
             live_geometry,
             used_metrics: None,
+            text_capture: None,
+            html_font_metrics: false,
             floats: Vec::new(),
         };
         let frag = block::layout_box_sized_isolated(item, &bs, 0.0, 0.0, w, &mut mctx);

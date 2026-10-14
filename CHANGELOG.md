@@ -4,6 +4,65 @@ All notable changes to turbo-html2pdf are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/); versions follow SemVer. The npm,
 PyPI, and crates.io packages release in lockstep from a `v*` tag (PyPI on `pyv*`).
 
+## [0.3.6] — unreleased
+
+- Add optional live-tree snapshots with genuine glyph/source cluster provenance,
+  original byte/UTF-16 ranges and real pen advances. Metadata follows unique
+  private native text-fragment IDs through wrapping, transforms and inline atoms,
+  while caller-owned source IDs retain the original text node. Existing public
+  Fragment/GlyphRun layouts and PDF itemization remain unchanged.
+- The text-enabled path checks actual primary-font shaping before per-character
+  fallback, retaining normalized combining clusters even when an individual mark
+  is absent from the font cmap. Authored Chrome controls with the identical bundled
+  font verify full cluster rectangles across wrapping, transforms and four sizes.
+  Add a separate HTML font-metric policy with native baseline/ascent/descent and
+  transformed cluster boxes, keeping generic/PDF metrics unchanged. This is
+  groundwork for genuine Range/
+  caret and fragmented inline geometry, not complete CSSOM View support.
+- Retain bounded original native text inputs and actual shaper direction for
+  Range/caret groundwork. Reject more than 16 MiB or one million Unicode scalars
+  of source text before capture.
+  The source-enabled route preserves NBSP/em-space glyphs rather than collapsing
+  all Unicode whitespace; two additional authored Chrome controls reproduce the
+  old defect and verify the correction. Full whitespace-mode/line-breaking and
+  caret semantics remain open.
+- Add source-scoped native Range rectangles from actual placed clusters and
+  collapsible pen gaps, plus caret selection at genuine cluster edges. All offset
+  pairs and recorded caret hits match the twelve controlled-font Chrome graphs.
+  Missing/unplaced sources, invalid offsets/points and rotated/skewed/degenerate
+  caret transforms fail explicitly. DOM hit testing, cross-node Range assembly,
+  full bidi and whitespace modes remain separate integration work.
+- Honor explicit HTML line heights below the loaded font height through actual
+  negative leading. A fresh independently recorded overlapping-line control
+  reproduces the former 29px displacement and wrong caret selection. Native line
+  precedence and nearby cluster edges now determine caret hits across separate
+  fallback-font runs; source queries avoid materializing unrelated glyph cells.
+  PDF line heights and the existing atomic-inline policy are retained.
+- Share immutable source ancestry between native cluster boxes rather than copying
+  an ancestor vector for every glyph; retained geometry remains valid after the
+  snapshot is dropped.
+- Bound shared native font-shaping memoization to 128 entries/8 MiB per face,
+  releasing old run payloads during churn and skipping oversized cache entries
+  while returning their genuine glyph results.
+- Add an explicit outer-SVG viewport snapshot route with real native replaced
+  sizing, CSS/attribute/intrinsic ratio handling and source ownership. Preserve
+  every SVG descendant identity while marking shape/nested/foreignObject geometry
+  unsupported. Forty-nine independently captured Chrome graphs verify full
+  parent/viewport rectangles and client sizes. Physical layout scale is measured
+  separately from JS DPR; native used-size conversion precedes fragment allocation
+  and leaves returned affine geometry and existing PDF policies intact.
+- Treat invalid CSS declaration fallback separately from computed variable
+  invalidation and SVG animated-length defaults; parse real viewBox numeric
+  grammar without accepting malformed repeated/trailing commas. Fresh browser
+  controls retain invalid, signed, exponent, decimal and mixed-calc cases.
+- Reject incomplete nonwhitespace glyph coverage instead of returning partial
+  source selections. Verify real captured glyph-loss/capacity boundaries and
+  cross-platform font policy; duplicate concurrent native shaping results leave
+  shared cache accounting unchanged.
+- Package the pinned Blink155 layout-unit notice with native viewport attribution.
+- Attribute the HTML font-metric policy to pinned Blink155 sources and include
+  their BSD notice in the reproducible npm, Python, WASM and binary notices.
+
 ## [0.3.5] — 2026-10-14
 
 - Ship the MIT license and existing embedded-font notices with the actual npm,

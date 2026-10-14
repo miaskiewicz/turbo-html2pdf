@@ -1,0 +1,10 @@
+{
+  "purpose": "Native replaced SVG used dimensions use bounded/truncated six-bit LayoutUnit conversion before fragment allocation; physical layout scale is caller-owned and independent of JavaScript DPR. Existing PDF/generic snapshot policy unchanged.",
+  "license": "Blink-layout-unit.LICENSE",
+  "sources": [
+    {
+      "source": "https://chromium.googlesource.com/chromium/src/+/refs/tags/155.0.8059.79/third_party/blink/renderer/platform/geometry/layout_unit.h",
+      "sha256": "fdc4e8d9386923943ec92a6868dcf59b34c741d52b19d0ee41c255092ff23624"
+    }
+  ]
+}

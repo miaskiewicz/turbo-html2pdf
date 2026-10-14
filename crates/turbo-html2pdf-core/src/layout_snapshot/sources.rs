@@ -1,5 +1,6 @@
 use super::{
-    SnapshotError, SnapshotFragment, SnapshotSource, SourceId, SourceIdentity, SourceKind,
+    SnapshotError, SnapshotFragment, SnapshotSource, SnapshotTextSource, SourceId, SourceIdentity,
+    SourceKind,
 };
 use crate::layout::value::{display_of, Display};
 use crate::{NodeId, StyledNode};
@@ -15,7 +16,10 @@ pub(crate) struct BuildSources {
     // Addresses are used only inside the one borrowed styled-tree construction.
     // They never escape as IDs; generated input labels cannot alias live nodes.
     nodes: HashMap<usize, SourceRecord>,
+    pub(crate) svg_viewports: std::collections::HashSet<usize>,
+    pub(crate) svg_layout_scale: f32,
     pub(crate) records: HashMap<NodeId, SourceRecord>,
+    pub(crate) text_sources: Vec<SnapshotTextSource>,
 }
 
 impl BuildSources {
@@ -29,19 +33,25 @@ impl BuildSources {
 pub(crate) fn prepare(
     styled: &[StyledNode],
     identities: &[SourceIdentity],
+    capture_text: bool,
 ) -> Result<(BuildSources, Vec<SnapshotSource>), SnapshotError> {
     let wanted = validate_identities(identities)?;
     let mut walker = Walker {
         wanted: &wanted,
         nodes: HashMap::new(),
         sources: Vec::new(),
+        text_sources: Vec::new(),
+        capture_text,
     };
     walker.visit(styled, &mut Vec::new(), &[], false);
     check_found(&wanted, &walker.sources)?;
     Ok((
         BuildSources {
             nodes: walker.nodes,
+            svg_viewports: std::collections::HashSet::new(),
+            svg_layout_scale: 1.0,
             records: HashMap::new(),
+            text_sources: walker.text_sources,
         },
         walker.sources,
     ))
@@ -80,6 +90,8 @@ struct Walker<'a> {
     wanted: &'a BTreeMap<Vec<usize>, SourceId>,
     nodes: HashMap<usize, SourceRecord>,
     sources: Vec<SnapshotSource>,
+    text_sources: Vec<SnapshotTextSource>,
+    capture_text: bool,
 }
 
 impl Walker<'_> {
@@ -116,6 +128,7 @@ impl Walker<'_> {
             },
         );
         if let Some(id) = id {
+            self.capture_text_source(id, node);
             self.sources.push(SnapshotSource {
                 id,
                 path: path.clone(),
@@ -126,6 +139,18 @@ impl Walker<'_> {
             });
         }
         self.children(node, path, ancestors, id, excluded);
+    }
+
+    fn capture_text_source(&mut self, id: SourceId, node: &StyledNode) {
+        if !self.capture_text {
+            return;
+        }
+        if let StyledNode::Text(text) = node {
+            self.text_sources.push(SnapshotTextSource {
+                source_id: id,
+                text: text.clone(),
+            });
+        }
     }
 
     fn children(

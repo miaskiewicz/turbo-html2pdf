@@ -57,6 +57,8 @@ pub(crate) struct Ctx<'a> {
     /// Live snapshots use viewport geometry rather than pagination image caps.
     pub(crate) live_geometry: bool,
     pub(crate) used_metrics: Option<HashMap<NodeId, UsedBoxMetrics>>,
+    pub(crate) text_capture: Option<crate::layout_snapshot::text::TextCapture>,
+    pub(crate) html_font_metrics: bool,
     /// Floats active in the current **block formatting context**, in absolute
     /// galley coordinates. In-flow content within the same BFC flows in the
     /// inline region these leave free (a `float:right` infobox narrows the text
@@ -298,7 +300,7 @@ fn layout_positioned(
 ) -> Fragment {
     let mut bs = resolve(lb, width, fs);
     let width = out_of_flow_width(&bs, width, ctx);
-    if !ctx.live_geometry || lb.image.as_ref().is_some_and(|image| image.replaced) {
+    if !ctx.live_geometry || lb.is_replaced() {
         return layout_box(lb, origin.0, origin.1, width, fs, ctx);
     }
     bs = resolve(lb, width, fs);
@@ -469,9 +471,22 @@ pub(crate) fn build_runs(
         .collect()
 }
 
-fn lines_to_fragments(para: &inline::ParagraphLayout, cx: f32, cy: f32, out: &mut Vec<Fragment>) {
-    for line in &para.lines {
-        for gr in &line.runs {
+fn lines_to_fragments(
+    para: &inline::ParagraphSourceLayout,
+    cx: f32,
+    cy: f32,
+    out: &mut Vec<Fragment>,
+    capture: &mut Option<crate::layout_snapshot::text::TextCapture>,
+) {
+    for (line_index, line) in para.layout.lines.iter().enumerate() {
+        for (run_index, gr) in line.runs.iter().enumerate() {
+            let node_id = capture.as_mut().map_or(gr.node_id, |capture| {
+                capture.record(
+                    gr.node_id,
+                    &para.clusters[line_index][run_index],
+                    para.font_boxes[line_index][run_index],
+                )
+            });
             let content = FragmentContent::TextLine {
                 glyphs: gr.glyphs.clone(),
                 face: gr.face.clone(),
@@ -479,7 +494,7 @@ fn lines_to_fragments(para: &inline::ParagraphLayout, cx: f32, cy: f32, out: &mu
                 color: gr.color,
             };
             out.push(Fragment::new(
-                gr.node_id,
+                node_id,
                 cx + line.indent,
                 cy + line.top,
                 line.width,
@@ -515,7 +530,7 @@ fn anchor_directive_frag(
 /// fill the line); replaced/explicit-width boxes size themselves normally.
 fn lay_atomic(b: &LayoutBox, cw: f32, fs: f32, ctx: &mut Ctx) -> Fragment {
     let bs = resolve(b, cw, fs);
-    let replaced = b.image.as_ref().is_some_and(|s| s.replaced);
+    let replaced = b.is_replaced();
     if !replaced && bs.width.resolve(cw).is_none() {
         // Shrink-to-fit, then honor `min-width`/`max-width` — google's header "Sign in"
         // pill has `min-width:85px`; unclamped it shrank to its ~68px text and, nearly
@@ -558,12 +573,42 @@ fn layout_lines(
         (rx - cx, rw)
     };
     let strut = line_strut(bs, fonts);
-    let para =
-        inline::layout_paragraph_in(&pieces, fonts, bs.text_align, ctx.diags, &region, strut);
+    let para = if ctx.html_font_metrics {
+        inline::layout_html_paragraph_in_with_sources(
+            &pieces,
+            fonts,
+            bs.text_align,
+            ctx.diags,
+            &region,
+            strut,
+        )
+    } else if ctx.text_capture.is_some() {
+        inline::layout_paragraph_in_with_sources(
+            &pieces,
+            fonts,
+            bs.text_align,
+            ctx.diags,
+            &region,
+            strut,
+        )
+    } else {
+        inline::ParagraphSourceLayout {
+            layout: inline::layout_paragraph_in(
+                &pieces,
+                fonts,
+                bs.text_align,
+                ctx.diags,
+                &region,
+                strut,
+            ),
+            clusters: Vec::new(),
+            font_boxes: Vec::new(),
+        }
+    };
     let mut frags = Vec::new();
-    lines_to_fragments(&para, cx, cy, &mut frags);
+    lines_to_fragments(&para, cx, cy, &mut frags, &mut ctx.text_capture);
     // Translate each pre-laid atom to where it landed within its line.
-    for line in &para.lines {
+    for line in &para.layout.lines {
         for placed in &line.atoms {
             let mut f = atom_frags[placed.id].clone();
             f.translate(cx + line.indent + placed.x, cy + line.top + placed.y);
@@ -571,7 +616,7 @@ fn layout_lines(
         }
     }
     frags.extend(directives);
-    (frags, para.height)
+    (frags, para.layout.height)
 }
 
 /// Pre-lay the inline sequence in document order, returning `(pieces, atoms,
@@ -955,7 +1000,7 @@ fn flow_region(
     cw: f32,
     flow_y: f32,
 ) -> (f32, f32) {
-    let avoids_floats = establishes_bfc(kid, kbs) || kid.image.as_ref().is_some_and(|s| s.replaced);
+    let avoids_floats = establishes_bfc(kid, kbs) || kid.is_replaced();
     if avoids_floats {
         inline_region(ctx, cx, cw, flow_y)
     } else {
@@ -1083,7 +1128,7 @@ fn place_float(
     y0: f32,
     ctx: &mut Ctx,
 ) -> Fragment {
-    let replaced = kid.image.as_ref().is_some_and(|s| s.replaced);
+    let replaced = kid.is_replaced();
     let (w, shrink) = float_width(kid, kbs, cw, ctx.fonts, replaced);
     // A float is offset from its packing edge by its own margins (CSS 9.5): its
     // border box drops below preceding floats plus `margin-top`, and packs inside
@@ -1523,6 +1568,15 @@ pub(crate) fn stamp_intrinsic_widths(lb: &LayoutBox, images: &ImageCtx) {
 
 /// Stamp one box's `intrinsic_w` if it is a resolvable replaced image.
 fn stamp_replaced_intrinsic(lb: &LayoutBox, images: &ImageCtx) {
+    if let Some(viewport) = &lb.svg_viewport {
+        let style = lb.resolved(ResolveCtx {
+            parent_font_size: super::value::DEFAULT_FONT_SIZE,
+            cb_width: 0.0,
+        });
+        lb.intrinsic_w
+            .set(Some(viewport.natural_width(style.font_size)));
+        return;
+    }
     let Some(src) = lb.image.as_ref().filter(|s| s.replaced) else {
         return;
     };
@@ -1550,6 +1604,11 @@ fn replaced_image_box(
     cb_width: f32,
     ctx: &mut Ctx,
 ) -> Option<Fragment> {
+    if let Some(viewport) = &lb.svg_viewport {
+        return Some(svg_viewport_fragment(
+            lb, viewport, bs, bx, by, cb_width, ctx,
+        ));
+    }
     let src = lb.image.as_ref().filter(|s| s.replaced)?;
     let intrinsic = probe_source(src, ctx)?;
     let sizing = size_ctx(bs, cb_width, ctx);
@@ -1560,6 +1619,33 @@ fn replaced_image_box(
     }
     let sized = size_replaced(src.name.clone(), intrinsic, &sizing);
     Some(image_fragment(lb, bx, by, &sized, bs))
+}
+
+fn svg_viewport_fragment(
+    lb: &LayoutBox,
+    viewport: &super::svg_viewport::SvgViewport,
+    style: &BoxStyle,
+    x: f32,
+    y: f32,
+    width: f32,
+    ctx: &mut Ctx,
+) -> Fragment {
+    let (content_width, content_height) = viewport.size(&size_ctx(style, width, ctx));
+    record_metrics(lb, style, content_width, content_height, ctx);
+    let width = content_width + style.padding.horizontal() + style.border.widths().horizontal();
+    let height = content_height + style.padding.vertical() + style.border.widths().vertical();
+    let mut fragment = Fragment::new(
+        lb.node_id,
+        x,
+        y,
+        width,
+        height,
+        content_kind(lb, style, width, height),
+    );
+    fragment.break_meta = break_meta_of(style);
+    fragment.z_index = style.z_index;
+    fragment.is_positioned = style.position != Position::Static;
+    fragment
 }
 
 /// Assemble the [`SizeCtx`] for the image sizer from a box's style and the
@@ -1674,29 +1760,46 @@ pub fn layout_tree_with_images(
     images: &ImageCtx,
     diags: &mut Diagnostics,
 ) -> Fragment {
-    layout_tree_policy(root, cb_width, 0.0, false, fonts, images, diags).0
+    layout_tree_policy(root, cb_width, 0.0, (false, None), fonts, images, diags).0
 }
 
 pub(crate) fn layout_tree_live(
     root: &LayoutBox,
-    width: f32,
-    height: f32,
+    viewport: (f32, f32),
     fonts: &FontRegistry,
     images: &ImageCtx,
     diags: &mut Diagnostics,
-) -> (Fragment, HashMap<NodeId, UsedBoxMetrics>) {
-    layout_tree_policy(root, width, height, true, fonts, images, diags)
+    text_start: Option<(u32, bool)>,
+) -> (
+    Fragment,
+    HashMap<NodeId, UsedBoxMetrics>,
+    Option<crate::layout_snapshot::text::TextCapture>,
+) {
+    layout_tree_policy(
+        root,
+        viewport.0,
+        viewport.1,
+        (true, text_start),
+        fonts,
+        images,
+        diags,
+    )
 }
 
 fn layout_tree_policy(
     root: &LayoutBox,
     cb_width: f32,
     viewport_height: f32,
-    live_geometry: bool,
+    policy: (bool, Option<(u32, bool)>),
     fonts: &FontRegistry,
     images: &ImageCtx,
     diags: &mut Diagnostics,
-) -> (Fragment, HashMap<NodeId, UsedBoxMetrics>) {
+) -> (
+    Fragment,
+    HashMap<NodeId, UsedBoxMetrics>,
+    Option<crate::layout_snapshot::text::TextCapture>,
+) {
+    let (live_geometry, text_start) = policy;
     let mut ctx = Ctx {
         fonts,
         images,
@@ -1711,6 +1814,9 @@ fn layout_tree_policy(
         root_h: viewport_height,
         live_geometry,
         used_metrics: live_geometry.then(HashMap::new),
+        html_font_metrics: text_start.is_some_and(|value| value.1),
+        text_capture: text_start
+            .map(|value| crate::layout_snapshot::text::TextCapture::new(value.0)),
         floats: Vec::new(),
     };
     stamp_intrinsic_widths(root, images);
@@ -1722,7 +1828,7 @@ fn layout_tree_policy(
     if float_bottom > frag.height {
         frag.height = float_bottom;
     }
-    (frag, ctx.used_metrics.unwrap_or_default())
+    (frag, ctx.used_metrics.unwrap_or_default(), ctx.text_capture)
 }
 
 #[cfg(test)]

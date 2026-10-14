@@ -87,6 +87,14 @@ pub struct ShapedGlyph {
     pub cluster: u32,
 }
 
+/// Native continuous-HTML font metrics, distinct from fractional PDF metrics.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct HtmlFontMetrics {
+    pub ascent: f32,
+    pub descent: f32,
+    pub line_gap: f32,
+}
+
 /// A loaded font face. Cheap to clone (the parsed faces and the shape cache are
 /// shared via `Arc`).
 #[derive(Clone)]
@@ -106,11 +114,12 @@ pub struct FontFace {
     ascent: i16,
     descent: i16,
     line_gap: i16,
+    mac_ascent_adjustment: bool,
     /// Memoizes shaping by run text. Shaping is real per-run work, and layout
     /// shapes each run at least twice (measuring its width, then emitting its
     /// glyphs) plus once more for every repeated string (table cells, labels);
     /// caching by text collapses those to one shape per *distinct* run.
-    shape_cache: Arc<Mutex<HashMap<String, Vec<ShapedGlyph>>>>,
+    shape_cache: Arc<Mutex<ShapeCache>>,
 }
 
 impl std::fmt::Debug for FontFace {
@@ -120,6 +129,14 @@ impl std::fmt::Debug for FontFace {
             .field("weight", &self.weight)
             .field("italic", &self.italic)
             .finish()
+    }
+}
+
+fn html_legacy_ascent(ascent: f32, descent: f32, enabled: bool) -> f32 {
+    if enabled {
+        ascent + ((ascent + descent) * 0.15 + 0.5).floor()
+    } else {
+        ascent
     }
 }
 
@@ -147,6 +164,8 @@ impl FontFace {
         crate::hot!("font.face.build");
         let faces = OwnedFaces::try_new(data, |bytes| build_parsed_index(bytes, index)).ok()?;
         let (units_per_em, ascent, descent, line_gap) = metrics(faces.borrow_dependent());
+        let mac_ascent_adjustment = family_name(&faces.borrow_dependent().ttf)
+            .is_some_and(|name| matches!(name.as_str(), "Times" | "Helvetica" | "Courier"));
         Some(FontFace {
             faces: Arc::new(faces),
             index,
@@ -157,8 +176,29 @@ impl FontFace {
             ascent,
             descent,
             line_gap,
-            shape_cache: Arc::new(Mutex::new(HashMap::new())),
+            mac_ascent_adjustment,
+            shape_cache: Arc::new(Mutex::new(ShapeCache::default())),
         })
+    }
+
+    /// Resolve actual font-table metrics using continuous HTML's integer ascent/
+    /// descent policy. Blink155 FontMetrics::AscentDescentWithHacks rounds each
+    /// independently; macOS's three named legacy families also adjust ascent.
+    /// Attribution/source pins are in html-font-metrics-provenance.json and
+    /// Blink-font-metrics.LICENSE. Existing PDF/tiny-font canvas metrics stay intact.
+    pub fn html_metrics(&self, size: f32) -> HtmlFontMetrics {
+        let ascent = self.ascent_px(size).round();
+        let descent = self.descent_px(size).round();
+        let ascent = html_legacy_ascent(
+            ascent,
+            descent,
+            cfg!(target_os = "macos") && self.mac_ascent_adjustment,
+        );
+        HtmlFontMetrics {
+            ascent,
+            descent,
+            line_gap: (f32::from(self.line_gap) * self.scale(size)).round(),
+        }
     }
 
     pub fn family(&self) -> &str {
@@ -304,6 +344,7 @@ impl FontFace {
         self.shape_cache
             .lock()
             .expect("shape cache not poisoned")
+            .entries
             .get(text)
             .cloned()
     }
@@ -312,7 +353,7 @@ impl FontFace {
         self.shape_cache
             .lock()
             .expect("shape cache not poisoned")
-            .insert(text.to_string(), glyphs.to_vec());
+            .insert(text, glyphs);
     }
 
     /// Measure the advance width of `text` in pixels at `font_size`, adding
@@ -322,6 +363,41 @@ impl FontFace {
         let advance: i64 = glyphs.iter().map(|g| i64::from(g.x_advance)).sum();
         advance as f32 * self.scale(font_size) + letter_spacing * glyphs.len() as f32
     }
+}
+
+const SHAPE_CACHE_ENTRIES: usize = 128;
+const SHAPE_CACHE_BYTES: usize = 8 * 1024 * 1024;
+
+#[derive(Default)]
+struct ShapeCache {
+    entries: HashMap<String, Vec<ShapedGlyph>>,
+    bytes: usize,
+}
+impl ShapeCache {
+    fn insert(&mut self, text: &str, glyphs: &[ShapedGlyph]) {
+        let Some(bytes) = shape_payload_bytes(text, glyphs) else {
+            return;
+        };
+        if self.entries.contains_key(text) {
+            return;
+        }
+        self.make_room(bytes);
+        self.entries.insert(text.to_string(), glyphs.to_vec());
+        self.bytes += bytes;
+    }
+    fn make_room(&mut self, bytes: usize) {
+        if self.entries.len() >= SHAPE_CACHE_ENTRIES || self.bytes + bytes > SHAPE_CACHE_BYTES {
+            self.entries.clear();
+            self.bytes = 0;
+        }
+    }
+}
+fn shape_payload_bytes(text: &str, glyphs: &[ShapedGlyph]) -> Option<usize> {
+    let bytes = glyphs
+        .len()
+        .checked_mul(std::mem::size_of::<ShapedGlyph>())?
+        .checked_add(text.len())?;
+    (bytes <= SHAPE_CACHE_BYTES).then_some(bytes)
 }
 
 fn collect_glyphs(shaped: &rustybuzz::GlyphBuffer) -> Vec<ShapedGlyph> {
@@ -427,5 +503,75 @@ mod tests {
         // re-parsing the shared bytes selects the same face.
         assert_eq!(face.index(), 0);
         assert_eq!(retagged.index(), face.index());
+    }
+    #[test]
+    fn shared_shape_cache_releases_churn_without_changing_native_results() {
+        let face = FontFace::from_bytes(ROBOTO.to_vec(), "Roboto", 400, false).unwrap();
+        let alias = face.with_family("sans-serif");
+        let expected = face.shape("retained glyph output");
+        for index in 0..512 {
+            alias.shape(&format!("unique actual run {index}"));
+            let cache = face.shape_cache.lock().unwrap();
+            assert!(cache.entries.len() <= SHAPE_CACHE_ENTRIES);
+            assert!(cache.bytes <= SHAPE_CACHE_BYTES);
+        }
+        assert!(face.cached_shape("retained glyph output").is_none());
+        assert_eq!(face.shape("retained glyph output"), expected);
+    }
+
+    #[test]
+    fn oversized_real_shaping_results_are_returned_without_persistent_memoization() {
+        let face = FontFace::from_bytes(ROBOTO.to_vec(), "Roboto", 400, false).unwrap();
+        let input = "a".repeat(450_000);
+        let glyphs = face.shape(&input);
+        assert_eq!(glyphs.len(), input.len());
+        assert!(glyphs.iter().all(|glyph| glyph.glyph_id != 0));
+        assert!(face.cached_shape(&input).is_none());
+        assert_eq!(face.shape_cache.lock().unwrap().bytes, 0);
+    }
+}
+
+#[cfg(test)]
+mod html_metric_policy_contracts {
+    #[test]
+    fn mac_legacy_policy_and_unmodified_platform_metrics_use_the_same_real_font_tables() {
+        let face = super::FontFace::from_bytes(
+            include_bytes!("../../assets/fonts/Go-Regular.ttf").to_vec(),
+            "Go",
+            400,
+            false,
+        )
+        .unwrap();
+        let ascent = face.ascent_px(64.0).round();
+        let descent = face.descent_px(64.0).round();
+        assert_eq!(super::html_legacy_ascent(ascent, descent, false), ascent);
+        assert_eq!((ascent, descent), (60.0, 14.0));
+        assert_eq!(super::html_legacy_ascent(ascent, descent, true), 71.0);
+        assert_eq!(
+            face.html_metrics(64.0).ascent,
+            ascent,
+            "Go is not a physical legacy-family face"
+        );
+    }
+    #[test]
+    fn duplicate_native_shaping_results_do_not_double_account_shared_cache_payloads() {
+        let face = super::FontFace::from_bytes(
+            include_bytes!("../../assets/fonts/Go-Regular.ttf").to_vec(),
+            "Go",
+            400,
+            false,
+        )
+        .unwrap();
+        let glyphs = face.shape("cache race");
+        let original_bytes = face.shape_cache.lock().unwrap().bytes;
+        face.shape_cache
+            .lock()
+            .unwrap()
+            .insert("cache race", &glyphs);
+        let cache = face.shape_cache.lock().unwrap();
+        assert_eq!(cache.entries.len(), 1);
+        assert_eq!(cache.bytes, original_bytes);
+        drop(cache);
+        assert_eq!(face.shape("cache race"), glyphs);
     }
 }

@@ -8,13 +8,19 @@
 //!
 //! This is a provenance seam, not a complete CSSOM View implementation. In
 //! particular a text-line fragment's rectangle is its line container, not a
-//! Range rectangle. Original UTF-16 offsets, caret boxes, scrollbars, clipping,
-//! and fragmented inline border boxes require further layout support.
+//! Range rectangle. The optional text-enabled API preserves actual shaper
+//! clusters and original UTF-16 offsets; complete caret boxes, whitespace/bidi
+//! mapping, scrollbars, clipping and fragmented inline borders remain separate.
 
 mod fixed_containing;
 mod geometry;
 mod metrics;
 pub(crate) mod sources;
+mod svg_viewports;
+pub(crate) mod text;
+mod text_carets;
+mod text_geometry;
+mod text_ranges;
 
 use crate::layout::{block, boxgen};
 use crate::{Cascade, Diagnostics, FontRegistry, Fragment, ImageCtx, Node, NodeId, StyledNode};
@@ -22,6 +28,10 @@ use std::collections::BTreeMap;
 
 pub use geometry::{Point, Rect};
 pub use metrics::UsedBoxMetrics;
+pub use svg_viewports::SvgSnapshotError;
+pub use text::{SnapshotTextGlyph, SnapshotTextRun, SnapshotTextSource};
+pub use text_geometry::SourceClusterBox;
+pub use text_ranges::{SourceRangeBox, TextGeometryError};
 
 /// A stable identity from the caller's source tree, independent of its position.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -117,9 +127,58 @@ pub struct LayoutSnapshot {
     sources: Vec<SnapshotSource>,
     source_index: BTreeMap<SourceId, usize>,
     viewport: (f32, f32),
+    text_runs: Vec<SnapshotTextRun>,
+    text_sources: Vec<SnapshotTextSource>,
+    unsupported_svg_sources: std::collections::BTreeSet<SourceId>,
 }
 
 impl LayoutSnapshot {
+    /// SVG shape/nested-viewport identities stay present, but this viewport-only
+    /// producer cannot supply their geometry. Absence is never a zero rectangle.
+    pub fn unsupported_svg_source_geometry(&self, source: SourceId) -> bool {
+        self.unsupported_svg_sources.contains(&source)
+    }
+
+    /// Resolve a candidate text source to a real placed cluster edge. The caller
+    /// chooses a visible hit-test source; this does not perform DOM hit testing.
+    /// Rotation/skew and degenerate transforms fail rather than guessing a caret.
+    pub fn text_caret_offset_from_point(
+        &self,
+        source: SourceId,
+        point: Point,
+    ) -> Result<usize, TextGeometryError> {
+        text_carets::offset(self, source, point)
+    }
+
+    /// Select one original text source using actual placed shaper cells. Partial
+    /// clusters keep their full native cell; no interior caret is interpolated.
+    /// Unplaced or unresolved sources fail explicitly instead of returning zeros.
+    pub fn text_range_boxes(
+        &self,
+        source: SourceId,
+        start: usize,
+        end: usize,
+    ) -> Result<Vec<SourceRangeBox>, TextGeometryError> {
+        text_ranges::ranges(self, source, start, end)
+    }
+
+    /// Actual glyph advance/font boxes, preserving source ranges and transforms.
+    pub fn text_cluster_boxes(&self) -> Vec<SourceClusterBox> {
+        text_geometry::cluster_boxes(self)
+    }
+    /// Capture only one source's real cluster boxes without materializing the
+    /// rest of the document's glyph geometry. Unknown sources produce no cells.
+    pub fn text_cluster_boxes_for_source(&self, source: SourceId) -> Vec<SourceClusterBox> {
+        text_geometry::source_cluster_boxes(self, source)
+    }
+    /// Actual per-glyph source metadata; empty for the original box-only API.
+    pub fn text_runs(&self) -> &[SnapshotTextRun] {
+        &self.text_runs
+    }
+    /// Mapped native text before whitespace collapse; empty for box-only snapshots.
+    pub fn text_sources(&self) -> &[SnapshotTextSource] {
+        &self.text_sources
+    }
     pub fn galley(&self) -> &Fragment {
         &self.galley
     }
@@ -160,29 +219,192 @@ pub fn snapshot_styled_tree(
     inputs: &SnapshotInputs,
     diags: &mut Diagnostics,
 ) -> Result<LayoutSnapshot, SnapshotError> {
+    capture_styled(styled, identities, inputs, diags, None).map(|(snapshot, _)| snapshot)
+}
+
+/// Failures specific to optional text provenance do not change the original API.
+#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
+pub enum TextSnapshotError {
+    #[error(transparent)]
+    Snapshot(#[from] SnapshotError),
+    #[error("native text provenance exceeds its source-byte, glyph or layout-ID budget")]
+    Budget,
+}
+
+fn checked_text_capture(
+    snapshot: LayoutSnapshot,
+    exceeded: bool,
+) -> Result<LayoutSnapshot, TextSnapshotError> {
+    if exceeded {
+        Err(TextSnapshotError::Budget)
+    } else {
+        Ok(snapshot)
+    }
+}
+
+/// Capture real shaping clusters/UTF-16 offsets alongside native source fragments.
+/// This API keeps original Fragment/GlyphRun output types and the PDF path intact.
+pub fn snapshot_styled_tree_with_text(
+    styled: &[StyledNode],
+    identities: &[SourceIdentity],
+    inputs: &SnapshotInputs,
+    diags: &mut Diagnostics,
+) -> Result<LayoutSnapshot, TextSnapshotError> {
+    validate_viewport(inputs)?;
+    text::validate_source_budget(styled)?;
+    let (snapshot, exceeded) = capture_styled(styled, identities, inputs, diags, Some(false))?;
+    checked_text_capture(snapshot, exceeded)
+}
+
+/// Style a borrowed live forest and capture actual native glyph source metadata.
+pub fn snapshot_live_tree_with_text(
+    nodes: &[Node],
+    identities: &[SourceIdentity],
+    cascade: &Cascade,
+    inputs: &SnapshotInputs,
+    diags: &mut Diagnostics,
+) -> Result<LayoutSnapshot, TextSnapshotError> {
+    validate_viewport(inputs)?;
+    crate::style::set_layout_viewport(inputs.width, inputs.height);
+    let styled = crate::style_tree(nodes, cascade);
+    snapshot_styled_tree_with_text(&styled, identities, inputs, diags)
+}
+
+/// Continuous HTML text layout with rounded native font metrics and real source
+/// clusters. The original box-only/PDF and generic source APIs keep their policy.
+pub fn snapshot_html_styled_tree_with_text(
+    styled: &[StyledNode],
+    identities: &[SourceIdentity],
+    inputs: &SnapshotInputs,
+    diags: &mut Diagnostics,
+) -> Result<LayoutSnapshot, TextSnapshotError> {
+    validate_viewport(inputs)?;
+    text::validate_source_budget(styled)?;
+    let (snapshot, exceeded) = capture_styled(styled, identities, inputs, diags, Some(true))?;
+    checked_text_capture(snapshot, exceeded)
+}
+
+/// Style a live forest using the continuous HTML text geometry policy.
+pub fn snapshot_html_live_tree_with_text(
+    nodes: &[Node],
+    identities: &[SourceIdentity],
+    cascade: &Cascade,
+    inputs: &SnapshotInputs,
+    diags: &mut Diagnostics,
+) -> Result<LayoutSnapshot, TextSnapshotError> {
+    validate_viewport(inputs)?;
+    crate::style::set_layout_viewport(inputs.width, inputs.height);
+    let styled = crate::style_tree(nodes, cascade);
+    snapshot_html_styled_tree_with_text(&styled, identities, inputs, diags)
+}
+
+/// Capture genuine outer-SVG viewport boxes and native HTML text. The caller
+/// declares identities whose native namespace is SVG; all descendant identities
+/// remain present but their SVG geometry is explicitly unsupported.
+pub fn snapshot_html_styled_tree_with_svg_viewports(
+    styled: &[StyledNode],
+    identities: &[SourceIdentity],
+    viewports: &[SourceId],
+    layout_scale: f32,
+    inputs: &SnapshotInputs,
+    diags: &mut Diagnostics,
+) -> Result<LayoutSnapshot, SvgSnapshotError> {
+    validate_viewport(inputs)?;
+    text::validate_source_budget(styled)?;
+    let plan = svg_viewports::prepare(styled, identities, viewports, layout_scale)?;
+    let (snapshot, exceeded) =
+        capture_styled_with_plan(styled, identities, inputs, diags, Some(true), Some(plan))?;
+    checked_svg_capture(snapshot, exceeded)
+}
+
+fn checked_svg_capture(
+    snapshot: LayoutSnapshot,
+    exceeded: bool,
+) -> Result<LayoutSnapshot, SvgSnapshotError> {
+    checked_text_capture(snapshot, exceeded).map_err(Into::into)
+}
+
+/// Style the complete caller-owned forest without rewriting/removing SVG nodes.
+pub fn snapshot_html_live_tree_with_svg_viewports(
+    nodes: &[Node],
+    identities: &[SourceIdentity],
+    viewports: &[SourceId],
+    layout_scale: f32,
+    cascade: &Cascade,
+    inputs: &SnapshotInputs,
+    diags: &mut Diagnostics,
+) -> Result<LayoutSnapshot, SvgSnapshotError> {
+    validate_viewport(inputs)?;
+    crate::style::set_layout_viewport(inputs.width, inputs.height);
+    let styled = crate::style_tree(nodes, cascade);
+    snapshot_html_styled_tree_with_svg_viewports(
+        &styled,
+        identities,
+        viewports,
+        layout_scale,
+        inputs,
+        diags,
+    )
+}
+
+fn capture_styled(
+    styled: &[StyledNode],
+    identities: &[SourceIdentity],
+    inputs: &SnapshotInputs,
+    diags: &mut Diagnostics,
+    html_text_metrics: Option<bool>,
+) -> Result<(LayoutSnapshot, bool), SnapshotError> {
+    capture_styled_with_plan(styled, identities, inputs, diags, html_text_metrics, None)
+}
+
+fn capture_styled_with_plan(
+    styled: &[StyledNode],
+    identities: &[SourceIdentity],
+    inputs: &SnapshotInputs,
+    diags: &mut Diagnostics,
+    html_text_metrics: Option<bool>,
+    plan: Option<svg_viewports::Plan>,
+) -> Result<(LayoutSnapshot, bool), SnapshotError> {
     validate_viewport(inputs)?;
     crate::style::set_layout_viewport(inputs.width, inputs.height);
     fixed_containing::validate(styled, false)?;
-    let (build_sources, mut sources) = sources::prepare(styled, identities)?;
-    let (tree, records) = boxgen::build_sourced_tree(styled, build_sources);
-    let (galley, metrics) = block::layout_tree_live(
+    let (mut build_sources, mut sources) =
+        sources::prepare(styled, identities, html_text_metrics.is_some())?;
+    let mut unsupported_svg_sources = std::collections::BTreeSet::new();
+    if let Some(plan) = plan {
+        build_sources.svg_viewports = plan.keys;
+        build_sources.svg_layout_scale = plan.layout_scale;
+        unsupported_svg_sources = plan.unsupported;
+    }
+    let text_sources = std::mem::take(&mut build_sources.text_sources);
+    let (tree, mut records, next_id) = boxgen::build_sourced_tree(styled, build_sources);
+    let (galley, metrics, text) = block::layout_tree_live(
         &tree,
-        inputs.width,
-        inputs.height,
+        (inputs.width, inputs.height),
         inputs.fonts,
         inputs.images,
         diags,
+        html_text_metrics.map(|html| (next_id, html)),
     );
+    text::alias_sources(text.as_ref(), &mut records);
     let fragments = geometry::collect(&galley, &records, &metrics);
     let source_index = sources.iter().enumerate().map(|(i, s)| (s.id, i)).collect();
     sources::index_fragments(&mut sources, &source_index, &fragments);
-    Ok(LayoutSnapshot {
-        galley,
-        fragments,
-        sources,
-        source_index,
-        viewport: (inputs.width, inputs.height),
-    })
+    let exceeded = text.as_ref().is_some_and(|text| text.exceeded);
+    let text_runs = text.map_or_else(Vec::new, |text| text.collect(&galley, &fragments));
+    Ok((
+        LayoutSnapshot {
+            galley,
+            fragments,
+            sources,
+            source_index,
+            viewport: (inputs.width, inputs.height),
+            text_runs,
+            text_sources,
+            unsupported_svg_sources,
+        },
+        exceeded,
+    ))
 }
 
 fn validate_viewport(inputs: &SnapshotInputs) -> Result<(), SnapshotError> {
@@ -192,4 +414,45 @@ fn validate_viewport(inputs: &SnapshotInputs) -> Result<(), SnapshotError> {
         }
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod text_budget_contracts {
+    #[test]
+    fn native_layout_identity_exhaustion_cannot_publish_partial_text_capture() {
+        use super::*;
+
+        use crate::{build_cascade, Diagnostics, FontRegistry, ImageCtx, NoImages, Node};
+        let fonts = FontRegistry::new();
+        let images = ImageCtx {
+            resolver: &NoImages,
+            body_height: None,
+        };
+        let nodes = [Node::Text("ab".into())];
+        let snapshot = snapshot_html_live_tree_with_text(
+            &nodes,
+            &[],
+            &build_cascade("", "", Default::default()),
+            &SnapshotInputs {
+                width: 80.0,
+                height: 40.0,
+                fonts: &fonts,
+                images: &images,
+            },
+            &mut Diagnostics::default(),
+        )
+        .unwrap();
+        let run = &snapshot.text_runs()[0];
+        let mut capture = text::TextCapture::new(u32::MAX);
+        capture.record(
+            snapshot.fragments()[run.fragment_index].layout_node_id,
+            &[run.glyphs[0].source],
+            run.font_box,
+        );
+        assert!(capture.exceeded);
+        assert!(matches!(
+            checked_text_capture(snapshot, capture.exceeded),
+            Err(TextSnapshotError::Budget)
+        ));
+    }
 }

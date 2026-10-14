@@ -13,7 +13,18 @@ const families = [
 ];
 const fonts = join(root, "crates/turbo-html2pdf-core/assets/fonts");
 const notices =
-  "# Embedded font notices\n\n" +
+  "# Third-party notices\n\n" +
+  "## Blink HTML font metric policy\n\n" +
+  readFileSync(
+    join(root, "crates/turbo-html2pdf-core/src/text/Blink-font-metrics.LICENSE"),
+    "utf8",
+  ) +
+  "\n## Blink SVG viewport layout-unit policy\n\n" +
+  readFileSync(
+    join(root, "crates/turbo-html2pdf-core/src/layout/Blink-layout-unit.LICENSE"),
+    "utf8",
+  ) +
+  "\n## Embedded fonts\n\n" +
   readFileSync(join(fonts, "NOTICE.md"), "utf8") +
   "\n" +
   families.map((path) => `\n## ${path}\n\n${readFileSync(join(fonts, path), "utf8")}\n`).join("");

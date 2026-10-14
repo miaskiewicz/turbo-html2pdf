@@ -8,6 +8,6 @@ mod font;
 mod inline;
 mod registry;
 
-pub use font::{FontFace, ShapedGlyph};
+pub use font::{FontFace, HtmlFontMetrics, ShapedGlyph};
 pub use inline::{layout_text, Align, LineBox, TextStyle, WhiteSpace};
 pub use registry::FontRegistry;

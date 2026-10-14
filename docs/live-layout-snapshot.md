@@ -119,9 +119,10 @@ control graphs avoid attributing font differences to box geometry.
 This seam exposes the real native engine; it does not turn its CSS subset into
 Blink. Remaining work before a complete browser geometry API includes:
 
-- Fragmented inline border boxes and original text byte/UTF-16 offsets, whitespace
-  mapping, bidi/ligature clusters, caret and selection rectangles. Existing
-  positioned glyphs have no retained original-offset mapping; none is invented.
+- Fragmented inline border boxes, collapsed-whitespace mapping, bidi/ligature
+  caret positions and complete selection rectangles. The unreleased optional
+  text path below retains actual original byte/UTF-16 cluster provenance; the
+  published box-only path does not invent this information.
 - Full overflow/clip/scrollbar regions, scroll offsets, sticky behavior, hit
   testing, transforms that establish fixed containing blocks, frame coordinate
   propagation, and browser stacking contexts beyond the engine's paint subset.
@@ -165,3 +166,150 @@ Source records expose actual `excluded_from_layout` provenance, including unmapp
 `display:none` ancestors. Zero fragments alone cannot distinguish exclusion from
 a visible empty/flattened inline, so embedders must not invent a zero rectangle
 from fragment absence.
+
+
+## Optional native text-source provenance (unreleased)
+
+`snapshot_live_tree_with_text` and `snapshot_styled_tree_with_text` return the same
+immutable snapshot with `text_runs()`. Each record identifies an actual native
+text fragment, the caller's source ID/ancestors and its positioned glyphs. Every
+glyph carries the real shaper byte cluster converted to original input UTF-16
+ranges, pen position and advance. Fragment origin and composed transform remain
+in `fragments()[run.fragment_index]`. These are actual shaping records, not equally
+spaced positions derived from a line rectangle.
+
+`layout::inline::layout_paragraph_in_with_sources` exposes the native paragraph
+and parallel per-line/per-run/per-glyph source data without changing the existing
+public paragraph/glyph structs. The text-enabled route shapes clusters in the
+primary face before choosing a fallback: normalization can produce a valid glyph
+for a base-plus-mark sequence even when that individual mark has no cmap entry.
+The existing PDF/box-only itemization and entry points retain their behavior.
+
+The separate `snapshot_html_live_tree_with_text`,
+`snapshot_html_styled_tree_with_text` and
+`layout_html_paragraph_in_with_sources` entry points select continuous HTML
+font metrics. Ascent/descent are rounded independently from the loaded font
+tables; macOS legacy-family adjustments follow the pinned Blink155 algorithm,
+using the font program's real family rather than a caller alias. The generic
+text entry points preserve their fractional/PDF metrics. `SourceFontBox` retains
+the actual run baseline and metrics. `text_cluster_boxes()` combines genuine
+shaper advances with these font boxes and the fragment's composed transform.
+Cluster cells share immutable native ancestry rather than copying a deep
+ancestor vector for every glyph. Each result keeps source ownership and UTF-16
+bounds; it is not an interpolated
+caret position or a glyph ink rectangle.
+
+`text_sources()` preserves each mapped text node's actual native UTF-8 input
+before whitespace collapse, together with its stable source ID. This provides
+original whitespace/UTF-16 ownership for subsequent Range algorithms without
+reading a guest getter or reconstructing text from rendered glyphs. Cluster
+records also retain the native shaper's selected direction; this does not imply
+complete CSS bidi itemization.
+
+The native capture refuses more than 16 MiB or one million Unicode scalars of
+input text before source copying/layout capture, layout-ID overflow or more than
+one million captured
+glyph records. `TextSnapshotError` wraps the existing viewport/source validation
+errors and reports that additional capacity bound. Original box-only snapshots
+retain their error type and allocate no glyph provenance. Text metadata holds
+native values and font/source IDs, with no script references or guest attributes.
+Shared loaded-font memoization is separately bounded to 128 entries and 8 MiB
+of logical run-text/glyph payload per face; oversized actual shaping results are
+returned without persistent caching. Eviction leaves real shaping output unchanged.
+
+The authored `scripts/text-source-chrome-control.mjs` serves the exact bundled
+Go-Regular.ttf and captures Range rectangles and caret queries in independent
+Chrome. Its saved font hash is
+`197d9f3703b4c00af609178876a8d73e396f64fe438b2c871778566632374be3`.
+Twelve controlled-face graphs check exact native cluster x/y/width/height,
+including combining text, collapsed leading whitespace, wrapping, transforms
+and four font sizes. NBSP/em-space retain their actual shaped advances, and
+NBSP remains unbroken when its word overflows. A thirteenth graph preserves the uncontrolled installed emoji
+fallback result; its
+numeric metrics are not certified. The capture requires zero errors and records
+localhost-only extension flags. Native tests separately verify astral UTF-16
+ranges, source ownership and repeated wrapped runs.
+
+`text_range_boxes(source, start, end)` selects one original text node using the
+actual placed cells and pen gaps. It returns the native fragment index, local
+rectangle and transformed bounds for each selected line. Partial combining
+clusters retain their whole native cell; selecting collapsed spaces uses the
+measured gap between adjacent placed cells or a genuine zero-width line edge.
+`text_caret_offset_from_point(source, point)` chooses a real cluster edge after
+inverting an axis-aligned fragment transform. The embedding caller must first
+identify the visible text source through its actual DOM hit-test policy. This
+method does not choose a DOM node, invent internal ligature offsets or perform
+browser viewport clipping. Rotation, skew and degenerate caret transforms are
+explicitly unsupported. Missing/unplaced sources and invalid input have distinct
+`TextGeometryError` variants.
+
+The same twelve controlled-font graphs now compare every valid UTF-16 start/end
+pair's complete client-rectangle list and every recorded caret hit. This includes
+partial combining-cluster selection, collapsed spaces, wrap edges, overlapping
+negative-leading lines and translated/scaled fragments. The source-scoped producer
+filters actual native runs before producing cells, avoiding unrelated glyph
+geometry allocations. On overlapping font boxes the earlier real line wins;
+between equally distant boxes the following line wins. Separate fallback runs
+on a chosen native line compete by their genuine edge distances. The public HTML
+text policy permits negative leading; generic/PDF and atomic-inline line policy
+remain unchanged. Offline contracts also cover invalid/missing/hidden sources,
+nonfinite coordinates and unsupported caret transforms. The original emoji
+fallback graph remains recorded but is explicitly outside numerical certification.
+
+Full cross-node DOM Range assembly, hit-test selection, bidi/CJK itemization,
+fragmented inline borders, CSS whitespace modes/Unicode line breaking and complete
+font-fallback behavior remain unfinished. The controlled-font comparisons do not
+certify installed fallback fonts, platform-specific hinted metrics or complete
+CSSOM View behavior.
+
+## Explicit outer SVG viewports (unreleased)
+
+`snapshot_html_live_tree_with_svg_viewports` and its already-styled counterpart
+accept the complete original forest, source identities, explicit outer-SVG
+`SourceId` declarations and a physical `layout_scale`. The embedding caller
+supplies identities from its actual SVG namespace. A supplied declaration must
+identify an SVG element; duplicate/nested declarations and invalid scale fail
+before layout. Qualified SVG names retain their original source identity.
+
+This route builds an actual atomic replaced viewport with float intrinsic size
+and native CSS width/height, constraints, padding/borders and transforms. It reads
+case-sensitive native attributes, resolves percentage geometry against the real
+containing block, and distinguishes CSS `auto` from intrinsic attribute sizes.
+Intrinsic width/height ratio precedes a viewBox-only ratio. Missing natural axes
+use the real default 300×150 sizing; viewBox-only sizing uses the containing
+width. There is no fabricated raster image, injected attribute or rewritten tag.
+
+Every original source/path remains in the snapshot. SVG shape, nested SVG and
+foreignObject descendants have `unsupported_svg_source_geometry(id) == true`;
+they have no manufactured fragment or zero rectangle. The supported outer SVG
+has its genuine border fragment and used content metrics. Display-none exclusion
+remains independently recorded through actual source ancestry. The normal
+box-only/PDF and generic text APIs retain their previous policy.
+
+Before allocating viewport fragments, native replaced sizing converts used
+content dimensions through the pinned Blink155 six-bit LayoutUnit model at the
+caller's measured physical layout scale. That scale is separate from JavaScript
+`devicePixelRatio`; the oracle measures it with independent ordinary HTML input
+sizes. The current profile's 32.51→32.5078125 and 32.504→32.5 observations uniquely
+match scale 2 among the tested 1/2/4/8 candidates. An explicit DPR 1 comparison
+retains the same observations as DPR 2. No returned rectangle or affine quad is
+postprocessed to match a hash. Source attribution/license is in
+`src/layout/svg-layout-provenance.json` and the packaged notices.
+
+`scripts/svg-viewport-chrome-control.mjs` retains actual Chrome/V8, source hashes,
+DPR, scale-calibration inputs/results and full parent/viewport/shape measurements.
+Forty-nine independent graphs verify the complete supported parent and viewport
+rectangles/client dimensions, including fractional sizes, ratio precedence,
+case sensitivity, invalid CSS versus computed-variable invalidation, malformed/
+negative/mixed-calc attributes, strict signed/exponent/decimal viewBox grammar,
+CSS overrides/auto, percentages, padding/borders, transforms, flex controls,
+hidden flow and margins. Shape measurements remain recorded and explicitly
+outside this viewport producer. Native contracts also verify declarations,
+nested-source admission, preserved identities and bounded/configurable scale.
+
+The native engine's remaining general CSS subset and float layout policy still
+apply outside this scoped used-size conversion. This does not supply SVG shape
+layout/painting, foreignObject layout, nested viewport transforms, full CSS zoom,
+all flex/grid/table sizing or browser hit-test stacking. Embedders must retain
+those limits and use real loaded resources/fonts; this seam does not certify a
+complete mixed SVG/browser implementation.
