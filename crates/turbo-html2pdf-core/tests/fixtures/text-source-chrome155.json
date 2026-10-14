@@ -1,7 +1,7 @@
 {
   "browser": "Chrome/155.0.8059.79",
   "v8": "15.5.35.23",
-  "recordedAt": "2026-10-14T05:06:20.338Z",
+  "recordedAt": "2026-10-14T05:29:58.082Z",
   "fontSha256": "197d9f3703b4c00af609178876a8d73e396f64fe438b2c871778566632374be3",
   "effectiveExtensionFlags": [
     "--disable-extensions",
@@ -138,6 +138,408 @@
             "point": {
               "x": 53.390625,
               "y": 40
+            },
+            "sameText": true,
+            "offset": 1
+          }
+        ]
+      },
+      {
+        "name": "font32",
+        "text": "ab",
+        "width": 400,
+        "fontSize": 32,
+        "lineHeight": 48,
+        "ranges": {
+          "0:0": {
+            "rect": {
+              "x": 0,
+              "y": 5.5,
+              "width": 0,
+              "height": 37
+            },
+            "rects": [
+              {
+                "x": 0,
+                "y": 5.5,
+                "width": 0,
+                "height": 37
+              }
+            ]
+          },
+          "0:1": {
+            "rect": {
+              "x": 0,
+              "y": 5.5,
+              "width": 17.796875,
+              "height": 37
+            },
+            "rects": [
+              {
+                "x": 0,
+                "y": 5.5,
+                "width": 17.796875,
+                "height": 37
+              }
+            ]
+          },
+          "0:2": {
+            "rect": {
+              "x": 0,
+              "y": 5.5,
+              "width": 35.59375,
+              "height": 37
+            },
+            "rects": [
+              {
+                "x": 0,
+                "y": 5.5,
+                "width": 35.59375,
+                "height": 37
+              }
+            ]
+          },
+          "1:1": {
+            "rect": {
+              "x": 17.796875,
+              "y": 5.5,
+              "width": 0,
+              "height": 37
+            },
+            "rects": [
+              {
+                "x": 17.796875,
+                "y": 5.5,
+                "width": 0,
+                "height": 37
+              }
+            ]
+          },
+          "1:2": {
+            "rect": {
+              "x": 17.796875,
+              "y": 5.5,
+              "width": 17.796875,
+              "height": 37
+            },
+            "rects": [
+              {
+                "x": 17.796875,
+                "y": 5.5,
+                "width": 17.796875,
+                "height": 37
+              }
+            ]
+          },
+          "2:2": {
+            "rect": {
+              "x": 35.59375,
+              "y": 5.5,
+              "width": 0,
+              "height": 37
+            },
+            "rects": [
+              {
+                "x": 35.59375,
+                "y": 5.5,
+                "width": 0,
+                "height": 37
+              }
+            ]
+          }
+        },
+        "hits": [
+          {
+            "range": "0:1",
+            "point": {
+              "x": 8.8984375,
+              "y": 24
+            },
+            "sameText": true,
+            "offset": 0
+          },
+          {
+            "range": "0:2",
+            "point": {
+              "x": 17.796875,
+              "y": 24
+            },
+            "sameText": true,
+            "offset": 1
+          },
+          {
+            "range": "1:2",
+            "point": {
+              "x": 26.6953125,
+              "y": 24
+            },
+            "sameText": true,
+            "offset": 1
+          }
+        ]
+      },
+      {
+        "name": "font96",
+        "text": "ab",
+        "width": 400,
+        "fontSize": 96,
+        "lineHeight": 128,
+        "ranges": {
+          "0:0": {
+            "rect": {
+              "x": 0,
+              "y": 8.5,
+              "width": 0,
+              "height": 111
+            },
+            "rects": [
+              {
+                "x": 0,
+                "y": 8.5,
+                "width": 0,
+                "height": 111
+              }
+            ]
+          },
+          "0:1": {
+            "rect": {
+              "x": 0,
+              "y": 8.5,
+              "width": 53.390625,
+              "height": 111
+            },
+            "rects": [
+              {
+                "x": 0,
+                "y": 8.5,
+                "width": 53.390625,
+                "height": 111
+              }
+            ]
+          },
+          "0:2": {
+            "rect": {
+              "x": 0,
+              "y": 8.5,
+              "width": 106.78125,
+              "height": 111
+            },
+            "rects": [
+              {
+                "x": 0,
+                "y": 8.5,
+                "width": 106.78125,
+                "height": 111
+              }
+            ]
+          },
+          "1:1": {
+            "rect": {
+              "x": 53.390625,
+              "y": 8.5,
+              "width": 0,
+              "height": 111
+            },
+            "rects": [
+              {
+                "x": 53.390625,
+                "y": 8.5,
+                "width": 0,
+                "height": 111
+              }
+            ]
+          },
+          "1:2": {
+            "rect": {
+              "x": 53.390625,
+              "y": 8.5,
+              "width": 53.390625,
+              "height": 111
+            },
+            "rects": [
+              {
+                "x": 53.390625,
+                "y": 8.5,
+                "width": 53.390625,
+                "height": 111
+              }
+            ]
+          },
+          "2:2": {
+            "rect": {
+              "x": 106.78125,
+              "y": 8.5,
+              "width": 0,
+              "height": 111
+            },
+            "rects": [
+              {
+                "x": 106.78125,
+                "y": 8.5,
+                "width": 0,
+                "height": 111
+              }
+            ]
+          }
+        },
+        "hits": [
+          {
+            "range": "0:1",
+            "point": {
+              "x": 26.6953125,
+              "y": 64
+            },
+            "sameText": true,
+            "offset": 0
+          },
+          {
+            "range": "0:2",
+            "point": {
+              "x": 53.390625,
+              "y": 64
+            },
+            "sameText": true,
+            "offset": 1
+          },
+          {
+            "range": "1:2",
+            "point": {
+              "x": 80.0859375,
+              "y": 64
+            },
+            "sameText": true,
+            "offset": 1
+          }
+        ]
+      },
+      {
+        "name": "font128",
+        "text": "ab",
+        "width": 400,
+        "fontSize": 128,
+        "lineHeight": 180,
+        "ranges": {
+          "0:0": {
+            "rect": {
+              "x": 0,
+              "y": 16,
+              "width": 0,
+              "height": 148
+            },
+            "rects": [
+              {
+                "x": 0,
+                "y": 16,
+                "width": 0,
+                "height": 148
+              }
+            ]
+          },
+          "0:1": {
+            "rect": {
+              "x": 0,
+              "y": 16,
+              "width": 71.1875,
+              "height": 148
+            },
+            "rects": [
+              {
+                "x": 0,
+                "y": 16,
+                "width": 71.1875,
+                "height": 148
+              }
+            ]
+          },
+          "0:2": {
+            "rect": {
+              "x": 0,
+              "y": 16,
+              "width": 142.375,
+              "height": 148
+            },
+            "rects": [
+              {
+                "x": 0,
+                "y": 16,
+                "width": 142.375,
+                "height": 148
+              }
+            ]
+          },
+          "1:1": {
+            "rect": {
+              "x": 71.1875,
+              "y": 16,
+              "width": 0,
+              "height": 148
+            },
+            "rects": [
+              {
+                "x": 71.1875,
+                "y": 16,
+                "width": 0,
+                "height": 148
+              }
+            ]
+          },
+          "1:2": {
+            "rect": {
+              "x": 71.1875,
+              "y": 16,
+              "width": 71.1875,
+              "height": 148
+            },
+            "rects": [
+              {
+                "x": 71.1875,
+                "y": 16,
+                "width": 71.1875,
+                "height": 148
+              }
+            ]
+          },
+          "2:2": {
+            "rect": {
+              "x": 142.375,
+              "y": 16,
+              "width": 0,
+              "height": 148
+            },
+            "rects": [
+              {
+                "x": 142.375,
+                "y": 16,
+                "width": 0,
+                "height": 148
+              }
+            ]
+          }
+        },
+        "hits": [
+          {
+            "range": "0:1",
+            "point": {
+              "x": 35.59375,
+              "y": 90
+            },
+            "sameText": true,
+            "offset": 0
+          },
+          {
+            "range": "0:2",
+            "point": {
+              "x": 71.1875,
+              "y": 90
+            },
+            "sameText": true,
+            "offset": 1
+          },
+          {
+            "range": "1:2",
+            "point": {
+              "x": 106.78125,
+              "y": 90
             },
             "sameText": true,
             "offset": 1

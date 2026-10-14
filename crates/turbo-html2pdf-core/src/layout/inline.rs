@@ -145,14 +145,25 @@ pub struct GlyphSourceCluster {
 pub struct ParagraphSourceLayout {
     pub layout: ParagraphLayout,
     pub clusters: Vec<Vec<Vec<GlyphSourceCluster>>>,
+    pub font_boxes: Vec<Vec<SourceFontBox>>,
 }
+/// A run's real baseline and native HTML font box, relative to its fragment.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct SourceFontBox {
+    pub baseline: f32,
+    pub ascent: f32,
+    pub descent: f32,
+}
+
 struct SourceRun {
     run: GlyphRun,
     clusters: Vec<GlyphSourceCluster>,
+    font_box: SourceFontBox,
 }
 struct SourceLine {
     line: InlineLine,
     clusters: Vec<Vec<GlyphSourceCluster>>,
+    font_boxes: Vec<SourceFontBox>,
 }
 
 // --------------------------------------------------------------------------
@@ -440,6 +451,7 @@ struct Placer<'a> {
     /// so an empty line (from consecutive `<br>`) is exactly one strut tall.
     strut: f32,
     capture_sources: bool,
+    html_font_metrics: bool,
     out: Vec<SourceLine>,
     cur: Vec<Word>,
     y: f32,
@@ -449,13 +461,15 @@ struct Placer<'a> {
 }
 
 impl<'a> Placer<'a> {
-    fn new(align: Align, region: LineRegion<'a>, strut: f32, capture_sources: bool) -> Self {
+    fn new(align: Align, region: LineRegion<'a>, strut: f32, policy: (bool, bool)) -> Self {
+        let (capture_sources, html_font_metrics) = policy;
         let (indent, lw) = region(0.0);
         Placer {
             align,
             region,
             strut,
             capture_sources,
+            html_font_metrics,
             out: Vec::new(),
             cur: Vec::new(),
             y: 0.0,
@@ -476,7 +490,7 @@ impl<'a> Placer<'a> {
             self.lw,
             self.align,
             self.strut,
-            self.capture_sources,
+            (self.capture_sources, self.html_font_metrics),
         );
         line.line.top = self.y;
         line.line.indent = self.indent;
@@ -512,9 +526,9 @@ fn wrap_and_place(
     align: Align,
     region: LineRegion,
     strut: f32,
-    capture_sources: bool,
+    policy: (bool, bool),
 ) -> Vec<SourceLine> {
-    let mut placer = Placer::new(align, region, strut, capture_sources);
+    let mut placer = Placer::new(align, region, strut, policy);
     for word in words {
         placer.add(word);
     }
@@ -547,13 +561,25 @@ struct Metrics {
     height: f32,
 }
 
-fn fold_seg_metrics(seg: &Seg, m: &mut Metrics) {
+fn fold_seg_metrics(seg: &Seg, m: &mut Metrics, capture_sources: bool) {
     let shift = valign_shift(seg.valign, seg.font_size);
-    m.ascent = m.ascent.max(seg.face.ascent_px(seg.font_size) + shift);
-    m.descent = m.descent.max(seg.face.descent_px(seg.font_size) - shift);
-    let lh = seg
-        .line_height
-        .unwrap_or_else(|| seg.face.line_height_px(seg.font_size));
+    let (ascent, descent, normal) = if capture_sources {
+        let metrics = seg.face.html_metrics(seg.font_size);
+        (
+            metrics.ascent,
+            metrics.descent,
+            metrics.ascent + metrics.descent + metrics.line_gap,
+        )
+    } else {
+        (
+            seg.face.ascent_px(seg.font_size),
+            seg.face.descent_px(seg.font_size),
+            seg.face.line_height_px(seg.font_size),
+        )
+    };
+    m.ascent = m.ascent.max(ascent + shift);
+    m.descent = m.descent.max(descent - shift);
+    let lh = seg.line_height.unwrap_or(normal);
     m.height = m.height.max(lh);
 }
 
@@ -577,7 +603,7 @@ fn fold_atom_metrics(atom: &InlineAtom, m: &mut Metrics) {
 /// `<br><br>` gap — is exactly one strut tall), then each word's text segments and
 /// atoms grow it. Text ascent/descent still floor the height via the final `max`,
 /// as a line box is never shorter than its own content.
-fn line_metrics(words: &[Word], strut: f32) -> Metrics {
+fn line_metrics(words: &[Word], strut: f32, capture_sources: bool) -> Metrics {
     let mut m = Metrics {
         ascent: 0.0,
         descent: 0.0,
@@ -585,7 +611,7 @@ fn line_metrics(words: &[Word], strut: f32) -> Metrics {
     };
     for word in words {
         for seg in &word.segs {
-            fold_seg_metrics(seg, &mut m);
+            fold_seg_metrics(seg, &mut m, capture_sources);
         }
         if let Some(atom) = word.atom {
             fold_atom_metrics(&atom, &mut m);
@@ -606,7 +632,8 @@ fn line_used_width(words: &[Word]) -> f32 {
     w
 }
 
-fn shape_seg(seg: &Seg, pen_x: f32, baseline: f32, capture_sources: bool) -> SourceRun {
+fn shape_seg(seg: &Seg, pen_x: f32, baseline: f32, policy: (bool, bool)) -> SourceRun {
+    let (capture_sources, html_font_metrics) = policy;
     let scale = seg.face.scale(seg.font_size);
     let seg_baseline = baseline - valign_shift(seg.valign, seg.font_size);
     let mut glyphs = Vec::new();
@@ -662,7 +689,21 @@ fn shape_seg(seg: &Seg, pen_x: f32, baseline: f32, capture_sources: bool) -> Sou
         });
         x += scale * g.x_advance as f32 + seg.letter_spacing;
     }
+    let (ascent, descent) = if html_font_metrics {
+        let metrics = seg.face.html_metrics(seg.font_size);
+        (metrics.ascent, metrics.descent)
+    } else {
+        (
+            seg.face.ascent_px(seg.font_size),
+            seg.face.descent_px(seg.font_size),
+        )
+    };
     SourceRun {
+        font_box: SourceFontBox {
+            baseline: seg_baseline,
+            ascent,
+            descent,
+        },
         clusters,
         run: GlyphRun {
             node_id: seg.node_id,
@@ -685,11 +726,21 @@ fn can_merge(a: &GlyphRun, b: &GlyphRun) -> bool {
         && same_face(&a.face, &b.face)
 }
 
-fn merge_runs(runs: Vec<SourceRun>) -> Vec<SourceRun> {
+fn can_merge_source(a: &SourceRun, b: &SourceRun, capture_sources: bool) -> bool {
+    can_merge(&a.run, &b.run) && source_metadata_compatible(a, b, capture_sources)
+}
+fn source_metadata_compatible(a: &SourceRun, b: &SourceRun, enabled: bool) -> bool {
+    if !enabled {
+        return true;
+    }
+    a.font_box == b.font_box && a.run.face.data().as_ptr() == b.run.face.data().as_ptr()
+}
+
+fn merge_runs(runs: Vec<SourceRun>, capture_sources: bool) -> Vec<SourceRun> {
     let mut out: Vec<SourceRun> = Vec::new();
     for run in runs {
         match out.last_mut() {
-            Some(last) if can_merge(&last.run, &run.run) => {
+            Some(last) if can_merge_source(last, &run, capture_sources) => {
                 last.run.glyphs.extend(run.run.glyphs);
                 last.clusters.extend(run.clusters);
             }
@@ -720,9 +771,9 @@ fn place_line(
     max_width: f32,
     align: Align,
     strut: f32,
-    capture_sources: bool,
+    policy: (bool, bool),
 ) -> SourceLine {
-    let m = line_metrics(&words, strut);
+    let m = line_metrics(&words, strut, policy.1);
     let baseline = m.ascent + (m.height - m.ascent - m.descent) / 2.0;
     let width = line_used_width(&words);
     let mut pen = align_offset(align, width, max_width);
@@ -739,20 +790,25 @@ fn place_line(
             pen += atom.width + atom.margin_left + atom.margin_right;
         } else {
             for seg in &word.segs {
-                runs.push(shape_seg(seg, pen, baseline, capture_sources));
+                runs.push(shape_seg(seg, pen, baseline, policy));
                 pen += seg.width;
             }
         }
         pen += word.space_after;
     }
-    let (runs, clusters) = merge_runs(runs)
-        .into_iter()
-        .map(|value| (value.run, value.clusters))
-        .unzip();
+    let mut output_runs = Vec::new();
+    let mut clusters = Vec::new();
+    let mut font_boxes = Vec::new();
+    for value in merge_runs(runs, policy.0) {
+        output_runs.push(value.run);
+        clusters.push(value.clusters);
+        font_boxes.push(value.font_box);
+    }
     SourceLine {
+        font_boxes,
         clusters,
         line: InlineLine {
-            runs,
+            runs: output_runs,
             atoms,
             width,
             top: 0.0,
@@ -770,14 +826,19 @@ fn finalize(lines: Vec<SourceLine>) -> ParagraphSourceLayout {
         height = height.max(line.top + line.height);
         width = width.max(line.indent + line.width);
     }
-    let (lines, clusters) = lines
-        .into_iter()
-        .map(|value| (value.line, value.clusters))
-        .unzip();
+    let mut output_lines = Vec::new();
+    let mut clusters = Vec::new();
+    let mut font_boxes = Vec::new();
+    for value in lines {
+        output_lines.push(value.line);
+        clusters.push(value.clusters);
+        font_boxes.push(value.font_boxes);
+    }
     ParagraphSourceLayout {
+        font_boxes,
         clusters,
         layout: ParagraphLayout {
-            lines,
+            lines: output_lines,
             width,
             height,
         },
@@ -812,7 +873,7 @@ pub fn layout_paragraph_in(
     strut: f32,
 ) -> ParagraphLayout {
     let words = build_pieces(pieces, reg, diags, false);
-    finalize(wrap_and_place(words, align, region, strut, false)).layout
+    finalize(wrap_and_place(words, align, region, strut, (false, false))).layout
 }
 
 /// The same native shaping and line-breaking result with glyph source offsets.
@@ -827,7 +888,21 @@ pub fn layout_paragraph_in_with_sources(
     strut: f32,
 ) -> ParagraphSourceLayout {
     let words = build_pieces(pieces, reg, diags, true);
-    finalize(wrap_and_place(words, align, region, strut, true))
+    finalize(wrap_and_place(words, align, region, strut, (true, false)))
+}
+
+/// Continuous HTML text geometry with actual source clusters and rounded native
+/// HTML font metrics. The original paragraph/PDF functions retain their policy.
+pub fn layout_html_paragraph_in_with_sources(
+    pieces: &[Piece],
+    reg: &FontRegistry,
+    align: Align,
+    diags: &mut Diagnostics,
+    region: LineRegion,
+    strut: f32,
+) -> ParagraphSourceLayout {
+    let words = build_pieces(pieces, reg, diags, true);
+    finalize(wrap_and_place(words, align, region, strut, (true, true)))
 }
 
 /// Lay out a paragraph of text runs only (no atoms) — a convenience for callers

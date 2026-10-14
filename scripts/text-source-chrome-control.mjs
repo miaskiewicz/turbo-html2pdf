@@ -31,6 +31,9 @@ async function collect() {
   document.body.style.cssText = "margin:0;padding:0";
   const definitions = [
     { name: "ascii", text: "ab", width: 400 },
+    { name: "font32", text: "ab", width: 400, fontSize: 32, lineHeight: 48 },
+    { name: "font96", text: "ab", width: 400, fontSize: 96, lineHeight: 128 },
+    { name: "font128", text: "ab", width: 400, fontSize: 128, lineHeight: 180 },
     { name: "leading-collapsed-accent", text: "  ab  é", width: 400 },
     { name: "ligature", text: "ffi", width: 400 },
     { name: "combining", text: "e\u0301", width: 400 },
@@ -43,7 +46,7 @@ async function collect() {
   for (const definition of definitions) {
     document.body.replaceChildren();
     const element = document.createElement("div");
-    element.style.cssText = `font-family:ParityGo;font-size:64px;line-height:80px;width:${definition.width}px;${definition.transform ? `transform:${definition.transform};transform-origin:0 0;` : ""}`;
+    element.style.cssText = `font-family:ParityGo;font-size:${definition.fontSize ?? 64}px;line-height:${definition.lineHeight ?? 80}px;width:${definition.width}px;${definition.transform ? `transform:${definition.transform};transform-origin:0 0;` : ""}`;
     const text = document.createTextNode(definition.text);
     element.append(text);
     document.body.append(element);

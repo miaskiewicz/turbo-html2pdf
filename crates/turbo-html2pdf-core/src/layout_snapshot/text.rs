@@ -2,7 +2,7 @@
 //! Private layout IDs distinguish repeated identical runs on different lines;
 //! caller-owned source identities still point to the original text node.
 use super::{SnapshotFragment, SourceId};
-use crate::layout::inline::GlyphSourceCluster;
+use crate::layout::inline::{GlyphSourceCluster, SourceFontBox};
 use crate::{Fragment, FragmentContent, NodeId};
 use std::collections::HashMap;
 
@@ -23,11 +23,13 @@ pub struct SnapshotTextRun {
     pub source_id: Option<SourceId>,
     pub source_ancestors: Vec<SourceId>,
     pub glyphs: Vec<SnapshotTextGlyph>,
+    pub font_box: SourceFontBox,
 }
 
 pub(crate) struct CapturedRun {
     pub(crate) original: NodeId,
     clusters: Vec<GlyphSourceCluster>,
+    font_box: SourceFontBox,
 }
 pub(crate) struct TextCapture {
     next: u32,
@@ -44,7 +46,12 @@ impl TextCapture {
             runs: HashMap::new(),
         }
     }
-    pub(crate) fn record(&mut self, original: NodeId, clusters: &[GlyphSourceCluster]) -> NodeId {
+    pub(crate) fn record(
+        &mut self,
+        original: NodeId,
+        clusters: &[GlyphSourceCluster],
+        font_box: SourceFontBox,
+    ) -> NodeId {
         let Some(next) = self.next.checked_add(1) else {
             self.exceeded = true;
             return original;
@@ -60,6 +67,7 @@ impl TextCapture {
             id,
             CapturedRun {
                 original,
+                font_box,
                 clusters: clusters.to_vec(),
             },
         );
@@ -88,6 +96,7 @@ impl TextCapture {
         {
             debug_assert_eq!(capture.clusters.len(), glyphs.len());
             out.push(SnapshotTextRun {
+                font_box: capture.font_box,
                 fragment_index: snapshot.index,
                 source_id: snapshot.source_id,
                 source_ancestors: snapshot.source_ancestors.clone(),
@@ -140,11 +149,33 @@ mod tests {
     fn native_capture_never_wraps_layout_ids_or_exceeds_the_glyph_budget() {
         let original = NodeId(7);
         let mut ids = TextCapture::new(u32::MAX);
-        assert_eq!(ids.record(original, &[cluster()]), original);
+        assert_eq!(
+            ids.record(
+                original,
+                &[cluster()],
+                SourceFontBox {
+                    baseline: 1.0,
+                    ascent: 1.0,
+                    descent: 0.0
+                }
+            ),
+            original
+        );
         assert!(ids.exceeded && ids.runs.is_empty());
         let mut capacity = TextCapture::new(100);
         capacity.count = 1_000_000;
-        assert_eq!(capacity.record(original, &[cluster()]), original);
+        assert_eq!(
+            capacity.record(
+                original,
+                &[cluster()],
+                SourceFontBox {
+                    baseline: 1.0,
+                    ascent: 1.0,
+                    descent: 0.0
+                }
+            ),
+            original
+        );
         assert!(capacity.exceeded && capacity.runs.is_empty());
     }
 }

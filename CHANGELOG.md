@@ -14,8 +14,13 @@ PyPI, and crates.io packages release in lockstep from a `v*` tag (PyPI on `pyv*`
 - The text-enabled path checks actual primary-font shaping before per-character
   fallback, retaining normalized combining clusters even when an individual mark
   is absent from the font cmap. Authored Chrome controls with the identical bundled
-  font verify horizontal cluster geometry. This is groundwork for genuine Range/
+  font verify full cluster rectangles across wrapping, transforms and four sizes.
+  Add a separate HTML font-metric policy with native baseline/ascent/descent and
+  transformed cluster boxes, keeping generic/PDF metrics unchanged. This is
+  groundwork for genuine Range/
   caret and fragmented inline geometry, not complete CSSOM View support.
+- Attribute the HTML font-metric policy to pinned Blink155 sources and include
+  their BSD notice in the reproducible npm, Python, WASM and binary notices.
 
 ## [0.3.5] — 2026-10-14
 

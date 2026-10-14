@@ -17,6 +17,7 @@ mod geometry;
 mod metrics;
 pub(crate) mod sources;
 pub(crate) mod text;
+mod text_geometry;
 
 use crate::layout::{block, boxgen};
 use crate::{Cascade, Diagnostics, FontRegistry, Fragment, ImageCtx, Node, NodeId, StyledNode};
@@ -25,6 +26,7 @@ use std::collections::BTreeMap;
 pub use geometry::{Point, Rect};
 pub use metrics::UsedBoxMetrics;
 pub use text::{SnapshotTextGlyph, SnapshotTextRun};
+pub use text_geometry::SourceClusterBox;
 
 /// A stable identity from the caller's source tree, independent of its position.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -125,6 +127,10 @@ pub struct LayoutSnapshot {
 
 impl LayoutSnapshot {
     /// Actual per-glyph source metadata; empty for the original box-only API.
+    /// Actual glyph advance/font boxes, preserving source ranges and transforms.
+    pub fn text_cluster_boxes(&self) -> Vec<SourceClusterBox> {
+        text_geometry::cluster_boxes(self)
+    }
     pub fn text_runs(&self) -> &[SnapshotTextRun] {
         &self.text_runs
     }
@@ -168,7 +174,7 @@ pub fn snapshot_styled_tree(
     inputs: &SnapshotInputs,
     diags: &mut Diagnostics,
 ) -> Result<LayoutSnapshot, SnapshotError> {
-    capture_styled(styled, identities, inputs, diags, false).map(|(snapshot, _)| snapshot)
+    capture_styled(styled, identities, inputs, diags, None).map(|(snapshot, _)| snapshot)
 }
 
 /// Failures specific to optional text provenance do not change the original API.
@@ -188,7 +194,7 @@ pub fn snapshot_styled_tree_with_text(
     inputs: &SnapshotInputs,
     diags: &mut Diagnostics,
 ) -> Result<LayoutSnapshot, TextSnapshotError> {
-    let (snapshot, exceeded) = capture_styled(styled, identities, inputs, diags, true)?;
+    let (snapshot, exceeded) = capture_styled(styled, identities, inputs, diags, Some(false))?;
     if exceeded {
         Err(TextSnapshotError::Budget)
     } else {
@@ -210,12 +216,42 @@ pub fn snapshot_live_tree_with_text(
     snapshot_styled_tree_with_text(&styled, identities, inputs, diags)
 }
 
+/// Continuous HTML text layout with rounded native font metrics and real source
+/// clusters. The original box-only/PDF and generic source APIs keep their policy.
+pub fn snapshot_html_styled_tree_with_text(
+    styled: &[StyledNode],
+    identities: &[SourceIdentity],
+    inputs: &SnapshotInputs,
+    diags: &mut Diagnostics,
+) -> Result<LayoutSnapshot, TextSnapshotError> {
+    let (snapshot, exceeded) = capture_styled(styled, identities, inputs, diags, Some(true))?;
+    if exceeded {
+        Err(TextSnapshotError::Budget)
+    } else {
+        Ok(snapshot)
+    }
+}
+
+/// Style a live forest using the continuous HTML text geometry policy.
+pub fn snapshot_html_live_tree_with_text(
+    nodes: &[Node],
+    identities: &[SourceIdentity],
+    cascade: &Cascade,
+    inputs: &SnapshotInputs,
+    diags: &mut Diagnostics,
+) -> Result<LayoutSnapshot, TextSnapshotError> {
+    validate_viewport(inputs)?;
+    crate::style::set_layout_viewport(inputs.width, inputs.height);
+    let styled = crate::style_tree(nodes, cascade);
+    snapshot_html_styled_tree_with_text(&styled, identities, inputs, diags)
+}
+
 fn capture_styled(
     styled: &[StyledNode],
     identities: &[SourceIdentity],
     inputs: &SnapshotInputs,
     diags: &mut Diagnostics,
-    capture_text: bool,
+    html_text_metrics: Option<bool>,
 ) -> Result<(LayoutSnapshot, bool), SnapshotError> {
     validate_viewport(inputs)?;
     crate::style::set_layout_viewport(inputs.width, inputs.height);
@@ -228,7 +264,7 @@ fn capture_styled(
         inputs.fonts,
         inputs.images,
         diags,
-        capture_text.then_some(next_id),
+        html_text_metrics.map(|html| (next_id, html)),
     );
     text::alias_sources(text.as_ref(), &mut records);
     let fragments = geometry::collect(&galley, &records, &metrics);

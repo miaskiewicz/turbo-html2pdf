@@ -1,0 +1,18 @@
+{
+  "purpose": "Native continuous-HTML font-metric rounding and macOS legacy-family ascent adjustment; existing PDF metrics unchanged.",
+  "license": "Blink-font-metrics.LICENSE",
+  "sources": [
+    {
+      "source": "https://chromium.googlesource.com/chromium/src/+/refs/tags/155.0.8059.79/third_party/blink/renderer/platform/fonts/font_metrics.h",
+      "sha256": "8920de3f1f3d70810bd562103bc95598ecfee841a90f20a3d2b77f5aaa5daab7"
+    },
+    {
+      "source": "https://chromium.googlesource.com/chromium/src/+/refs/tags/155.0.8059.79/third_party/blink/renderer/platform/fonts/font_metrics.cc",
+      "sha256": "6bd1064eb60f5ac81f15d8f454d0bc10fa68718bf4590bf788bfe2c8fc62435d"
+    },
+    {
+      "source": "https://chromium.googlesource.com/chromium/src/+/refs/tags/155.0.8059.79/third_party/blink/renderer/platform/fonts/simple_font_data.cc",
+      "sha256": "9c986ecb53e232243d0d28ad8b9c45e0835a3e62cfded1f359e01f7a9284adc4"
+    }
+  ]
+}

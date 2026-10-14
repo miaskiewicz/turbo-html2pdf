@@ -311,7 +311,7 @@ fn atom_cloning_and_positioning_preserve_real_nested_text_source_clusters() {
 #[test]
 fn native_cluster_advances_match_independent_chrome_ranges_with_the_same_real_font() {
     use turbo_html2pdf_core::layout_snapshot::{
-        snapshot_live_tree_with_text, SnapshotInputs, SourceId, SourceIdentity,
+        snapshot_html_live_tree_with_text, SnapshotInputs, SourceId, SourceIdentity,
     };
     use turbo_html2pdf_core::{
         build_cascade, Attr, Element, FontFace, ImageCtx, NoImages, Node, Tag,
@@ -344,8 +344,10 @@ fn native_cluster_advances_match_independent_chrome_ranges_with_the_same_real_fo
             continue;
         }
         let width = case["width"].as_f64().unwrap();
+        let font_size = case["fontSize"].as_f64().unwrap_or(64.0);
+        let line_height = case["lineHeight"].as_f64().unwrap_or(80.0);
         let transform = case["transform"].as_str().unwrap_or("none");
-        let nodes=[Node::Element(Element{tag:Tag::Html("div".into()),attrs:vec![Attr{name:"style".into(),value:format!("font-family:ParityGo;font-size:64px;line-height:80px;width:{width}px;transform:{transform};transform-origin:0 0")}],children:vec![Node::Text(case["text"].as_str().unwrap().into())]})];
+        let nodes=[Node::Element(Element{tag:Tag::Html("div".into()),attrs:vec![Attr{name:"style".into(),value:format!("font-family:ParityGo;font-size:{font_size}px;line-height:{line_height}px;width:{width}px;transform:{transform};transform-origin:0 0")}],children:vec![Node::Text(case["text"].as_str().unwrap().into())]})];
         let ids = [
             SourceIdentity {
                 id: SourceId(99),
@@ -356,7 +358,7 @@ fn native_cluster_advances_match_independent_chrome_ranges_with_the_same_real_fo
                 path: vec![0, 0],
             },
         ];
-        let native = snapshot_live_tree_with_text(
+        let native = snapshot_html_live_tree_with_text(
             &nodes,
             &ids,
             &build_cascade("", "", Default::default()),
@@ -369,43 +371,35 @@ fn native_cluster_advances_match_independent_chrome_ranges_with_the_same_real_fo
             &mut Diagnostics::default(),
         )
         .unwrap();
-        assert_cluster_horizontal(&native, case);
+        assert_cluster_geometry(&native, case);
     }
 }
 
-fn assert_cluster_horizontal(
+fn assert_cluster_geometry(
     native: &turbo_html2pdf_core::layout_snapshot::LayoutSnapshot,
     case: &serde_json::Value,
 ) {
-    for run in native.text_runs() {
-        let fragment = &native.fragments()[run.fragment_index];
-        let mut groups = std::collections::BTreeMap::<(usize, usize), (f32, f32)>::new();
-        for glyph in &run.glyphs {
-            let c = glyph.source;
-            let bounds = groups
-                .entry((c.utf16_start, c.utf16_end))
-                .or_insert((c.pen_x, c.pen_x));
-            bounds.0 = bounds.0.min(c.pen_x);
-            bounds.1 = bounds.1.max(c.pen_x + c.advance);
-        }
-        for ((start, end), (left, right)) in groups {
-            let [a, _, _, _, e, _] = fragment.world_transform;
-            let x = (fragment.rect.x + left) * a + e;
-            let width = (right - left) * a;
-            let range = &case["ranges"][format!("{start}:{end}")]["rect"];
-            assert_eq!(
-                f64::from(x),
-                range["x"].as_f64().unwrap(),
-                "{} cluster {start}:{end} x",
-                case["name"]
-            );
-            assert_eq!(
-                f64::from(width),
-                range["width"].as_f64().unwrap(),
-                "{} cluster {start}:{end} advance",
-                case["name"]
-            );
-        }
+    for box_ in native.text_cluster_boxes() {
+        let start = box_.utf16_start;
+        let end = box_.utf16_end;
+        let expected = &case["ranges"][format!("{start}:{end}")]["rect"];
+        let actual = box_.transformed_bounds;
+        assert_eq!(
+            (
+                f64::from(actual.x),
+                f64::from(actual.y),
+                f64::from(actual.width),
+                f64::from(actual.height)
+            ),
+            (
+                expected["x"].as_f64().unwrap(),
+                expected["y"].as_f64().unwrap(),
+                expected["width"].as_f64().unwrap(),
+                expected["height"].as_f64().unwrap()
+            ),
+            "{} genuine native cluster {start}:{end}",
+            case["name"]
+        );
     }
 }
 
@@ -458,4 +452,45 @@ fn text_snapshot_errors_keep_the_original_source_and_viewport_validation() {
             .unwrap();
     assert_eq!(unmapped.text_runs()[0].source_id, None);
     assert!(unmapped.text_runs()[0].source_ancestors.is_empty());
+}
+
+#[test]
+fn source_metadata_preserves_distinct_baselines_with_identical_public_run_identity() {
+    let fonts = FontRegistry::new();
+    let mut raised = run(&fonts, 17, "b");
+    if let Piece::Run(value) = &mut raised {
+        value.valign = VAlign::Super;
+    }
+    let pieces = [run(&fonts, 17, "a"), raised];
+    let native = layout_paragraph_in_with_sources(
+        &pieces,
+        &fonts,
+        Align::Left,
+        &mut Diagnostics::default(),
+        &|_| (0.0, 200.0),
+        24.0,
+    );
+    assert_eq!(native.layout.lines[0].runs.len(), 2);
+    let metrics = &native.font_boxes[0];
+    assert_eq!(metrics.len(), 2);
+    assert!(metrics[1].baseline < metrics[0].baseline);
+    for (run, metric) in native.layout.lines[0].runs.iter().zip(metrics) {
+        assert_eq!(run.glyphs[0].y, metric.baseline);
+    }
+}
+
+#[test]
+fn font_alias_does_not_select_a_foreign_legacy_metric_adjustment() {
+    use turbo_html2pdf_core::FontFace;
+    let face = FontFace::from_bytes(
+        include_bytes!("../assets/fonts/Go-Regular.ttf").to_vec(),
+        "ParityGo",
+        400,
+        false,
+    )
+    .unwrap();
+    let renamed = face.with_family("Helvetica");
+    for size in [16.0, 32.0, 64.0, 96.0] {
+        assert_eq!(face.html_metrics(size), renamed.html_metrics(size));
+    }
 }

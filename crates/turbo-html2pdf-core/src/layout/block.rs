@@ -58,6 +58,7 @@ pub(crate) struct Ctx<'a> {
     pub(crate) live_geometry: bool,
     pub(crate) used_metrics: Option<HashMap<NodeId, UsedBoxMetrics>>,
     pub(crate) text_capture: Option<crate::layout_snapshot::text::TextCapture>,
+    pub(crate) html_font_metrics: bool,
     /// Floats active in the current **block formatting context**, in absolute
     /// galley coordinates. In-flow content within the same BFC flows in the
     /// inline region these leave free (a `float:right` infobox narrows the text
@@ -480,7 +481,11 @@ fn lines_to_fragments(
     for (line_index, line) in para.layout.lines.iter().enumerate() {
         for (run_index, gr) in line.runs.iter().enumerate() {
             let node_id = capture.as_mut().map_or(gr.node_id, |capture| {
-                capture.record(gr.node_id, &para.clusters[line_index][run_index])
+                capture.record(
+                    gr.node_id,
+                    &para.clusters[line_index][run_index],
+                    para.font_boxes[line_index][run_index],
+                )
             });
             let content = FragmentContent::TextLine {
                 glyphs: gr.glyphs.clone(),
@@ -568,7 +573,16 @@ fn layout_lines(
         (rx - cx, rw)
     };
     let strut = line_strut(bs, fonts);
-    let para = if ctx.text_capture.is_some() {
+    let para = if ctx.html_font_metrics {
+        inline::layout_html_paragraph_in_with_sources(
+            &pieces,
+            fonts,
+            bs.text_align,
+            ctx.diags,
+            &region,
+            strut,
+        )
+    } else if ctx.text_capture.is_some() {
         inline::layout_paragraph_in_with_sources(
             &pieces,
             fonts,
@@ -588,6 +602,7 @@ fn layout_lines(
                 strut,
             ),
             clusters: Vec::new(),
+            font_boxes: Vec::new(),
         }
     };
     let mut frags = Vec::new();
@@ -1713,7 +1728,7 @@ pub(crate) fn layout_tree_live(
     fonts: &FontRegistry,
     images: &ImageCtx,
     diags: &mut Diagnostics,
-    text_start: Option<u32>,
+    text_start: Option<(u32, bool)>,
 ) -> (
     Fragment,
     HashMap<NodeId, UsedBoxMetrics>,
@@ -1734,7 +1749,7 @@ fn layout_tree_policy(
     root: &LayoutBox,
     cb_width: f32,
     viewport_height: f32,
-    policy: (bool, Option<u32>),
+    policy: (bool, Option<(u32, bool)>),
     fonts: &FontRegistry,
     images: &ImageCtx,
     diags: &mut Diagnostics,
@@ -1758,7 +1773,9 @@ fn layout_tree_policy(
         root_h: viewport_height,
         live_geometry,
         used_metrics: live_geometry.then(HashMap::new),
-        text_capture: text_start.map(crate::layout_snapshot::text::TextCapture::new),
+        html_font_metrics: text_start.is_some_and(|value| value.1),
+        text_capture: text_start
+            .map(|value| crate::layout_snapshot::text::TextCapture::new(value.0)),
         floats: Vec::new(),
     };
     stamp_intrinsic_widths(root, images);

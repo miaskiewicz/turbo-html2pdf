@@ -1,0 +1,57 @@
+//! Advance/font boxes from real glyph clusters, not line-container rectangles.
+use super::{geometry, LayoutSnapshot, Point, Rect, SourceId};
+use std::collections::BTreeMap;
+
+/// One actual shaper cluster's native advance/font box and composed transform.
+/// It may span several UTF-16 units; this is not an interpolated caret position.
+#[derive(Debug, Clone, PartialEq)]
+pub struct SourceClusterBox {
+    pub fragment_index: usize,
+    pub source_id: Option<SourceId>,
+    pub source_ancestors: Vec<SourceId>,
+    pub utf16_start: usize,
+    pub utf16_end: usize,
+    pub rect: Rect,
+    pub quad: [Point; 4],
+    pub transformed_bounds: Rect,
+}
+
+pub(crate) fn cluster_boxes(snapshot: &LayoutSnapshot) -> Vec<SourceClusterBox> {
+    let mut boxes = Vec::new();
+    for run in snapshot.text_runs() {
+        let fragment = &snapshot.fragments()[run.fragment_index];
+        let mut groups = BTreeMap::<(usize, usize), (f32, f32)>::new();
+        for glyph in &run.glyphs {
+            let source = glyph.source;
+            let begin = source.pen_x.min(source.pen_x + source.advance);
+            let end = source.pen_x.max(source.pen_x + source.advance);
+            let edges = groups
+                .entry((source.utf16_start, source.utf16_end))
+                .or_insert((begin, end));
+            edges.0 = edges.0.min(begin);
+            edges.1 = edges.1.max(end);
+        }
+        for ((start, end), (left, right)) in groups {
+            let font = run.font_box;
+            let rect = Rect {
+                x: fragment.rect.x + left,
+                y: fragment.rect.y + font.baseline - font.ascent,
+                width: right - left,
+                height: font.ascent + font.descent,
+            };
+            let quad = geometry::rect_quad(rect)
+                .map(|point| geometry::transform(point, fragment.world_transform));
+            boxes.push(SourceClusterBox {
+                fragment_index: fragment.index,
+                source_id: run.source_id,
+                source_ancestors: run.source_ancestors.clone(),
+                utf16_start: start,
+                utf16_end: end,
+                rect,
+                quad,
+                transformed_bounds: geometry::bounds(quad),
+            });
+        }
+    }
+    boxes
+}

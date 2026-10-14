@@ -634,6 +634,7 @@ fn measure_item(
             live_geometry,
             used_metrics: None,
             text_capture: None,
+            html_font_metrics: false,
             floats: Vec::new(),
         };
         let frag = block::layout_box_sized_isolated(item, &bs, 0.0, 0.0, w, &mut mctx);

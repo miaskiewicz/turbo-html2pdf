@@ -87,6 +87,14 @@ pub struct ShapedGlyph {
     pub cluster: u32,
 }
 
+/// Native continuous-HTML font metrics, distinct from fractional PDF metrics.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct HtmlFontMetrics {
+    pub ascent: f32,
+    pub descent: f32,
+    pub line_gap: f32,
+}
+
 /// A loaded font face. Cheap to clone (the parsed faces and the shape cache are
 /// shared via `Arc`).
 #[derive(Clone)]
@@ -106,6 +114,7 @@ pub struct FontFace {
     ascent: i16,
     descent: i16,
     line_gap: i16,
+    mac_ascent_adjustment: bool,
     /// Memoizes shaping by run text. Shaping is real per-run work, and layout
     /// shapes each run at least twice (measuring its width, then emitting its
     /// glyphs) plus once more for every repeated string (table cells, labels);
@@ -147,6 +156,8 @@ impl FontFace {
         crate::hot!("font.face.build");
         let faces = OwnedFaces::try_new(data, |bytes| build_parsed_index(bytes, index)).ok()?;
         let (units_per_em, ascent, descent, line_gap) = metrics(faces.borrow_dependent());
+        let mac_ascent_adjustment = family_name(&faces.borrow_dependent().ttf)
+            .is_some_and(|name| matches!(name.as_str(), "Times" | "Helvetica" | "Courier"));
         Some(FontFace {
             faces: Arc::new(faces),
             index,
@@ -157,8 +168,27 @@ impl FontFace {
             ascent,
             descent,
             line_gap,
+            mac_ascent_adjustment,
             shape_cache: Arc::new(Mutex::new(HashMap::new())),
         })
+    }
+
+    /// Resolve actual font-table metrics using continuous HTML's integer ascent/
+    /// descent policy. Blink155 FontMetrics::AscentDescentWithHacks rounds each
+    /// independently; macOS's three named legacy families also adjust ascent.
+    /// Attribution/source pins are in html-font-metrics-provenance.json and
+    /// Blink-font-metrics.LICENSE. Existing PDF/tiny-font canvas metrics stay intact.
+    pub fn html_metrics(&self, size: f32) -> HtmlFontMetrics {
+        let mut ascent = self.ascent_px(size).round();
+        let descent = self.descent_px(size).round();
+        if cfg!(target_os = "macos") && self.mac_ascent_adjustment {
+            ascent += ((ascent + descent) * 0.15 + 0.5).floor();
+        }
+        HtmlFontMetrics {
+            ascent,
+            descent,
+            line_gap: (f32::from(self.line_gap) * self.scale(size)).round(),
+        }
     }
 
     pub fn family(&self) -> &str {

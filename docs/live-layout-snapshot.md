@@ -119,9 +119,10 @@ control graphs avoid attributing font differences to box geometry.
 This seam exposes the real native engine; it does not turn its CSS subset into
 Blink. Remaining work before a complete browser geometry API includes:
 
-- Fragmented inline border boxes and original text byte/UTF-16 offsets, whitespace
-  mapping, bidi/ligature clusters, caret and selection rectangles. Existing
-  positioned glyphs have no retained original-offset mapping; none is invented.
+- Fragmented inline border boxes, collapsed-whitespace mapping, bidi/ligature
+  caret positions and complete selection rectangles. The unreleased optional
+  text path below retains actual original byte/UTF-16 cluster provenance; the
+  published box-only path does not invent this information.
 - Full overflow/clip/scrollbar regions, scroll offsets, sticky behavior, hit
   testing, transforms that establish fixed containing blocks, frame coordinate
   propagation, and browser stacking contexts beyond the engine's paint subset.
@@ -184,6 +185,18 @@ primary face before choosing a fallback: normalization can produce a valid glyph
 for a base-plus-mark sequence even when that individual mark has no cmap entry.
 The existing PDF/box-only itemization and entry points retain their behavior.
 
+The separate `snapshot_html_live_tree_with_text`,
+`snapshot_html_styled_tree_with_text` and
+`layout_html_paragraph_in_with_sources` entry points select continuous HTML
+font metrics. Ascent/descent are rounded independently from the loaded font
+tables; macOS legacy-family adjustments follow the pinned Blink155 algorithm,
+using the font program's real family rather than a caller alias. The generic
+text entry points preserve their fractional/PDF metrics. `SourceFontBox` retains
+the actual run baseline and metrics. `text_cluster_boxes()` combines genuine
+shaper advances with these font boxes and the fragment's composed transform.
+Each result keeps source ownership and UTF-16 bounds; it is not an interpolated
+caret position or a glyph ink rectangle.
+
 The native capture refuses layout-ID overflow or more than one million captured
 glyph records. `TextSnapshotError` wraps the existing viewport/source validation
 errors and reports that additional capacity bound. Original box-only snapshots
@@ -194,14 +207,16 @@ The authored `scripts/text-source-chrome-control.mjs` serves the exact bundled
 Go-Regular.ttf and captures Range rectangles and caret queries in independent
 Chrome. Its saved font hash is
 `197d9f3703b4c00af609178876a8d73e396f64fe438b2c871778566632374be3`.
-Six controlled-face graphs check exact horizontal cluster positions/advances,
-including combining text, collapsed leading whitespace, wrapping and transforms.
-A seventh graph preserves the uncontrolled installed emoji fallback result; its
+Nine controlled-face graphs check exact native cluster x/y/width/height,
+including combining text, collapsed leading whitespace, wrapping, transforms
+and four font sizes. A tenth graph preserves the uncontrolled installed emoji
+fallback result; its
 numeric metrics are not certified. The capture requires zero errors and records
 localhost-only extension flags. Native tests separately verify astral UTF-16
 ranges, source ownership and repeated wrapped runs.
 
-Caret selection, range vertical/font boxes, whitespace gap provenance, bidi/CJK
+Caret selection, partial-cluster ranges, whitespace gap provenance, bidi/CJK
 itemization, fragmented inline borders and complete font-fallback behavior remain
-unfinished. The collector preserves these fields for subsequent implementation;
-passing horizontal cluster checks does not establish complete caret geometry.
+unfinished. The collector preserves these fields for subsequent implementation.
+The controlled-font box comparisons do not certify installed fallback fonts,
+platform-specific hinted metrics or complete Range/caret geometry.
