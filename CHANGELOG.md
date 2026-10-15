@@ -4,6 +4,10 @@ All notable changes to turbo-html2pdf are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/); versions follow SemVer. The npm,
 PyPI, and crates.io packages release in lockstep from a `v*` tag (PyPI on `pyv*`).
 
+## Unreleased
+
+- Correct README status after verified0.3.7 publication and record the actual merge/tag/registry release proof.
+
 ## [0.3.7] — 2026-10-15
 
 - Round actual HTML font ascent/descent at the live snapshot physical scale and
