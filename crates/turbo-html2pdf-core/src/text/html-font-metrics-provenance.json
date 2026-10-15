@@ -1,5 +1,5 @@
 {
-  "purpose": "Native continuous-HTML font-metric rounding and macOS legacy-family ascent adjustment; existing PDF metrics unchanged.",
+  "purpose": "Native continuous HTML font metric rounding at physical scale, floor leading, macOS legacy-family ascent adjustment and source Range LayoutUnit encompasses; existing PDF policies unchanged. Native paint-scope residual propagation and original UTF-16 platform fallback source behavior.",
   "license": "Blink-font-metrics.LICENSE",
   "sources": [
     {
@@ -13,6 +13,43 @@
     {
       "source": "https://chromium.googlesource.com/chromium/src/+/refs/tags/155.0.8059.79/third_party/blink/renderer/platform/fonts/simple_font_data.cc",
       "sha256": "9c986ecb53e232243d0d28ad8b9c45e0835a3e62cfded1f359e01f7a9284adc4"
+    },
+    {
+      "source": "https://chromium.googlesource.com/chromium/src/+/refs/tags/155.0.8059.79/third_party/blink/renderer/core/layout/inline/inline_box_state.cc",
+      "sha256": "4dacd389be262c85e29c27b61a888bb1dd38e4eaf04ddd7bb33842a8a2860e3d"
+    },
+    {
+      "source": "https://chromium.googlesource.com/chromium/src/+/refs/tags/155.0.8059.79/third_party/blink/renderer/core/layout/inline/line_utils.cc",
+      "sha256": "34854a9e571f4f47f12a8405366355773a7b87c809c98bc8fa8fe7a41f245350"
+    },
+    {
+      "source": "https://chromium.googlesource.com/chromium/src/+/refs/tags/155.0.8059.79/third_party/blink/renderer/core/layout/inline/fragment_item.cc",
+      "sha256": "84b18c2d6258babb6b10618962a625770b45852e34d0b51e6708848c273da75c"
+    },
+    {
+      "source": "https://chromium.googlesource.com/chromium/src/+/refs/tags/155.0.8059.79/third_party/blink/renderer/platform/geometry/layout_unit.h",
+      "sha256": "fdc4e8d9386923943ec92a6868dcf59b34c741d52b19d0ee41c255092ff23624"
+    },
+    {
+      "source": "https://chromium.googlesource.com/chromium/src/+/refs/tags/155.0.8059.79/third_party/blink/renderer/core/paint/paint_property_tree_builder.cc",
+      "sha256": "80402fc808fc93430d3a7ecb8505f0d105071c861c7346d799254dbe05cd2640"
+    },
+    {
+      "source": "https://chromium.googlesource.com/chromium/src/+/refs/tags/155.0.8059.79/third_party/blink/renderer/platform/fonts/script_run_iterator.cc",
+      "sha256": "bbbfc455a19128b9889d89c8ccdcac152927ec55c713e6223ea6281f4d871c6f"
+    },
+    {
+      "source": "https://chromium.googlesource.com/chromium/src/+/refs/tags/155.0.8059.79/third_party/blink/renderer/platform/fonts/utf16_text_iterator.cc",
+      "sha256": "ef29a3b7792ba0d8473d5d1429b785f3987a49c57f0c309c0dcd456ce4f81964"
+    },
+    {
+      "source": "https://chromium.googlesource.com/chromium/src/+/refs/tags/155.0.8059.79/third_party/blink/renderer/platform/fonts/mac/font_cache_mac.mm",
+      "sha256": "5bd070fba9cd7ed1120de89bdf8c3fdbdb2e170ab536b521138bbc5107b5d360"
+    },
+    {
+      "source": "https://chromium.googlesource.com/chromium/src/+/refs/tags/155.0.8059.79/third_party/blink/renderer/platform/fonts/shaping/case_mapping_harfbuzz_buffer_filler.cc",
+      "sha256": "69a01531adb42755685ace598ced61e3fa698e080ede528503f08e592e3c3b8f"
     }
-  ]
+  ],
+  "leadingLicense": "../layout/Blink-layout-unit.LICENSE"
 }

@@ -48,6 +48,8 @@ pub struct LayoutBox {
     /// re-parsing the ~25 properties. The (one-time) independence classification
     /// is also cached so context-*dependent* boxes never re-scan their values.
     style_cache: RefCell<StyleCache>,
+    // Valid native scales are positive; zero retains the generic/no-scale policy.
+    html_layout_policy: std::cell::Cell<(bool, f32)>,
     /// Memoized intrinsic widths (max-content, min-content). Both are pure
     /// functions of the box subtree + fonts (no layout context), but the flex/table
     /// sizers call them repeatedly and RE-descend the subtree each time, so a deeply
@@ -77,10 +79,22 @@ pub struct LayoutBox {
     pub ua_alt: Option<String>,
 }
 
+fn same_original_inputs(
+    a: Option<&std::sync::Arc<crate::layout_snapshot::text_units::NativeUnitMap>>,
+    b: Option<&std::sync::Arc<crate::layout_snapshot::text_units::NativeUnitMap>>,
+) -> bool {
+    match (a, b) {
+        (None, None) => true,
+        (Some(a), Some(b)) => std::sync::Arc::ptr_eq(a, b),
+        _ => false,
+    }
+}
+
 // Lazily boxed so optional viewport data does not enlarge the public inline
 // item enum or force allocations for boxes that never need measurement caching.
 #[derive(Debug, Clone)]
 struct MeasuredSizes {
+    original_units: Option<std::sync::Arc<crate::layout_snapshot::text_units::NativeUnitMap>>,
     values: Vec<(u32, (f32, f32))>,
 }
 
@@ -143,7 +157,12 @@ impl LayoutBox {
         }
         let size = f();
         let mut storage = self.measure_cache.borrow_mut();
-        let cache = storage.get_or_insert_with(|| Box::new(MeasuredSizes { values: Vec::new() }));
+        let cache = storage.get_or_insert_with(|| {
+            Box::new(MeasuredSizes {
+                values: Vec::new(),
+                original_units: None,
+            })
+        });
         cache.values.push((key, size));
         size
     }
@@ -152,9 +171,110 @@ impl LayoutBox {
     /// when the style is context-independent.
     pub(crate) fn resolved(&self, ctx: ResolveCtx) -> BoxStyle {
         let style = self.resolved_base(ctx);
-        match &self.svg_viewport {
+        let mut style = match &self.svg_viewport {
             Some(viewport) => viewport.apply_attributes(style),
             None => style,
+        };
+        super::value::quantize_html_box_style(&mut style, self.native_scale());
+        style
+    }
+
+    fn native_scale(&self) -> Option<f32> {
+        let scale = self.html_layout_policy.get().1;
+        (scale != 0.0).then_some(scale)
+    }
+    pub(crate) fn set_html_layout_policy(&self, policy: (bool, Option<f32>)) {
+        let encoded = (policy.0, policy.1.unwrap_or(0.0));
+        if self.html_layout_policy.replace(encoded) != encoded {
+            self.natural_cache.set(None);
+            self.min_content_cache.set(None);
+            self.clear_measured_values();
+        }
+        self.set_child_html_layout_policy(policy);
+    }
+
+    pub(crate) fn original_units(
+        &self,
+    ) -> Option<std::sync::Arc<crate::layout_snapshot::text_units::NativeUnitMap>> {
+        self.measure_cache
+            .borrow()
+            .as_ref()
+            .and_then(|cache| cache.original_units.clone())
+    }
+    pub(crate) fn set_original_units(
+        &self,
+        units: Option<&std::sync::Arc<crate::layout_snapshot::text_units::NativeUnitMap>>,
+    ) {
+        let changed = !same_original_inputs(self.original_units().as_ref(), units);
+        if changed {
+            let mut storage = self.measure_cache.borrow_mut();
+            let cache = storage.get_or_insert_with(|| {
+                Box::new(MeasuredSizes {
+                    values: Vec::new(),
+                    original_units: None,
+                })
+            });
+            cache.original_units = units.cloned();
+            drop(storage);
+            self.natural_cache.set(None);
+            self.min_content_cache.set(None);
+            self.clear_measured_values();
+        }
+        self.set_child_original_units(units);
+    }
+    fn clear_measured_values(&self) {
+        let mut storage = self.measure_cache.borrow_mut();
+        if storage
+            .as_ref()
+            .is_some_and(|cache| cache.original_units.is_none())
+        {
+            *storage = None;
+        } else if let Some(cache) = storage.as_mut() {
+            cache.values.clear();
+        }
+    }
+    fn set_child_original_units(
+        &self,
+        units: Option<&std::sync::Arc<crate::layout_snapshot::text_units::NativeUnitMap>>,
+    ) {
+        match &self.kind {
+            BoxKind::Block(children)
+            | BoxKind::Flex(children)
+            | BoxKind::Grid(children)
+            | BoxKind::Table(children) => {
+                for child in children {
+                    child.set_original_units(units);
+                }
+            }
+            BoxKind::Lines(items) => {
+                for item in items {
+                    if let InlineItem::Atomic(child) = item {
+                        child.set_original_units(units);
+                    }
+                }
+            }
+            BoxKind::Directive(_) => {}
+        }
+    }
+
+    fn set_child_html_layout_policy(&self, policy: (bool, Option<f32>)) {
+        match &self.kind {
+            BoxKind::Block(children)
+            | BoxKind::Flex(children)
+            | BoxKind::Grid(children)
+            | BoxKind::Table(children) => {
+                for child in children {
+                    child.set_html_layout_policy(policy);
+                }
+            }
+            BoxKind::Lines(items) => {
+                for item in items {
+                    if let InlineItem::Atomic(child) = item {
+                        child.set_html_layout_policy(policy);
+                    }
+                }
+            }
+            BoxKind::Directive(_) => {}
         }
     }
 
@@ -518,6 +638,7 @@ fn build_block_box(el: &StyledElement, ids: &mut Ids) -> LayoutBox {
             svg_viewport: None,
             mask: None,
             style_cache: RefCell::new(StyleCache::Unknown),
+            html_layout_policy: std::cell::Cell::new((false, 0.0)),
             natural_cache: std::cell::Cell::new(None),
             min_content_cache: std::cell::Cell::new(None),
             intrinsic_w: std::cell::Cell::new(None),
@@ -553,6 +674,7 @@ fn build_block_box(el: &StyledElement, ids: &mut Ids) -> LayoutBox {
         svg_viewport,
         mask: mask_image(&el.style),
         style_cache: RefCell::new(StyleCache::Unknown),
+        html_layout_policy: std::cell::Cell::new((false, 0.0)),
         natural_cache: std::cell::Cell::new(None),
         min_content_cache: std::cell::Cell::new(None),
         intrinsic_w: std::cell::Cell::new(None),
@@ -716,6 +838,7 @@ fn anon_lines_box(
         svg_viewport: None,
         mask: None,
         style_cache: RefCell::new(StyleCache::Unknown),
+        html_layout_policy: std::cell::Cell::new((false, 0.0)),
         natural_cache: std::cell::Cell::new(None),
         min_content_cache: std::cell::Cell::new(None),
         intrinsic_w: std::cell::Cell::new(None),
@@ -839,6 +962,7 @@ fn build_root(styled: &[StyledNode], ids: &mut Ids) -> LayoutBox {
         svg_viewport: None,
         mask: None,
         style_cache: RefCell::new(StyleCache::Unknown),
+        html_layout_policy: std::cell::Cell::new((false, 0.0)),
         natural_cache: std::cell::Cell::new(None),
         min_content_cache: std::cell::Cell::new(None),
         intrinsic_w: std::cell::Cell::new(None),
@@ -884,6 +1008,195 @@ mod tests {
             attrs: vec![],
             style: ComputedStyle::default(),
             children: vec![],
+        }
+    }
+
+    fn reuse_policy_tree(text: &str) -> LayoutBox {
+        let nodes = vec![crate::Node::Element(crate::Element {
+            tag: Tag::Html("div".into()),
+            attrs: vec![Attr { name: "style".into(), value: "display:flex;width:41.145px;font-family:ParityGo;font-size:13px;line-height:10px;padding-left:3.145px".into() }],
+            children: vec![crate::Node::Element(crate::Element { tag: Tag::Html("div".into()), attrs: vec![Attr { name: "style".into(), value: "display:flex;padding-left:2.61px".into() }], children: vec![crate::Node::Text(text.into())] })],
+        })];
+        build_box_tree(&crate::style::style_tree(
+            &nodes,
+            &crate::style::build_cascade("", "", Default::default()),
+        ))
+    }
+
+    fn reuse_policy_layout(
+        root: &LayoutBox,
+        fonts: &crate::FontRegistry,
+        policy: (bool, Option<f32>),
+    ) -> super::super::fragment::Fragment {
+        match policy {
+            (true, scale) => {
+                super::super::block::layout_tree_live(
+                    root,
+                    (400.0, 300.0),
+                    fonts,
+                    &crate::ImageCtx::none(),
+                    &mut crate::Diagnostics::default(),
+                    super::super::block::TextLayoutPolicy {
+                        start: Some((100, true, scale)),
+                        original_units: None,
+                    },
+                )
+                .0
+            }
+            (false, _) => super::super::block::layout_tree(
+                root,
+                400.0,
+                fonts,
+                &mut crate::Diagnostics::default(),
+            ),
+        }
+    }
+
+    fn cache_children(root: &LayoutBox) -> Vec<&LayoutBox> {
+        match &root.kind {
+            BoxKind::Block(children)
+            | BoxKind::Flex(children)
+            | BoxKind::Grid(children)
+            | BoxKind::Table(children) => children.iter().collect(),
+            BoxKind::Lines(items) => items
+                .iter()
+                .filter_map(|item| match item {
+                    InlineItem::Atomic(child) => Some(child),
+                    _ => None,
+                })
+                .collect(),
+            BoxKind::Directive(_) => Vec::new(),
+        }
+    }
+    fn cache_signature(root: &LayoutBox) -> Vec<(Option<f32>, Option<f32>, Option<String>)> {
+        let mut output = vec![(
+            root.natural_cache.get(),
+            root.min_content_cache.get(),
+            root.measure_cache
+                .borrow()
+                .as_ref()
+                .map(|value| format!("{:?}", value.values)),
+        )];
+        for child in cache_children(root) {
+            output.extend(cache_signature(child));
+        }
+        output
+    }
+
+    #[test]
+    fn reusable_box_tree_resets_intrinsic_measurement_and_placement_policy() {
+        let mut fonts = crate::FontRegistry::new();
+        fonts.add(
+            crate::FontFace::from_bytes(
+                include_bytes!("../../assets/fonts/Go-Regular.ttf").to_vec(),
+                "ParityGo",
+                400,
+                false,
+            )
+            .unwrap(),
+        );
+        let reused = reuse_policy_tree("ab ab");
+        for policy in [
+            (true, Some(2.0)),
+            (false, None),
+            (true, None),
+            (true, Some(1.0)),
+            (true, Some(2.0)),
+        ] {
+            let fresh = reuse_policy_tree("ab ab");
+            let actual = reuse_policy_layout(&reused, &fonts, policy);
+            let expected = reuse_policy_layout(&fresh, &fonts, policy);
+            assert_eq!(
+                format!("{actual:?}"),
+                format!("{expected:?}"),
+                "policy {policy:?}"
+            );
+            assert_eq!(
+                super::super::flex::natural_width(&reused, &fonts),
+                super::super::flex::natural_width(&fresh, &fonts)
+            );
+            assert_eq!(
+                super::super::flex::min_content_width(&reused, &fonts),
+                super::super::flex::min_content_width(&fresh, &fonts)
+            );
+            let actual_cache = cache_signature(&reused);
+            let expected_cache = cache_signature(&fresh);
+            assert!(actual_cache.iter().any(|entry| entry.2.is_some()));
+            assert_eq!(actual_cache, expected_cache);
+        }
+    }
+
+    fn source_units_for(
+        root: &LayoutBox,
+        units: &[u16],
+    ) -> crate::layout_snapshot::text_units::NativeUnitMap {
+        let mut map = std::collections::HashMap::new();
+        if let BoxKind::Lines(items) = &root.kind {
+            for item in items {
+                if let InlineItem::Text { node_id, .. } = item {
+                    map.insert(*node_id, std::sync::Arc::from(units));
+                }
+            }
+        }
+        for child in cache_children(root) {
+            map.extend(source_units_for(child, units));
+        }
+        map
+    }
+    #[test]
+    fn original_unit_policy_reuse_releases_stale_intrinsic_and_measure_caches() {
+        let mut fonts = crate::FontRegistry::new();
+        fonts.add(
+            crate::FontFace::from_bytes(
+                include_bytes!("../../assets/fonts/Go-Regular.ttf").to_vec(),
+                "ParityGo",
+                400,
+                false,
+            )
+            .unwrap(),
+        );
+        let reused = reuse_policy_tree("\u{fffd}");
+        for original in [Some(0xd800), Some(0xfffd), None, Some(0xdcff)] {
+            let fresh = reuse_policy_tree("\u{fffd}");
+            let reused_map =
+                original.map(|unit| std::sync::Arc::new(source_units_for(&reused, &[unit])));
+            let fresh_map =
+                original.map(|unit| std::sync::Arc::new(source_units_for(&fresh, &[unit])));
+            reused.set_original_units(reused_map.as_ref());
+            fresh.set_original_units(fresh_map.as_ref());
+            reused.set_html_layout_policy((true, Some(2.0)));
+            fresh.set_html_layout_policy((true, Some(2.0)));
+            assert_eq!(
+                super::super::flex::natural_width(&reused, &fonts),
+                super::super::flex::natural_width(&fresh, &fonts)
+            );
+            assert_eq!(
+                super::super::flex::min_content_width(&reused, &fonts),
+                super::super::flex::min_content_width(&fresh, &fonts)
+            );
+            let layout = |tree: &LayoutBox, map| {
+                super::super::block::layout_tree_live(
+                    tree,
+                    (400.0, 300.0),
+                    &fonts,
+                    &crate::ImageCtx::none(),
+                    &mut crate::Diagnostics::default(),
+                    super::super::block::TextLayoutPolicy {
+                        start: Some((100, true, Some(2.0))),
+                        original_units: map,
+                    },
+                )
+                .0
+            };
+            assert_eq!(
+                format!("{:?}", layout(&reused, reused_map.clone())),
+                format!("{:?}", layout(&fresh, fresh_map))
+            );
+            assert_eq!(cache_signature(&reused), cache_signature(&fresh));
+            assert!(same_original_inputs(
+                reused.original_units().as_ref(),
+                reused_map.as_ref()
+            ));
         }
     }
 

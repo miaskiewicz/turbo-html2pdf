@@ -142,8 +142,14 @@ cbc = { version = "0.1", optional = true }
 sha2 = { version = "0.10", optional = true }
 getrandom = { version = "0.2", optional = true }
 
+encoding_rs = "0.8"
+
+[target.'cfg(target_os = "macos")'.dependencies]
+core-text = "20.1"
+core-foundation = "0.9"
+
 [dev-dependencies]
-serde_json = { workspace = true }
+serde_json = { workspace = true, features = ["float_roundtrip"] }
 criterion = "0.5"
 
 # Phase 13 groundwork: criterion benchmark harness measuring the pipeline that

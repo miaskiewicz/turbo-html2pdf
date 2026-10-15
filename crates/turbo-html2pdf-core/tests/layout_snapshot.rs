@@ -958,3 +958,55 @@ fn live_document_root_contains_body_margins_and_preserves_legacy_pdf_policy() {
     assert_eq!(legacy.children[0].y, 12.0);
     assert_eq!(legacy.children[0].height, 16.0);
 }
+
+#[test]
+fn double_precision_used_transforms_follow_real_image_fragments_once_and_keep_legacy_matrix_type() {
+    let native = image_snapshot(
+        "display:block;width:80px;height:40px;transform:rotate(10deg);transform-origin:0 0",
+    );
+    let source = native.source(SourceId(9)).unwrap();
+    let border = source
+        .fragment_indices
+        .iter()
+        .map(|&i| &native.fragments()[i])
+        .find(|fragment| fragment.kind == GeometryKind::BorderBox)
+        .unwrap();
+    let paint = source
+        .fragment_indices
+        .iter()
+        .map(|&i| &native.fragments()[i])
+        .find(|fragment| fragment.kind == GeometryKind::ImagePaint)
+        .unwrap();
+    let matrix = native.native_world_transform(border.index).unwrap();
+    assert_eq!(matrix, native.native_world_transform(paint.index).unwrap());
+    assert_eq!(matrix[0], 10_f64.to_radians().cos());
+    assert_eq!(border.world_transform, matrix.map(|value| value as f32));
+    assert_eq!(native.native_world_transform(usize::MAX), None);
+}
+
+#[test]
+fn legacy_float_translation_is_retained_for_nonperspective_z_translation() {
+    let native = capture(
+        &[element(
+            "div",
+            "width:80px;height:40px;transform:translate3d(2px,3px,1px)",
+            Vec::new(),
+        )],
+        &[identity(8, &[0])],
+    );
+    let source = native.source(SourceId(8)).unwrap();
+    let box_ = &native.fragments()[source.fragment_indices[0]];
+    assert_eq!(
+        box_.transformed_bounds,
+        Rect {
+            x: 2.0,
+            y: 3.0,
+            width: 80.0,
+            height: 40.0
+        }
+    );
+    assert_eq!(
+        native.native_world_transform(box_.index),
+        Some([1.0, 0.0, 0.0, 1.0, 2.0, 3.0])
+    );
+}

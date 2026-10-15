@@ -4,7 +4,38 @@ All notable changes to turbo-html2pdf are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/); versions follow SemVer. The npm,
 PyPI, and crates.io packages release in lockstep from a `v*` tag (PyPI on `pyv*`).
 
-## [0.3.6] — unreleased
+## [0.3.7] — 2026-10-15
+
+- Round actual HTML font ascent/descent at the live snapshot physical scale and
+  floor physical half-leading before native line placement. Retain generic/PDF
+  policies. Source Range queries encompass nonempty horizontal edges and floor
+  equal offsets in physical LayoutUnits before applying native transforms. Fresh
+  independently captured Go-font13/15 controls verify exact Range geometry and
+  caret hits, while raw source glyph metadata retains real shaper advances.
+
+- Support real inverse-affine caret queries under finite invertible rotation and
+  skew, with physical LayoutUnit hit coordinates and native double CSS transform
+  coefficients/composition captured during actual box placement. Preserve legacy
+  Fragment/PDF float matrices and expose `native_world_transform` for consumers.
+- Keep HTML flex intrinsic measurement on the same font policy as final placement,
+  and fail before publishing nonfinite native text geometry. Real decoded-image
+  regressions ensure the parent transform applies once to its paint fragment.
+
+- Resolve native fractional used-value placement and first-line text indentation,
+  including negative/percentage indentation and first lines displaced by floats.
+  Reused boxes reset intrinsic, measurement and source policies across HTML scales
+  and generic/PDF layout. Controlled graphs verify 391 Range lists, 273 caret hits
+  and 1141 fractional hit sweeps.
+- Capture native paint hit transforms separately from layout/Range matrices, using
+  real transform-scope origin snapping and axis-specific residual propagation.
+  Fractional negative origins, nested rotations and one-axis scaling are covered.
+- Add bounded original UTF-16 inputs keyed by native source identity, preserving
+  existing scalar/public variants. Original-unit cache keys, safe platform cascade
+  lookup and real installed fallback fonts reproduce the mixed astral/lone source
+  control's 26 Range differences and twelve font/size controls. Source-line Range
+  boxes span adjacent fallback runs. Reject invalid source identities/projections.
+
+## [0.3.6] — 2026-10-14
 
 - Add optional live-tree snapshots with genuine glyph/source cluster provenance,
   original byte/UTF-16 ranges and real pen advances. Metadata follows unique

@@ -14,13 +14,16 @@
 
 mod fixed_containing;
 mod geometry;
+mod hit_geometry;
 mod metrics;
 pub(crate) mod sources;
 mod svg_viewports;
 pub(crate) mod text;
 mod text_carets;
+mod text_finite;
 mod text_geometry;
 mod text_ranges;
+pub(crate) mod text_units;
 
 use crate::layout::{block, boxgen};
 use crate::{Cascade, Diagnostics, FontRegistry, Fragment, ImageCtx, Node, NodeId, StyledNode};
@@ -52,6 +55,22 @@ pub enum SourceKind {
     Text,
 }
 
+/// Original native DOM code units for one caller-owned text identity. The ordinary
+/// Node/StyledNode string is its scalar projection; these units retain lone values.
+#[derive(Debug, Clone, Copy)]
+pub struct SourceTextUnits<'a> {
+    pub source_id: SourceId,
+    pub units: &'a [u16],
+}
+
+/// Native HTML source inputs; SVG identities and physical scale keep their existing
+/// meaning. This additive route does not change ordinary scalar/PDF entry points.
+pub struct NativeTextOptions<'a> {
+    pub original_text: &'a [SourceTextUnits<'a>],
+    pub svg_viewports: &'a [SourceId],
+    pub layout_scale: f32,
+}
+
 /// Layout inputs are scoped to a single snapshot. The caller resolves live CSS,
 /// fonts and images before calling; this API performs no network or script work.
 pub struct SnapshotInputs<'a> {
@@ -65,6 +84,10 @@ pub struct SnapshotInputs<'a> {
 pub enum SnapshotError {
     #[error("viewport dimensions must be finite and greater than zero")]
     InvalidViewport,
+    #[error("original UTF-16 text source {0:?} is invalid or duplicated")]
+    InvalidOriginalText(SourceId),
+    #[error("original UTF-16 text inputs exceed the source unit budget")]
+    OriginalTextBudget,
     #[error("fixed descendants of transformed ancestors require an unsupported containing block")]
     UnsupportedFixedContainingBlock,
     #[error("source ID {0:?} is assigned more than once")]
@@ -124,15 +147,31 @@ pub struct SnapshotSource {
 pub struct LayoutSnapshot {
     galley: Fragment,
     fragments: Vec<SnapshotFragment>,
+    native_transforms: Vec<[f64; 6]>,
+    native_hit_transforms: Vec<[f64; 6]>,
     sources: Vec<SnapshotSource>,
     source_index: BTreeMap<SourceId, usize>,
     viewport: (f32, f32),
     text_runs: Vec<SnapshotTextRun>,
     text_sources: Vec<SnapshotTextSource>,
+    original_text_units: BTreeMap<SourceId, std::sync::Arc<[u16]>>,
+    html_layout_scale: Option<f32>,
     unsupported_svg_sources: std::collections::BTreeSet<SourceId>,
 }
 
 impl LayoutSnapshot {
+    /// Native affine composition retains double precision until final float points.
+    /// The legacy fragment matrix remains available with its original float type.
+    pub fn native_world_transform(&self, fragment_index: usize) -> Option<[f64; 6]> {
+        self.native_transforms.get(fragment_index).copied()
+    }
+
+    /// Actual HTML paint/hit scopes retain pixel-snapped origins separately from
+    /// layout geometry. Generic snapshots use the layout transform unchanged.
+    pub fn native_hit_transform(&self, fragment_index: usize) -> Option<[f64; 6]> {
+        self.native_hit_transforms.get(fragment_index).copied()
+    }
+
     /// SVG shape/nested-viewport identities stay present, but this viewport-only
     /// producer cannot supply their geometry. Absence is never a zero rectangle.
     pub fn unsupported_svg_source_geometry(&self, source: SourceId) -> bool {
@@ -141,7 +180,8 @@ impl LayoutSnapshot {
 
     /// Resolve a candidate text source to a real placed cluster edge. The caller
     /// chooses a visible hit-test source; this does not perform DOM hit testing.
-    /// Rotation/skew and degenerate transforms fail rather than guessing a caret.
+    /// Finite invertible affine transforms use actual native paint/hit scopes;
+    /// degenerate transforms fail rather than guessing a caret.
     pub fn text_caret_offset_from_point(
         &self,
         source: SourceId,
@@ -160,6 +200,12 @@ impl LayoutSnapshot {
         end: usize,
     ) -> Result<Vec<SourceRangeBox>, TextGeometryError> {
         text_ranges::ranges(self, source, start, end)
+    }
+
+    pub fn text_original_units(&self, source: SourceId) -> Option<&[u16]> {
+        self.original_text_units
+            .get(&source)
+            .map(std::sync::Arc::as_ref)
     }
 
     /// Actual glyph advance/font boxes, preserving source ranges and transforms.
@@ -229,6 +275,8 @@ pub enum TextSnapshotError {
     Snapshot(#[from] SnapshotError),
     #[error("native text provenance exceeds its source-byte, glyph or layout-ID budget")]
     Budget,
+    #[error("native text provenance contains unrepresentable geometry")]
+    NonFiniteGeometry,
 }
 
 fn checked_text_capture(
@@ -237,6 +285,8 @@ fn checked_text_capture(
 ) -> Result<LayoutSnapshot, TextSnapshotError> {
     if exceeded {
         Err(TextSnapshotError::Budget)
+    } else if !text_finite::valid(&snapshot) {
+        Err(TextSnapshotError::NonFiniteGeometry)
     } else {
         Ok(snapshot)
     }
@@ -312,9 +362,58 @@ pub fn snapshot_html_styled_tree_with_svg_viewports(
     validate_viewport(inputs)?;
     text::validate_source_budget(styled)?;
     let plan = svg_viewports::prepare(styled, identities, viewports, layout_scale)?;
-    let (snapshot, exceeded) =
-        capture_styled_with_plan(styled, identities, inputs, diags, Some(true), Some(plan))?;
+    let (snapshot, exceeded) = capture_styled_with_plan(
+        styled,
+        identities,
+        inputs,
+        diags,
+        Some(true),
+        Some(plan),
+        &[],
+    )?;
     checked_svg_capture(snapshot, exceeded)
+}
+
+/// Capture native original-unit text using the same live HTML/SVG placement seam.
+pub fn snapshot_html_styled_tree_with_native_text(
+    styled: &[StyledNode],
+    identities: &[SourceIdentity],
+    options: &NativeTextOptions<'_>,
+    inputs: &SnapshotInputs,
+    diags: &mut Diagnostics,
+) -> Result<LayoutSnapshot, SvgSnapshotError> {
+    validate_viewport(inputs)?;
+    text::validate_source_budget(styled)?;
+    let plan = svg_viewports::prepare(
+        styled,
+        identities,
+        options.svg_viewports,
+        options.layout_scale,
+    )?;
+    let (snapshot, exceeded) = capture_styled_with_plan(
+        styled,
+        identities,
+        inputs,
+        diags,
+        Some(true),
+        Some(plan),
+        options.original_text,
+    )?;
+    checked_svg_capture(snapshot, exceeded)
+}
+
+pub fn snapshot_html_live_tree_with_native_text(
+    nodes: &[Node],
+    identities: &[SourceIdentity],
+    cascade: &Cascade,
+    options: &NativeTextOptions<'_>,
+    inputs: &SnapshotInputs,
+    diags: &mut Diagnostics,
+) -> Result<LayoutSnapshot, SvgSnapshotError> {
+    validate_viewport(inputs)?;
+    crate::style::set_layout_viewport(inputs.width, inputs.height);
+    let styled = crate::style_tree(nodes, cascade);
+    snapshot_html_styled_tree_with_native_text(&styled, identities, options, inputs, diags)
 }
 
 fn checked_svg_capture(
@@ -354,7 +453,15 @@ fn capture_styled(
     diags: &mut Diagnostics,
     html_text_metrics: Option<bool>,
 ) -> Result<(LayoutSnapshot, bool), SnapshotError> {
-    capture_styled_with_plan(styled, identities, inputs, diags, html_text_metrics, None)
+    capture_styled_with_plan(
+        styled,
+        identities,
+        inputs,
+        diags,
+        html_text_metrics,
+        None,
+        &[],
+    )
 }
 
 fn capture_styled_with_plan(
@@ -364,30 +471,33 @@ fn capture_styled_with_plan(
     diags: &mut Diagnostics,
     html_text_metrics: Option<bool>,
     plan: Option<svg_viewports::Plan>,
+    original_text: &[SourceTextUnits<'_>],
 ) -> Result<(LayoutSnapshot, bool), SnapshotError> {
     validate_viewport(inputs)?;
     crate::style::set_layout_viewport(inputs.width, inputs.height);
     fixed_containing::validate(styled, false)?;
     let (mut build_sources, mut sources) =
         sources::prepare(styled, identities, html_text_metrics.is_some())?;
-    let mut unsupported_svg_sources = std::collections::BTreeSet::new();
-    if let Some(plan) = plan {
-        build_sources.svg_viewports = plan.keys;
-        build_sources.svg_layout_scale = plan.layout_scale;
-        unsupported_svg_sources = plan.unsupported;
-    }
+    let (font_layout_scale, unsupported_svg_sources) = apply_native_plan(&mut build_sources, plan);
     let text_sources = std::mem::take(&mut build_sources.text_sources);
+    let original_text_units = text_units::prepare(&text_sources, original_text)?;
     let (tree, mut records, next_id) = boxgen::build_sourced_tree(styled, build_sources);
-    let (galley, metrics, text) = block::layout_tree_live(
+    let native_units =
+        text_units::native_nodes(&records, &original_text_units, !original_text.is_empty());
+    let (galley, metrics, text, transforms) = block::layout_tree_live(
         &tree,
         (inputs.width, inputs.height),
         inputs.fonts,
         inputs.images,
         diags,
-        html_text_metrics.map(|html| (next_id, html)),
+        block::TextLayoutPolicy {
+            start: html_text_metrics.map(|html| (next_id, html, font_layout_scale)),
+            original_units: native_units,
+        },
     );
     text::alias_sources(text.as_ref(), &mut records);
-    let fragments = geometry::collect(&galley, &records, &metrics);
+    let (fragments, native_transforms, native_hit_transforms) =
+        geometry::collect(&galley, &records, &metrics, &transforms, font_layout_scale);
     let source_index = sources.iter().enumerate().map(|(i, s)| (s.id, i)).collect();
     sources::index_fragments(&mut sources, &source_index, &fragments);
     let exceeded = text.as_ref().is_some_and(|text| text.exceeded);
@@ -396,15 +506,33 @@ fn capture_styled_with_plan(
         LayoutSnapshot {
             galley,
             fragments,
+            native_transforms,
+            native_hit_transforms,
             sources,
             source_index,
             viewport: (inputs.width, inputs.height),
             text_runs,
             text_sources,
+            original_text_units,
+            html_layout_scale: font_layout_scale,
             unsupported_svg_sources,
         },
         exceeded,
     ))
+}
+
+fn apply_native_plan(
+    sources: &mut sources::BuildSources,
+    plan: Option<svg_viewports::Plan>,
+) -> (Option<f32>, std::collections::BTreeSet<SourceId>) {
+    match plan {
+        Some(plan) => {
+            sources.svg_viewports = plan.keys;
+            sources.svg_layout_scale = plan.layout_scale;
+            (Some(plan.layout_scale), plan.unsupported)
+        }
+        None => (None, Default::default()),
+    }
 }
 
 fn validate_viewport(inputs: &SnapshotInputs) -> Result<(), SnapshotError> {

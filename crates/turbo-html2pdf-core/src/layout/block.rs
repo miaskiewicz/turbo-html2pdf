@@ -29,6 +29,13 @@ use super::value::{
 use super::ImageCtx;
 
 /// Shared layout inputs threaded through the recursion. Shared with `flex.rs`.
+#[derive(Default)]
+pub(crate) struct TextLayoutPolicy {
+    pub(crate) start: Option<(u32, bool, Option<f32>)>,
+    pub(crate) original_units:
+        Option<std::sync::Arc<crate::layout_snapshot::text_units::NativeUnitMap>>,
+}
+
 pub(crate) struct Ctx<'a> {
     pub(crate) fonts: &'a FontRegistry,
     pub(crate) images: &'a ImageCtx<'a>,
@@ -59,6 +66,9 @@ pub(crate) struct Ctx<'a> {
     pub(crate) used_metrics: Option<HashMap<NodeId, UsedBoxMetrics>>,
     pub(crate) text_capture: Option<crate::layout_snapshot::text::TextCapture>,
     pub(crate) html_font_metrics: bool,
+    pub(crate) html_font_scale: Option<f32>,
+    pub(crate) original_units: Option<&'a crate::layout_snapshot::text_units::NativeUnitMap>,
+    pub(crate) native_transforms: Option<HashMap<NodeId, super::value::NativeTransform>>,
     /// Floats active in the current **block formatting context**, in absolute
     /// galley coordinates. In-flow content within the same BFC flows in the
     /// inline region these leave free (a `float:right` infobox narrows the text
@@ -554,6 +564,7 @@ fn lay_atomic(b: &LayoutBox, cw: f32, fs: f32, ctx: &mut Ctx) -> Fragment {
 /// so an `inline-block`/`<img>` sits *within* the line next to text rather than
 /// stacking below it. Inline directives become zero-size markers at the origin.
 fn layout_lines(
+    lb: &LayoutBox,
     items: &[InlineItem],
     bs: &BoxStyle,
     cx: f32,
@@ -568,19 +579,38 @@ fn layout_lines(
     // text flows beside a `float:right` infobox and widens once below its bottom.
     // Clone the float set so the closure can borrow it while `ctx.diags` is used.
     let floats = ctx.floats.clone();
+    let text_indent = lb
+        .style
+        .get("text-indent")
+        .and_then(|value| super::value::parse_length_pct(value, bs.font_size))
+        .and_then(|value| value.resolve(cw))
+        .unwrap_or(0.0);
+    let text_indent = super::value::html_used_value(text_indent, ctx.html_font_scale);
     let region = |top: f32| {
+        let (rx, rw) = inline_region_from(&floats, cx, cw, cy + top);
+        let indent = if top == 0.0 { text_indent } else { 0.0 };
+        (rx - cx + indent, rw - indent)
+    };
+    let native_region = |top: f32| {
         let (rx, rw) = inline_region_from(&floats, cx, cw, cy + top);
         (rx - cx, rw)
     };
+    let clearance = |top, needed| inline_clearance(&floats, (cx, cy, cw), top, needed);
     let strut = line_strut(bs, fonts);
     let para = if ctx.html_font_metrics {
-        inline::layout_html_paragraph_in_with_sources(
+        inline::layout_html_paragraph_in_with_sources_at_scale(
             &pieces,
             fonts,
             bs.text_align,
             ctx.diags,
-            &region,
+            &native_region,
             strut,
+            inline::NativeLineOptions {
+                scale: ctx.html_font_scale,
+                first_indent: text_indent,
+                clearance: &clearance,
+                original_units: ctx.original_units,
+            },
         )
     } else if ctx.text_capture.is_some() {
         inline::layout_paragraph_in_with_sources(
@@ -1080,6 +1110,29 @@ fn inline_region_from(floats: &[FloatRect], cx: f32, cw: f32, y: f32) -> (f32, f
     (left, (right - left).max(1.0))
 }
 
+fn inline_clearance(floats: &[FloatRect], region: (f32, f32, f32), top: f32, needed: f32) -> f32 {
+    let (cx, cy, cw) = region;
+    let mut y = cy + top;
+    for _ in floats {
+        if inline_region_from(floats, cx, cw, y).1 >= needed {
+            break;
+        }
+        let Some(bottom) = next_float_bottom(floats, y) else {
+            break;
+        };
+        y = bottom;
+    }
+    y - cy
+}
+
+fn next_float_bottom(floats: &[FloatRect], y: f32) -> Option<f32> {
+    floats
+        .iter()
+        .filter(|float| y + 0.5 >= float.top && y <= float.bottom - 0.5)
+        .map(|float| float.bottom)
+        .min_by(f32::total_cmp)
+}
+
 /// Narrow the inline region for one float whose span contains the row: a `float:left`
 /// pushes the start right, a `float:right` pulls the end left. A `FloatRect` is only
 /// ever built for a real left/right float (`None` never enters the list), so there is
@@ -1234,7 +1287,7 @@ fn layout_content(
         BoxKind::Flex(kids) => super::flex::layout_flex(lb, kids, cx, cy, cw, bs.font_size, ctx),
         BoxKind::Grid(kids) => super::flex::layout_grid(lb, kids, cx, cy, cw, bs.font_size, ctx),
         BoxKind::Table(kids) => super::table::layout_table(lb, kids, cx, cy, cw, bs.font_size, ctx),
-        BoxKind::Lines(items) => layout_lines(items, bs, cx, cy, cw, ctx),
+        BoxKind::Lines(items) => layout_lines(lb, items, bs, cx, cy, cw, ctx),
         BoxKind::Directive(_) => (Vec::new(), 0.0),
     }
 }
@@ -1690,6 +1743,17 @@ fn image_fragment(lb: &LayoutBox, bx: f32, by: f32, sized: &SizedImage, bs: &Box
 }
 
 fn record_metrics(lb: &LayoutBox, bs: &BoxStyle, width: f32, height: f32, ctx: &mut Ctx) {
+    if let Some(transforms) = &mut ctx.native_transforms {
+        let border = bs.border.widths();
+        if let Some(transform) = super::value::native_transform(
+            &lb.style,
+            bs,
+            width + bs.padding.horizontal() + border.horizontal(),
+            height + bs.padding.vertical() + border.vertical(),
+        ) {
+            transforms.insert(lb.node_id, transform);
+        }
+    }
     if let Some(metrics) = &mut ctx.used_metrics {
         metrics.insert(
             lb.node_id,
@@ -1760,7 +1824,16 @@ pub fn layout_tree_with_images(
     images: &ImageCtx,
     diags: &mut Diagnostics,
 ) -> Fragment {
-    layout_tree_policy(root, cb_width, 0.0, (false, None), fonts, images, diags).0
+    layout_tree_policy(
+        root,
+        cb_width,
+        0.0,
+        (false, TextLayoutPolicy::default()),
+        fonts,
+        images,
+        diags,
+    )
+    .0
 }
 
 pub(crate) fn layout_tree_live(
@@ -1769,11 +1842,12 @@ pub(crate) fn layout_tree_live(
     fonts: &FontRegistry,
     images: &ImageCtx,
     diags: &mut Diagnostics,
-    text_start: Option<(u32, bool)>,
+    text_start: TextLayoutPolicy,
 ) -> (
     Fragment,
     HashMap<NodeId, UsedBoxMetrics>,
     Option<crate::layout_snapshot::text::TextCapture>,
+    HashMap<NodeId, super::value::NativeTransform>,
 ) {
     layout_tree_policy(
         root,
@@ -1790,7 +1864,7 @@ fn layout_tree_policy(
     root: &LayoutBox,
     cb_width: f32,
     viewport_height: f32,
-    policy: (bool, Option<(u32, bool)>),
+    policy: (bool, TextLayoutPolicy),
     fonts: &FontRegistry,
     images: &ImageCtx,
     diags: &mut Diagnostics,
@@ -1798,8 +1872,15 @@ fn layout_tree_policy(
     Fragment,
     HashMap<NodeId, UsedBoxMetrics>,
     Option<crate::layout_snapshot::text::TextCapture>,
+    HashMap<NodeId, super::value::NativeTransform>,
 ) {
-    let (live_geometry, text_start) = policy;
+    let (
+        live_geometry,
+        TextLayoutPolicy {
+            start: text_start,
+            original_units,
+        },
+    ) = policy;
     let mut ctx = Ctx {
         fonts,
         images,
@@ -1815,10 +1896,15 @@ fn layout_tree_policy(
         live_geometry,
         used_metrics: live_geometry.then(HashMap::new),
         html_font_metrics: text_start.is_some_and(|value| value.1),
+        html_font_scale: text_start.and_then(|value| value.2),
+        original_units: original_units.as_deref(),
+        native_transforms: live_geometry.then(HashMap::new),
         text_capture: text_start
             .map(|value| crate::layout_snapshot::text::TextCapture::new(value.0)),
         floats: Vec::new(),
     };
+    root.set_html_layout_policy((ctx.html_font_metrics, ctx.html_font_scale));
+    root.set_original_units(original_units.as_ref());
     stamp_intrinsic_widths(root, images);
     let mut frag = layout_box(root, 0.0, 0.0, cb_width, DEFAULT_FONT_SIZE, &mut ctx);
     // The galley (initial containing block) contains every float — grow it to the
@@ -1828,7 +1914,12 @@ fn layout_tree_policy(
     if float_bottom > frag.height {
         frag.height = float_bottom;
     }
-    (frag, ctx.used_metrics.unwrap_or_default(), ctx.text_capture)
+    (
+        frag,
+        ctx.used_metrics.unwrap_or_default(),
+        ctx.text_capture,
+        ctx.native_transforms.unwrap_or_default(),
+    )
 }
 
 #[cfg(test)]

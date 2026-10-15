@@ -7,7 +7,7 @@ pub enum TextGeometryError {
     MissingSource(SourceId),
     #[error("caret point coordinates must be finite")]
     InvalidPoint,
-    #[error("caret transform is rotated, skewed or degenerate")]
+    #[error("caret transform is degenerate or unrepresentable")]
     UnsupportedCaretTransform,
     #[error("text selection offsets are outside the original UTF-16 source")]
     InvalidOffsets,
@@ -35,6 +35,8 @@ pub(crate) fn ranges(
     let mut boxes = selected_boxes(&cells, start, end);
     append_placed_gaps(&mut boxes, &cells, &text, start, end);
     append_empty_boundaries(&mut boxes, &cells, &text, start, end)?;
+    coalesce_native_runs(snapshot, &mut boxes);
+    encompass_native_edges(snapshot, &cells, &mut boxes);
     transform_boxes(snapshot, &mut boxes);
     Ok(boxes)
 }
@@ -50,7 +52,10 @@ fn source_text(
         .iter()
         .find(|source| source.source_id == id)
         .ok_or(TextGeometryError::MissingSource(id))?;
-    let text: Vec<_> = source.text.encode_utf16().collect();
+    let text = snapshot
+        .text_original_units(id)
+        .map(<[u16]>::to_vec)
+        .unwrap_or_else(|| source.text.encode_utf16().collect());
     if start > end || end > text.len() {
         return Err(TextGeometryError::InvalidOffsets);
     }
@@ -122,10 +127,68 @@ fn append_empty_boundaries(
     Ok(())
 }
 
+// Chrome's source-scoped FragmentItem selection encompasses nonempty offsets,
+// while equal offsets retain one floored LayoutUnit edge. Quantize within the
+// native fragment before transforms; generic/PDF source queries keep raw units.
+fn encompass_native_edges(
+    snapshot: &LayoutSnapshot,
+    cells: &[SourceClusterBox],
+    boxes: &mut [SourceRangeBox],
+) {
+    let Some(scale) = snapshot.html_layout_scale else {
+        return;
+    };
+    let units = scale * 64.0;
+    for box_ in boxes {
+        let origin = cells
+            .iter()
+            .filter(|cell| {
+                cell.rect.y == box_.rect.y
+                    && cell.rect.height == box_.rect.height
+                    && snapshot.native_transforms[cell.fragment_index]
+                        == snapshot.native_transforms[box_.fragment_index]
+            })
+            .map(|cell| cell.rect.x)
+            .reduce(f32::min)
+            .unwrap_or(snapshot.fragments()[box_.fragment_index].rect.x);
+        let left = box_.rect.x - origin;
+        let right = left + box_.rect.width;
+        let begin = (left * units).floor() / units;
+        let end = if left == right {
+            begin
+        } else {
+            (right * units).ceil() / units
+        };
+        box_.rect.x = origin + begin;
+        box_.rect.width = end - begin;
+    }
+}
+
+fn coalesce_native_runs(snapshot: &LayoutSnapshot, boxes: &mut Vec<SourceRangeBox>) {
+    if snapshot.html_layout_scale.is_none() {
+        return;
+    }
+    let mut merged = Vec::<SourceRangeBox>::new();
+    for box_ in boxes.drain(..) {
+        let contiguous = merged.last_mut().filter(|previous| {
+            previous.rect.y == box_.rect.y
+                && previous.rect.height == box_.rect.height
+                && (previous.rect.x + previous.rect.width - box_.rect.x).abs() < 0.0001
+                && snapshot.native_transforms[previous.fragment_index]
+                    == snapshot.native_transforms[box_.fragment_index]
+        });
+        match contiguous {
+            Some(previous) => previous.rect.width = box_.rect.x + box_.rect.width - previous.rect.x,
+            None => merged.push(box_),
+        }
+    }
+    *boxes = merged;
+}
+
 fn transform_boxes(snapshot: &LayoutSnapshot, boxes: &mut [SourceRangeBox]) {
     boxes.sort_by_key(|box_| box_.fragment_index);
     for box_ in boxes {
-        let matrix = snapshot.fragments()[box_.fragment_index].world_transform;
+        let matrix = snapshot.native_transforms[box_.fragment_index];
         box_.transformed_bounds = geometry::bounds(
             geometry::rect_quad(box_.rect).map(|point| geometry::transform(point, matrix)),
         );

@@ -62,8 +62,9 @@ fn collect_boxes<'a>(
                 width: right - left,
                 height: font.ascent + font.descent,
             };
-            let quad = geometry::rect_quad(rect)
-                .map(|point| geometry::transform(point, fragment.world_transform));
+            let quad = geometry::rect_quad(rect).map(|point| {
+                geometry::transform(point, snapshot.native_transforms[fragment.index])
+            });
             boxes.push(SourceClusterBox {
                 right_to_left,
                 fragment_index: fragment.index,

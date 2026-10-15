@@ -178,6 +178,8 @@ struct CharInfo {
     ch: char,
     run: usize,
     face: FontFace,
+    original: bool,
+    invalid_unit: Option<u16>,
 }
 
 fn resolve_face(ch: char, run: &InlineRun, reg: &FontRegistry) -> (FontFace, bool) {
@@ -195,12 +197,19 @@ fn resolve_face(ch: char, run: &InlineRun, reg: &FontRegistry) -> (FontFace, boo
 // its cmap does not contain an individual mark. Native text snapshots consult
 // real primary-font shaping before character fallback; the legacy PDF route
 // keeps its existing itemization policy.
-fn primary_cluster_coverage(run: &InlineRun, enabled: bool) -> Vec<(usize, bool)> {
+fn primary_cluster_coverage(
+    run: &InlineRun,
+    enabled: bool,
+    original: Option<&[u16]>,
+) -> Vec<(usize, bool)> {
     if !enabled {
         return Vec::new();
     }
     let mut coverage = std::collections::BTreeMap::new();
-    for glyph in run.face.shape(&run.text) {
+    for glyph in original.map_or_else(
+        || run.face.shape(&run.text),
+        |units| run.face.shape_original_utf16(units),
+    ) {
         *coverage.entry(glyph.cluster as usize).or_insert(true) &= glyph.glyph_id != 0;
     }
     coverage.into_iter().collect()
@@ -215,18 +224,32 @@ fn flatten_chars(
     reg: &FontRegistry,
     diags: &mut Diagnostics,
     capture_sources: bool,
+    original_units: Option<&crate::layout_snapshot::text_units::NativeUnitMap>,
 ) -> Vec<CharInfo> {
     let mut out = Vec::new();
     for (i, run) in runs.iter().enumerate() {
         let mut missing = false;
-        let coverage = primary_cluster_coverage(run, capture_sources);
+        let original = original_units
+            .and_then(|units| units.get(&run.node_id))
+            .map(std::sync::Arc::as_ref);
+        let coverage =
+            primary_cluster_coverage(run, capture_sources || original.is_some(), original);
+        let mut native_faces = NativeFallbacks::default();
         let mut utf16_offset = 0;
         for (byte_offset, ch) in run.text.char_indices() {
-            let (face, notdef) = if primary_covers(&coverage, byte_offset) {
-                (run.face.clone(), false)
-            } else {
-                resolve_face(ch, run, reg)
-            };
+            let invalid_unit = invalid_source_unit(original, utf16_offset, ch);
+            let (face, notdef) = select_character_face(
+                CharacterSelection {
+                    ch,
+                    byte: byte_offset,
+                    unit: invalid_unit,
+                    native: original.is_some(),
+                    run,
+                    fonts: reg,
+                    coverage: &coverage,
+                },
+                &mut native_faces,
+            );
             missing |= notdef;
             out.push(CharInfo {
                 byte_offset,
@@ -234,6 +257,8 @@ fn flatten_chars(
                 ch,
                 run: i,
                 face,
+                original: original.is_some(),
+                invalid_unit,
             });
             utf16_offset += ch.len_utf16();
         }
@@ -248,6 +273,109 @@ fn flatten_chars(
     out
 }
 
+struct CharacterSelection<'a> {
+    ch: char,
+    byte: usize,
+    unit: Option<u16>,
+    native: bool,
+    run: &'a InlineRun,
+    fonts: &'a FontRegistry,
+    coverage: &'a [(usize, bool)],
+}
+fn select_character_face(
+    selection: CharacterSelection<'_>,
+    previous: &mut NativeFallbacks,
+) -> (FontFace, bool) {
+    let CharacterSelection {
+        ch,
+        byte,
+        unit,
+        native,
+        run,
+        fonts,
+        coverage,
+    } = selection;
+    if native && !primary_covers(coverage, byte) {
+        native_character_face(ch, unit, run, fonts, previous)
+    } else {
+        character_face(ch, byte, run, fonts, coverage)
+    }
+}
+
+fn invalid_source_unit(original: Option<&[u16]>, offset: usize, character: char) -> Option<u16> {
+    if character != char::REPLACEMENT_CHARACTER {
+        return None;
+    }
+    original
+        .and_then(|units| units.get(offset))
+        .copied()
+        .filter(|unit| (0xd800..=0xdfff).contains(unit))
+}
+
+#[derive(Default)]
+struct NativeFallbacks {
+    faces: Vec<FontFace>,
+    invalid: Option<(FontFace, bool)>,
+}
+
+impl NativeFallbacks {
+    fn cached(&self, ch: char, invalid: bool) -> Option<(FontFace, bool)> {
+        if invalid {
+            self.invalid.clone()
+        } else {
+            self.faces
+                .iter()
+                .find(|face| face.has_glyph(ch))
+                .map(|face| (face.clone(), false))
+        }
+    }
+    fn retain(&mut self, invalid: bool, selected: &(FontFace, bool)) {
+        if invalid {
+            self.invalid = Some(selected.clone());
+        } else if !selected.1 {
+            self.faces.push(selected.0.clone());
+        }
+    }
+}
+fn registered_fallback(ch: char, run: &InlineRun, fonts: &FontRegistry) -> Option<FontFace> {
+    let (face, missing) = resolve_face(ch, run, fonts);
+    (!missing).then_some(face)
+}
+fn native_character_face(
+    ch: char,
+    unit: Option<u16>,
+    run: &InlineRun,
+    fonts: &FontRegistry,
+    previous: &mut NativeFallbacks,
+) -> (FontFace, bool) {
+    // Unknown-script original units do not compete with scalar fallback runs.
+    if let Some(face) = previous.cached(ch, unit.is_some()) {
+        return face;
+    }
+    let face = fonts
+        .native_fallback(&run.face, ch, run.weight, run.italic)
+        .or_else(|| registered_fallback(ch, run, fonts));
+    let selected = face
+        .map(|face| (face, false))
+        .unwrap_or_else(|| resolve_face(ch, run, fonts));
+    previous.retain(unit.is_some(), &selected);
+    selected
+}
+
+fn character_face(
+    ch: char,
+    byte: usize,
+    run: &InlineRun,
+    fonts: &FontRegistry,
+    coverage: &[(usize, bool)],
+) -> (FontFace, bool) {
+    if primary_covers(coverage, byte) {
+        (run.face.clone(), false)
+    } else {
+        resolve_face(ch, run, fonts)
+    }
+}
+
 // --------------------------------------------------------------------------
 // words & segments
 // --------------------------------------------------------------------------
@@ -256,6 +384,8 @@ struct Seg {
     source_bytes: usize,
     source_utf16: usize,
     face: FontFace,
+    primary_face: FontFace,
+    original_units: Option<Vec<u16>>,
     text: String,
     font_size: f32,
     color: Rgba,
@@ -290,11 +420,17 @@ fn make_seg(chars: &[CharInfo], runs: &[InlineRun]) -> Seg {
     let text: String = chars.iter().map(|c| c.ch).collect();
     let run = &runs[chars[0].run];
     let face = chars[0].face.clone();
-    let width = face.measure(&text, run.font_size, run.letter_spacing);
+    let original_units = segment_original_units(chars);
+    let width = original_units.as_deref().map_or_else(
+        || face.measure(&text, run.font_size, run.letter_spacing),
+        |units| face.measure_original_utf16(units, run.font_size, run.letter_spacing),
+    );
     Seg {
         source_bytes: chars[0].byte_offset,
         source_utf16: chars[0].utf16_offset,
         face,
+        primary_face: run.face.clone(),
+        original_units,
         text,
         font_size: run.font_size,
         color: run.color,
@@ -304,6 +440,21 @@ fn make_seg(chars: &[CharInfo], runs: &[InlineRun]) -> Seg {
         node_id: run.node_id,
         width,
     }
+}
+
+fn segment_original_units(chars: &[CharInfo]) -> Option<Vec<u16>> {
+    if !chars[0].original {
+        return None;
+    }
+    let mut units = Vec::new();
+    for character in chars {
+        if let Some(unit) = character.invalid_unit {
+            units.push(unit);
+        } else {
+            units.extend_from_slice(character.ch.encode_utf16(&mut [0; 2]));
+        }
+    }
+    Some(units)
 }
 
 fn make_word(chars: &[CharInfo], runs: &[InlineRun], space_after: f32) -> Word {
@@ -379,6 +530,7 @@ fn build_pieces(
     reg: &FontRegistry,
     diags: &mut Diagnostics,
     capture_sources: bool,
+    original_units: Option<&crate::layout_snapshot::text_units::NativeUnitMap>,
 ) -> Vec<Word> {
     let mut words = Vec::new();
     let mut group: Vec<InlineRun> = Vec::new();
@@ -386,7 +538,14 @@ fn build_pieces(
         match piece {
             Piece::Run(run) => group.push(run.clone()),
             Piece::Atom(atom) => {
-                flush_run_group(&mut group, reg, diags, &mut words, capture_sources);
+                flush_run_group(
+                    &mut group,
+                    reg,
+                    diags,
+                    &mut words,
+                    capture_sources,
+                    original_units,
+                );
                 words.push(Word {
                     segs: Vec::new(),
                     // The atom occupies its MARGIN box inline, so horizontal margins
@@ -398,12 +557,26 @@ fn build_pieces(
                 });
             }
             Piece::Break => {
-                flush_run_group(&mut group, reg, diags, &mut words, capture_sources);
+                flush_run_group(
+                    &mut group,
+                    reg,
+                    diags,
+                    &mut words,
+                    capture_sources,
+                    original_units,
+                );
                 words.push(break_word());
             }
         }
     }
-    flush_run_group(&mut group, reg, diags, &mut words, capture_sources);
+    flush_run_group(
+        &mut group,
+        reg,
+        diags,
+        &mut words,
+        capture_sources,
+        original_units,
+    );
     words
 }
 
@@ -415,11 +588,13 @@ fn flush_run_group(
     diags: &mut Diagnostics,
     out: &mut Vec<Word>,
     capture_sources: bool,
+    original_units: Option<&crate::layout_snapshot::text_units::NativeUnitMap>,
 ) {
     if !group.is_empty() {
-        let chars = flatten_chars(group, reg, diags, capture_sources);
-        hand_off_leading_space(&chars, group, out, capture_sources);
-        out.extend(build_words(&chars, group, capture_sources));
+        let native = capture_sources || original_units.is_some();
+        let chars = flatten_chars(group, reg, diags, native, original_units);
+        hand_off_leading_space(&chars, group, out, native);
+        out.extend(build_words(&chars, group, native));
         group.clear();
     }
 }
@@ -466,6 +641,9 @@ struct Placer<'a> {
     strut: f32,
     capture_sources: bool,
     html_font_metrics: bool,
+    html_font_scale: Option<f32>,
+    first_indent: f32,
+    clearance: Option<&'a dyn Fn(f32, f32) -> f32>,
     out: Vec<SourceLine>,
     cur: Vec<Word>,
     y: f32,
@@ -475,8 +653,13 @@ struct Placer<'a> {
 }
 
 impl<'a> Placer<'a> {
-    fn new(align: Align, region: LineRegion<'a>, strut: f32, policy: (bool, bool)) -> Self {
-        let (capture_sources, html_font_metrics) = policy;
+    fn new(
+        align: Align,
+        region: LineRegion<'a>,
+        strut: f32,
+        policy: (bool, bool, Option<f32>),
+    ) -> Self {
+        let (capture_sources, html_font_metrics, html_font_scale) = policy;
         let (indent, lw) = region(0.0);
         Placer {
             align,
@@ -484,6 +667,9 @@ impl<'a> Placer<'a> {
             strut,
             capture_sources,
             html_font_metrics,
+            html_font_scale,
+            first_indent: 0.0,
+            clearance: None,
             out: Vec::new(),
             cur: Vec::new(),
             y: 0.0,
@@ -504,7 +690,11 @@ impl<'a> Placer<'a> {
             self.lw,
             self.align,
             self.strut,
-            (self.capture_sources, self.html_font_metrics),
+            (
+                self.capture_sources,
+                self.html_font_metrics,
+                self.html_font_scale,
+            ),
         );
         line.line.top = self.y;
         line.line.indent = self.indent;
@@ -520,12 +710,31 @@ impl<'a> Placer<'a> {
         if !self.cur.is_empty() && self.x + word.width > self.lw {
             self.flush();
         }
+        self.avoid_floats(word.width);
         let forced = word.break_after;
         self.x += word.width + word.space_after;
         self.cur.push(word);
         if forced {
             self.flush();
         }
+    }
+
+    fn avoid_floats(&mut self, width: f32) {
+        if !self.cur.is_empty() {
+            return;
+        }
+        let Some(clearance) = self.clearance else {
+            return;
+        };
+        let indent = if self.out.is_empty() {
+            self.first_indent
+        } else {
+            0.0
+        };
+        self.y = clearance(self.y, width + indent);
+        (self.indent, self.lw) = (self.region)(self.y);
+        self.indent += indent;
+        self.lw -= indent;
     }
 
     fn finish(mut self) -> Vec<SourceLine> {
@@ -540,7 +749,7 @@ fn wrap_and_place(
     align: Align,
     region: LineRegion,
     strut: f32,
-    policy: (bool, bool),
+    policy: (bool, bool, Option<f32>),
 ) -> Vec<SourceLine> {
     let mut placer = Placer::new(align, region, strut, policy);
     for word in words {
@@ -575,10 +784,23 @@ struct Metrics {
     height: f32,
 }
 
-fn fold_seg_metrics(seg: &Seg, m: &mut Metrics, capture_sources: bool) {
+// Source pins and the Chromium leading-policy attribution are recorded in
+// text/html-font-metrics-provenance.json. Quantize actual font metrics before
+// placement so physical-scale geometry never rewrites returned rectangles.
+fn source_font_metrics(seg: &Seg, scale: Option<f32>) -> crate::text::HtmlFontMetrics {
+    let scale = scale.unwrap_or(1.0);
+    let metrics = seg.primary_face.html_metrics(seg.font_size * scale);
+    crate::text::HtmlFontMetrics {
+        ascent: metrics.ascent / scale,
+        descent: metrics.descent / scale,
+        line_gap: metrics.line_gap / scale,
+    }
+}
+
+fn fold_seg_metrics(seg: &Seg, m: &mut Metrics, capture_sources: bool, scale: Option<f32>) {
     let shift = valign_shift(seg.valign, seg.font_size);
     let (ascent, descent, normal) = if capture_sources {
-        let metrics = seg.face.html_metrics(seg.font_size);
+        let metrics = source_font_metrics(seg, scale);
         (
             metrics.ascent,
             metrics.descent,
@@ -617,7 +839,7 @@ fn fold_atom_metrics(atom: &InlineAtom, m: &mut Metrics) {
 /// `<br><br>` gap — is exactly one strut tall), then each word's text segments and
 /// atoms grow it. The PDF policy floors the height at the font box; explicit
 /// HTML line-height permits negative leading and overlapping glyph font boxes.
-fn line_metrics(words: &[Word], strut: f32, capture_sources: bool) -> Metrics {
+fn line_metrics(words: &[Word], strut: f32, capture_sources: bool, scale: Option<f32>) -> Metrics {
     let mut m = Metrics {
         ascent: 0.0,
         descent: 0.0,
@@ -625,7 +847,7 @@ fn line_metrics(words: &[Word], strut: f32, capture_sources: bool) -> Metrics {
     };
     for word in words {
         for seg in &word.segs {
-            fold_seg_metrics(seg, &mut m, capture_sources);
+            fold_seg_metrics(seg, &mut m, capture_sources, scale);
         }
         if let Some(atom) = word.atom {
             fold_atom_metrics(&atom, &mut m);
@@ -664,14 +886,17 @@ fn source_shaper_is_rtl(text: &str, enabled: bool) -> bool {
     buffer.direction() == rustybuzz::Direction::RightToLeft
 }
 
-fn shape_seg(seg: &Seg, pen_x: f32, baseline: f32, policy: (bool, bool)) -> SourceRun {
-    let (capture_sources, html_font_metrics) = policy;
+fn shape_seg(seg: &Seg, pen_x: f32, baseline: f32, policy: (bool, bool, Option<f32>)) -> SourceRun {
+    let (capture_sources, html_font_metrics, html_font_scale) = policy;
     let scale = seg.face.scale(seg.font_size);
     let seg_baseline = baseline - valign_shift(seg.valign, seg.font_size);
     let mut glyphs = Vec::new();
     let mut clusters = Vec::new();
     let mut x = pen_x;
-    let shaped = seg.face.shape(&seg.text);
+    let shaped = seg.original_units.as_deref().map_or_else(
+        || seg.face.shape(&seg.text),
+        |units| seg.face.shape_original_utf16(units),
+    );
     let right_to_left = source_shaper_is_rtl(&seg.text, capture_sources);
     let (boundaries, utf16) = if capture_sources {
         let mut boundaries: Vec<_> = shaped.iter().map(|glyph| glyph.cluster as usize).collect();
@@ -724,7 +949,7 @@ fn shape_seg(seg: &Seg, pen_x: f32, baseline: f32, policy: (bool, bool)) -> Sour
         x += scale * g.x_advance as f32 + seg.letter_spacing;
     }
     let (ascent, descent) = if html_font_metrics {
-        let metrics = seg.face.html_metrics(seg.font_size);
+        let metrics = source_font_metrics(seg, html_font_scale);
         (metrics.ascent, metrics.descent)
     } else {
         (
@@ -805,10 +1030,14 @@ fn place_line(
     max_width: f32,
     align: Align,
     strut: f32,
-    policy: (bool, bool),
+    policy: (bool, bool, Option<f32>),
 ) -> SourceLine {
-    let m = line_metrics(&words, strut, policy.1);
-    let baseline = m.ascent + (m.height - m.ascent - m.descent) / 2.0;
+    let m = line_metrics(&words, strut, policy.1, policy.2);
+    let half_leading = (m.height - m.ascent - m.descent) / 2.0;
+    let leading = policy
+        .2
+        .map_or(half_leading, |scale| (half_leading * scale).floor() / scale);
+    let baseline = m.ascent + leading;
     let width = line_used_width(&words);
     let mut pen = align_offset(align, width, max_width);
     let mut runs = Vec::new();
@@ -906,8 +1135,15 @@ pub fn layout_paragraph_in(
     region: LineRegion,
     strut: f32,
 ) -> ParagraphLayout {
-    let words = build_pieces(pieces, reg, diags, false);
-    finalize(wrap_and_place(words, align, region, strut, (false, false))).layout
+    let words = build_pieces(pieces, reg, diags, false, None);
+    finalize(wrap_and_place(
+        words,
+        align,
+        region,
+        strut,
+        (false, false, None),
+    ))
+    .layout
 }
 
 /// The same native shaping and line-breaking result with glyph source offsets.
@@ -921,8 +1157,14 @@ pub fn layout_paragraph_in_with_sources(
     region: LineRegion,
     strut: f32,
 ) -> ParagraphSourceLayout {
-    let words = build_pieces(pieces, reg, diags, true);
-    finalize(wrap_and_place(words, align, region, strut, (true, false)))
+    let words = build_pieces(pieces, reg, diags, true, None);
+    finalize(wrap_and_place(
+        words,
+        align,
+        region,
+        strut,
+        (true, false, None),
+    ))
 }
 
 /// Continuous HTML text geometry with actual source clusters and rounded native
@@ -935,8 +1177,59 @@ pub fn layout_html_paragraph_in_with_sources(
     region: LineRegion,
     strut: f32,
 ) -> ParagraphSourceLayout {
-    let words = build_pieces(pieces, reg, diags, true);
-    finalize(wrap_and_place(words, align, region, strut, (true, true)))
+    let words = build_pieces(pieces, reg, diags, true, None);
+    finalize(wrap_and_place(
+        words,
+        align,
+        region,
+        strut,
+        (true, true, None),
+    ))
+}
+
+pub(crate) fn layout_html_paragraph_in_with_sources_at_scale(
+    pieces: &[Piece],
+    reg: &FontRegistry,
+    align: Align,
+    diags: &mut Diagnostics,
+    region: LineRegion,
+    strut: f32,
+    options: NativeLineOptions<'_>,
+) -> ParagraphSourceLayout {
+    let words = build_pieces(pieces, reg, diags, true, options.original_units);
+    let mut placer = Placer::new(align, region, strut, (true, true, options.scale));
+    placer.first_indent = options.first_indent;
+    placer.clearance = Some(options.clearance);
+    for word in words {
+        placer.add(word);
+    }
+    finalize(placer.finish())
+}
+
+pub(crate) struct NativeLineOptions<'a> {
+    pub scale: Option<f32>,
+    pub first_indent: f32,
+    pub clearance: &'a dyn Fn(f32, f32) -> f32,
+    pub original_units: Option<&'a crate::layout_snapshot::text_units::NativeUnitMap>,
+}
+
+pub(crate) fn layout_runs_with_units(
+    runs: &[InlineRun],
+    fonts: &FontRegistry,
+    width: f32,
+    diags: &mut Diagnostics,
+    original: Option<&crate::layout_snapshot::text_units::NativeUnitMap>,
+) -> ParagraphLayout {
+    let pieces: Vec<_> = runs.iter().cloned().map(Piece::Run).collect();
+    let words = build_pieces(&pieces, fonts, diags, false, original);
+    finalize(wrap_and_place(
+        words,
+        Align::Left,
+        &|_| (0.0, width),
+        0.0,
+        (false, false, None),
+    ))
+    .layout
 }
 
 /// Lay out a paragraph of text runs only (no atoms) — a convenience for callers
