@@ -262,6 +262,41 @@ font-fallback behavior remain unfinished. The controlled-font comparisons do not
 certify installed fallback fonts, platform-specific hinted metrics or complete
 CSSOM View behavior.
 
+## Original-scope matched declarations and unboxed elements (unreleased)
+
+An embedder with its own DOM and shadow trees can call
+`style::resolve_matched_style(parent, declarations)` after matching selectors in
+their actual scopes. Each `MatchedDeclaration` carries its CSS origin, shadow
+depth, inline status, specificity and source order. Normal declarations prefer
+outer encapsulation contexts; important declarations prefer inner contexts.
+Origin precedence applies first, with the usual important-origin reversal.
+The caller supplies UA declarations and inline declarations explicitly;
+`presentational_declarations` exposes the ordinary engine's attribute hints.
+`user_agent_css` and `user_agent_stylesheet` expose the same UA rules for an
+embedder's original-scope matcher.
+Custom properties, inherited values, quad shorthands and font sizes share the
+existing style resolution. This API does not match selectors or provide cascade
+layers, animations or complete CSS parsing on the caller's behalf.
+
+`display:contents` now suppresses only the element's box and promotes its actual
+children into the parent's formatting context. The source tree retains the
+unboxed ancestor and its inherited text style, without applying its padding,
+margin or transform to promoted boxes. Its own fragment list remains empty;
+descendant provenance remains available. Replaced HTML elements and controls
+listed in CSS Display's unusual-element rules suppress their subtree instead.
+Flex/grid text becomes genuine anonymous items, grouped across unboxed and
+display-none boundaries while retaining original text identities and styles.
+Whitespace-only items are omitted; NBSP remains real content. Native HTML
+intrinsic sizing and flex/grid placement retain fractional advances and the same
+whitespace policy as final glyph layout. Legacy PDF rounding remains separate.
+Full anonymous table row/cell synthesis is still unsupported.
+
+The authored fourteen-case control is independently captured with the reusable
+collector's `--fixture` argument; its source hashes and actual Chrome/V8 versions
+are retained in `tests/fixtures/layout-snapshot/contents-chrome155.json` and
+`contents-text-chrome155.json`; the latter loads the same bundled Go font bytes
+in both engines and records their hash.
+
 ## Explicit outer SVG viewports (unreleased)
 
 `snapshot_html_live_tree_with_svg_viewports` and its already-styled counterpart

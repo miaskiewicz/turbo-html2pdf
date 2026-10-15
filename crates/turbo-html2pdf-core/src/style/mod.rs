@@ -8,10 +8,10 @@ mod selector;
 mod token;
 
 pub use cascade::{
-    style_tree, style_tree_with_roots, Cascade, ComputedStyle, LeveledRule, StyledElement,
-    StyledNode,
+    presentational_declarations, resolve_matched_style, style_tree, style_tree_with_roots, Cascade,
+    CascadeOrigin, ComputedStyle, LeveledRule, MatchedDeclaration, StyledElement, StyledNode,
 };
-pub use parser::{parse_stylesheet, AtRule, Declaration, Rule, Stylesheet};
+pub use parser::{parse_declarations, parse_stylesheet, AtRule, Declaration, Rule, Stylesheet};
 pub use token::{StyleToken, TokenSet};
 
 /// A minimal user-agent stylesheet (§4.2): the defaults the cascade starts from.
@@ -63,6 +63,19 @@ input[type=hidden] { display: none }
 textarea { display: inline-block; width: 200px; height: 3em; border: 1px solid #a9a9a9; background-color: #ffffff }
 select, button { display: inline-block; border: 1px solid #a9a9a9; background-color: #efefef }
 ";
+
+/// The same UA declarations used by the ordinary cascade. A DOM embedder can
+/// match these against each original tree scope before resolving matched styles.
+#[must_use]
+pub fn user_agent_stylesheet() -> Stylesheet {
+    parse_stylesheet(UA_CSS)
+}
+
+/// Original UA source for embedders that use a different selector parser.
+#[must_use]
+pub fn user_agent_css() -> &'static str {
+    UA_CSS
+}
 
 fn add_leveled(rules: &mut Vec<LeveledRule>, order: &mut usize, level: u8, sheet: Stylesheet) {
     for rule in sheet.rules {

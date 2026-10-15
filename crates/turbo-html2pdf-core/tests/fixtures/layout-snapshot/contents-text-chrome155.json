@@ -1,0 +1,491 @@
+{
+  "browser": "Chrome/155.0.8059.80",
+  "v8": "15.5.35.23",
+  "recordedAt": "2026-10-15T23:22:46.396Z",
+  "fixture": "contents-text-cases.json",
+  "fixtureSha256": "b633a1de8bd507f08b34559816a3f8a1270e8e2de914dde47d2ce2d44601c055",
+  "probeSha256": "2b1deb4f2774e0b51180037e20bc4f606819369f275d9de7f6935892f82f2b92",
+  "collectorSha256": "bbf2072eeb27d730ec057a7b5481f324d49252c2af200aa1243c4b6ff6f84da8",
+  "fontSha256": "197d9f3703b4c00af609178876a8d73e396f64fe438b2c871778566632374be3",
+  "effectiveExtensionFlags": [
+    "--disable-extensions",
+    "--disable-component-extensions-with-background-pages"
+  ],
+  "viewport": {
+    "width": 200,
+    "height": 200
+  },
+  "cases": [
+    {
+      "name": "anonymous-direct-flex",
+      "boxes": [
+        {
+          "sourceId": 1,
+          "isDocumentRoot": false,
+          "rect": {
+            "x": 0,
+            "y": 0,
+            "width": 200,
+            "height": 20
+          },
+          "clientRects": [
+            {
+              "x": 0,
+              "y": 0,
+              "width": 200,
+              "height": 20
+            }
+          ],
+          "client": {
+            "left": 0,
+            "top": 0,
+            "width": 200,
+            "height": 20
+          },
+          "offset": {
+            "width": 200,
+            "height": 20
+          }
+        },
+        {
+          "sourceId": 3,
+          "isDocumentRoot": false,
+          "rect": {
+            "x": 27.796875,
+            "y": 0,
+            "width": 20,
+            "height": 10
+          },
+          "clientRects": [
+            {
+              "x": 27.796875,
+              "y": 0,
+              "width": 20,
+              "height": 10
+            }
+          ],
+          "client": {
+            "left": 0,
+            "top": 0,
+            "width": 20,
+            "height": 10
+          },
+          "offset": {
+            "width": 20,
+            "height": 10
+          }
+        }
+      ]
+    },
+    {
+      "name": "anonymous-contents-flex",
+      "boxes": [
+        {
+          "sourceId": 1,
+          "isDocumentRoot": false,
+          "rect": {
+            "x": 0,
+            "y": 0,
+            "width": 200,
+            "height": 20
+          },
+          "clientRects": [
+            {
+              "x": 0,
+              "y": 0,
+              "width": 200,
+              "height": 20
+            }
+          ],
+          "client": {
+            "left": 0,
+            "top": 0,
+            "width": 200,
+            "height": 20
+          },
+          "offset": {
+            "width": 200,
+            "height": 20
+          }
+        },
+        {
+          "sourceId": 2,
+          "isDocumentRoot": false,
+          "rect": {
+            "x": 0,
+            "y": 0,
+            "width": 0,
+            "height": 0
+          },
+          "clientRects": [],
+          "client": {
+            "left": 0,
+            "top": 0,
+            "width": 0,
+            "height": 0
+          },
+          "offset": {
+            "width": 0,
+            "height": 0
+          }
+        },
+        {
+          "sourceId": 4,
+          "isDocumentRoot": false,
+          "rect": {
+            "x": 27.796875,
+            "y": 0,
+            "width": 20,
+            "height": 10
+          },
+          "clientRects": [
+            {
+              "x": 27.796875,
+              "y": 0,
+              "width": 20,
+              "height": 10
+            }
+          ],
+          "client": {
+            "left": 0,
+            "top": 0,
+            "width": 20,
+            "height": 10
+          },
+          "offset": {
+            "width": 20,
+            "height": 10
+          }
+        }
+      ]
+    },
+    {
+      "name": "anonymous-merged-across-contents-and-hidden",
+      "boxes": [
+        {
+          "sourceId": 1,
+          "isDocumentRoot": false,
+          "rect": {
+            "x": 0,
+            "y": 0,
+            "width": 200,
+            "height": 20
+          },
+          "clientRects": [
+            {
+              "x": 0,
+              "y": 0,
+              "width": 200,
+              "height": 20
+            }
+          ],
+          "client": {
+            "left": 0,
+            "top": 0,
+            "width": 200,
+            "height": 20
+          },
+          "offset": {
+            "width": 200,
+            "height": 20
+          }
+        },
+        {
+          "sourceId": 3,
+          "isDocumentRoot": false,
+          "rect": {
+            "x": 0,
+            "y": 0,
+            "width": 0,
+            "height": 0
+          },
+          "clientRects": [],
+          "client": {
+            "left": 0,
+            "top": 0,
+            "width": 0,
+            "height": 0
+          },
+          "offset": {
+            "width": 0,
+            "height": 0
+          }
+        },
+        {
+          "sourceId": 5,
+          "isDocumentRoot": false,
+          "rect": {
+            "x": 0,
+            "y": 0,
+            "width": 0,
+            "height": 0
+          },
+          "clientRects": [],
+          "client": {
+            "left": 0,
+            "top": 0,
+            "width": 0,
+            "height": 0
+          },
+          "offset": {
+            "width": 0,
+            "height": 0
+          }
+        },
+        {
+          "sourceId": 8,
+          "isDocumentRoot": false,
+          "rect": {
+            "x": 35.796875,
+            "y": 0,
+            "width": 20,
+            "height": 10
+          },
+          "clientRects": [
+            {
+              "x": 35.796875,
+              "y": 0,
+              "width": 20,
+              "height": 10
+            }
+          ],
+          "client": {
+            "left": 0,
+            "top": 0,
+            "width": 20,
+            "height": 10
+          },
+          "offset": {
+            "width": 20,
+            "height": 10
+          }
+        }
+      ]
+    },
+    {
+      "name": "anonymous-whitespace-omitted",
+      "boxes": [
+        {
+          "sourceId": 1,
+          "isDocumentRoot": false,
+          "rect": {
+            "x": 0,
+            "y": 0,
+            "width": 200,
+            "height": 10
+          },
+          "clientRects": [
+            {
+              "x": 0,
+              "y": 0,
+              "width": 200,
+              "height": 10
+            }
+          ],
+          "client": {
+            "left": 0,
+            "top": 0,
+            "width": 200,
+            "height": 10
+          },
+          "offset": {
+            "width": 200,
+            "height": 10
+          }
+        },
+        {
+          "sourceId": 3,
+          "isDocumentRoot": false,
+          "rect": {
+            "x": 0,
+            "y": 0,
+            "width": 0,
+            "height": 0
+          },
+          "clientRects": [],
+          "client": {
+            "left": 0,
+            "top": 0,
+            "width": 0,
+            "height": 0
+          },
+          "offset": {
+            "width": 0,
+            "height": 0
+          }
+        },
+        {
+          "sourceId": 5,
+          "isDocumentRoot": false,
+          "rect": {
+            "x": 0,
+            "y": 0,
+            "width": 20,
+            "height": 10
+          },
+          "clientRects": [
+            {
+              "x": 0,
+              "y": 0,
+              "width": 20,
+              "height": 10
+            }
+          ],
+          "client": {
+            "left": 0,
+            "top": 0,
+            "width": 20,
+            "height": 10
+          },
+          "offset": {
+            "width": 20,
+            "height": 10
+          }
+        }
+      ]
+    },
+    {
+      "name": "anonymous-nbsp-preserved",
+      "boxes": [
+        {
+          "sourceId": 1,
+          "isDocumentRoot": false,
+          "rect": {
+            "x": 0,
+            "y": 0,
+            "width": 200,
+            "height": 20
+          },
+          "clientRects": [
+            {
+              "x": 0,
+              "y": 0,
+              "width": 200,
+              "height": 20
+            }
+          ],
+          "client": {
+            "left": 0,
+            "top": 0,
+            "width": 200,
+            "height": 20
+          },
+          "offset": {
+            "width": 200,
+            "height": 20
+          }
+        },
+        {
+          "sourceId": 3,
+          "isDocumentRoot": false,
+          "rect": {
+            "x": 14.4453125,
+            "y": 0,
+            "width": 20,
+            "height": 10
+          },
+          "clientRects": [
+            {
+              "x": 14.4453125,
+              "y": 0,
+              "width": 20,
+              "height": 10
+            }
+          ],
+          "client": {
+            "left": 0,
+            "top": 0,
+            "width": 20,
+            "height": 10
+          },
+          "offset": {
+            "width": 20,
+            "height": 10
+          }
+        }
+      ]
+    },
+    {
+      "name": "anonymous-contents-grid",
+      "boxes": [
+        {
+          "sourceId": 1,
+          "isDocumentRoot": false,
+          "rect": {
+            "x": 0,
+            "y": 0,
+            "width": 200,
+            "height": 20
+          },
+          "clientRects": [
+            {
+              "x": 0,
+              "y": 0,
+              "width": 200,
+              "height": 20
+            }
+          ],
+          "client": {
+            "left": 0,
+            "top": 0,
+            "width": 200,
+            "height": 20
+          },
+          "offset": {
+            "width": 200,
+            "height": 20
+          }
+        },
+        {
+          "sourceId": 2,
+          "isDocumentRoot": false,
+          "rect": {
+            "x": 0,
+            "y": 0,
+            "width": 0,
+            "height": 0
+          },
+          "clientRects": [],
+          "client": {
+            "left": 0,
+            "top": 0,
+            "width": 0,
+            "height": 0
+          },
+          "offset": {
+            "width": 0,
+            "height": 0
+          }
+        },
+        {
+          "sourceId": 4,
+          "isDocumentRoot": false,
+          "rect": {
+            "x": 60,
+            "y": 0,
+            "width": 20,
+            "height": 10
+          },
+          "clientRects": [
+            {
+              "x": 60,
+              "y": 0,
+              "width": 20,
+              "height": 10
+            }
+          ],
+          "client": {
+            "left": 0,
+            "top": 0,
+            "width": 20,
+            "height": 10
+          },
+          "offset": {
+            "width": 20,
+            "height": 10
+          }
+        }
+      ]
+    }
+  ]
+}

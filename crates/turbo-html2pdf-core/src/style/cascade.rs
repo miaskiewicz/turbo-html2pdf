@@ -924,3 +924,9 @@ fn root_pos() -> ElemPos {
         siblings: 1,
     }
 }
+
+#[path = "matched.rs"]
+mod matched;
+pub use matched::{
+    presentational_declarations, resolve_matched_style, CascadeOrigin, MatchedDeclaration,
+};

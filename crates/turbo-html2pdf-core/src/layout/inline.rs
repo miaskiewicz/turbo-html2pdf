@@ -1219,15 +1219,16 @@ pub(crate) fn layout_runs_with_units(
     width: f32,
     diags: &mut Diagnostics,
     original: Option<&crate::layout_snapshot::text_units::NativeUnitMap>,
+    html_metrics: bool,
 ) -> ParagraphLayout {
     let pieces: Vec<_> = runs.iter().cloned().map(Piece::Run).collect();
-    let words = build_pieces(&pieces, fonts, diags, false, original);
+    let words = build_pieces(&pieces, fonts, diags, html_metrics, original);
     finalize(wrap_and_place(
         words,
         Align::Left,
         &|_| (0.0, width),
         0.0,
-        (false, false, None),
+        (html_metrics, html_metrics, None),
     ))
     .layout
 }

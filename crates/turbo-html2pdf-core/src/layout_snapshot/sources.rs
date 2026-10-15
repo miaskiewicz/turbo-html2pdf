@@ -117,7 +117,8 @@ impl Walker<'_> {
         excluded: bool,
     ) {
         let excluded = excluded
-            || matches!(node, StyledNode::Element(element) if display_of(&element.style) == Display::None);
+            || matches!(node, StyledNode::Element(element) if display_of(&element.style) == Display::None
+                || crate::layout::contents::suppresses_subtree(element));
         let id = self.wanted.get(path).copied();
         let (key, kind) = node_key(node);
         self.nodes.insert(

@@ -1,0 +1,196 @@
+{
+  "viewport": {
+    "width": 200,
+    "height": 200
+  },
+  "intrinsicImage": {
+    "width": 4,
+    "height": 2
+  },
+  "font": "Go",
+  "cases": [
+    {
+      "name": "anonymous-direct-flex",
+      "nodes": [
+        {
+          "sourceId": 1,
+          "tag": "div",
+          "style": "display:flex;width:200px;font-family:ParityGo;font-size:16px;line-height:20px;gap:10px;",
+          "children": [
+            {
+              "sourceId": 2,
+              "text": "ab"
+            },
+            {
+              "sourceId": 3,
+              "tag": "div",
+              "style": "width:20px;height:10px",
+              "children": []
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "anonymous-contents-flex",
+      "nodes": [
+        {
+          "sourceId": 1,
+          "tag": "div",
+          "style": "display:flex;width:200px;font-family:ParityGo;font-size:16px;line-height:20px;gap:10px;",
+          "children": [
+            {
+              "sourceId": 2,
+              "tag": "section",
+              "style": "display:contents;width:900px;padding:50px",
+              "children": [
+                {
+                  "sourceId": 3,
+                  "text": "ab"
+                }
+              ]
+            },
+            {
+              "sourceId": 4,
+              "tag": "div",
+              "style": "width:20px;height:10px",
+              "children": []
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "anonymous-merged-across-contents-and-hidden",
+      "nodes": [
+        {
+          "sourceId": 1,
+          "tag": "div",
+          "style": "display:flex;width:200px;font-family:ParityGo;font-size:16px;line-height:20px;gap:10px;",
+          "children": [
+            {
+              "sourceId": 2,
+              "text": "a"
+            },
+            {
+              "sourceId": 3,
+              "tag": "section",
+              "style": "display:contents",
+              "children": [
+                {
+                  "sourceId": 4,
+                  "text": "b"
+                }
+              ]
+            },
+            {
+              "sourceId": 5,
+              "tag": "span",
+              "style": "display:none",
+              "children": [
+                {
+                  "sourceId": 6,
+                  "text": "unused"
+                }
+              ]
+            },
+            {
+              "sourceId": 7,
+              "text": "c"
+            },
+            {
+              "sourceId": 8,
+              "tag": "div",
+              "style": "width:20px;height:10px",
+              "children": []
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "anonymous-whitespace-omitted",
+      "nodes": [
+        {
+          "sourceId": 1,
+          "tag": "div",
+          "style": "display:flex;width:200px;font-family:ParityGo;font-size:16px;line-height:20px;gap:10px;",
+          "children": [
+            {
+              "sourceId": 2,
+              "text": " \t\n"
+            },
+            {
+              "sourceId": 3,
+              "tag": "section",
+              "style": "display:contents",
+              "children": [
+                {
+                  "sourceId": 4,
+                  "text": " \r\n"
+                }
+              ]
+            },
+            {
+              "sourceId": 5,
+              "tag": "div",
+              "style": "width:20px;height:10px",
+              "children": []
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "anonymous-nbsp-preserved",
+      "nodes": [
+        {
+          "sourceId": 1,
+          "tag": "div",
+          "style": "display:flex;width:200px;font-family:ParityGo;font-size:16px;line-height:20px;gap:10px;",
+          "children": [
+            {
+              "sourceId": 2,
+              "text": "\u00a0"
+            },
+            {
+              "sourceId": 3,
+              "tag": "div",
+              "style": "width:20px;height:10px",
+              "children": []
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "anonymous-contents-grid",
+      "nodes": [
+        {
+          "sourceId": 1,
+          "tag": "div",
+          "style": "display:grid;grid-template-columns:50px 70px;width:200px;font-family:ParityGo;font-size:16px;line-height:20px;gap:10px;",
+          "children": [
+            {
+              "sourceId": 2,
+              "tag": "section",
+              "style": "display:contents",
+              "children": [
+                {
+                  "sourceId": 3,
+                  "text": "ab"
+                }
+              ]
+            },
+            {
+              "sourceId": 4,
+              "tag": "div",
+              "style": "width:20px;height:10px",
+              "children": []
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

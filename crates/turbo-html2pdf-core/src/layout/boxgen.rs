@@ -183,6 +183,9 @@ impl LayoutBox {
         let scale = self.html_layout_policy.get().1;
         (scale != 0.0).then_some(scale)
     }
+    pub(crate) fn uses_html_font_metrics(&self) -> bool {
+        self.html_layout_policy.get().0
+    }
     pub(crate) fn set_html_layout_policy(&self, policy: (bool, Option<f32>)) {
         let encoded = (policy.0, policy.1.unwrap_or(0.0));
         if self.html_layout_policy.replace(encoded) != encoded {
@@ -582,13 +585,13 @@ fn classify_element(el: &StyledElement, ids: &mut Ids) -> Option<Level> {
 /// a nested block becomes an atomic inline).
 fn flatten_inline(el: &StyledElement, ids: &mut Ids) -> Vec<InlineItem> {
     let mut out = Vec::new();
-    for child in &el.children {
-        match classify(child, &el.style, ids) {
-            Some(Level::Inline(items)) => out.extend(items),
-            Some(Level::Block(b)) => out.push(InlineItem::Atomic(b)),
-            None => {}
-        }
-    }
+    super::contents::visit(&el.children, &el.style, &mut |child, style| match classify(
+        child, style, ids,
+    ) {
+        Some(Level::Inline(items)) => out.extend(items),
+        Some(Level::Block(b)) => out.push(InlineItem::Atomic(b)),
+        None => {}
+    });
     out
 }
 
@@ -605,8 +608,8 @@ fn box_kind_for(display: Display, el: &StyledElement, ids: &mut Ids) -> BoxKind 
         return build_flow(&text, &el.style, ids);
     }
     match display {
-        Display::Flex => BoxKind::Flex(child_block_boxes(el, ids)),
-        Display::Grid => BoxKind::Grid(child_block_boxes(el, ids)),
+        Display::Flex => BoxKind::Flex(flex_grid_children(el, ids)),
+        Display::Grid => BoxKind::Grid(flex_grid_children(el, ids)),
         Display::Table => BoxKind::Table(child_block_boxes(el, ids)),
         _ => build_flow(&el.children, &el.style, ids),
     }
@@ -792,13 +795,45 @@ fn url_token(token: &str) -> Option<String> {
     (!name.is_empty()).then(|| name.to_string())
 }
 
-/// Build a flex/table container's children as block-level boxes (raw text and
-/// `display:none` dropped; v1 does not synthesize anonymous flex/table items).
+/// Table anonymous-row/cell synthesis remains separate from flex/grid items.
 fn child_block_boxes(el: &StyledElement, ids: &mut Ids) -> Vec<LayoutBox> {
-    el.children
-        .iter()
-        .filter_map(|n| block_child(n, ids))
-        .collect()
+    let mut boxes = Vec::new();
+    super::contents::visit(&el.children, &el.style, &mut |node, _| {
+        boxes.extend(block_child(node, ids));
+    });
+    boxes
+}
+
+fn flex_grid_children(el: &StyledElement, ids: &mut Ids) -> Vec<LayoutBox> {
+    let mut boxes = Vec::new();
+    let mut text = Vec::new();
+    super::contents::visit(&el.children, &el.style, &mut |node, style| match node {
+        StyledNode::Text(value) => text.push(text_item(node, value, style, ids)),
+        _ => {
+            if let Some(child) = block_child(node, ids) {
+                flush_flex_text(&mut text, &el.style, ids, &mut boxes);
+                boxes.push(child);
+            }
+        }
+    });
+    flush_flex_text(&mut text, &el.style, ids, &mut boxes);
+    boxes
+}
+
+fn flush_flex_text(
+    text: &mut Vec<InlineItem>,
+    style: &ComputedStyle,
+    ids: &mut Ids,
+    boxes: &mut Vec<LayoutBox>,
+) {
+    if text.is_empty() || run_is_blank(text) {
+        text.clear();
+        return;
+    }
+    let mut anonymous = anon_lines_box(std::mem::take(text), style, ids);
+    // The item inherits text properties, never the container's width or frame.
+    anonymous.style = style.inherited_only();
+    boxes.push(anonymous);
 }
 
 fn block_child(node: &StyledNode, ids: &mut Ids) -> Option<LayoutBox> {
@@ -814,7 +849,7 @@ fn run_is_blank(run: &[InlineItem]) -> bool {
 }
 
 fn is_blank_text(item: &InlineItem) -> bool {
-    matches!(item, InlineItem::Text { text, .. } if text.trim().is_empty())
+    matches!(item, InlineItem::Text { text, .. } if text.chars().all(|ch| matches!(ch, ' ' | '\t' | '\n' | '\r' | '\x0c')))
 }
 
 fn anon_lines_box(
@@ -895,10 +930,10 @@ fn inline_items_of(levels: Vec<Level>) -> Vec<InlineItem> {
 /// Build the formatting context for a flow of children: a block context (with
 /// anonymous-block wrapping) if any child is block-level, else an inline context.
 fn build_flow(children: &[StyledNode], parent_style: &ComputedStyle, ids: &mut Ids) -> BoxKind {
-    let levels: Vec<Level> = children
-        .iter()
-        .filter_map(|n| classify(n, parent_style, ids))
-        .collect();
+    let mut levels = Vec::new();
+    super::contents::visit(children, parent_style, &mut |node, style| {
+        levels.extend(classify(node, style, ids));
+    });
     if levels.iter().any(|l| matches!(l, Level::Block(_))) {
         BoxKind::Block(wrap_runs(levels, parent_style, ids))
     } else {

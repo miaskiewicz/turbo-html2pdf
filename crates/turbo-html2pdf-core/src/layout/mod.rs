@@ -5,6 +5,7 @@
 
 pub mod block;
 pub mod boxgen;
+pub(crate) mod contents;
 pub mod flex;
 pub mod fragment;
 pub mod imgsize;

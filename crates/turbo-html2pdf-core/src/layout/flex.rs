@@ -429,16 +429,26 @@ fn lines_natural(
     fs: f32,
     fonts: &FontRegistry,
     original: Option<&crate::layout_snapshot::text_units::NativeUnitMap>,
+    html_metrics: bool,
 ) -> f32 {
     let runs = block::build_runs(items, fs, 0.0, fonts);
     let mut scratch = Diagnostics::default();
-    // Round the max-content width UP: a box shrink-wrapped to a fractional text width
+    // The legacy PDF path rounds max-content width UP: a shrink-wrapped fractional width
     // and then re-laid at that width can't fit the fractional last glyph, so the run
     // wraps a word onto a second line even though it "fit" the measurement (nike's
     // "Find a Store" utility links, google's footer). A whole-pixel max-content leaves
     // room for the rounding.
-    let text = inline::layout_runs_with_units(&runs, fonts, f32::MAX, &mut scratch, original).width;
-    text.ceil() + atomics_natural(items, fonts)
+    let text = inline::layout_runs_with_units(
+        &runs,
+        fonts,
+        f32::MAX,
+        &mut scratch,
+        original,
+        html_metrics,
+    )
+    .width;
+    let text = if html_metrics { text } else { text.ceil() };
+    text + atomics_natural(items, fonts)
 }
 
 fn kids_natural(kids: &[LayoutBox], fonts: &FontRegistry) -> f32 {
@@ -504,9 +514,13 @@ pub(crate) fn natural_width(lb: &LayoutBox, fonts: &FontRegistry) -> f32 {
             return iw + frame;
         }
         let inner = match &lb.kind {
-            BoxKind::Lines(items) => {
-                lines_natural(items, bs.font_size, fonts, lb.original_units().as_deref())
-            }
+            BoxKind::Lines(items) => lines_natural(
+                items,
+                bs.font_size,
+                fonts,
+                lb.original_units().as_deref(),
+                lb.uses_html_font_metrics(),
+            ),
             BoxKind::Flex(k) => flex_natural(k, &lb.style, fonts),
             BoxKind::Block(k) | BoxKind::Grid(k) | BoxKind::Table(k) => kids_natural(k, fonts),
             BoxKind::Directive(_) => 0.0,
@@ -522,10 +536,13 @@ fn lines_min(
     fs: f32,
     fonts: &FontRegistry,
     original: Option<&crate::layout_snapshot::text_units::NativeUnitMap>,
+    html_metrics: bool,
 ) -> f32 {
     let runs = block::build_runs(items, fs, 0.0, fonts);
     let mut scratch = Diagnostics::default();
-    let text = inline::layout_runs_with_units(&runs, fonts, 0.0, &mut scratch, original).width;
+    let text =
+        inline::layout_runs_with_units(&runs, fonts, 0.0, &mut scratch, original, html_metrics)
+            .width;
     // An atomic doesn't break, so it contributes its own min-content; the line can
     // wrap between pieces, so its min-content is the widest single piece.
     let atom = items
@@ -556,9 +573,13 @@ pub(crate) fn min_content_width(lb: &LayoutBox, fonts: &FontRegistry) -> f32 {
             return natural_width(lb, fonts); // replaced image: intrinsic/declared size
         }
         let inner = match &lb.kind {
-            BoxKind::Lines(items) => {
-                lines_min(items, bs.font_size, fonts, lb.original_units().as_deref())
-            }
+            BoxKind::Lines(items) => lines_min(
+                items,
+                bs.font_size,
+                fonts,
+                lb.original_units().as_deref(),
+                lb.uses_html_font_metrics(),
+            ),
             BoxKind::Flex(k) | BoxKind::Block(k) | BoxKind::Grid(k) | BoxKind::Table(k) => k
                 .iter()
                 .map(|c| min_content_width(c, fonts))
@@ -711,6 +732,11 @@ fn solve(
     cw: f32,
     ctx: &Ctx,
 ) {
+    // Browser CSS geometry preserves fractional advances; whole-pixel rounding
+    // belongs only to the legacy PDF layout policy.
+    if ctx.html_font_metrics {
+        tree.disable_rounding();
+    }
     let avail = Size {
         width: AvailableSpace::Definite(cw),
         height: AvailableSpace::MaxContent,
@@ -1108,6 +1134,14 @@ fn build_grid_leaves(
         .enumerate()
         .map(|(i, it)| {
             let mut style = item_style(it, fs);
+            // Grid has no flex-basis: an explicit width must reach its own size
+            // constraint instead of becoming the track's stretch width.
+            if it.uses_html_font_metrics() {
+                style.size = item_size(&it.resolved(ResolveCtx {
+                    parent_font_size: fs,
+                    cb_width: 0.0,
+                }));
+            }
             // Grid items carry their own `justify-self` (flex has none). Its default
             // is `stretch` via the container's `justify-items`; a `center`/`start`/
             // `end` value here instead sizes the item to its own width and aligns it

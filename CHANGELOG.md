@@ -4,6 +4,23 @@ All notable changes to turbo-html2pdf are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/); versions follow SemVer. The npm,
 PyPI, and crates.io packages release in lockstep from a `v*` tag (PyPI on `pyv*`).
 
+## [0.3.8] — unreleased
+
+- Add a pre-matched declaration cascade for native embedders that match selectors
+  against original document and shadow scopes. Preserve normal/important origin,
+  encapsulation, inline, specificity and source ordering while reusing existing
+  variable, inheritance and font resolution. Expand margin/padding before cascade
+  selection so winning shorthands correctly replace lower-ranked longhands.
+- Generate no wrapper box for `display:contents`, retaining source ancestry and
+  inherited text styles while promoting children into flow and flex/table/grid
+  formatting. Suppress replaced HTML elements under the unusual-element rules.
+  Fourteen fresh installed-Chrome155 geometry controls cover block/flex promotion,
+  replaced elements and real-font anonymous flex/grid items. Preserve NBSP and
+  fractional intrinsic widths in native HTML layout instead of applying PDF
+  whitespace/whole-pixel rounding. Pass explicit native grid widths to the grid
+  sizing algorithm. Scoped cascade and text/source contracts are offline.
+  This does not complete decorated inline, SVG or general browser layout parity.
+
 ## [0.3.7] — 2026-10-15
 
 - Round actual HTML font ascent/descent at the live snapshot physical scale and

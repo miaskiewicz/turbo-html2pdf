@@ -2,7 +2,9 @@
 
 The text/SVG provenance APIs ship in `turbo-html2pdf-core 0.3.6` from merged
 PR20. The physical-scale font/leading and fractional Range corrections are
-prepared separately as 0.3.7. No release tag is authorized by this document.
+published in 0.3.7 from merged PR21, tagged `v0.3.7` and `pyv0.3.7` on
+its actual merge commit `33853374bdeae040e596858bcbf3da9670543b0e`.
+The new matched-scope cascade and display:contents producer changes are unreleased.
 
 Build the actual borrowed source forest and `SourceIdentity` paths, including
 all text nodes. Load the actual font programs into `FontRegistry`; caller aliases
