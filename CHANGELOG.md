@@ -6,6 +6,12 @@ PyPI, and crates.io packages release in lockstep from a `v*` tag (PyPI on `pyv*`
 
 ## [0.3.8] — unreleased
 
+- Add an explicit native HTML system-font loader that admits genuine platform-only
+  family records before choosing generic aliases. Resolve macOS Menlo as the
+  native monospace primary while preserving ordinary PDF font loading and caller
+  priority. Cover platform-only name records, physical face identity and the real
+  Menlo collection; keep existing PDF behavior under its original loader.
+
 - Add a pre-matched declaration cascade for native embedders that match selectors
   against original document and shadow scopes. Preserve normal/important origin,
   encapsulation, inline, specificity and source ordering while reusing existing

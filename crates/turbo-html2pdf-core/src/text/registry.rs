@@ -165,6 +165,18 @@ impl FontRegistry {
     /// a page that names an installed font — or a generic — renders in it, matching
     /// a browser on the same machine. Best-effort: unreadable dirs/files skipped.
     pub fn load_system_fonts(&mut self) {
+        self.load_system_fonts_with_primary_policy(false);
+    }
+
+    /// Load installed fonts for continuous native HTML layout, including faces
+    /// whose family exists only in platform name records. Choose generic aliases
+    /// after admitting those real primary faces (for example Menlo on macOS).
+    /// Ordinary PDF callers retain the policy of [`Self::load_system_fonts`].
+    pub fn load_system_fonts_for_html(&mut self) {
+        self.load_system_fonts_with_primary_policy(true);
+    }
+
+    fn load_system_fonts_with_primary_policy(&mut self, platform_primary: bool) {
         self.native_glyphs = Default::default();
         self.platform_cascades = Default::default();
         for dir in system_font_dirs() {
@@ -175,7 +187,14 @@ impl FontRegistry {
                 load_font_file(&mut self.faces, &mut self.platform_faces, &entry.path());
             }
         }
+        if platform_primary {
+            self.register_platform_primary();
+        }
         self.alias_generics();
+    }
+
+    fn register_platform_primary(&mut self) {
+        self.faces.extend(self.platform_faces.iter().cloned());
     }
 
     /// Alias each CSS generic to the first installed candidate family (all its
@@ -479,9 +498,52 @@ mod tests {
         assert!(registry
             .glyph_for_native_families(&[family], '\u{10ffff}', 400, false)
             .is_none());
+        let legacy = registry.select(&[private[0].family()], 400, false);
+        assert!(legacy.is_none_or(|face| face.data() != private[0].data()));
+        registry.register_platform_primary();
+        let primary = registry.select(&[private[0].family()], 400, false).unwrap();
+        assert_eq!(primary.family(), private[0].family());
+        assert_eq!(primary.data(), private[0].data());
+        let caller = FontFace::from_bytes(
+            include_bytes!("../../assets/fonts/Go-Regular.ttf").to_vec(),
+            private[0].family(),
+            400,
+            false,
+        )
+        .unwrap();
+        let mut with_caller = FontRegistry::new();
+        with_caller.add(caller.clone());
+        with_caller.platform_faces = private.clone();
+        with_caller.register_platform_primary();
+        assert_eq!(
+            with_caller
+                .select(&[private[0].family()], 400, false)
+                .unwrap()
+                .data(),
+            caller.data()
+        );
         load_face(&mut public, &mut private, b"invalid font", 0);
         assert_eq!(public.len(), 0);
         assert_eq!(private.len(), 1);
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn html_system_generics_select_real_menlo_with_platform_only_family_records() {
+        let _guard = ENV_LOCK.lock().unwrap();
+        let bytes = std::fs::read("/System/Library/Fonts/Menlo.ttc").unwrap();
+        assert!(super::super::font::describe(&bytes, 0).is_none());
+        let mut registry = FontRegistry::new();
+        registry.load_system_fonts_for_html();
+        let explicit = registry.select(&["Menlo"], 400, false).unwrap();
+        let generic = registry.select(&["monospace"], 400, false).unwrap();
+        assert_eq!(explicit.data(), bytes);
+        assert_eq!(generic.data(), explicit.data());
+        assert_eq!(generic.index(), explicit.index());
+        assert!(generic
+            .native_postscript_name()
+            .unwrap()
+            .starts_with("Menlo"));
     }
     #[test]
     fn load_font_file_covers_ext_read_and_parse() {
