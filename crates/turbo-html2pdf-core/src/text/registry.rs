@@ -459,7 +459,8 @@ mod tests {
         assert!(!super::super::platform_fallback::families(&go).is_empty());
     }
     #[test]
-    fn legacy_only_real_fonts_stay_private_and_invalid_programs_do_not_register() {
+    fn platform_only_fonts_require_html_opt_in_and_keep_caller_priority() {
+        let _guard = ENV_LOCK.lock().unwrap();
         let mut bytes =
             include_bytes!("../../assets/fonts/liberation-serif/LiberationSerif-Regular.ttf")
                 .to_vec();
@@ -500,26 +501,27 @@ mod tests {
             .is_none());
         let legacy = registry.select(&[private[0].family()], 400, false);
         assert!(legacy.is_none_or(|face| face.data() != private[0].data()));
-        registry.register_platform_primary();
-        let primary = registry.select(&[private[0].family()], 400, false).unwrap();
-        assert_eq!(primary.family(), private[0].family());
+        // A unique CSS alias keeps installed copies of Liberation Serif from
+        // satisfying the request before the platform-only face is admitted.
+        let alias = "Turbo HTML platform-only fixture";
+        registry.platform_faces[0] = registry.platform_faces[0].with_family(alias);
+        registry.load_system_fonts_for_html();
+        let primary = registry.select(&[alias], 400, false).unwrap();
+        assert_eq!(primary.family(), alias);
         assert_eq!(primary.data(), private[0].data());
         let caller = FontFace::from_bytes(
             include_bytes!("../../assets/fonts/Go-Regular.ttf").to_vec(),
-            private[0].family(),
+            alias,
             400,
             false,
         )
         .unwrap();
         let mut with_caller = FontRegistry::new();
         with_caller.add(caller.clone());
-        with_caller.platform_faces = private.clone();
-        with_caller.register_platform_primary();
+        with_caller.platform_faces = vec![private[0].with_family(alias)];
+        with_caller.load_system_fonts_for_html();
         assert_eq!(
-            with_caller
-                .select(&[private[0].family()], 400, false)
-                .unwrap()
-                .data(),
+            with_caller.select(&[alias], 400, false).unwrap().data(),
             caller.data()
         );
         load_face(&mut public, &mut private, b"invalid font", 0);

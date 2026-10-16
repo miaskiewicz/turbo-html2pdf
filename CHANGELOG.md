@@ -10,7 +10,9 @@ PyPI, and crates.io packages release in lockstep from a `v*` tag (PyPI on `pyv*`
   family records before choosing generic aliases. Resolve macOS Menlo as the
   native monospace primary while preserving ordinary PDF font loading and caller
   priority. Cover platform-only name records, physical face identity and the real
-  Menlo collection; keep existing PDF behavior under its original loader.
+  Menlo collection; keep existing PDF behavior under its original loader. Exercise
+  the public HTML loader on every test platform, including physical face bytes
+  and explicit caller priority, rather than relying only on the macOS control.
 
 - Add a pre-matched declaration cascade for native embedders that match selectors
   against original document and shadow scopes. Preserve normal/important origin,
