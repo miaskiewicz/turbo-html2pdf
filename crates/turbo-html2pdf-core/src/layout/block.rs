@@ -51,12 +51,16 @@ pub(crate) struct Ctx<'a> {
     /// Set only when the ancestor's height is explicit (not derived from content),
     /// so an `<img height:100%>` in a sized hero card gets a real height.
     pub(crate) abs_cb_h: f32,
+    /// Native CSS distinguishes a definite zero from an unresolved auto height.
+    pub(crate) abs_cb_h_known: bool,
     /// The nearest ancestor's **definite** content-box height for *in-flow* `%`
     /// height resolution (0 = unknown). Unlike [`Ctx::abs_cb_h`] (positioned CBs)
     /// this is set for ANY box with a definite height, so a normal-flow
     /// `<img height:100%>` / `max-height:100%` inside a fixed-height parent gets a
     /// real height instead of falling back to its intrinsic size.
     pub(crate) cb_h: f32,
+    /// Paired with `cb_h` so native percentage sizing retains definite zero.
+    pub(crate) cb_h_known: bool,
     /// The initial containing block width (page content width) — the CB for
     /// `position:fixed` boxes.
     pub(crate) root_w: f32,
@@ -249,16 +253,16 @@ fn resolved_content_height(bs: &BoxStyle, auto_height: f32, ctx: &Ctx) -> f32 {
     if !ctx.live_geometry {
         return content_box_height(bs, auto_height, positioned_cb_height(bs, ctx));
     }
-    let basis = live_height_basis(bs, ctx);
+    let basis = native_height_basis(bs, ctx);
     let frame = bs.padding.vertical() + bs.border.widths().vertical();
     let inset = if bs.box_sizing == BoxSizing::BorderBox {
         frame
     } else {
         0.0
     };
-    let content = live_height(bs.height, basis, inset).unwrap_or(auto_height);
-    let max = live_height(bs.max_height, basis, inset).unwrap_or(f32::INFINITY);
-    let min = live_height(bs.min_height, basis, inset).unwrap_or(0.0);
+    let content = resolved_live_height(bs.height, basis, inset).unwrap_or(auto_height);
+    let max = resolved_live_height(bs.max_height, basis, inset).unwrap_or(f32::INFINITY);
+    let min = resolved_live_height(bs.min_height, basis, inset).unwrap_or(0.0);
     content.min(max).max(min)
 }
 
@@ -282,7 +286,7 @@ fn positioned_child_block(
         BoxSizing::BorderBox => border.vertical() + bs.padding.vertical(),
         BoxSizing::ContentBox => 0.0,
     };
-    let height = live_height(bs.height, live_height_basis(bs, ctx), inset)
+    let height = resolved_live_height(bs.height, native_height_basis(bs, ctx), inset)
         .map(|h| h + bs.padding.vertical())
         .unwrap_or(0.0);
     (
@@ -379,11 +383,24 @@ fn live_height_basis(bs: &BoxStyle, ctx: &Ctx) -> f32 {
     }
 }
 
-fn live_height(value: LengthPct, basis: f32, inset: f32) -> Option<f32> {
+fn native_height_basis(bs: &BoxStyle, ctx: &Ctx) -> Option<f32> {
+    if !ctx.html_font_metrics {
+        let height = live_height_basis(bs, ctx);
+        return (height > 0.0).then_some(height);
+    }
+    let (height, known) = match bs.position {
+        Position::Absolute => (ctx.abs_cb_h, ctx.abs_cb_h_known),
+        Position::Fixed => (ctx.root_h, true),
+        _ => (ctx.cb_h, ctx.cb_h_known),
+    };
+    known.then_some(height)
+}
+
+fn resolved_live_height(value: LengthPct, basis: Option<f32>, inset: f32) -> Option<f32> {
     match value {
         LengthPct::Px(px) => Some((px - inset).max(0.0)),
         LengthPct::Auto => None,
-        _ => (basis > 0.0).then(|| (value.resolve(basis).unwrap_or(0.0) - inset).max(0.0)),
+        _ => basis.map(|basis| (value.resolve(basis).unwrap_or(0.0) - inset).max(0.0)),
     }
 }
 
@@ -487,9 +504,11 @@ fn lines_to_fragments(
     cy: f32,
     out: &mut Vec<Fragment>,
     capture: &mut Option<crate::layout_snapshot::text::TextCapture>,
+    offsets: &HashMap<NodeId, (f32, f32)>,
 ) {
     for (line_index, line) in para.layout.lines.iter().enumerate() {
         for (run_index, gr) in line.runs.iter().enumerate() {
+            let (dx, dy) = offsets.get(&gr.node_id).copied().unwrap_or_default();
             let node_id = capture.as_mut().map_or(gr.node_id, |capture| {
                 capture.record(
                     gr.node_id,
@@ -505,8 +524,8 @@ fn lines_to_fragments(
             };
             out.push(Fragment::new(
                 node_id,
-                cx + line.indent,
-                cy + line.top,
+                cx + line.indent + dx,
+                cy + line.top + dy,
                 line.width,
                 line.height,
                 content,
@@ -572,7 +591,31 @@ fn layout_lines(
     cw: f32,
     ctx: &mut Ctx,
 ) -> (Vec<Fragment>, f32) {
-    let (pieces, atom_frags, directives) = build_inline_pieces(items, bs, cx, cy, cw, ctx);
+    let placement = super::inline_boxes::positions(items, bs.font_size, cw, ctx);
+    if let Some(empty) =
+        super::inline_boxes::empty_fragments(items, bs.font_size, (cx, cy), cw, &placement, ctx)
+    {
+        return (empty, 0.0);
+    }
+    layout_nonempty_lines(lb, items, bs, (cx, cy), cw, ctx, placement)
+}
+fn layout_nonempty_lines(
+    lb: &LayoutBox,
+    items: &[InlineItem],
+    bs: &BoxStyle,
+    origin: (f32, f32),
+    cw: f32,
+    ctx: &mut Ctx,
+    placement: super::inline_boxes::SourcePlacement,
+) -> (Vec<Fragment>, f32) {
+    let (cx, cy) = origin;
+    let (mut pieces, atom_frags, directives) = build_inline_pieces(items, bs, cx, cy, cw, ctx);
+    super::inline_boxes::native_atoms(
+        &mut pieces,
+        &atom_frags,
+        &placement.baselines,
+        ctx.html_font_metrics,
+    );
     let fonts = ctx.fonts;
     // Per-line float wrapping: each line's `(indent, width)` is the free inline
     // region the BFC's floats leave at that line's own y (absolute `cy + top`), so
@@ -587,12 +630,12 @@ fn layout_lines(
         .unwrap_or(0.0);
     let text_indent = super::value::html_used_value(text_indent, ctx.html_font_scale);
     let region = |top: f32| {
-        let (rx, rw) = inline_region_from(&floats, cx, cw, cy + top);
+        let (rx, rw) = inline_region_from(&floats, cx, cw, cy + top, 1.0);
         let indent = if top == 0.0 { text_indent } else { 0.0 };
         (rx - cx + indent, rw - indent)
     };
     let native_region = |top: f32| {
-        let (rx, rw) = inline_region_from(&floats, cx, cw, cy + top);
+        let (rx, rw) = inline_region_from(&floats, cx, cw, cy + top, 0.0);
         (rx - cx, rw)
     };
     let clearance = |top, needed| inline_clearance(&floats, (cx, cy, cw), top, needed);
@@ -610,6 +653,8 @@ fn layout_lines(
                 first_indent: text_indent,
                 clearance: &clearance,
                 original_units: ctx.original_units,
+                baselines: &placement.baselines,
+                strut_metrics: super::inline_boxes::strut(bs, ctx),
             },
         )
     } else if ctx.text_capture.is_some() {
@@ -635,13 +680,27 @@ fn layout_lines(
             font_boxes: Vec::new(),
         }
     };
+    let offsets = placement.offsets;
     let mut frags = Vec::new();
-    lines_to_fragments(&para, cx, cy, &mut frags, &mut ctx.text_capture);
+    frags.extend(super::inline_boxes::fragments(
+        &para.layout,
+        items,
+        bs.font_size,
+        (cx, cy),
+        cw,
+        ctx,
+        &offsets,
+    ));
+    lines_to_fragments(&para, cx, cy, &mut frags, &mut ctx.text_capture, &offsets);
     // Translate each pre-laid atom to where it landed within its line.
     for line in &para.layout.lines {
         for placed in &line.atoms {
             let mut f = atom_frags[placed.id].clone();
-            f.translate(cx + line.indent + placed.x, cy + line.top + placed.y);
+            let (dx, dy) = offsets.get(&f.node_id).copied().unwrap_or_default();
+            f.translate(
+                cx + line.indent + placed.x + dx,
+                cy + line.top + placed.y + dy,
+            );
             frags.push(f);
         }
     }
@@ -654,6 +713,20 @@ fn layout_lines(
 /// recursively and returned *separately* (keyed by its index in `atoms`, via the
 /// piece's id) so it can be re-placed once its line position is known; directives
 /// collapse to zero-size markers at the container origin.
+fn append_source_break(
+    node_id: NodeId,
+    style: &crate::ComputedStyle,
+    font: f32,
+    width: f32,
+    ctx: &Ctx,
+    pieces: &mut Vec<inline::Piece>,
+) {
+    if let Some(mut edge) = super::inline_boxes::edge(node_id, style, true, font, width, ctx) {
+        edge.advance = 0.0;
+        edge.contributes_metrics = false;
+        pieces.push(inline::Piece::SourceBreak(edge));
+    }
+}
 fn build_inline_pieces(
     items: &[InlineItem],
     bs: &BoxStyle,
@@ -671,6 +744,20 @@ fn build_inline_pieces(
                 if let Some(run) = text_run(item, bs.font_size, cw, ctx.fonts) {
                     pieces.push(inline::Piece::Run(run));
                 }
+            }
+            InlineItem::Boundary {
+                node_id,
+                style,
+                start,
+            } => {
+                if let Some(edge) =
+                    super::inline_boxes::edge(*node_id, style, *start, bs.font_size, cw, ctx)
+                {
+                    pieces.push(inline::Piece::Edge(edge));
+                }
+            }
+            InlineItem::SourceBreak { node_id, style } => {
+                append_source_break(*node_id, style, bs.font_size, cw, ctx, &mut pieces)
             }
             InlineItem::LineBreak => pieces.push(inline::Piece::Break),
             InlineItem::Atomic(b) => {
@@ -859,7 +946,10 @@ fn layout_block_flow(
 /// IS its containing block (positioned) but that block's height is still
 /// indefinite (`abs_cb_h == 0`), so a `%`-height / `bottom` inset can't resolve.
 fn defer_this_kid(parent: &BoxStyle, kbs: &BoxStyle, ctx: &Ctx) -> bool {
-    kbs.position == Position::Absolute && parent.position != Position::Static && ctx.abs_cb_h == 0.0
+    kbs.position == Position::Absolute
+        && parent.position != Position::Static
+        && ctx.abs_cb_h == 0.0
+        && !(ctx.html_font_metrics && ctx.abs_cb_h_known)
 }
 
 /// Second pass for a positioned CB's own `absolute` children, now that its in-flow
@@ -878,6 +968,7 @@ fn place_deferred_abs(
         return;
     }
     ctx.abs_cb_h = content_h;
+    ctx.abs_cb_h_known = true;
     for (kid, static_pos) in deferred {
         let kbs = resolve(kid, cw, fs);
         let (bx, by) = out_of_flow_origin(&kbs, cw, ctx, *static_pos);
@@ -1008,7 +1099,7 @@ fn layout_in_flow_kid(
 /// The paint-time shift for a `relative`/`sticky` box: it flows normally (its
 /// space is reserved via the cursor) but is painted shifted by its insets. Any
 /// other positioning contributes no shift.
-fn flow_relative_offset(kbs: &BoxStyle, cw: f32) -> (f32, f32) {
+pub(super) fn flow_relative_offset(kbs: &BoxStyle, cw: f32) -> (f32, f32) {
     if matches!(kbs.position, Position::Relative | Position::Sticky) {
         relative_offset(kbs, cw)
     } else {
@@ -1069,7 +1160,7 @@ fn auto_x_margins(s: &crate::style::ComputedStyle) -> bool {
 /// grow this box). Floats, out-of-flow boxes, non-`visible` `overflow`, and the
 /// independent formatting roots (flex/grid/table) all qualify.
 fn intrinsic_formatting_root(lb: &LayoutBox, bs: &BoxStyle) -> bool {
-    lb.document_root || bs.float != Float::None || bs.position.is_out_of_flow()
+    lb.document_root() || bs.float != Float::None || bs.position.is_out_of_flow()
 }
 
 fn establishes_bfc(lb: &LayoutBox, bs: &BoxStyle) -> bool {
@@ -1093,12 +1184,19 @@ fn establishes_bfc(lb: &LayoutBox, bs: &BoxStyle) -> bool {
 /// The free inline region `(x, width)` at vertical position `y` within the
 /// content box `[cx, cx+cw]`, narrowed by every float in the current BFC whose
 /// vertical span contains `y` (left floats push the start right, right floats
-/// pull the end left). Width floors at 1px so a fully-covered row still lays out.
+/// pull the end left). Native CSS keeps valid zero widths; PDF retains its
+/// positive floor for a fully-covered row.
 fn inline_region(ctx: &Ctx, cx: f32, cw: f32, y: f32) -> (f32, f32) {
-    inline_region_from(&ctx.floats, cx, cw, y)
+    inline_region_from(
+        &ctx.floats,
+        cx,
+        cw,
+        y,
+        if ctx.html_font_metrics { 0.0 } else { 1.0 },
+    )
 }
 
-fn inline_region_from(floats: &[FloatRect], cx: f32, cw: f32, y: f32) -> (f32, f32) {
+fn inline_region_from(floats: &[FloatRect], cx: f32, cw: f32, y: f32, minimum: f32) -> (f32, f32) {
     let mut left = cx;
     let mut right = cx + cw;
     for f in floats {
@@ -1107,14 +1205,14 @@ fn inline_region_from(floats: &[FloatRect], cx: f32, cw: f32, y: f32) -> (f32, f
         }
         narrow_region(f, &mut left, &mut right);
     }
-    (left, (right - left).max(1.0))
+    (left, (right - left).max(minimum))
 }
 
 fn inline_clearance(floats: &[FloatRect], region: (f32, f32, f32), top: f32, needed: f32) -> f32 {
     let (cx, cy, cw) = region;
     let mut y = cy + top;
     for _ in floats {
-        if inline_region_from(floats, cx, cw, y).1 >= needed {
+        if inline_region_from(floats, cx, cw, y, 0.0).1 >= needed {
             break;
         }
         let Some(bottom) = next_float_bottom(floats, y) else {
@@ -1281,7 +1379,7 @@ fn layout_content(
                 cw,
                 bs,
                 ctx,
-                (suppress_first, lb.document_root),
+                (suppress_first, lb.document_root()),
             )
         }
         BoxKind::Flex(kids) => super::flex::layout_flex(lb, kids, cx, cy, cw, bs.font_size, ctx),
@@ -1411,6 +1509,10 @@ pub(crate) fn layout_box_sized_isolated(
     layout_box_sized_impl(lb, bs, bx, by, bbw, ctx, true)
 }
 
+fn child_height_known(lb: &LayoutBox, height: Option<f32>, inherited: bool) -> bool {
+    height.is_some() || (lb.node_id == NodeId(0) && inherited)
+}
+
 fn layout_box_sized_impl(
     lb: &LayoutBox,
     bs: &BoxStyle,
@@ -1434,14 +1536,19 @@ fn layout_box_sized_impl(
     // A positioned box establishes the containing block for its `absolute`
     // descendants (its content box). Save/restore around the child layout.
     let saved_cb = (ctx.abs_cb_x, ctx.abs_cb_y, ctx.abs_cb_w, ctx.abs_cb_h);
+    let saved_abs_known = ctx.abs_cb_h_known;
+    let own_height = resolved_live_height(bs.height, native_height_basis(bs, ctx), 0.0);
     if bs.position != Position::Static {
         (ctx.abs_cb_x, ctx.abs_cb_y, ctx.abs_cb_w, ctx.abs_cb_h) =
             positioned_child_block(bs, (bx, by, bbw), (content_x, content_y, content_w), ctx);
+        ctx.abs_cb_h_known = own_height.is_some();
     }
     // In-flow `%`-height CB: expose this box's own definite content height to its
     // children (any box, not just positioned) so a `height:100%`/`max-height:100%`
     // child resolves against it. 0 (auto) leaves children on their intrinsic size.
     let saved_cb_h = ctx.cb_h;
+    let saved_cb_known = ctx.cb_h_known;
+    ctx.cb_h_known = child_height_known(lb, own_height, saved_cb_known);
     ctx.cb_h = live_child_height(lb, bs, saved_cb_h, ctx.live_geometry);
     // A box that establishes a block formatting context isolates floats: its
     // content does not wrap around outer floats, and the floats placed inside it
@@ -1461,6 +1568,8 @@ fn layout_box_sized_impl(
     }
     (ctx.abs_cb_x, ctx.abs_cb_y, ctx.abs_cb_w, ctx.abs_cb_h) = saved_cb;
     ctx.cb_h = saved_cb_h;
+    ctx.cb_h_known = saved_cb_known;
+    ctx.abs_cb_h_known = saved_abs_known;
     // The content-box height honoring an explicit/min/max `height` — a `background`
     // or `mask` image fills the box even when it has no flow content (an empty icon
     // span sized only by `height`, whose measured `content_h` is 0).
@@ -1621,6 +1730,10 @@ pub(crate) fn stamp_intrinsic_widths(lb: &LayoutBox, images: &ImageCtx) {
 
 /// Stamp one box's `intrinsic_w` if it is a resolvable replaced image.
 fn stamp_replaced_intrinsic(lb: &LayoutBox, images: &ImageCtx) {
+    if lb.native_iframe() {
+        lb.intrinsic_w.set(Some(300.0));
+        return;
+    }
     if let Some(viewport) = &lb.svg_viewport {
         let style = lb.resolved(ResolveCtx {
             parent_font_size: super::value::DEFAULT_FONT_SIZE,
@@ -1657,10 +1770,8 @@ fn replaced_image_box(
     cb_width: f32,
     ctx: &mut Ctx,
 ) -> Option<Fragment> {
-    if let Some(viewport) = &lb.svg_viewport {
-        return Some(svg_viewport_fragment(
-            lb, viewport, bs, bx, by, cb_width, ctx,
-        ));
+    if let Some(fragment) = replaced_viewport_box(lb, bs, bx, by, cb_width, ctx) {
+        return Some(fragment);
     }
     let src = lb.image.as_ref().filter(|s| s.replaced)?;
     let intrinsic = probe_source(src, ctx)?;
@@ -1674,6 +1785,39 @@ fn replaced_image_box(
     Some(image_fragment(lb, bx, by, &sized, bs))
 }
 
+fn replaced_viewport_box(
+    lb: &LayoutBox,
+    style: &BoxStyle,
+    x: f32,
+    y: f32,
+    width: f32,
+    ctx: &mut Ctx,
+) -> Option<Fragment> {
+    if lb.native_iframe() {
+        return Some(embedded_viewport_fragment(lb, style, x, y, width, ctx));
+    }
+    let viewport = lb.svg_viewport.as_ref()?;
+    Some(svg_viewport_fragment(lb, viewport, style, x, y, width, ctx))
+}
+
+fn embedded_viewport_fragment(
+    lb: &LayoutBox,
+    style: &BoxStyle,
+    x: f32,
+    y: f32,
+    width: f32,
+    ctx: &mut Ctx,
+) -> Fragment {
+    let dimensions = super::imgsize::size_viewport_live(
+        Some(300.0),
+        None,
+        style.aspect_ratio,
+        ctx.html_font_scale.unwrap_or(1.0),
+        &size_ctx(style, width, ctx),
+    );
+    viewport_fragment(lb, style, x, y, dimensions, ctx)
+}
+
 fn svg_viewport_fragment(
     lb: &LayoutBox,
     viewport: &super::svg_viewport::SvgViewport,
@@ -1683,7 +1827,18 @@ fn svg_viewport_fragment(
     width: f32,
     ctx: &mut Ctx,
 ) -> Fragment {
-    let (content_width, content_height) = viewport.size(&size_ctx(style, width, ctx));
+    let dimensions = viewport.size(&size_ctx(style, width, ctx));
+    viewport_fragment(lb, style, x, y, dimensions, ctx)
+}
+
+fn viewport_fragment(
+    lb: &LayoutBox,
+    style: &BoxStyle,
+    x: f32,
+    y: f32,
+    (content_width, content_height): (f32, f32),
+    ctx: &mut Ctx,
+) -> Fragment {
     record_metrics(lb, style, content_width, content_height, ctx);
     let width = content_width + style.padding.horizontal() + style.border.widths().horizontal();
     let height = content_height + style.padding.vertical() + style.border.widths().vertical();
@@ -1714,7 +1869,11 @@ fn size_ctx<'a>(bs: &'a BoxStyle, cb_width: f32, ctx: &Ctx) -> SizeCtx<'a> {
     SizeCtx {
         style: bs,
         cb_width,
-        cb_height: (cbh > 0.0).then_some(cbh),
+        cb_height: if ctx.html_font_metrics {
+            native_height_basis(bs, ctx)
+        } else {
+            (cbh > 0.0).then_some(cbh)
+        },
         body_height: ctx.images.body_height,
     }
 }
@@ -1758,6 +1917,7 @@ fn record_metrics(lb: &LayoutBox, bs: &BoxStyle, width: f32, height: f32, ctx: &
         metrics.insert(
             lb.node_id,
             UsedBoxMetrics {
+                inline_fragment: false,
                 border: bs.border.widths(),
                 padding: bs.padding,
                 margin: bs.margin,
@@ -1890,7 +2050,9 @@ fn layout_tree_policy(
         abs_cb_y: 0.0,
         abs_cb_w: cb_width,
         abs_cb_h: viewport_height,
+        abs_cb_h_known: live_geometry,
         cb_h: viewport_height,
+        cb_h_known: live_geometry,
         root_w: cb_width,
         root_h: viewport_height,
         live_geometry,

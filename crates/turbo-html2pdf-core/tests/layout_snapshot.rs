@@ -475,6 +475,9 @@ fn fixture_node(
     identities: &mut Vec<SourceIdentity>,
 ) -> Node {
     identities.push(identity(value["sourceId"].as_u64().unwrap(), path));
+    if let Some(text) = value["text"].as_str() {
+        return Node::Text(text.into());
+    }
     let children = value["children"]
         .as_array()
         .unwrap()
@@ -522,7 +525,46 @@ fn authored_live_boxes_match_independently_recorded_chrome155_geometry() {
         serde_json::from_str(include_str!("fixtures/layout-snapshot/cases.json")).unwrap();
     let oracle: serde_json::Value =
         serde_json::from_str(include_str!("fixtures/layout-snapshot/chrome155.json")).unwrap();
-    let fonts = FontRegistry::new();
+    compare_authored_cases(&fixture, &oracle);
+}
+
+#[test]
+fn contents_boxes_match_independently_recorded_chrome155_geometry() {
+    let fixture: serde_json::Value =
+        serde_json::from_str(include_str!("fixtures/layout-snapshot/contents-cases.json")).unwrap();
+    let oracle: serde_json::Value = serde_json::from_str(include_str!(
+        "fixtures/layout-snapshot/contents-chrome155.json"
+    ))
+    .unwrap();
+    compare_authored_cases(&fixture, &oracle);
+}
+
+#[test]
+fn anonymous_contents_text_matches_independent_chrome155_geometry() {
+    let fixture: serde_json::Value = serde_json::from_str(include_str!(
+        "fixtures/layout-snapshot/contents-text-cases.json"
+    ))
+    .unwrap();
+    let oracle: serde_json::Value = serde_json::from_str(include_str!(
+        "fixtures/layout-snapshot/contents-text-chrome155.json"
+    ))
+    .unwrap();
+    compare_authored_cases(&fixture, &oracle);
+}
+
+fn compare_authored_cases(fixture: &serde_json::Value, oracle: &serde_json::Value) {
+    let mut fonts = FontRegistry::new();
+    if fixture["font"] == "Go" {
+        fonts.add(
+            turbo_html2pdf_core::FontFace::from_bytes(
+                include_bytes!("../assets/fonts/Go-Regular.ttf").to_vec(),
+                "ParityGo",
+                400,
+                false,
+            )
+            .unwrap(),
+        );
+    }
     let resolver = Images(image_bytes());
     let images = ImageCtx {
         resolver: &resolver,
@@ -553,6 +595,21 @@ fn authored_live_boxes_match_independently_recorded_chrome155_geometry() {
             .enumerate()
             .map(|(i, n)| fixture_node(n, &[i], &mut identities))
             .collect();
+        if fixture["font"] == "Go" {
+            let snapshot =
+                turbo_html2pdf_core::layout_snapshot::snapshot_html_live_tree_with_svg_viewports(
+                    &nodes,
+                    &identities,
+                    &[],
+                    2.0,
+                    &build_cascade("", "", Default::default()),
+                    &inputs,
+                    &mut Diagnostics::default(),
+                )
+                .unwrap();
+            compare_chrome_boxes(&snapshot, chrome);
+            continue;
+        }
         let result = snapshot_live_tree(
             &nodes,
             &identities,
@@ -1009,4 +1066,150 @@ fn legacy_float_translation_is_retained_for_nonperspective_z_translation() {
         native.native_world_transform(box_.index),
         Some([1.0, 0.0, 0.0, 1.0, 2.0, 3.0])
     );
+}
+
+#[test]
+fn contents_ancestors_keep_source_identity_without_frame_or_transform() {
+    let child = element("div", "width:40px;height:12px", Vec::new());
+    let unboxed = element(
+        "section",
+        "display:contents;padding:30px;margin:40px;transform:translate(80px,90px)",
+        vec![element("div", "display:contents;width:900px", vec![child])],
+    );
+    let nodes = vec![unboxed, element("div", "width:20px;height:7px", Vec::new())];
+    let snapshot = capture(
+        &nodes,
+        &[
+            identity(1, &[0]),
+            identity(2, &[0, 0]),
+            identity(3, &[0, 0, 0]),
+            identity(4, &[1]),
+        ],
+    );
+    for id in [1, 2] {
+        let source = snapshot.source(SourceId(id)).unwrap();
+        assert_eq!(source.fragment_indices, [] as [usize; 0]);
+        assert!(!source.descendant_fragment_indices.is_empty());
+        assert!(!source.excluded_from_layout);
+    }
+    let child = border(&snapshot, 3);
+    assert_eq!(
+        child.rect,
+        Rect {
+            x: 0.0,
+            y: 0.0,
+            width: 40.0,
+            height: 12.0
+        }
+    );
+    assert_eq!(child.transformed_bounds, child.rect);
+    assert_eq!(child.source_ancestors, vec![SourceId(1), SourceId(2)]);
+    assert_eq!(border(&snapshot, 4).rect.y, 12.0);
+}
+
+#[test]
+fn contents_promotes_children_to_real_flex_items() {
+    let first = element("div", "width:20px;height:10px", Vec::new());
+    let second = element("div", "width:30px;height:10px", Vec::new());
+    let contents = element(
+        "section",
+        "display:contents;width:900px;padding:50px",
+        vec![first, second],
+    );
+    let nodes = vec![element("div", "display:flex;width:200px", vec![contents])];
+    let snapshot = capture(
+        &nodes,
+        &[
+            identity(1, &[0]),
+            identity(2, &[0, 0]),
+            identity(3, &[0, 0, 0]),
+            identity(4, &[0, 0, 1]),
+        ],
+    );
+    assert_eq!(
+        snapshot.source(SourceId(2)).unwrap().fragment_indices,
+        [] as [usize; 0]
+    );
+    assert_eq!(border(&snapshot, 3).rect.x, 0.0);
+    assert_eq!(border(&snapshot, 4).rect.x, 20.0);
+    assert_eq!(border(&snapshot, 1).rect.height, 10.0);
+}
+
+#[test]
+fn contents_text_keeps_its_own_inherited_line_height() {
+    let nodes = vec![element(
+        "span",
+        "display:contents;font-size:16px;line-height:24px",
+        vec![Node::Text("hello".into())],
+    )];
+    let snapshot = capture(&nodes, &[identity(1, &[0]), identity(2, &[0, 0])]);
+    let source = snapshot.source(SourceId(2)).unwrap();
+    assert_eq!(source.fragment_indices.len(), 1);
+    let fragment = &snapshot.fragments()[source.fragment_indices[0]];
+    assert_eq!(fragment.rect.height, 24.0);
+    assert_eq!(fragment.source_ancestors, vec![SourceId(1)]);
+    assert_eq!(
+        snapshot.source(SourceId(1)).unwrap().fragment_indices,
+        [] as [usize; 0]
+    );
+}
+
+#[test]
+fn replaced_contents_suppresses_fallback_descendants_and_br_breaks() {
+    for tag in ["img", "input", "textarea", "select", "object", "br"] {
+        let nodes = vec![
+            element(
+                tag,
+                "display:contents;width:90px;height:90px",
+                vec![element("div", "width:80px;height:80px", Vec::new())],
+            ),
+            element("div", "height:5px", Vec::new()),
+        ];
+        let snapshot = capture(
+            &nodes,
+            &[identity(1, &[0]), identity(2, &[0, 0]), identity(3, &[1])],
+        );
+        for id in [1, 2] {
+            let source = snapshot.source(SourceId(id)).unwrap();
+            assert!(source.excluded_from_layout, "{tag}");
+            assert_eq!(source.fragment_indices, [] as [usize; 0]);
+            assert_eq!(source.descendant_fragment_indices, [] as [usize; 0]);
+        }
+        assert_eq!(border(&snapshot, 3).rect.y, 0.0, "{tag}");
+    }
+}
+
+#[test]
+fn anonymous_items_keep_original_text_identity_and_unboxed_ancestry() {
+    let nodes = vec![element(
+        "div",
+        "display:flex;width:200px",
+        vec![element(
+            "section",
+            "display:contents",
+            vec![Node::Text("ab".into())],
+        )],
+    )];
+    let snapshot = capture(
+        &nodes,
+        &[
+            identity(1, &[0]),
+            identity(2, &[0, 0]),
+            identity(3, &[0, 0, 0]),
+        ],
+    );
+    let text = snapshot.source(SourceId(3)).unwrap();
+    assert_eq!(text.kind, SourceKind::Text);
+    assert_eq!(text.path, vec![0, 0, 0]);
+    assert_eq!(text.fragment_indices.len(), 1);
+    let fragment = &snapshot.fragments()[text.fragment_indices[0]];
+    assert_eq!(fragment.source_id, Some(SourceId(3)));
+    assert_eq!(fragment.source_ancestors, vec![SourceId(1), SourceId(2)]);
+    assert_eq!(
+        snapshot.source(SourceId(2)).unwrap().fragment_indices,
+        [] as [usize; 0]
+    );
+    let anonymous = &snapshot.fragments()[fragment.parent.unwrap()];
+    assert_eq!(anonymous.source_id, None);
+    assert_eq!(snapshot.sources().len(), 3);
 }

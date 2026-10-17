@@ -14,8 +14,9 @@ pub(crate) fn offset(
     {
         return Err(TextGeometryError::MissingSource(id));
     }
+    let cells = snapshot.text_cluster_boxes_for_source(id);
     let mut best = None;
-    for cell in snapshot.text_cluster_boxes_for_source(id).iter() {
+    for (index, cell) in cells.iter().enumerate() {
         let fragment = &snapshot.fragments()[cell.fragment_index];
         let matrix = snapshot.native_hit_transforms[fragment.index];
         let local = local_point(point, matrix, snapshot.html_layout_scale)?;
@@ -28,10 +29,13 @@ pub(crate) fn offset(
             fragment.rect.y,
             cell.fragment_index,
             edge,
+            index,
         );
     }
-    best.map(|(_, _, _, (_, offset))| offset)
-        .ok_or(TextGeometryError::UnresolvedSource)
+    best.map(|(_, _, _, (_, offset), index)| {
+        super::text_caret_edges::canonicalize(snapshot, &cells, index, offset)
+    })
+    .ok_or(TextGeometryError::UnresolvedSource)
 }
 
 fn validate_point(point: Point) -> Result<(), TextGeometryError> {
@@ -97,7 +101,7 @@ fn nearest_edge(x: f32, cell: &SourceClusterBox) -> (f32, usize) {
     }
 }
 
-type Candidate = (f32, f32, usize, (f32, usize));
+type Candidate = (f32, f32, usize, (f32, usize), usize);
 
 fn consider(
     best: &mut Option<Candidate>,
@@ -105,8 +109,9 @@ fn consider(
     line_top: f32,
     fragment: usize,
     edge: (f32, usize),
+    index: usize,
 ) {
-    let candidate = (vertical, line_top, fragment, edge);
+    let candidate = (vertical, line_top, fragment, edge, index);
     if best.is_none_or(|old| preference(candidate) < preference(old)) {
         *best = Some(candidate);
     }

@@ -149,6 +149,7 @@ core-text = "20.1"
 core-foundation = "0.9"
 
 [dev-dependencies]
+sha2 = "0.10"
 serde_json = { workspace = true, features = ["float_roundtrip"] }
 criterion = "0.5"
 

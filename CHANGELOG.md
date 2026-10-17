@@ -4,6 +4,98 @@ All notable changes to turbo-html2pdf are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/); versions follow SemVer. The npm,
 PyPI, and crates.io packages release in lockstep from a `v*` tag (PyPI on `pyv*`).
 
+## [0.3.8] — unreleased
+
+- Cover the unchanged generic/PDF source-range compatibility path with actual
+  raw placed gaps, extra collapsed separators, caret boundaries and soft wraps.
+  These public API controls preserve the separate legacy source policy while
+  native snapshots retain their complete whitespace cells.
+
+- Preserve native leading whitespace inside its actual inline owner after images
+  and inline blocks. Keep the rendered first space and subsequent collapsed
+  UTF-16 positions, including direct text, decorated/nested spans and prefixes
+  relocated by wrapping. Preserve actual internal whitespace cells in bare text,
+  including both line affinities for separator-only selections at soft wraps.
+  Nineteen pinned-font normal Chrome controls also cover paragraph starts,
+  forced breaks and one/two-space ordinary text selections. Expose actual CSS
+  collapse provenance in source clusters so caret hits keep rendered leading
+  spaces and follow only zero-space suffixes anchored at a real same-line glyph. Generic/PDF whitespace policy stays intact.
+
+- Admit native HTML text-source items to the physical LayoutUnit grid before
+  line breaking and placement. Keep native glyph/partial-selection positions in
+  real signed 16.16 advances and aggregate across words and collapsed spaces of
+  the same text node; source boundaries and inline decorations advance neighboring
+  boxes consistently. Pinned IBM Plex Mono and Fira Code controls use normal
+  headed Chrome, including whole versus split text nodes and five-glyph runs.
+  Ordinary PDF measurement, glyph advances and generic source snapshots keep
+  their previous unquantized policy.
+- Preserve real flat-transform FloatQuad boundaries for native HTML text Range
+  and block/replaced Element geometry. Ordinary inline Element quads retain their
+  accumulated-matrix path. Normal headed Chrome controls distinguish body margins
+  from padding, viewport positioning, nested transforms and integer translations;
+  the existing fixed-containing-block rejection remains explicit.
+
+- Expand portable regression controls for fixed viewport percentages, adjacent
+  source-run boundaries, continued inline struts, own super/sub atomic alignment,
+  preserved whitespace and directive markers. Malformed closing markers retain
+  their documented advance without inventing glyphs or source element boxes.
+  These coverage additions leave production layout code unchanged.
+
+- Size native HTML iframes as replaced viewports using the real 300×150 default
+  object dimensions, author attributes, CSS sizing, aspect ratio and box model.
+  Preserve definite zero containing-block heights and normal-flow percentage
+  sizing on relatively positioned replacements. Accept finite zero native HTML
+  viewports, including genuine zero-width regions under explicit HTML/body roots,
+  while preserving positive-only PDF snapshot admission and its legacy width floor. Twenty
+  independent Chrome controls cover defaults, invalid attributes, zero axes,
+  percentage bases, padded positioned containing blocks, excluded iframe fallback
+  sources and standards-mode zero-viewport descendants. Reject negative
+  and non-finite presentational dimension hints on both HTML and PDF paths.
+- Add portable source/Range/inline-edge coverage and actual font-face selection
+  controls for native versus PDF aliases. Preserve the CI 100% coverage gate and
+  upload its Cobertura report even when the threshold fails for diagnosis.
+
+- Select physical Times for macOS native HTML generic serif, matching fresh
+  Chrome's actual font selection. Resolve legacy ascent policy from a face's
+  real platform name when Unicode family records are absent. Fifteen independent
+  Chrome controls cover serif, Times, Times New Roman, Helvetica and Courier at
+  three sizes, including physical ascent/descent, advances, source ranges and
+  normal line heights. Explicit families and the existing PDF alias policy stay
+  intact; the PDF loader still selects its previous Times New Roman alias.
+
+- Preserve native HTML inline boundaries through shaping and line breaking.
+  Capture own-font border fragments, sliced decorations, transparent ancestor
+  regions, replaced-element metrics, relative offsets and original text ranges.
+  Resolve per-inline physical leading, parent struts and nested super/sub shifts
+  for text and atomic children without changing the ordinary PDF layout policy.
+  Forty-three source graphs match independently recorded Chrome155 border boxes
+  and container heights, including empty inlines, forced breaks, whitespace,
+  nested fonts and top/bottom aligned atomic children. Reject unsupported inline
+  block splitting, positioning, alignment and writing modes before capture.
+
+- Add an explicit native HTML system-font loader that admits genuine platform-only
+  family records before choosing generic aliases. Resolve macOS Menlo as the
+  native monospace primary while preserving ordinary PDF font loading and caller
+  priority. Cover platform-only name records, physical face identity and the real
+  Menlo collection; keep existing PDF behavior under its original loader. Exercise
+  the public HTML loader on every test platform, including physical face bytes
+  and explicit caller priority, rather than relying only on the macOS control.
+
+- Add a pre-matched declaration cascade for native embedders that match selectors
+  against original document and shadow scopes. Preserve normal/important origin,
+  encapsulation, inline, specificity and source ordering while reusing existing
+  variable, inheritance and font resolution. Expand margin/padding before cascade
+  selection so winning shorthands correctly replace lower-ranked longhands.
+- Generate no wrapper box for `display:contents`, retaining source ancestry and
+  inherited text styles while promoting children into flow and flex/table/grid
+  formatting. Suppress replaced HTML elements under the unusual-element rules.
+  Fourteen fresh installed-Chrome155 geometry controls cover block/flex promotion,
+  replaced elements and real-font anonymous flex/grid items. Preserve NBSP and
+  fractional intrinsic widths in native HTML layout instead of applying PDF
+  whitespace/whole-pixel rounding. Pass explicit native grid widths to the grid
+  sizing algorithm. Scoped cascade and text/source contracts are offline.
+  This does not complete SVG or general browser layout parity.
+
 ## [0.3.7] — 2026-10-15
 
 - Round actual HTML font ascent/descent at the live snapshot physical scale and

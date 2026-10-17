@@ -1,0 +1,153 @@
+{
+  "browser": "Chrome/155.0.8059.80",
+  "v8": "15.5.35.23",
+  "probeSha256": "f80b8e0c75893a2f5679022be57ae012c992088661e37292f5201a6033190582",
+  "collectorSha256": "b13d2f18eba0accfb1bf4391b5970509bc95225c2dd6e5941e34596bbd3a7695",
+  "flags": [
+    "--remote-debugging-port=0",
+    "--user-data-dir=<fresh-profile>",
+    "--no-first-run",
+    "--no-default-browser-check",
+    "--disable-extensions",
+    "--disable-component-extensions-with-background-pages",
+    "about:blank"
+  ],
+  "errors": [],
+  "result": [
+    {
+      "family": "serif",
+      "size": 13,
+      "range": [0, 0, 23.8359375, 15.5],
+      "box": [0, 0, 1200, 15.5],
+      "fontBoundingBoxAscent": 24,
+      "fontBoundingBoxDescent": 7,
+      "width": 47.6708984375
+    },
+    {
+      "family": "serif",
+      "size": 16,
+      "range": [0, 0, 29.3359375, 18.5],
+      "box": [0, 0, 1200, 18.5],
+      "fontBoundingBoxAscent": 29,
+      "fontBoundingBoxDescent": 8,
+      "width": 58.671875
+    },
+    {
+      "family": "serif",
+      "size": 24,
+      "range": [0, 0, 44.0078125, 27.5],
+      "box": [0, 0, 1200, 27.5],
+      "fontBoundingBoxAscent": 43,
+      "fontBoundingBoxDescent": 12,
+      "width": 88.0078125
+    },
+    {
+      "family": "Times",
+      "size": 13,
+      "range": [0, 0, 23.8359375, 15.5],
+      "box": [0, 0, 1200, 15.5],
+      "fontBoundingBoxAscent": 24,
+      "fontBoundingBoxDescent": 7,
+      "width": 47.6708984375
+    },
+    {
+      "family": "Times",
+      "size": 16,
+      "range": [0, 0, 29.3359375, 18.5],
+      "box": [0, 0, 1200, 18.5],
+      "fontBoundingBoxAscent": 29,
+      "fontBoundingBoxDescent": 8,
+      "width": 58.671875
+    },
+    {
+      "family": "Times",
+      "size": 24,
+      "range": [0, 0, 44.0078125, 27.5],
+      "box": [0, 0, 1200, 27.5],
+      "fontBoundingBoxAscent": 43,
+      "fontBoundingBoxDescent": 12,
+      "width": 88.0078125
+    },
+    {
+      "family": "Times New Roman",
+      "size": 13,
+      "range": [0, 0, 23.8359375, 14.5],
+      "box": [0, 0, 1200, 15],
+      "fontBoundingBoxAscent": 23,
+      "fontBoundingBoxDescent": 6,
+      "width": 47.6708984375
+    },
+    {
+      "family": "Times New Roman",
+      "size": 16,
+      "range": [0, 0, 29.3359375, 18],
+      "box": [0, 0, 1200, 18.5],
+      "fontBoundingBoxAscent": 29,
+      "fontBoundingBoxDescent": 7,
+      "width": 58.671875
+    },
+    {
+      "family": "Times New Roman",
+      "size": 24,
+      "range": [0, 0.5, 44.0078125, 26.5],
+      "box": [0, 0, 1200, 27.5],
+      "fontBoundingBoxAscent": 43,
+      "fontBoundingBoxDescent": 10,
+      "width": 88.0078125
+    },
+    {
+      "family": "Helvetica",
+      "size": 13,
+      "range": [0, 0, 23.8515625, 15],
+      "box": [0, 0, 1200, 15],
+      "fontBoundingBoxAscent": 24,
+      "fontBoundingBoxDescent": 6,
+      "width": 47.6962890625
+    },
+    {
+      "family": "Helvetica",
+      "size": 16,
+      "range": [0, 0, 29.3515625, 18.5],
+      "box": [0, 0, 1200, 18.5],
+      "fontBoundingBoxAscent": 30,
+      "fontBoundingBoxDescent": 7,
+      "width": 58.703125
+    },
+    {
+      "family": "Helvetica",
+      "size": 24,
+      "range": [0, 0, 44.03125, 27.5],
+      "box": [0, 0, 1200, 27.5],
+      "fontBoundingBoxAscent": 44,
+      "fontBoundingBoxDescent": 11,
+      "width": 88.0546875
+    },
+    {
+      "family": "Courier",
+      "size": 13,
+      "range": [0, 0, 39.0078125, 15],
+      "box": [0, 0, 1200, 15],
+      "fontBoundingBoxAscent": 24,
+      "fontBoundingBoxDescent": 6,
+      "width": 78.0126953125
+    },
+    {
+      "family": "Courier",
+      "size": 16,
+      "range": [0, 0, 48.0078125, 18.5],
+      "box": [0, 0, 1200, 18.5],
+      "fontBoundingBoxAscent": 29,
+      "fontBoundingBoxDescent": 8,
+      "width": 96.015625
+    },
+    {
+      "family": "Courier",
+      "size": 24,
+      "range": [0, 0, 72.015625, 27.5],
+      "box": [0, 0, 1200, 27.5],
+      "fontBoundingBoxAscent": 43,
+      "fontBoundingBoxDescent": 12,
+      "width": 144.0234375
+    }
+  ]
+}

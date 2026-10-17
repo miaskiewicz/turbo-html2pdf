@@ -3,6 +3,19 @@ use crate::layout::value::{parse_color, parse_length_pct, parse_px, DEFAULT_FONT
 type Validator = fn(&str) -> bool;
 
 const LONGHANDS: &[(&str, [&str; 4])] = &[
+    (
+        "margin",
+        ["margin-top", "margin-right", "margin-bottom", "margin-left"],
+    ),
+    (
+        "padding",
+        [
+            "padding-top",
+            "padding-right",
+            "padding-bottom",
+            "padding-left",
+        ],
+    ),
     ("inset", ["top", "right", "bottom", "left"]),
     (
         "border-width",
@@ -61,6 +74,8 @@ fn admitted(property: &str, parts: &[&str]) -> bool {
         return false;
     }
     let validators: &[(&str, Validator)] = &[
+        ("margin", inset),
+        ("padding", padding),
         ("inset", inset),
         ("border-width", border_width),
         ("border-style", border_style),
@@ -80,6 +95,10 @@ fn css_wide(value: &str) -> bool {
 
 fn inset(value: &str) -> bool {
     value == "auto" || valid_length(value, true, false)
+}
+
+fn padding(value: &str) -> bool {
+    valid_length(value, true, true)
 }
 
 fn border_width(value: &str) -> bool {
@@ -172,6 +191,9 @@ mod tests {
     #[test]
     fn complete_quad_grammar_is_validated_before_expansion() {
         for (property, value) in [
+            ("padding", "-1px"),
+            ("padding", "auto"),
+            ("margin", "5px bogus"),
             ("inset", "10px bogus"),
             ("inset", "initial auto"),
             ("border-width", "3px red"),
@@ -183,6 +205,8 @@ mod tests {
             assert!(expand(property, value).is_none(), "{property}:{value}");
         }
         for (property, value) in [
+            ("padding", "0 3% 2em 4px"),
+            ("margin", "-2px auto 3% 0"),
             ("inset", "auto 0 -2px 4%"),
             ("border-width", "thin medium thick 0"),
             ("border-style", "solid dotted double groove"),
