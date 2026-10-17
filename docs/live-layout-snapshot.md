@@ -297,6 +297,16 @@ specific `SnapshotError` variants. Atomic and inline-block top/bottom alignment
 remain available. These limits describe the supported native subset, rather than
 certifying the full CSS inline formatting model or complete browser layout.
 
+For macOS native HTML, generic serif selects physical Times before Times New
+Roman; the ordinary PDF system-font loader retains its prior preference. Physical
+legacy ascent policy reads decoded platform family records when a font has no
+Unicode family name, so an author alias cannot enable or suppress that policy.
+The source-pinned `tests/fixtures/native-serif/probe.js` and Chrome155 control
+cover fifteen font/size combinations: serif, Times, Times New Roman, Helvetica
+and Courier at 13, 16 and 24 CSS pixels. Tests compare real physical font metrics,
+text advances, source Range rectangles and normal container line heights; a
+separate actual-font identity check preserves the existing PDF selection.
+
 ## Original-scope matched declarations and unboxed elements (unreleased)
 
 An embedder with its own DOM and shadow trees can call

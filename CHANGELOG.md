@@ -6,6 +6,14 @@ PyPI, and crates.io packages release in lockstep from a `v*` tag (PyPI on `pyv*`
 
 ## [0.3.8] — unreleased
 
+- Select physical Times for macOS native HTML generic serif, matching fresh
+  Chrome's actual font selection. Resolve legacy ascent policy from a face's
+  real platform name when Unicode family records are absent. Fifteen independent
+  Chrome controls cover serif, Times, Times New Roman, Helvetica and Courier at
+  three sizes, including physical ascent/descent, advances, source ranges and
+  normal line heights. Explicit families and the existing PDF alias policy stay
+  intact; the PDF loader still selects its previous Times New Roman alias.
+
 - Preserve native HTML inline boundaries through shaping and line breaking.
   Capture own-font border fragments, sliced decorations, transparent ancestor
   regions, replaced-element metrics, relative offsets and original text ranges.

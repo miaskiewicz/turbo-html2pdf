@@ -54,17 +54,21 @@ pub fn describe(bytes: &[u8], index: u32) -> Option<(String, u16, bool)> {
 /// the existing scalar/PDF registry's family selection.
 pub(super) fn describe_platform(bytes: &[u8], index: u32) -> Option<(String, u16, bool)> {
     let face = TtfFace::parse(bytes, index).ok()?;
+    Some((
+        platform_family_name(&face)?,
+        face.weight().to_number(),
+        face.is_italic(),
+    ))
+}
+
+fn platform_family_name(face: &TtfFace) -> Option<String> {
     let family = face.names().into_iter().find(|name| {
         name.name_id == 1
             && name.platform_id == rustybuzz::ttf_parser::name::PlatformId::Macintosh
             && name.encoding_id == 0
     })?;
     let (name, _, _) = encoding_rs::MACINTOSH.decode(family.name);
-    Some((
-        name.into_owned(),
-        face.weight().to_number(),
-        face.is_italic(),
-    ))
+    Some(name.into_owned())
 }
 
 /// The face's English family name: the typographic family (name id 16) if
@@ -182,6 +186,7 @@ impl FontFace {
         let faces = OwnedFaces::try_new(data, |bytes| build_parsed_index(bytes, index)).ok()?;
         let (units_per_em, ascent, descent, line_gap) = metrics(faces.borrow_dependent());
         let mac_ascent_adjustment = family_name(&faces.borrow_dependent().ttf)
+            .or_else(|| platform_family_name(&faces.borrow_dependent().ttf))
             .is_some_and(|name| matches!(name.as_str(), "Times" | "Helvetica" | "Courier"));
         Some(FontFace {
             faces: Arc::new(faces),

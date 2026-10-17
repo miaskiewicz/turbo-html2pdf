@@ -36,6 +36,26 @@ pub struct FontRegistry {
     native_glyphs: std::sync::Arc<std::sync::Mutex<NativeGlyphCache>>,
 }
 
+fn html_generic_candidates<'a>(
+    generic: &str,
+    candidates: &'a [&'a str],
+    platform_primary: bool,
+) -> &'a [&'a str] {
+    // Chrome's macOS serif default is the physical Times face. PDF callers
+    // keep the prior Times New Roman preference and explicit families keep theirs.
+    if cfg!(target_os = "macos") && platform_primary && generic == "serif" {
+        &[
+            "Times",
+            "Times New Roman",
+            "Georgia",
+            "Liberation Serif",
+            "DejaVu Serif",
+        ]
+    } else {
+        candidates
+    }
+}
+
 fn family_matches(face: &FontFace, name: &str) -> bool {
     face.family().eq_ignore_ascii_case(name.trim())
 }
@@ -189,8 +209,10 @@ impl FontRegistry {
         }
         if platform_primary {
             self.register_platform_primary();
+            self.alias_generics_with_primary_policy(true);
+        } else {
+            self.alias_generics();
         }
-        self.alias_generics();
     }
 
     fn register_platform_primary(&mut self) {
@@ -200,6 +222,10 @@ impl FontRegistry {
     /// Alias each CSS generic to the first installed candidate family (all its
     /// weights/styles), so `font-family: sans-serif` resolves to a system font.
     fn alias_generics(&mut self) {
+        self.alias_generics_with_primary_policy(false);
+    }
+
+    fn alias_generics_with_primary_policy(&mut self, platform_primary: bool) {
         const GENERIC_CANDIDATES: &[(&str, &[&str])] = &[
             (
                 "sans-serif",
@@ -233,6 +259,7 @@ impl FontRegistry {
             ),
         ];
         for (generic, candidates) in GENERIC_CANDIDATES {
+            let candidates = html_generic_candidates(generic, candidates, platform_primary);
             if let Some(cand) = candidates
                 .iter()
                 .find(|c| self.faces.iter().any(|f| family_matches(f, c)))
