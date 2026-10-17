@@ -152,8 +152,7 @@ fn encompass_native_edges(
             .filter(|cell| {
                 cell.rect.y == box_.rect.y
                     && cell.rect.height == box_.rect.height
-                    && snapshot.native_transforms[cell.fragment_index]
-                        == snapshot.native_transforms[box_.fragment_index]
+                    && same_projection(snapshot, cell.fragment_index, box_.fragment_index)
             })
             .map(|cell| cell.rect.x)
             .reduce(f32::min)
@@ -171,6 +170,11 @@ fn encompass_native_edges(
     }
 }
 
+fn same_projection(snapshot: &LayoutSnapshot, a: usize, b: usize) -> bool {
+    snapshot.native_transforms[a] == snapshot.native_transforms[b]
+        && super::range_projection::compatible(snapshot, a, b)
+}
+
 fn coalesce_native_runs(snapshot: &LayoutSnapshot, boxes: &mut Vec<SourceRangeBox>) {
     if snapshot.html_layout_scale.is_none() {
         return;
@@ -181,8 +185,7 @@ fn coalesce_native_runs(snapshot: &LayoutSnapshot, boxes: &mut Vec<SourceRangeBo
             previous.rect.y == box_.rect.y
                 && previous.rect.height == box_.rect.height
                 && (previous.rect.x + previous.rect.width - box_.rect.x).abs() < 0.0001
-                && snapshot.native_transforms[previous.fragment_index]
-                    == snapshot.native_transforms[box_.fragment_index]
+                && same_projection(snapshot, previous.fragment_index, box_.fragment_index)
         });
         match contiguous {
             Some(previous) => previous.rect.width = box_.rect.x + box_.rect.width - previous.rect.x,
@@ -196,9 +199,13 @@ fn transform_boxes(snapshot: &LayoutSnapshot, boxes: &mut [SourceRangeBox]) {
     boxes.sort_by_key(|box_| box_.fragment_index);
     for box_ in boxes {
         let matrix = snapshot.native_transforms[box_.fragment_index];
-        box_.transformed_bounds = geometry::bounds(
-            geometry::rect_quad(box_.rect).map(|point| geometry::transform(point, matrix)),
-        );
+        box_.transformed_bounds = if snapshot.html_layout_scale.is_some() {
+            super::range_projection::project(snapshot, box_.fragment_index, box_.rect)
+        } else {
+            geometry::bounds(
+                geometry::rect_quad(box_.rect).map(|point| geometry::transform(point, matrix)),
+            )
+        };
     }
 }
 

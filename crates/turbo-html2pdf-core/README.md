@@ -68,6 +68,23 @@ elements. Unsupported block-in-inline splitting, ordinary-inline top/bottom/midd
 alignment, out-of-flow positioning and non-horizontal/LTR writing return typed
 snapshot errors. The generic and PDF paths retain their existing layout policy.
 
+Native HTML source items admit their aggregate advance to the physical
+LayoutUnit grid before line breaking and placement, while glyph positions and
+partial selections retain their real signed 16.16 advances. Aggregation crosses
+words and collapsed spaces within one text source; adjacent text nodes remain
+separate items. The pinned-font controls in `tests/fixtures/native-font-runs`
+record normal headed Chrome155 with real IBM Plex Mono and Fira Code bytes.
+Headless automation with forced font-rendering flags is a separate profile and
+is not substituted for that control. Generic and PDF paths retain raw advances.
+
+Native text Range and block/replaced Element quads preserve each flat transform
+boundary and subsequent float ancestor offsets. Ordinary inline Element quads
+retain their accumulated global matrix, as in Chrome. The sibling
+`tests/fixtures/native-range-transforms` controls retain the distinct margin,
+padding, viewport-positioned and nested-transform observations. A fixed child
+under a transformed containing block remains an explicit unsupported snapshot;
+its Chrome observation stays in the fixture rather than being claimed as parity.
+
 Native HTML iframe replacements use the CSS 300×150 default object size when
 attributes and CSS do not provide dimensions. Valid zero-width/height viewports
 retain fixed-size descendants, viewport units and definite-zero percentage bases,

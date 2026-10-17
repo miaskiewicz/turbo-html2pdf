@@ -6,6 +6,20 @@ PyPI, and crates.io packages release in lockstep from a `v*` tag (PyPI on `pyv*`
 
 ## [0.3.8] — unreleased
 
+- Admit native HTML text-source items to the physical LayoutUnit grid before
+  line breaking and placement. Keep native glyph/partial-selection positions in
+  real signed 16.16 advances and aggregate across words and collapsed spaces of
+  the same text node; source boundaries and inline decorations advance neighboring
+  boxes consistently. Pinned IBM Plex Mono and Fira Code controls use normal
+  headed Chrome, including whole versus split text nodes and five-glyph runs.
+  Ordinary PDF measurement, glyph advances and generic source snapshots keep
+  their previous unquantized policy.
+- Preserve real flat-transform FloatQuad boundaries for native HTML text Range
+  and block/replaced Element geometry. Ordinary inline Element quads retain their
+  accumulated-matrix path. Normal headed Chrome controls distinguish body margins
+  from padding, viewport positioning, nested transforms and integer translations;
+  the existing fixed-containing-block rejection remains explicit.
+
 - Expand portable regression controls for fixed viewport percentages, adjacent
   source-run boundaries, continued inline struts, own super/sub atomic alignment,
   preserved whitespace and directive markers. Malformed closing markers retain

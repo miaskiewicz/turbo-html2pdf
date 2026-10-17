@@ -16,6 +16,7 @@ mod fixed_containing;
 mod geometry;
 mod hit_geometry;
 mod metrics;
+mod range_projection;
 pub(crate) mod sources;
 mod svg_viewports;
 pub(crate) mod text;
@@ -159,6 +160,7 @@ pub struct LayoutSnapshot {
     fragments: Vec<SnapshotFragment>,
     native_transforms: Vec<[f64; 6]>,
     native_hit_transforms: Vec<[f64; 6]>,
+    range_projection: Vec<range_projection::Projection>,
     sources: Vec<SnapshotSource>,
     source_index: BTreeMap<SourceId, usize>,
     viewport: (f32, f32),
@@ -171,8 +173,10 @@ pub struct LayoutSnapshot {
 }
 
 impl LayoutSnapshot {
-    /// Native affine composition retains double precision until final float points.
-    /// The legacy fragment matrix remains available with its original float type.
+    /// Global native affine coefficients retain double precision. Native box and
+    /// text-selection quads additionally preserve each flat FloatQuad boundary;
+    /// ordinary inline quads use this accumulated matrix. The legacy fragment
+    /// matrix remains available with its original float type.
     pub fn native_world_transform(&self, fragment_index: usize) -> Option<[f64; 6]> {
         self.native_transforms.get(fragment_index).copied()
     }
@@ -541,28 +545,30 @@ fn capture_styled_with_plan(
         .collect();
     let (fragments, native_transforms, native_hit_transforms) =
         geometry::collect(&galley, &records, &metrics, &transforms, font_layout_scale);
+    let range_projection =
+        range_projection::collect(&fragments, &transforms, font_layout_scale.is_some());
     let source_index = sources.iter().enumerate().map(|(i, s)| (s.id, i)).collect();
     sources::index_fragments(&mut sources, &source_index, &fragments);
     let exceeded = text.as_ref().is_some_and(|text| text.exceeded);
     let text_runs = text.map_or_else(Vec::new, |text| text.collect(&galley, &fragments));
-    Ok((
-        LayoutSnapshot {
-            galley,
-            fragments,
-            native_transforms,
-            native_hit_transforms,
-            sources,
-            source_index,
-            viewport: (inputs.width, inputs.height),
-            text_runs,
-            text_sources,
-            original_text_units,
-            collapsed_text_sources,
-            html_layout_scale: font_layout_scale,
-            unsupported_svg_sources,
-        },
-        exceeded,
-    ))
+    let mut snapshot = LayoutSnapshot {
+        galley,
+        fragments,
+        native_transforms,
+        native_hit_transforms,
+        range_projection,
+        sources,
+        source_index,
+        viewport: (inputs.width, inputs.height),
+        text_runs,
+        text_sources,
+        original_text_units,
+        collapsed_text_sources,
+        html_layout_scale: font_layout_scale,
+        unsupported_svg_sources,
+    };
+    range_projection::place_boxes(&mut snapshot);
+    Ok((snapshot, exceeded))
 }
 
 fn apply_native_plan(
