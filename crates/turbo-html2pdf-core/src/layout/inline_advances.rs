@@ -105,3 +105,44 @@ pub(super) fn line_width(words: &[Word], scale: f32) -> f32 {
     }
     cursor.snapped()
 }
+
+#[cfg(test)]
+mod tests {
+    use super::super::{atom_word, break_word, place_line, InlineAtom, VAlign};
+    use crate::text::Align;
+
+    #[test]
+    fn numeric_spacing_without_source_metadata_preserves_the_next_atomic_placement() {
+        // A legacy item can carry a numeric gap without a text-source record.
+        // Retain that compatibility advance without manufacturing glyph owners.
+        let mut gap = break_word();
+        gap.break_after = false;
+        gap.space_after = 3.25;
+        let next = InlineAtom {
+            id: 17,
+            width: 10.0,
+            height: 10.0,
+            valign: VAlign::Baseline,
+            font_size: 16.0,
+            margin_top: 0.0,
+            margin_bottom: 0.0,
+            margin_left: 0.0,
+            margin_right: 0.0,
+        };
+        let placed = place_line(
+            vec![gap, atom_word(next, 0.0)],
+            100.0,
+            Align::Left,
+            24.0,
+            &[],
+            None,
+            (true, true, Some(2.0)),
+        );
+        assert_eq!(placed.line.atoms.len(), 1);
+        assert_eq!(placed.line.atoms[0].id, 17);
+        assert_eq!(placed.line.atoms[0].x, 3.25);
+        assert_eq!(placed.line.width, 13.25);
+        assert_eq!(placed.line.runs.len(), 0);
+        assert_eq!(placed.clusters.len(), 0);
+    }
+}

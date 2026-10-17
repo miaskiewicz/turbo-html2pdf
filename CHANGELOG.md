@@ -6,6 +6,12 @@ PyPI, and crates.io packages release in lockstep from a `v*` tag (PyPI on `pyv*`
 
 ## [0.3.8] — unreleased
 
+- Preserve native leading whitespace inside its actual inline owner after images
+  and inline blocks. Keep the rendered first space and subsequent collapsed
+  UTF-16 positions, including direct text, decorated/nested spans and prefixes
+  relocated by wrapping. Fifteen pinned-font normal Chrome controls also cover
+  paragraph starts and forced breaks. Generic/PDF whitespace policy stays intact.
+
 - Admit native HTML text-source items to the physical LayoutUnit grid before
   line breaking and placement. Keep native glyph/partial-selection positions in
   real signed 16.16 advances and aggregate across words and collapsed spaces of

@@ -430,6 +430,7 @@ struct Seg {
 struct Word {
     atom_shift: f32,
     spaces: Vec<Seg>,
+    leading_spaces: Vec<Seg>,
     advance_space: Option<Seg>,
     native_space: Option<(NodeId, f64)>,
     edges: Vec<(usize, InlineEdge)>,
@@ -510,6 +511,7 @@ fn make_word(chars: &[CharInfo], runs: &[InlineRun], space_after: f32) -> Word {
     Word {
         atom_shift: 0.0,
         spaces: Vec::new(),
+        leading_spaces: Vec::new(),
         advance_space: None,
         native_space: None,
         edges: Vec::new(),
@@ -526,6 +528,7 @@ fn break_word() -> Word {
     Word {
         atom_shift: 0.0,
         spaces: Vec::new(),
+        leading_spaces: Vec::new(),
         advance_space: None,
         native_space: None,
         edges: Vec::new(),
@@ -676,6 +679,7 @@ fn atom_word(atom: InlineAtom, shift: f32) -> Word {
     Word {
         atom_shift: shift,
         spaces: Vec::new(),
+        leading_spaces: Vec::new(),
         advance_space: None,
         native_space: None,
         edges: Vec::new(),
@@ -700,15 +704,57 @@ fn flush_run_group(
     if !group.is_empty() || !edges.is_empty() {
         let native = policy.capture || original_units.is_some();
         let chars = flatten_chars(group, reg, diags, native, original_units);
-        hand_off_leading_space(&chars, group, out, native, policy.advances);
+        let continue_space = group_leading_space(&chars, group, edges, out, native, policy);
         if edges.is_empty() {
             out.extend(build_words(&chars, group, native, policy.advances));
         } else {
-            out.extend(build_marked_words(chars, group, edges, native));
+            out.extend(build_marked_words(
+                chars,
+                group,
+                edges,
+                native,
+                !continue_space,
+            ));
         }
         edges.clear();
         group.clear();
     }
+}
+
+fn group_leading_space(
+    chars: &[CharInfo],
+    group: &[InlineRun],
+    edges: &[(usize, InlineEdge)],
+    out: &mut [Word],
+    capture: bool,
+    policy: SourcePolicy,
+) -> bool {
+    if !policy.advances {
+        hand_off_leading_space(chars, group, out, capture, false);
+        return false;
+    }
+    let continuation = preceding_inline_content(out);
+    if continuation && !edges.first().is_some_and(|(at, _)| *at == 0) {
+        hand_off_leading_space(chars, group, out, capture, true);
+    }
+    continuation
+}
+
+fn contains_inline_content(word: &Word) -> bool {
+    word.atom.is_some() || !word.segs.is_empty()
+}
+// Empty inline boundaries do not reset whitespace collapse, but forced line
+// breaks and an already captured trailing space do.
+fn preceding_inline_content(words: &[Word]) -> bool {
+    for word in words.iter().rev() {
+        if word.break_after || word.space_after != 0.0 {
+            return false;
+        }
+        if contains_inline_content(word) {
+            return true;
+        }
+    }
+    false
 }
 
 enum SourceItem {
@@ -788,11 +834,12 @@ fn build_marked_words(
     runs: &[InlineRun],
     edges: &[(usize, InlineEdge)],
     native: bool,
+    in_space: bool,
 ) -> Vec<Word> {
     let mut builder = MarkedWords {
         words: Vec::new(),
         current: Vec::new(),
-        in_space: true,
+        in_space,
         runs,
         native,
     };
@@ -832,6 +879,7 @@ fn marked_word(items: Vec<SourceItem>, runs: &[InlineRun], space_after: f32) -> 
     Word {
         atom_shift: 0.0,
         spaces: Vec::new(),
+        leading_spaces: Vec::new(),
         advance_space: None,
         native_space: None,
         segs,
@@ -863,6 +911,14 @@ fn hand_off_leading_space(
         last.space_after = space_width(first, group);
         if native_advances {
             last.advance_space = Some(make_seg(std::slice::from_ref(first), group));
+            last.spaces.extend(
+                chars
+                    .iter()
+                    .take_while(|c| {
+                        collapsible_space(c.ch, capture_sources) && !group[c.run].nowrap
+                    })
+                    .map(|c| make_seg(std::slice::from_ref(c), group)),
+            );
         }
     }
 }
@@ -876,6 +932,18 @@ fn hand_off_leading_space(
 /// free for that line. The default (no floats) is `(0, max_width)` for every y.
 pub type LineRegion<'a> = &'a dyn Fn(f32) -> (f32, f32);
 
+fn opening_space_only(word: &Word) -> bool {
+    word.width == 0.0 && word.atom.is_none() && word.segs.is_empty() && opening_edges(&word.edges)
+}
+fn opening_edges(edges: &[(usize, InlineEdge)]) -> bool {
+    !edges.is_empty() && edges.iter().all(|(_, edge)| edge.start)
+}
+fn atom_source_prefix(previous: &Word, next: &Word) -> bool {
+    previous.atom.is_some()
+        && previous
+            .native_space
+            .is_some_and(|(source, _)| next.segs.first().is_some_and(|seg| seg.node_id == source))
+}
 /// Running state of line breaking: the accumulated `cur` words, the current line
 /// `y`, the float region `(indent, lw)` at that y, and the pen `x`. Threads `y`
 /// top-down so each line's available width is queried from `region` at its own
@@ -977,11 +1045,12 @@ impl<'a> Placer<'a> {
 
     /// Add one word: wrap first if it no longer fits, then flush after it if it is
     /// a forced break (so a `<br>` ends its line and the next word starts below).
-    fn add(&mut self, word: Word) {
+    fn add(&mut self, mut word: Word) {
         if self.attach_trailing_close(&word) {
             return;
         }
         if self.needs_wrap(&word) {
+            word.leading_spaces = self.wrapped_leading_spaces(&word);
             self.flush();
         }
         let width = self.html_font_scale.map_or(word.width, |scale| {
@@ -998,6 +1067,22 @@ impl<'a> Placer<'a> {
         if forced {
             self.flush();
         }
+    }
+
+    fn wrapped_leading_spaces(&mut self, next: &Word) -> Vec<Seg> {
+        if self.html_font_scale.is_none() {
+            return Vec::new();
+        }
+        let Some(last) = self
+            .cur
+            .last_mut()
+            .filter(|word| opening_space_only(word) || atom_source_prefix(word, next))
+        else {
+            return Vec::new();
+        };
+        // The atom/opening boundary remains on the old line; a collapsed prefix
+        // of the next text source belongs to that text's new line.
+        std::mem::take(&mut last.spaces)
     }
 
     fn attach_trailing_close(&mut self, word: &Word) -> bool {
@@ -1509,6 +1594,15 @@ struct LinePlacement {
 }
 impl LinePlacement {
     fn word(&mut self, word: &Word, has_next: bool) {
+        for space in &word.leading_spaces {
+            self.runs.push(shape_space(
+                space,
+                self.pen,
+                self.baseline,
+                self.policy,
+                0.0,
+            ));
+        }
         if let Some(atom) = word.atom {
             self.atom(&atom, word.atom_shift);
         } else {
@@ -1592,21 +1686,23 @@ impl LinePlacement {
         if !self.policy.1 {
             return;
         }
+        let mut pen = self.pen;
         for (index, space) in word.spaces.iter().enumerate() {
-            let advance = if index == 0 && has_next {
-                word.native_space
-                    .map_or(word.space_after, |(_, advance)| advance as f32)
-            } else {
-                0.0
-            };
-            self.runs.push(shape_space(
-                space,
-                self.pen,
-                self.baseline,
-                self.policy,
-                advance,
-            ));
+            let advance = visible_space_advance(word, index, has_next);
+            self.runs
+                .push(shape_space(space, pen, self.baseline, self.policy, advance));
+            if self.policy.2.is_some() {
+                pen += advance;
+            }
         }
+    }
+}
+fn visible_space_advance(word: &Word, index: usize, has_next: bool) -> f32 {
+    if index == 0 && has_next {
+        word.native_space
+            .map_or(word.space_after, |(_, advance)| advance as f32)
+    } else {
+        0.0
     }
 }
 fn shape_space(
