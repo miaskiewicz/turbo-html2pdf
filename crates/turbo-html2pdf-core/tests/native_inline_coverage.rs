@@ -128,7 +128,9 @@ fn identities(
 }
 
 fn snapshot(html: &str) -> (LayoutSnapshot, HashMap<String, SourceId>) {
-    let nodes = parse_html(html).unwrap();
+    snapshot_nodes(parse_html(html).unwrap())
+}
+fn snapshot_nodes(nodes: Vec<Node>) -> (LayoutSnapshot, HashMap<String, SourceId>) {
     let mut ids = Vec::new();
     let mut names = HashMap::new();
     identities(&nodes, &mut Vec::new(), &mut ids, &mut names);
@@ -259,4 +261,156 @@ fn empty_inline_inside_visible_text_keeps_its_insertion_box_without_advance() {
     let right = marked.text_cluster_boxes_for_source(after.source_id);
     assert_eq!(empty[0], left[0].rect.x + left[0].rect.width);
     assert_eq!(empty[0], right[0].rect.x);
+}
+
+#[test]
+fn adjacent_unbroken_source_runs_and_multiline_inline_metrics_retain_their_owners() {
+    let fonts = FontRegistry::new();
+    let pieces = source_pieces(&fonts, true, Some(44.0));
+    let Piece::Run(first) = &pieces[1] else {
+        unreachable!()
+    };
+    let mut second = first.clone();
+    second.node_id = NodeId(9);
+    second.text = "def".into();
+    second.color.r = 64;
+    let mut third = first.clone();
+    third.node_id = NodeId(10);
+    third.text = "ghi".into();
+    let region = |_: f32| (0.0, 400.0);
+    for html in [false, true] {
+        let layout = if html {
+            layout_html_paragraph_in_with_sources
+        } else {
+            layout_paragraph_in_with_sources
+        };
+        let joined = layout(
+            &[
+                pieces[0].clone(),
+                pieces[1].clone(),
+                Piece::Run(second.clone()),
+                pieces[2].clone(),
+            ],
+            &fonts,
+            Align::Left,
+            &mut Diagnostics::default(),
+            &region,
+            12.0,
+        );
+        assert_eq!(joined.layout.lines.len(), 1);
+        assert_eq!(
+            joined.layout.lines[0]
+                .runs
+                .iter()
+                .map(|run| run.node_id)
+                .collect::<Vec<_>>(),
+            [NodeId(8), NodeId(9)]
+        );
+        assert_eq!(joined.clusters[0].len(), 2);
+        assert_eq!(joined.clusters[0][0].first().unwrap().utf16_start, 0);
+        assert_eq!(joined.clusters[0][1].last().unwrap().utf16_end, 3);
+        let wrapped = layout(
+            &[
+                pieces[0].clone(),
+                pieces[1].clone(),
+                Piece::Break,
+                Piece::Run(second.clone()),
+                Piece::Break,
+                Piece::Run(third.clone()),
+                pieces[2].clone(),
+            ],
+            &fonts,
+            Align::Left,
+            &mut Diagnostics::default(),
+            &region,
+            12.0,
+        );
+        assert_eq!(wrapped.layout.lines.len(), 3);
+        assert!(wrapped.layout.lines[1].inline_edges.is_empty());
+        assert!(wrapped.layout.lines.iter().all(|line| line.height >= 44.0));
+        assert_eq!(
+            wrapped.layout.lines[1].baseline,
+            wrapped.layout.lines[0].baseline
+        );
+        assert_eq!(wrapped.layout.lines[1].runs[0].node_id, NodeId(9));
+    }
+}
+
+#[test]
+fn an_unmatched_public_closing_edge_keeps_its_advance_without_inventing_glyphs() {
+    let fonts = FontRegistry::new();
+    let pieces = source_pieces(&fonts, false, None);
+    let paragraph = layout_paragraph_in_with_sources(
+        &pieces[2..],
+        &fonts,
+        Align::Left,
+        &mut Diagnostics::default(),
+        &|_| (0.0, 200.0),
+        12.0,
+    );
+    assert_eq!(paragraph.layout.lines.len(), 1);
+    assert_eq!(paragraph.layout.width, 5.0);
+    assert_eq!(paragraph.layout.lines[0].inline_edges.len(), 1);
+    assert!(!paragraph.layout.lines[0].inline_edges[0].edge.start);
+    assert!(paragraph.layout.lines[0].runs.is_empty());
+    assert!(paragraph.clusters[0].is_empty());
+}
+
+#[test]
+fn native_fixed_replacements_resolve_percentage_height_against_the_viewport() {
+    let (snapshot, names) = snapshot("<div style='height:40px'><iframe id=frame style='display:inline;position:fixed;left:0;top:0;width:10px;height:50%;border:0'></iframe></div>");
+    assert_eq!(
+        first_box(&snapshot, names["frame"]),
+        [0.0, 0.0, 10.0, 100.0]
+    );
+}
+
+#[test]
+fn own_atomic_super_and_sub_alignment_shift_once_without_growing_a_dominant_strut() {
+    let capture = |align| {
+        snapshot(&format!("<div id=box><iframe id=frame style='display:inline;width:20px;height:5px;border:0;vertical-align:{align}'></iframe></div>"))
+    };
+    let (normal, names) = capture("baseline");
+    let baseline = first_box(&normal, names["frame"]);
+    for (align, delta) in [("super", -5.828125), ("sub", 3.6953125)] {
+        let (shifted, shifted_names) = capture(align);
+        let actual = first_box(&shifted, shifted_names["frame"]);
+        assert_eq!(actual, [baseline[0], baseline[1] + delta, 20.0, 5.0]);
+        assert_eq!(
+            first_box(&shifted, shifted_names["box"]),
+            first_box(&normal, names["box"])
+        );
+    }
+}
+
+#[test]
+fn preserved_whitespace_and_inline_directives_keep_real_source_provenance() {
+    let (pre, _) = snapshot("<div><span style='white-space:pre'>  </span></div>");
+    let text = pre
+        .text_sources()
+        .iter()
+        .find(|source| source.text == "  ")
+        .unwrap();
+    let selected = pre.text_range_boxes(text.source_id, 0, 2).unwrap();
+    assert!(!selected.is_empty());
+    assert!(selected.iter().any(|part| part.rect.width > 0.0));
+    let mut nodes = parse_html("<div>a<span id=marker></span>b</div>").unwrap();
+    let Node::Element(parent) = &mut nodes[0] else {
+        unreachable!()
+    };
+    let Node::Element(marker) = &mut parent.children[1] else {
+        unreachable!()
+    };
+    marker.tag = turbo_html2pdf_core::Tag::Directive(turbo_html2pdf_core::TKind::Page);
+    let (snapshot, names) = snapshot_nodes(nodes);
+    let source = snapshot.source(names["marker"]).unwrap();
+    assert!(!source.excluded_from_layout);
+    assert_eq!(source.fragment_indices.len(), 1);
+    let fragment = &snapshot.fragments()[source.fragment_indices[0]];
+    assert_eq!(fragment.kind, GeometryKind::Directive);
+    assert_eq!([fragment.rect.width, fragment.rect.height], [0.0, 0.0]);
+    assert_eq!(snapshot.text_sources().len(), 2);
+    assert!(snapshot.text_sources().iter().all(|text| !snapshot
+        .text_cluster_boxes_for_source(text.source_id)
+        .is_empty()));
 }

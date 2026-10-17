@@ -6,6 +6,12 @@ PyPI, and crates.io packages release in lockstep from a `v*` tag (PyPI on `pyv*`
 
 ## [0.3.8] — unreleased
 
+- Expand portable regression controls for fixed viewport percentages, adjacent
+  source-run boundaries, continued inline struts, own super/sub atomic alignment,
+  preserved whitespace and directive markers. Malformed closing markers retain
+  their documented advance without inventing glyphs or source element boxes.
+  These coverage additions leave production layout code unchanged.
+
 - Size native HTML iframes as replaced viewports using the real 300×150 default
   object dimensions, author attributes, CSS sizing, aspect ratio and box model.
   Preserve definite zero containing-block heights and normal-flow percentage

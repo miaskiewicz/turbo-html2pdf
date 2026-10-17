@@ -646,3 +646,70 @@ fn fragment(
         },
     )
 }
+
+#[cfg(test)]
+mod defensive_contract_tests {
+    use super::*;
+
+    #[test]
+    fn unmatched_closing_marker_does_not_create_an_element_fragment() {
+        // Valid DOM capture emits balanced boundaries. A corrupt intermediate
+        // closing marker must not acquire a synthetic source box.
+        let fonts = crate::FontRegistry::new();
+        let images = crate::ImageCtx {
+            resolver: &crate::NoImages,
+            body_height: None,
+        };
+        let mut diagnostics = crate::Diagnostics::default();
+        let mut ctx = Ctx {
+            fonts: &fonts,
+            images: &images,
+            diags: &mut diagnostics,
+            abs_cb_x: 0.0,
+            abs_cb_y: 0.0,
+            abs_cb_w: 200.0,
+            abs_cb_h: 100.0,
+            abs_cb_h_known: true,
+            cb_h: 100.0,
+            cb_h_known: true,
+            root_w: 200.0,
+            root_h: 100.0,
+            live_geometry: true,
+            used_metrics: Some(HashMap::new()),
+            text_capture: None,
+            html_font_metrics: true,
+            html_font_scale: Some(2.0),
+            original_units: None,
+            native_transforms: Some(HashMap::new()),
+            floats: Vec::new(),
+        };
+        let edge = super::super::inline::PlacedInlineEdge {
+            edge: InlineEdge {
+                node_id: NodeId(7),
+                start: false,
+                advance: 3.0,
+                face: fonts.select(&["sans-serif"], 400, false).unwrap().clone(),
+                font_size: 16.0,
+                line_height: Some(24.0),
+                baseline_shift: 0.0,
+                contributes_metrics: true,
+                valign: super::super::value::VAlign::Baseline,
+            },
+            x: 20.0,
+        };
+        let offsets = HashMap::new();
+        let mut projection = InlineFragments {
+            styles: HashMap::new(),
+            open: Vec::new(),
+            out: Vec::new(),
+            ctx: &mut ctx,
+            origin: (0.0, 0.0, 18.0),
+            offsets: &offsets,
+        };
+        projection.end(&edge);
+        assert!(projection.out.is_empty());
+        assert!(projection.open.is_empty());
+        drop(projection);
+        assert!(ctx.used_metrics.unwrap().is_empty());
+    }
+}
