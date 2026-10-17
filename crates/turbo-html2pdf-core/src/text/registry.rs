@@ -39,11 +39,11 @@ pub struct FontRegistry {
 fn html_generic_candidates<'a>(
     generic: &str,
     candidates: &'a [&'a str],
-    platform_primary: bool,
+    prefer_native_mac_serif: bool,
 ) -> &'a [&'a str] {
     // Chrome's macOS serif default is the physical Times face. PDF callers
     // keep the prior Times New Roman preference and explicit families keep theirs.
-    if cfg!(target_os = "macos") && platform_primary && generic == "serif" {
+    if prefer_native_mac_serif && generic == "serif" {
         &[
             "Times",
             "Times New Roman",
@@ -209,7 +209,7 @@ impl FontRegistry {
         }
         if platform_primary {
             self.register_platform_primary();
-            self.alias_generics_with_primary_policy(true);
+            self.alias_generics_with_primary_policy(cfg!(target_os = "macos"));
         } else {
             self.alias_generics();
         }
@@ -225,7 +225,7 @@ impl FontRegistry {
         self.alias_generics_with_primary_policy(false);
     }
 
-    fn alias_generics_with_primary_policy(&mut self, platform_primary: bool) {
+    fn alias_generics_with_primary_policy(&mut self, prefer_native_mac_serif: bool) {
         const GENERIC_CANDIDATES: &[(&str, &[&str])] = &[
             (
                 "sans-serif",
@@ -259,7 +259,7 @@ impl FontRegistry {
             ),
         ];
         for (generic, candidates) in GENERIC_CANDIDATES {
-            let candidates = html_generic_candidates(generic, candidates, platform_primary);
+            let candidates = html_generic_candidates(generic, candidates, prefer_native_mac_serif);
             if let Some(cand) = candidates
                 .iter()
                 .find(|c| self.faces.iter().any(|f| family_matches(f, c)))
@@ -638,6 +638,46 @@ mod tests {
         assert!(
             reg.select(&["sans-serif"], 400, false).is_some(),
             "sans-serif now resolves to the aliased Helvetica face"
+        );
+    }
+    #[test]
+    fn native_mac_serif_policy_selects_real_faces_without_changing_pdf_or_explicit_families() {
+        let times = FontFace::from_bytes(ROBOTO.to_vec(), "Times", 400, false).unwrap();
+        let tnr = FontFace::from_bytes(
+            include_bytes!("../../assets/fonts/Go-Regular.ttf").to_vec(),
+            "Times New Roman",
+            400,
+            false,
+        )
+        .unwrap();
+        let mut original = FontRegistry::default();
+        original.add(times.clone());
+        original.add(tnr.clone());
+        for (native, expected) in [(false, &tnr), (true, &times)] {
+            let mut registry = original.clone();
+            registry.alias_generics_with_primary_policy(native);
+            assert_eq!(
+                registry.select(&["serif"], 400, false).unwrap().data(),
+                expected.data()
+            );
+            assert_eq!(
+                registry
+                    .select(&["Times New Roman"], 400, false)
+                    .unwrap()
+                    .data(),
+                tnr.data()
+            );
+            assert_eq!(
+                registry.select(&["Times"], 400, false).unwrap().data(),
+                times.data()
+            );
+        }
+        let caller = tnr.with_family("serif");
+        original.add(caller.clone());
+        original.alias_generics_with_primary_policy(true);
+        assert_eq!(
+            original.select(&["serif"], 400, false).unwrap().data(),
+            caller.data()
         );
     }
 }

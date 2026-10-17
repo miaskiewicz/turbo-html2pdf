@@ -84,6 +84,8 @@ pub struct SnapshotInputs<'a> {
 pub enum SnapshotError {
     #[error("viewport dimensions must be finite and greater than zero")]
     InvalidViewport,
+    #[error("native HTML viewport dimensions must be finite and non-negative")]
+    InvalidNativeViewport,
     #[error("original UTF-16 text source {0:?} is invalid or duplicated")]
     InvalidOriginalText(SourceId),
     #[error("original UTF-16 text inputs exceed the source unit budget")]
@@ -337,7 +339,7 @@ pub fn snapshot_html_styled_tree_with_text(
     inputs: &SnapshotInputs,
     diags: &mut Diagnostics,
 ) -> Result<LayoutSnapshot, TextSnapshotError> {
-    validate_viewport(inputs)?;
+    validate_native_viewport(inputs)?;
     text::validate_source_budget(styled)?;
     let (snapshot, exceeded) = capture_styled(styled, identities, inputs, diags, Some(true))?;
     checked_text_capture(snapshot, exceeded)
@@ -351,7 +353,7 @@ pub fn snapshot_html_live_tree_with_text(
     inputs: &SnapshotInputs,
     diags: &mut Diagnostics,
 ) -> Result<LayoutSnapshot, TextSnapshotError> {
-    validate_viewport(inputs)?;
+    validate_native_viewport(inputs)?;
     crate::style::set_layout_viewport(inputs.width, inputs.height);
     let styled = crate::style_tree(nodes, cascade);
     snapshot_html_styled_tree_with_text(&styled, identities, inputs, diags)
@@ -368,7 +370,7 @@ pub fn snapshot_html_styled_tree_with_svg_viewports(
     inputs: &SnapshotInputs,
     diags: &mut Diagnostics,
 ) -> Result<LayoutSnapshot, SvgSnapshotError> {
-    validate_viewport(inputs)?;
+    validate_native_viewport(inputs)?;
     text::validate_source_budget(styled)?;
     let plan = svg_viewports::prepare(styled, identities, viewports, layout_scale)?;
     let (snapshot, exceeded) = capture_styled_with_plan(
@@ -391,7 +393,7 @@ pub fn snapshot_html_styled_tree_with_native_text(
     inputs: &SnapshotInputs,
     diags: &mut Diagnostics,
 ) -> Result<LayoutSnapshot, SvgSnapshotError> {
-    validate_viewport(inputs)?;
+    validate_native_viewport(inputs)?;
     text::validate_source_budget(styled)?;
     let plan = svg_viewports::prepare(
         styled,
@@ -419,7 +421,7 @@ pub fn snapshot_html_live_tree_with_native_text(
     inputs: &SnapshotInputs,
     diags: &mut Diagnostics,
 ) -> Result<LayoutSnapshot, SvgSnapshotError> {
-    validate_viewport(inputs)?;
+    validate_native_viewport(inputs)?;
     crate::style::set_layout_viewport(inputs.width, inputs.height);
     let styled = crate::style_tree(nodes, cascade);
     snapshot_html_styled_tree_with_native_text(&styled, identities, options, inputs, diags)
@@ -442,7 +444,7 @@ pub fn snapshot_html_live_tree_with_svg_viewports(
     inputs: &SnapshotInputs,
     diags: &mut Diagnostics,
 ) -> Result<LayoutSnapshot, SvgSnapshotError> {
-    validate_viewport(inputs)?;
+    validate_native_viewport(inputs)?;
     crate::style::set_layout_viewport(inputs.width, inputs.height);
     let styled = crate::style_tree(nodes, cascade);
     snapshot_html_styled_tree_with_svg_viewports(
@@ -483,6 +485,17 @@ fn validate_native_context(
     }
     Ok(())
 }
+fn validate_capture_viewport(
+    inputs: &SnapshotInputs,
+    html: Option<bool>,
+) -> Result<(), SnapshotError> {
+    if html == Some(true) {
+        validate_native_viewport(inputs)
+    } else {
+        validate_viewport(inputs)
+    }
+}
+
 fn capture_styled_with_plan(
     styled: &[StyledNode],
     identities: &[SourceIdentity],
@@ -492,11 +505,15 @@ fn capture_styled_with_plan(
     plan: Option<svg_viewports::Plan>,
     original_text: &[SourceTextUnits<'_>],
 ) -> Result<(LayoutSnapshot, bool), SnapshotError> {
-    validate_viewport(inputs)?;
+    validate_capture_viewport(inputs, html_text_metrics)?;
     crate::style::set_layout_viewport(inputs.width, inputs.height);
     validate_native_context(styled, html_text_metrics)?;
-    let (mut build_sources, mut sources) =
-        sources::prepare(styled, identities, html_text_metrics.is_some())?;
+    let (mut build_sources, mut sources) = sources::prepare(
+        styled,
+        identities,
+        html_text_metrics.is_some(),
+        html_text_metrics == Some(true),
+    )?;
     build_sources.inline_borders = html_text_metrics == Some(true);
     let (font_layout_scale, unsupported_svg_sources) = apply_native_plan(&mut build_sources, plan);
     let text_sources = std::mem::take(&mut build_sources.text_sources);
@@ -560,6 +577,15 @@ fn apply_native_plan(
         }
         None => (None, Default::default()),
     }
+}
+
+fn validate_native_viewport(inputs: &SnapshotInputs) -> Result<(), SnapshotError> {
+    for value in [inputs.width, inputs.height] {
+        if !value.is_finite() || value < 0.0 {
+            return Err(SnapshotError::InvalidNativeViewport);
+        }
+    }
+    Ok(())
 }
 
 fn validate_viewport(inputs: &SnapshotInputs) -> Result<(), SnapshotError> {

@@ -35,6 +35,7 @@ pub(crate) fn prepare(
     styled: &[StyledNode],
     identities: &[SourceIdentity],
     capture_text: bool,
+    native_html: bool,
 ) -> Result<(BuildSources, Vec<SnapshotSource>), SnapshotError> {
     let wanted = validate_identities(identities)?;
     let mut walker = Walker {
@@ -43,6 +44,7 @@ pub(crate) fn prepare(
         sources: Vec::new(),
         text_sources: Vec::new(),
         capture_text,
+        native_html,
     };
     walker.visit(styled, &mut Vec::new(), &[], false);
     check_found(&wanted, &walker.sources)?;
@@ -94,6 +96,7 @@ struct Walker<'a> {
     sources: Vec<SnapshotSource>,
     text_sources: Vec<SnapshotTextSource>,
     capture_text: bool,
+    native_html: bool,
 }
 
 impl Walker<'_> {
@@ -156,6 +159,11 @@ impl Walker<'_> {
         }
     }
 
+    fn excludes_child_content(&self, element: &crate::StyledElement) -> bool {
+        self.native_html
+            && matches!(&element.tag, crate::Tag::Html(name) if name.eq_ignore_ascii_case("iframe"))
+    }
+
     fn children(
         &mut self,
         node: &StyledNode,
@@ -169,6 +177,9 @@ impl Walker<'_> {
         };
         let mut next = ancestors.to_vec();
         next.extend(id);
+        // Fallback descendants remain in the DOM/source inventory, but a live
+        // embedded viewport never renders them in its parent's formatting tree.
+        let excluded = excluded || self.excludes_child_content(element);
         self.visit(&element.children, path, &next, excluded);
     }
 }

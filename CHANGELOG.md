@@ -6,6 +6,19 @@ PyPI, and crates.io packages release in lockstep from a `v*` tag (PyPI on `pyv*`
 
 ## [0.3.8] — unreleased
 
+- Size native HTML iframes as replaced viewports using the real 300×150 default
+  object dimensions, author attributes, CSS sizing, aspect ratio and box model.
+  Preserve definite zero containing-block heights and normal-flow percentage
+  sizing on relatively positioned replacements. Accept finite zero native HTML
+  viewports while preserving positive-only PDF snapshot admission. Twenty
+  independent Chrome controls cover defaults, invalid attributes, zero axes,
+  percentage bases, padded positioned containing blocks, excluded iframe fallback
+  sources and standards-mode zero-viewport descendants. Reject negative
+  and non-finite presentational dimension hints on both HTML and PDF paths.
+- Add portable source/Range/inline-edge coverage and actual font-face selection
+  controls for native versus PDF aliases. Preserve the CI 100% coverage gate and
+  upload its Cobertura report even when the threshold fails for diagnosis.
+
 - Select physical Times for macOS native HTML generic serif, matching fresh
   Chrome's actual font selection. Resolve legacy ascent policy from a face's
   real platform name when Unicode family records are absent. Fifteen independent

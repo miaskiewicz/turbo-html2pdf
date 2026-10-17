@@ -67,3 +67,23 @@ font metrics, relative positioning and super/sub atomic children. Its explicit
 elements. Unsupported block-in-inline splitting, ordinary-inline top/bottom/middle
 alignment, out-of-flow positioning and non-horizontal/LTR writing return typed
 snapshot errors. The generic and PDF paths retain their existing layout policy.
+
+Native HTML iframe replacements use the CSS 300×150 default object size when
+attributes and CSS do not provide dimensions. Valid zero-width/height viewports
+retain fixed-size descendants, viewport units and definite-zero percentage bases;
+normal-flow relative positioning does not substitute the absolute containing block.
+Iframe fallback descendants retain source identities and text while being excluded
+from the parent layout. Embedders use that explicit exclusion to return empty DOM Range geometry.
+The lower-level glyph query retains its `UnresolvedSource` error when no glyphs
+are placed; invalid UTF-16 offsets and genuinely lost visible glyphs remain errors.
+Native viewport admission accepts finite dimensions at least zero. Generic/PDF
+snapshot admission continues to require positive dimensions.
+
+The snapshot input does not yet carry HTML document compatibility mode. Its line
+layout follows the standards policy: an independently measured zero-viewport
+standards document with fixed and inline-iframe descendants has a 34px body;
+Chrome's BackCompat sibling suppresses the inline-only line strut and has a 30px
+body. Both raw Chrome controls are retained in `tests/fixtures/native-iframe`.
+Quirks-mode line-strut/aggregate-height parity requires a real document-mode input
+and remains outside this API's current contract; fixed descendant boxes match in
+both measurements. No rectangle is clipped or normalized to conceal this gap.

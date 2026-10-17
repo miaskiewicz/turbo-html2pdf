@@ -51,12 +51,16 @@ pub(crate) struct Ctx<'a> {
     /// Set only when the ancestor's height is explicit (not derived from content),
     /// so an `<img height:100%>` in a sized hero card gets a real height.
     pub(crate) abs_cb_h: f32,
+    /// Native CSS distinguishes a definite zero from an unresolved auto height.
+    pub(crate) abs_cb_h_known: bool,
     /// The nearest ancestor's **definite** content-box height for *in-flow* `%`
     /// height resolution (0 = unknown). Unlike [`Ctx::abs_cb_h`] (positioned CBs)
     /// this is set for ANY box with a definite height, so a normal-flow
     /// `<img height:100%>` / `max-height:100%` inside a fixed-height parent gets a
     /// real height instead of falling back to its intrinsic size.
     pub(crate) cb_h: f32,
+    /// Paired with `cb_h` so native percentage sizing retains definite zero.
+    pub(crate) cb_h_known: bool,
     /// The initial containing block width (page content width) — the CB for
     /// `position:fixed` boxes.
     pub(crate) root_w: f32,
@@ -249,16 +253,16 @@ fn resolved_content_height(bs: &BoxStyle, auto_height: f32, ctx: &Ctx) -> f32 {
     if !ctx.live_geometry {
         return content_box_height(bs, auto_height, positioned_cb_height(bs, ctx));
     }
-    let basis = live_height_basis(bs, ctx);
+    let basis = native_height_basis(bs, ctx);
     let frame = bs.padding.vertical() + bs.border.widths().vertical();
     let inset = if bs.box_sizing == BoxSizing::BorderBox {
         frame
     } else {
         0.0
     };
-    let content = live_height(bs.height, basis, inset).unwrap_or(auto_height);
-    let max = live_height(bs.max_height, basis, inset).unwrap_or(f32::INFINITY);
-    let min = live_height(bs.min_height, basis, inset).unwrap_or(0.0);
+    let content = resolved_live_height(bs.height, basis, inset).unwrap_or(auto_height);
+    let max = resolved_live_height(bs.max_height, basis, inset).unwrap_or(f32::INFINITY);
+    let min = resolved_live_height(bs.min_height, basis, inset).unwrap_or(0.0);
     content.min(max).max(min)
 }
 
@@ -282,7 +286,7 @@ fn positioned_child_block(
         BoxSizing::BorderBox => border.vertical() + bs.padding.vertical(),
         BoxSizing::ContentBox => 0.0,
     };
-    let height = live_height(bs.height, live_height_basis(bs, ctx), inset)
+    let height = resolved_live_height(bs.height, native_height_basis(bs, ctx), inset)
         .map(|h| h + bs.padding.vertical())
         .unwrap_or(0.0);
     (
@@ -379,11 +383,24 @@ fn live_height_basis(bs: &BoxStyle, ctx: &Ctx) -> f32 {
     }
 }
 
-fn live_height(value: LengthPct, basis: f32, inset: f32) -> Option<f32> {
+fn native_height_basis(bs: &BoxStyle, ctx: &Ctx) -> Option<f32> {
+    if !ctx.html_font_metrics {
+        let height = live_height_basis(bs, ctx);
+        return (height > 0.0).then_some(height);
+    }
+    let (height, known) = match bs.position {
+        Position::Absolute => (ctx.abs_cb_h, ctx.abs_cb_h_known),
+        Position::Fixed => (ctx.root_h, true),
+        _ => (ctx.cb_h, ctx.cb_h_known),
+    };
+    known.then_some(height)
+}
+
+fn resolved_live_height(value: LengthPct, basis: Option<f32>, inset: f32) -> Option<f32> {
     match value {
         LengthPct::Px(px) => Some((px - inset).max(0.0)),
         LengthPct::Auto => None,
-        _ => (basis > 0.0).then(|| (value.resolve(basis).unwrap_or(0.0) - inset).max(0.0)),
+        _ => basis.map(|basis| (value.resolve(basis).unwrap_or(0.0) - inset).max(0.0)),
     }
 }
 
@@ -929,7 +946,10 @@ fn layout_block_flow(
 /// IS its containing block (positioned) but that block's height is still
 /// indefinite (`abs_cb_h == 0`), so a `%`-height / `bottom` inset can't resolve.
 fn defer_this_kid(parent: &BoxStyle, kbs: &BoxStyle, ctx: &Ctx) -> bool {
-    kbs.position == Position::Absolute && parent.position != Position::Static && ctx.abs_cb_h == 0.0
+    kbs.position == Position::Absolute
+        && parent.position != Position::Static
+        && ctx.abs_cb_h == 0.0
+        && !(ctx.html_font_metrics && ctx.abs_cb_h_known)
 }
 
 /// Second pass for a positioned CB's own `absolute` children, now that its in-flow
@@ -948,6 +968,7 @@ fn place_deferred_abs(
         return;
     }
     ctx.abs_cb_h = content_h;
+    ctx.abs_cb_h_known = true;
     for (kid, static_pos) in deferred {
         let kbs = resolve(kid, cw, fs);
         let (bx, by) = out_of_flow_origin(&kbs, cw, ctx, *static_pos);
@@ -1139,7 +1160,7 @@ fn auto_x_margins(s: &crate::style::ComputedStyle) -> bool {
 /// grow this box). Floats, out-of-flow boxes, non-`visible` `overflow`, and the
 /// independent formatting roots (flex/grid/table) all qualify.
 fn intrinsic_formatting_root(lb: &LayoutBox, bs: &BoxStyle) -> bool {
-    lb.document_root || bs.float != Float::None || bs.position.is_out_of_flow()
+    lb.document_root() || bs.float != Float::None || bs.position.is_out_of_flow()
 }
 
 fn establishes_bfc(lb: &LayoutBox, bs: &BoxStyle) -> bool {
@@ -1351,7 +1372,7 @@ fn layout_content(
                 cw,
                 bs,
                 ctx,
-                (suppress_first, lb.document_root),
+                (suppress_first, lb.document_root()),
             )
         }
         BoxKind::Flex(kids) => super::flex::layout_flex(lb, kids, cx, cy, cw, bs.font_size, ctx),
@@ -1481,6 +1502,10 @@ pub(crate) fn layout_box_sized_isolated(
     layout_box_sized_impl(lb, bs, bx, by, bbw, ctx, true)
 }
 
+fn child_height_known(lb: &LayoutBox, height: Option<f32>, inherited: bool) -> bool {
+    height.is_some() || (lb.node_id == NodeId(0) && inherited)
+}
+
 fn layout_box_sized_impl(
     lb: &LayoutBox,
     bs: &BoxStyle,
@@ -1504,14 +1529,19 @@ fn layout_box_sized_impl(
     // A positioned box establishes the containing block for its `absolute`
     // descendants (its content box). Save/restore around the child layout.
     let saved_cb = (ctx.abs_cb_x, ctx.abs_cb_y, ctx.abs_cb_w, ctx.abs_cb_h);
+    let saved_abs_known = ctx.abs_cb_h_known;
+    let own_height = resolved_live_height(bs.height, native_height_basis(bs, ctx), 0.0);
     if bs.position != Position::Static {
         (ctx.abs_cb_x, ctx.abs_cb_y, ctx.abs_cb_w, ctx.abs_cb_h) =
             positioned_child_block(bs, (bx, by, bbw), (content_x, content_y, content_w), ctx);
+        ctx.abs_cb_h_known = own_height.is_some();
     }
     // In-flow `%`-height CB: expose this box's own definite content height to its
     // children (any box, not just positioned) so a `height:100%`/`max-height:100%`
     // child resolves against it. 0 (auto) leaves children on their intrinsic size.
     let saved_cb_h = ctx.cb_h;
+    let saved_cb_known = ctx.cb_h_known;
+    ctx.cb_h_known = child_height_known(lb, own_height, saved_cb_known);
     ctx.cb_h = live_child_height(lb, bs, saved_cb_h, ctx.live_geometry);
     // A box that establishes a block formatting context isolates floats: its
     // content does not wrap around outer floats, and the floats placed inside it
@@ -1531,6 +1561,8 @@ fn layout_box_sized_impl(
     }
     (ctx.abs_cb_x, ctx.abs_cb_y, ctx.abs_cb_w, ctx.abs_cb_h) = saved_cb;
     ctx.cb_h = saved_cb_h;
+    ctx.cb_h_known = saved_cb_known;
+    ctx.abs_cb_h_known = saved_abs_known;
     // The content-box height honoring an explicit/min/max `height` — a `background`
     // or `mask` image fills the box even when it has no flow content (an empty icon
     // span sized only by `height`, whose measured `content_h` is 0).
@@ -1691,6 +1723,10 @@ pub(crate) fn stamp_intrinsic_widths(lb: &LayoutBox, images: &ImageCtx) {
 
 /// Stamp one box's `intrinsic_w` if it is a resolvable replaced image.
 fn stamp_replaced_intrinsic(lb: &LayoutBox, images: &ImageCtx) {
+    if lb.native_iframe() {
+        lb.intrinsic_w.set(Some(300.0));
+        return;
+    }
     if let Some(viewport) = &lb.svg_viewport {
         let style = lb.resolved(ResolveCtx {
             parent_font_size: super::value::DEFAULT_FONT_SIZE,
@@ -1727,10 +1763,8 @@ fn replaced_image_box(
     cb_width: f32,
     ctx: &mut Ctx,
 ) -> Option<Fragment> {
-    if let Some(viewport) = &lb.svg_viewport {
-        return Some(svg_viewport_fragment(
-            lb, viewport, bs, bx, by, cb_width, ctx,
-        ));
+    if let Some(fragment) = replaced_viewport_box(lb, bs, bx, by, cb_width, ctx) {
+        return Some(fragment);
     }
     let src = lb.image.as_ref().filter(|s| s.replaced)?;
     let intrinsic = probe_source(src, ctx)?;
@@ -1744,6 +1778,39 @@ fn replaced_image_box(
     Some(image_fragment(lb, bx, by, &sized, bs))
 }
 
+fn replaced_viewport_box(
+    lb: &LayoutBox,
+    style: &BoxStyle,
+    x: f32,
+    y: f32,
+    width: f32,
+    ctx: &mut Ctx,
+) -> Option<Fragment> {
+    if lb.native_iframe() {
+        return Some(embedded_viewport_fragment(lb, style, x, y, width, ctx));
+    }
+    let viewport = lb.svg_viewport.as_ref()?;
+    Some(svg_viewport_fragment(lb, viewport, style, x, y, width, ctx))
+}
+
+fn embedded_viewport_fragment(
+    lb: &LayoutBox,
+    style: &BoxStyle,
+    x: f32,
+    y: f32,
+    width: f32,
+    ctx: &mut Ctx,
+) -> Fragment {
+    let dimensions = super::imgsize::size_viewport_live(
+        Some(300.0),
+        None,
+        style.aspect_ratio,
+        ctx.html_font_scale.unwrap_or(1.0),
+        &size_ctx(style, width, ctx),
+    );
+    viewport_fragment(lb, style, x, y, dimensions, ctx)
+}
+
 fn svg_viewport_fragment(
     lb: &LayoutBox,
     viewport: &super::svg_viewport::SvgViewport,
@@ -1753,7 +1820,18 @@ fn svg_viewport_fragment(
     width: f32,
     ctx: &mut Ctx,
 ) -> Fragment {
-    let (content_width, content_height) = viewport.size(&size_ctx(style, width, ctx));
+    let dimensions = viewport.size(&size_ctx(style, width, ctx));
+    viewport_fragment(lb, style, x, y, dimensions, ctx)
+}
+
+fn viewport_fragment(
+    lb: &LayoutBox,
+    style: &BoxStyle,
+    x: f32,
+    y: f32,
+    (content_width, content_height): (f32, f32),
+    ctx: &mut Ctx,
+) -> Fragment {
     record_metrics(lb, style, content_width, content_height, ctx);
     let width = content_width + style.padding.horizontal() + style.border.widths().horizontal();
     let height = content_height + style.padding.vertical() + style.border.widths().vertical();
@@ -1784,7 +1862,11 @@ fn size_ctx<'a>(bs: &'a BoxStyle, cb_width: f32, ctx: &Ctx) -> SizeCtx<'a> {
     SizeCtx {
         style: bs,
         cb_width,
-        cb_height: (cbh > 0.0).then_some(cbh),
+        cb_height: if ctx.html_font_metrics {
+            native_height_basis(bs, ctx)
+        } else {
+            (cbh > 0.0).then_some(cbh)
+        },
         body_height: ctx.images.body_height,
     }
 }
@@ -1961,7 +2043,9 @@ fn layout_tree_policy(
         abs_cb_y: 0.0,
         abs_cb_w: cb_width,
         abs_cb_h: viewport_height,
+        abs_cb_h_known: live_geometry,
         cb_h: viewport_height,
+        cb_h_known: live_geometry,
         root_w: cb_width,
         root_h: viewport_height,
         live_geometry,

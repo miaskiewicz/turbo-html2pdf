@@ -25,7 +25,7 @@ use super::value::{
 #[derive(Debug, Clone)]
 pub struct LayoutBox {
     pub node_id: NodeId,
-    pub(crate) document_root: bool,
+    source_role: SourceRole,
     pub style: ComputedStyle,
     /// Source element attributes (e.g. `colspan`, `href`); empty for anonymous
     /// boxes. Layout/emit read HTML attributes that are not CSS properties here.
@@ -110,9 +110,25 @@ enum StyleCache {
     Cached(Box<BoxStyle>),
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum SourceRole {
+    Ordinary,
+    DocumentRoot,
+    NativeIframe,
+}
+
 impl LayoutBox {
+    pub(crate) fn document_root(&self) -> bool {
+        self.source_role == SourceRole::DocumentRoot
+    }
+    pub(crate) fn native_iframe(&self) -> bool {
+        self.source_role == SourceRole::NativeIframe
+    }
+
     pub(crate) fn is_replaced(&self) -> bool {
-        self.svg_viewport.is_some() || self.image.as_ref().is_some_and(|source| source.replaced)
+        self.native_iframe()
+            || self.svg_viewport.is_some()
+            || self.image.as_ref().is_some_and(|source| source.replaced)
     }
 
     /// The memoized max-content width, computing it once via `f` on a miss.
@@ -560,6 +576,13 @@ fn classify_html(el: &StyledElement, ids: &mut Ids) -> Option<Level> {
             el, ids,
         ))]));
     }
+    classify_display(el, ids)
+}
+
+fn classify_display(el: &StyledElement, ids: &mut Ids) -> Option<Level> {
+    if native_out_of_flow(el, ids) {
+        return Some(Level::Block(build_block_box(el, ids)));
+    }
     // `display:none` was already dropped by the `is_hidden` guard above, so it can
     // never reach here — no `Display::None` arm (it would be dead code).
     match display_of(&el.style) {
@@ -569,6 +592,13 @@ fn classify_html(el: &StyledElement, ids: &mut Ids) -> Option<Level> {
         ))])),
         _ => Some(Level::Block(build_block_box(el, ids))),
     }
+}
+
+fn native_out_of_flow(element: &StyledElement, ids: &Ids) -> bool {
+    ids.sources
+        .as_ref()
+        .is_some_and(|sources| sources.inline_borders)
+        && matches!(element.style.get("position"), Some("absolute" | "fixed"))
 }
 
 fn native_inline_items(el: &StyledElement, ids: &mut Ids) -> Vec<InlineItem> {
@@ -682,12 +712,32 @@ fn input_button_text(el: &StyledElement) -> Option<String> {
         .flatten()
 }
 
+fn source_role(element: &StyledElement, ids: &Ids) -> SourceRole {
+    if native_iframe(element, ids) {
+        SourceRole::NativeIframe
+    } else if ids
+        .document_roots
+        .contains(&(element as *const StyledElement as usize))
+    {
+        SourceRole::DocumentRoot
+    } else {
+        SourceRole::Ordinary
+    }
+}
+
+fn native_iframe(element: &StyledElement, ids: &Ids) -> bool {
+    ids.sources
+        .as_ref()
+        .is_some_and(|sources| sources.inline_borders)
+        && matches!(&element.tag, Tag::Html(name) if name == "iframe")
+}
+
 fn build_block_box(el: &StyledElement, ids: &mut Ids) -> LayoutBox {
     let node_id = ids.element(el);
     if let Tag::Directive(kind) = &el.tag {
         return LayoutBox {
             node_id,
-            document_root: false,
+            source_role: SourceRole::Ordinary,
             style: el.style.clone(),
             attrs: el.attrs.clone(),
             display: Display::Block,
@@ -721,9 +771,7 @@ fn build_block_box(el: &StyledElement, ids: &mut Ids) -> LayoutBox {
     };
     LayoutBox {
         node_id,
-        document_root: ids
-            .document_roots
-            .contains(&(el as *const StyledElement as usize)),
+        source_role: source_role(el, ids),
         style: el.style.clone(),
         attrs: el.attrs.clone(),
         display,
@@ -919,7 +967,7 @@ fn anon_lines_box(
     };
     LayoutBox {
         node_id: ids.alloc(),
-        document_root: false,
+        source_role: SourceRole::Ordinary,
         style,
         attrs: Vec::new(),
         display: Display::Block,
@@ -1043,7 +1091,7 @@ fn build_root(styled: &[StyledNode], ids: &mut Ids) -> LayoutBox {
     let kind = build_flow(styled, &style, ids);
     LayoutBox {
         node_id,
-        document_root: false,
+        source_role: SourceRole::Ordinary,
         style,
         attrs: Vec::new(),
         display: Display::Block,
