@@ -336,6 +336,16 @@ pub enum BoxKind {
 /// One inline-level item inside a [`BoxKind::Lines`] context.
 #[derive(Debug, Clone)]
 pub enum InlineItem {
+    SourceBreak {
+        node_id: NodeId,
+        style: ComputedStyle,
+    },
+    /// A real native HTML inline boundary, retained before flattening text.
+    Boundary {
+        node_id: NodeId,
+        style: ComputedStyle,
+        start: bool,
+    },
     /// A run of text, styled by its containing element.
     Text {
         node_id: NodeId,
@@ -521,12 +531,26 @@ fn is_br(el: &StyledElement) -> bool {
     matches!(&el.tag, Tag::Html(n) if n == "br")
 }
 
+fn line_break(el: &StyledElement, ids: &mut Ids) -> InlineItem {
+    if ids
+        .sources
+        .as_ref()
+        .is_some_and(|sources| sources.inline_borders)
+    {
+        InlineItem::SourceBreak {
+            node_id: ids.element(el),
+            style: el.style.clone(),
+        }
+    } else {
+        InlineItem::LineBreak
+    }
+}
 fn classify_html(el: &StyledElement, ids: &mut Ids) -> Option<Level> {
     if ids.hidden(&el.style) {
         return None;
     }
     if is_br(el) {
-        return Some(Level::Inline(vec![InlineItem::LineBreak]));
+        return Some(Level::Inline(vec![line_break(el, ids)]));
     }
     #[cfg(feature = "xref")]
     if xref::internal_link_href(el).is_some() {
@@ -539,7 +563,7 @@ fn classify_html(el: &StyledElement, ids: &mut Ids) -> Option<Level> {
     // `display:none` was already dropped by the `is_hidden` guard above, so it can
     // never reach here — no `Display::None` arm (it would be dead code).
     match display_of(&el.style) {
-        Display::Inline => Some(Level::Inline(flatten_inline(el, ids))),
+        Display::Inline => Some(Level::Inline(native_inline_items(el, ids))),
         Display::InlineBlock => Some(Level::Inline(vec![InlineItem::Atomic(build_block_box(
             el, ids,
         ))])),
@@ -547,6 +571,18 @@ fn classify_html(el: &StyledElement, ids: &mut Ids) -> Option<Level> {
     }
 }
 
+fn native_inline_items(el: &StyledElement, ids: &mut Ids) -> Vec<InlineItem> {
+    let native = ids
+        .sources
+        .as_ref()
+        .is_some_and(|sources| sources.inline_borders);
+    let atomic = super::inline_boxes::atomic_element(el);
+    if native && atomic {
+        vec![InlineItem::Atomic(build_block_box(el, ids))]
+    } else {
+        flatten_inline(el, ids)
+    }
+}
 fn classify_svg_viewport(element: &StyledElement, ids: &mut Ids) -> Level {
     match super::svg_viewport::display(element) {
         Display::Inline | Display::InlineBlock => {
@@ -585,6 +621,18 @@ fn classify_element(el: &StyledElement, ids: &mut Ids) -> Option<Level> {
 /// a nested block becomes an atomic inline).
 fn flatten_inline(el: &StyledElement, ids: &mut Ids) -> Vec<InlineItem> {
     let mut out = Vec::new();
+    let boundary = ids
+        .sources
+        .as_ref()
+        .is_some_and(|sources| sources.inline_borders)
+        .then(|| ids.element(el));
+    if let Some(node_id) = boundary {
+        out.push(InlineItem::Boundary {
+            node_id,
+            style: el.style.clone(),
+            start: true,
+        });
+    }
     super::contents::visit(&el.children, &el.style, &mut |child, style| match classify(
         child, style, ids,
     ) {
@@ -592,6 +640,13 @@ fn flatten_inline(el: &StyledElement, ids: &mut Ids) -> Vec<InlineItem> {
         Some(Level::Block(b)) => out.push(InlineItem::Atomic(b)),
         None => {}
     });
+    if let Some(node_id) = boundary {
+        out.push(InlineItem::Boundary {
+            node_id,
+            style: el.style.clone(),
+            start: false,
+        });
+    }
     out
 }
 

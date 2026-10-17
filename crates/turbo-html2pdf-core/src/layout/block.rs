@@ -487,9 +487,11 @@ fn lines_to_fragments(
     cy: f32,
     out: &mut Vec<Fragment>,
     capture: &mut Option<crate::layout_snapshot::text::TextCapture>,
+    offsets: &HashMap<NodeId, (f32, f32)>,
 ) {
     for (line_index, line) in para.layout.lines.iter().enumerate() {
         for (run_index, gr) in line.runs.iter().enumerate() {
+            let (dx, dy) = offsets.get(&gr.node_id).copied().unwrap_or_default();
             let node_id = capture.as_mut().map_or(gr.node_id, |capture| {
                 capture.record(
                     gr.node_id,
@@ -505,8 +507,8 @@ fn lines_to_fragments(
             };
             out.push(Fragment::new(
                 node_id,
-                cx + line.indent,
-                cy + line.top,
+                cx + line.indent + dx,
+                cy + line.top + dy,
                 line.width,
                 line.height,
                 content,
@@ -572,7 +574,31 @@ fn layout_lines(
     cw: f32,
     ctx: &mut Ctx,
 ) -> (Vec<Fragment>, f32) {
-    let (pieces, atom_frags, directives) = build_inline_pieces(items, bs, cx, cy, cw, ctx);
+    let placement = super::inline_boxes::positions(items, bs.font_size, cw, ctx);
+    if let Some(empty) =
+        super::inline_boxes::empty_fragments(items, bs.font_size, (cx, cy), cw, &placement, ctx)
+    {
+        return (empty, 0.0);
+    }
+    layout_nonempty_lines(lb, items, bs, (cx, cy), cw, ctx, placement)
+}
+fn layout_nonempty_lines(
+    lb: &LayoutBox,
+    items: &[InlineItem],
+    bs: &BoxStyle,
+    origin: (f32, f32),
+    cw: f32,
+    ctx: &mut Ctx,
+    placement: super::inline_boxes::SourcePlacement,
+) -> (Vec<Fragment>, f32) {
+    let (cx, cy) = origin;
+    let (mut pieces, atom_frags, directives) = build_inline_pieces(items, bs, cx, cy, cw, ctx);
+    super::inline_boxes::native_atoms(
+        &mut pieces,
+        &atom_frags,
+        &placement.baselines,
+        ctx.html_font_metrics,
+    );
     let fonts = ctx.fonts;
     // Per-line float wrapping: each line's `(indent, width)` is the free inline
     // region the BFC's floats leave at that line's own y (absolute `cy + top`), so
@@ -610,6 +636,8 @@ fn layout_lines(
                 first_indent: text_indent,
                 clearance: &clearance,
                 original_units: ctx.original_units,
+                baselines: &placement.baselines,
+                strut_metrics: super::inline_boxes::strut(bs, ctx),
             },
         )
     } else if ctx.text_capture.is_some() {
@@ -635,13 +663,27 @@ fn layout_lines(
             font_boxes: Vec::new(),
         }
     };
+    let offsets = placement.offsets;
     let mut frags = Vec::new();
-    lines_to_fragments(&para, cx, cy, &mut frags, &mut ctx.text_capture);
+    frags.extend(super::inline_boxes::fragments(
+        &para.layout,
+        items,
+        bs.font_size,
+        (cx, cy),
+        cw,
+        ctx,
+        &offsets,
+    ));
+    lines_to_fragments(&para, cx, cy, &mut frags, &mut ctx.text_capture, &offsets);
     // Translate each pre-laid atom to where it landed within its line.
     for line in &para.layout.lines {
         for placed in &line.atoms {
             let mut f = atom_frags[placed.id].clone();
-            f.translate(cx + line.indent + placed.x, cy + line.top + placed.y);
+            let (dx, dy) = offsets.get(&f.node_id).copied().unwrap_or_default();
+            f.translate(
+                cx + line.indent + placed.x + dx,
+                cy + line.top + placed.y + dy,
+            );
             frags.push(f);
         }
     }
@@ -654,6 +696,20 @@ fn layout_lines(
 /// recursively and returned *separately* (keyed by its index in `atoms`, via the
 /// piece's id) so it can be re-placed once its line position is known; directives
 /// collapse to zero-size markers at the container origin.
+fn append_source_break(
+    node_id: NodeId,
+    style: &crate::ComputedStyle,
+    font: f32,
+    width: f32,
+    ctx: &Ctx,
+    pieces: &mut Vec<inline::Piece>,
+) {
+    if let Some(mut edge) = super::inline_boxes::edge(node_id, style, true, font, width, ctx) {
+        edge.advance = 0.0;
+        edge.contributes_metrics = false;
+        pieces.push(inline::Piece::SourceBreak(edge));
+    }
+}
 fn build_inline_pieces(
     items: &[InlineItem],
     bs: &BoxStyle,
@@ -671,6 +727,20 @@ fn build_inline_pieces(
                 if let Some(run) = text_run(item, bs.font_size, cw, ctx.fonts) {
                     pieces.push(inline::Piece::Run(run));
                 }
+            }
+            InlineItem::Boundary {
+                node_id,
+                style,
+                start,
+            } => {
+                if let Some(edge) =
+                    super::inline_boxes::edge(*node_id, style, *start, bs.font_size, cw, ctx)
+                {
+                    pieces.push(inline::Piece::Edge(edge));
+                }
+            }
+            InlineItem::SourceBreak { node_id, style } => {
+                append_source_break(*node_id, style, bs.font_size, cw, ctx, &mut pieces)
             }
             InlineItem::LineBreak => pieces.push(inline::Piece::Break),
             InlineItem::Atomic(b) => {
@@ -1008,7 +1078,7 @@ fn layout_in_flow_kid(
 /// The paint-time shift for a `relative`/`sticky` box: it flows normally (its
 /// space is reserved via the cursor) but is painted shifted by its insets. Any
 /// other positioning contributes no shift.
-fn flow_relative_offset(kbs: &BoxStyle, cw: f32) -> (f32, f32) {
+pub(super) fn flow_relative_offset(kbs: &BoxStyle, cw: f32) -> (f32, f32) {
     if matches!(kbs.position, Position::Relative | Position::Sticky) {
         relative_offset(kbs, cw)
     } else {
@@ -1758,6 +1828,7 @@ fn record_metrics(lb: &LayoutBox, bs: &BoxStyle, width: f32, height: f32, ctx: &
         metrics.insert(
             lb.node_id,
             UsedBoxMetrics {
+                inline_fragment: false,
                 border: bs.border.widths(),
                 padding: bs.padding,
                 margin: bs.margin,

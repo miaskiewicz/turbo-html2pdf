@@ -164,7 +164,10 @@ fn collect_inline_ids(
 ) {
     use turbo_html2pdf_core::layout::boxgen::InlineItem;
     match it {
-        InlineItem::Text { node_id, .. } | InlineItem::Directive { node_id, .. } => {
+        InlineItem::Text { node_id, .. }
+        | InlineItem::Directive { node_id, .. }
+        | InlineItem::SourceBreak { node_id, .. }
+        | InlineItem::Boundary { node_id, .. } => {
             out.insert(*node_id);
         }
         InlineItem::Atomic(b) => collect_box_ids(b, out),

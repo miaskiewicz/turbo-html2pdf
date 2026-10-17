@@ -119,7 +119,7 @@ control graphs avoid attributing font differences to box geometry.
 This seam exposes the real native engine; it does not turn its CSS subset into
 Blink. Remaining work before a complete browser geometry API includes:
 
-- Fragmented inline border boxes, collapsed-whitespace mapping, bidi/ligature
+- Broader collapsed-whitespace mapping, bidi/ligature
   caret positions and complete selection rectangles. The unreleased optional
   text path below retains actual original byte/UTF-16 cluster provenance; the
   published box-only path does not invent this information.
@@ -164,7 +164,7 @@ separately reviewed additive dependency/version checkpoint before using it.
 
 Source records expose actual `excluded_from_layout` provenance, including unmapped
 `display:none` ancestors. Zero fragments alone cannot distinguish exclusion from
-a visible empty/flattened inline, so embedders must not invent a zero rectangle
+a visible empty/flattened inline in the box-only path, so embedders must not invent a zero rectangle
 from fragment absence.
 
 
@@ -236,10 +236,11 @@ rectangle and transformed bounds for each selected line. Partial combining
 clusters retain their whole native cell; selecting collapsed spaces uses the
 measured gap between adjacent placed cells or a genuine zero-width line edge.
 `text_caret_offset_from_point(source, point)` chooses a real cluster edge after
-inverting an axis-aligned fragment transform. The embedding caller must first
+inverting a finite affine fragment transform. The embedding caller must first
 identify the visible text source through its actual DOM hit-test policy. This
 method does not choose a DOM node, invent internal ligature offsets or perform
-browser viewport clipping. Rotation, skew and degenerate caret transforms are
+browser viewport clipping. Rotation and skew are supported for finite invertible
+affine transforms; degenerate transforms remain
 explicitly unsupported. Missing/unplaced sources and invalid input have distinct
 `TextGeometryError` variants.
 
@@ -251,16 +252,50 @@ filters actual native runs before producing cells, avoiding unrelated glyph
 geometry allocations. On overlapping font boxes the earlier real line wins;
 between equally distant boxes the following line wins. Separate fallback runs
 on a chosen native line compete by their genuine edge distances. The public HTML
-text policy permits negative leading; generic/PDF and atomic-inline line policy
-remain unchanged. Offline contracts also cover invalid/missing/hidden sources,
+text policy permits negative leading; generic/PDF policy remains unchanged.
+Offline contracts also cover invalid/missing/hidden sources,
 nonfinite coordinates and unsupported caret transforms. The original emoji
 fallback graph remains recorded but is explicitly outside numerical certification.
 
 Full cross-node DOM Range assembly, hit-test selection, bidi/CJK itemization,
-fragmented inline borders, CSS whitespace modes/Unicode line breaking and complete
+broader inline formatting, CSS whitespace modes/Unicode line breaking and complete
 font-fallback behavior remain unfinished. The controlled-font comparisons do not
 certify installed fallback fonts, platform-specific hinted metrics or complete
 CSSOM View behavior.
+
+## Native inline boundaries and border fragments (unreleased)
+
+The native text-enabled HTML entry point preserves ordinary inline start/end
+boundaries before word breaking. Horizontal margins, borders and padding advance
+the real line pen. Per-line fragments retain the inline's own physical font box
+and first/last decoration slices; a transparent ancestor references actual child
+regions without painting the child's decorations a second time. Empty contexts
+retain placed zero rectangles and explicit collapsed-text provenance. Ordinary
+inline CSS transforms are ignored, as in Chrome; relative offsets move the own
+and descendant visual fragments without changing normal-flow advances.
+
+`UsedBoxMetrics.inline_fragment` identifies ordinary non-replaced inline geometry;
+an inline image or control retains its own client metrics. Native per-inline
+leading is quantized in physical LayoutUnits, parent struts participate in the
+line ascent/descent union, and nested super/sub shifts use the parent's physical
+font size. Shifted atomic children retain their own vertical-align policy.
+The existing generic/PDF boundary flattening and leading policies are unchanged.
+
+`tests/native_inline_borders.rs` compares 43 original-source graphs against fresh
+Chrome155 controls, including actual container heights and every border fragment.
+Every host exercises the same source graphs with source-role, ordinary/replaced
+metric and relative-offset invariants. Exact installed-font numerical comparison
+is certified on macOS; Linux glyph geometry remains unmeasured against this oracle.
+The saved `tests/fixtures/inline-borders/probe.js` is the independently executed
+probe; its SHA-256 is checked against the recorded control. Regenerate the browser
+control with turbo-surf's reusable `harness/detection/authored-dom-chrome.mjs`
+collector, using that probe and the `chrome155.json` output path.
+
+Native admission rejects ordinary inline top/bottom/middle alignment, block-child
+splitting, absolute/fixed/sticky positioning, RTL and vertical writing modes with
+specific `SnapshotError` variants. Atomic and inline-block top/bottom alignment
+remain available. These limits describe the supported native subset, rather than
+certifying the full CSS inline formatting model or complete browser layout.
 
 ## Original-scope matched declarations and unboxed elements (unreleased)
 

@@ -6,6 +6,16 @@ PyPI, and crates.io packages release in lockstep from a `v*` tag (PyPI on `pyv*`
 
 ## [0.3.8] — unreleased
 
+- Preserve native HTML inline boundaries through shaping and line breaking.
+  Capture own-font border fragments, sliced decorations, transparent ancestor
+  regions, replaced-element metrics, relative offsets and original text ranges.
+  Resolve per-inline physical leading, parent struts and nested super/sub shifts
+  for text and atomic children without changing the ordinary PDF layout policy.
+  Forty-three source graphs match independently recorded Chrome155 border boxes
+  and container heights, including empty inlines, forced breaks, whitespace,
+  nested fonts and top/bottom aligned atomic children. Reject unsupported inline
+  block splitting, positioning, alignment and writing modes before capture.
+
 - Add an explicit native HTML system-font loader that admits genuine platform-only
   family records before choosing generic aliases. Resolve macOS Menlo as the
   native monospace primary while preserving ordinary PDF font loading and caller
@@ -27,7 +37,7 @@ PyPI, and crates.io packages release in lockstep from a `v*` tag (PyPI on `pyv*`
   fractional intrinsic widths in native HTML layout instead of applying PDF
   whitespace/whole-pixel rounding. Pass explicit native grid widths to the grid
   sizing algorithm. Scoped cascade and text/source contracts are offline.
-  This does not complete decorated inline, SVG or general browser layout parity.
+  This does not complete SVG or general browser layout parity.
 
 ## [0.3.7] — 2026-10-15
 

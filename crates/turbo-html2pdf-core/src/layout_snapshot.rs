@@ -90,6 +90,14 @@ pub enum SnapshotError {
     OriginalTextBudget,
     #[error("fixed descendants of transformed ancestors require an unsupported containing block")]
     UnsupportedFixedContainingBlock,
+    #[error("native block-in-inline splitting is unsupported")]
+    UnsupportedInlineBlockSplit,
+    #[error("native ordinary inline top/bottom/middle alignment is unsupported")]
+    UnsupportedInlineAlignment,
+    #[error("native ordinary inline vertical/RTL writing is unsupported")]
+    UnsupportedInlineWriting,
+    #[error("native ordinary inline absolute/fixed/sticky positioning is unsupported")]
+    UnsupportedInlinePosition,
     #[error("source ID {0:?} is assigned more than once")]
     DuplicateId(SourceId),
     #[error("source path {0:?} is assigned more than once")]
@@ -155,6 +163,7 @@ pub struct LayoutSnapshot {
     text_runs: Vec<SnapshotTextRun>,
     text_sources: Vec<SnapshotTextSource>,
     original_text_units: BTreeMap<SourceId, std::sync::Arc<[u16]>>,
+    collapsed_text_sources: std::collections::BTreeSet<SourceId>,
     html_layout_scale: Option<f32>,
     unsupported_svg_sources: std::collections::BTreeSet<SourceId>,
 }
@@ -464,6 +473,16 @@ fn capture_styled(
     )
 }
 
+fn validate_native_context(
+    styled: &[StyledNode],
+    html_text_metrics: Option<bool>,
+) -> Result<(), SnapshotError> {
+    fixed_containing::validate(styled, false)?;
+    if html_text_metrics == Some(true) {
+        crate::layout::inline_boxes::validate(styled, false)?;
+    }
+    Ok(())
+}
 fn capture_styled_with_plan(
     styled: &[StyledNode],
     identities: &[SourceIdentity],
@@ -475,9 +494,10 @@ fn capture_styled_with_plan(
 ) -> Result<(LayoutSnapshot, bool), SnapshotError> {
     validate_viewport(inputs)?;
     crate::style::set_layout_viewport(inputs.width, inputs.height);
-    fixed_containing::validate(styled, false)?;
+    validate_native_context(styled, html_text_metrics)?;
     let (mut build_sources, mut sources) =
         sources::prepare(styled, identities, html_text_metrics.is_some())?;
+    build_sources.inline_borders = html_text_metrics == Some(true);
     let (font_layout_scale, unsupported_svg_sources) = apply_native_plan(&mut build_sources, plan);
     let text_sources = std::mem::take(&mut build_sources.text_sources);
     let original_text_units = text_units::prepare(&text_sources, original_text)?;
@@ -496,6 +516,12 @@ fn capture_styled_with_plan(
         },
     );
     text::alias_sources(text.as_ref(), &mut records);
+    let collapsed_text_sources = text
+        .as_ref()
+        .into_iter()
+        .flat_map(|capture| capture.collapsed_sources.iter())
+        .filter_map(|node| records.get(node).and_then(|record| record.id))
+        .collect();
     let (fragments, native_transforms, native_hit_transforms) =
         geometry::collect(&galley, &records, &metrics, &transforms, font_layout_scale);
     let source_index = sources.iter().enumerate().map(|(i, s)| (s.id, i)).collect();
@@ -514,6 +540,7 @@ fn capture_styled_with_plan(
             text_runs,
             text_sources,
             original_text_units,
+            collapsed_text_sources,
             html_layout_scale: font_layout_scale,
             unsupported_svg_sources,
         },

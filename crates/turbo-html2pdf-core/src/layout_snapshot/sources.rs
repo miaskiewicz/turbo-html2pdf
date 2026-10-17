@@ -18,6 +18,7 @@ pub(crate) struct BuildSources {
     nodes: HashMap<usize, SourceRecord>,
     pub(crate) svg_viewports: std::collections::HashSet<usize>,
     pub(crate) svg_layout_scale: f32,
+    pub(crate) inline_borders: bool,
     pub(crate) records: HashMap<NodeId, SourceRecord>,
     pub(crate) text_sources: Vec<SnapshotTextSource>,
 }
@@ -50,6 +51,7 @@ pub(crate) fn prepare(
             nodes: walker.nodes,
             svg_viewports: std::collections::HashSet::new(),
             svg_layout_scale: 1.0,
+            inline_borders: false,
             records: HashMap::new(),
             text_sources: walker.text_sources,
         },

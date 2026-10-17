@@ -31,6 +31,9 @@ pub(crate) fn ranges(
 ) -> Result<Vec<SourceRangeBox>, TextGeometryError> {
     let text = source_text(snapshot, id, start, end)?;
     let cells = source_cells(snapshot, id);
+    if snapshot.collapsed_text_sources.contains(&id) {
+        return Ok(Vec::new());
+    }
     validate_source_coverage(&cells, &text, start, end)?;
     let mut boxes = selected_boxes(&cells, start, end);
     append_placed_gaps(&mut boxes, &cells, &text, start, end);
@@ -96,8 +99,12 @@ fn require_collapsible(text: &[u16]) -> Result<(), TextGeometryError> {
 
 fn selected_boxes(cells: &[SourceClusterBox], start: usize, end: usize) -> Vec<SourceRangeBox> {
     let selected = selected_cells(cells, start, end);
+    let has_advance = selected.iter().any(|cell| cell.rect.width > 0.0);
     let mut boxes = Vec::new();
-    for cell in selected {
+    for cell in selected
+        .into_iter()
+        .filter(|cell| !has_advance || cell.rect.width > 0.0)
+    {
         append_box(&mut boxes, cell.fragment_index, cell.rect);
     }
     boxes

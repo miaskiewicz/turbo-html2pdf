@@ -57,4 +57,13 @@ composed transforms. It preserves hidden layout boxes and sizes replaced images
 without PDF page caps. PDF filtering, page-fit and legacy layout policies are preserved; shared CSS
 cascade fixes also improve valid PDF output. See
 [the snapshot contract and current geometry boundaries](../../docs/live-layout-snapshot.md);
-text-line provenance does not imply implemented Range, caret, or scroll metrics.
+native text-source range/caret queries do not implement DOM Range assembly,
+browser hit testing or scroll metrics for the embedding application.
+
+The native text-enabled HTML path retains ordinary inline boundaries and real
+per-line border fragments, including sliced decorations, empty inlines, nested
+font metrics, relative positioning and super/sub atomic children. Its explicit
+`UsedBoxMetrics.inline_fragment` flag distinguishes these from inline replaced
+elements. Unsupported block-in-inline splitting, ordinary-inline top/bottom/middle
+alignment, out-of-flow positioning and non-horizontal/LTR writing return typed
+snapshot errors. The generic and PDF paths retain their existing layout policy.
