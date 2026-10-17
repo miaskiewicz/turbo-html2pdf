@@ -10,7 +10,8 @@ PyPI, and crates.io packages release in lockstep from a `v*` tag (PyPI on `pyv*`
   object dimensions, author attributes, CSS sizing, aspect ratio and box model.
   Preserve definite zero containing-block heights and normal-flow percentage
   sizing on relatively positioned replacements. Accept finite zero native HTML
-  viewports while preserving positive-only PDF snapshot admission. Twenty
+  viewports, including genuine zero-width regions under explicit HTML/body roots,
+  while preserving positive-only PDF snapshot admission and its legacy width floor. Twenty
   independent Chrome controls cover defaults, invalid attributes, zero axes,
   percentage bases, padded positioned containing blocks, excluded iframe fallback
   sources and standards-mode zero-viewport descendants. Reject negative

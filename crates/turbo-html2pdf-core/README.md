@@ -70,7 +70,8 @@ snapshot errors. The generic and PDF paths retain their existing layout policy.
 
 Native HTML iframe replacements use the CSS 300×150 default object size when
 attributes and CSS do not provide dimensions. Valid zero-width/height viewports
-retain fixed-size descendants, viewport units and definite-zero percentage bases;
+retain fixed-size descendants, viewport units and definite-zero percentage bases,
+including zero-width bodies under real HTML document roots;
 normal-flow relative positioning does not substitute the absolute containing block.
 Iframe fallback descendants retain source identities and text while being excluded
 from the parent layout. Embedders use that explicit exclusion to return empty DOM Range geometry.

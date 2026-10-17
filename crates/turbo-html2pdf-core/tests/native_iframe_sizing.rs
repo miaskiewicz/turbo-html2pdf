@@ -191,22 +191,31 @@ fn native_zero_viewport_retains_fixed_descendant_and_viewport_unit_geometry() {
         }],
         children: parse_html(case["childHtml"].as_str().unwrap()).unwrap(),
     });
-    let (snapshot, names) = capture_nodes(vec![body], [0.0, 0.0]);
-    for name in ["fixed", "units", "nested", "percentage"] {
-        let source = snapshot.source(names[name]).unwrap();
+    let html = Node::Element(Element {
+        tag: Tag::Html("html".into()),
+        attrs: vec![],
+        children: vec![body.clone()],
+    });
+    for nodes in [vec![body], vec![html]] {
+        let (snapshot, names) = capture_nodes(nodes, [0.0, 0.0]);
+        for name in ["fixed", "units", "nested", "percentage"] {
+            let source = snapshot.source(names[name]).unwrap();
+            let actual = rect(snapshot.fragments()[source.fragment_indices[0]].rect);
+            let expected: [f64; 4] =
+                serde_json::from_value(case["children"][name].clone()).unwrap();
+            assert_eq!(actual[2..], expected[2..], "{name}");
+            #[cfg(target_os = "macos")]
+            assert_eq!(actual, expected, "{name}");
+        }
+        let source = snapshot.source(names["body"]).unwrap();
         let actual = rect(snapshot.fragments()[source.fragment_indices[0]].rect);
-        let expected: [f64; 4] = serde_json::from_value(case["children"][name].clone()).unwrap();
-        assert_eq!(actual[2..], expected[2..], "{name}");
         #[cfg(target_os = "macos")]
-        assert_eq!(actual, expected, "{name}");
+        let expected: [f64; 4] = serde_json::from_value(case["body"].clone()).unwrap();
+        #[cfg(target_os = "macos")]
+        assert_eq!(actual, expected);
+        assert_eq!(actual[2], 0.0);
+        assert!(actual[3].is_finite() && actual[3] >= 30.0);
     }
-    let source = snapshot.source(names["body"]).unwrap();
-    let actual = rect(snapshot.fragments()[source.fragment_indices[0]].rect);
-    let expected: [f64; 4] = serde_json::from_value(case["body"].clone()).unwrap();
-    #[cfg(target_os = "macos")]
-    assert_eq!(actual, expected);
-    assert_eq!(actual[2], 0.0);
-    assert!(actual[3].is_finite() && actual[3] >= 30.0);
 }
 
 #[test]

@@ -630,12 +630,12 @@ fn layout_nonempty_lines(
         .unwrap_or(0.0);
     let text_indent = super::value::html_used_value(text_indent, ctx.html_font_scale);
     let region = |top: f32| {
-        let (rx, rw) = inline_region_from(&floats, cx, cw, cy + top);
+        let (rx, rw) = inline_region_from(&floats, cx, cw, cy + top, 1.0);
         let indent = if top == 0.0 { text_indent } else { 0.0 };
         (rx - cx + indent, rw - indent)
     };
     let native_region = |top: f32| {
-        let (rx, rw) = inline_region_from(&floats, cx, cw, cy + top);
+        let (rx, rw) = inline_region_from(&floats, cx, cw, cy + top, 0.0);
         (rx - cx, rw)
     };
     let clearance = |top, needed| inline_clearance(&floats, (cx, cy, cw), top, needed);
@@ -1184,12 +1184,19 @@ fn establishes_bfc(lb: &LayoutBox, bs: &BoxStyle) -> bool {
 /// The free inline region `(x, width)` at vertical position `y` within the
 /// content box `[cx, cx+cw]`, narrowed by every float in the current BFC whose
 /// vertical span contains `y` (left floats push the start right, right floats
-/// pull the end left). Width floors at 1px so a fully-covered row still lays out.
+/// pull the end left). Native CSS keeps valid zero widths; PDF retains its
+/// positive floor for a fully-covered row.
 fn inline_region(ctx: &Ctx, cx: f32, cw: f32, y: f32) -> (f32, f32) {
-    inline_region_from(&ctx.floats, cx, cw, y)
+    inline_region_from(
+        &ctx.floats,
+        cx,
+        cw,
+        y,
+        if ctx.html_font_metrics { 0.0 } else { 1.0 },
+    )
 }
 
-fn inline_region_from(floats: &[FloatRect], cx: f32, cw: f32, y: f32) -> (f32, f32) {
+fn inline_region_from(floats: &[FloatRect], cx: f32, cw: f32, y: f32, minimum: f32) -> (f32, f32) {
     let mut left = cx;
     let mut right = cx + cw;
     for f in floats {
@@ -1198,14 +1205,14 @@ fn inline_region_from(floats: &[FloatRect], cx: f32, cw: f32, y: f32) -> (f32, f
         }
         narrow_region(f, &mut left, &mut right);
     }
-    (left, (right - left).max(1.0))
+    (left, (right - left).max(minimum))
 }
 
 fn inline_clearance(floats: &[FloatRect], region: (f32, f32, f32), top: f32, needed: f32) -> f32 {
     let (cx, cy, cw) = region;
     let mut y = cy + top;
     for _ in floats {
-        if inline_region_from(floats, cx, cw, y).1 >= needed {
+        if inline_region_from(floats, cx, cw, y, 0.0).1 >= needed {
             break;
         }
         let Some(bottom) = next_float_bottom(floats, y) else {
