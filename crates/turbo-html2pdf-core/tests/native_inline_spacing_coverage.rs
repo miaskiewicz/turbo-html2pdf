@@ -679,3 +679,118 @@ fn rendered_collapsible_space_keeps_its_real_caret_edges_and_provenance() {
         );
     }
 }
+
+fn generic_range_rects(
+    snapshot: &LayoutSnapshot,
+    source: SourceId,
+    start: usize,
+    end: usize,
+) -> Vec<Rect> {
+    snapshot
+        .text_range_boxes(source, start, end)
+        .unwrap()
+        .iter()
+        .map(|item| item.rect)
+        .collect()
+}
+fn assert_generic_whitespace_ranges(width: usize) {
+    let (snapshot, ids) = capture_html(&host_html("a  b", "caption", width), false);
+    let source = ids.text["caption"];
+    let cells = snapshot.text_cluster_boxes_for_source(source);
+    assert_eq!(
+        cells
+            .iter()
+            .map(|cell| (cell.utf16_start, cell.utf16_end))
+            .collect::<Vec<_>>(),
+        vec![(0, 1), (3, 4)]
+    );
+    assert_eq!(
+        snapshot
+            .text_sources()
+            .iter()
+            .find(|item| item.source_id == source)
+            .unwrap()
+            .text,
+        "a  b"
+    );
+    let glyphs = snapshot
+        .text_runs()
+        .iter()
+        .filter(|run| run.source_id == Some(source))
+        .flat_map(|run| &run.glyphs)
+        .collect::<Vec<_>>();
+    assert_eq!(
+        glyphs.len(),
+        2,
+        "Generic/PDF whitespace gaps do not become synthetic glyphs"
+    );
+    let face = fonts().select(&["IBM Plex Mono"], 400, false).unwrap();
+    for (glyph, letter) in glyphs.iter().zip(["a", "b"]) {
+        assert!(!glyph.source.collapsed_whitespace);
+        assert_eq!(glyph.source.advance, face.measure(letter, 16.0, 0.0));
+    }
+    let before = cells[0].rect;
+    let after = cells[1].rect;
+    let before_edge = Rect {
+        x: before.x + before.width,
+        width: 0.0,
+        ..before
+    };
+    let after_edge = Rect {
+        width: 0.0,
+        ..after
+    };
+    let (separator, extra, internal, complete) = if width == 1000 {
+        assert_eq!(cells[0].fragment_index, cells[1].fragment_index);
+        assert_eq!(before.y, after.y);
+        let gap = Rect {
+            width: after.x - before_edge.x,
+            ..before_edge
+        };
+        assert!(gap.width > 0.0);
+        let complete = Rect {
+            width: after.x + after.width - before.x,
+            ..before
+        };
+        (
+            vec![gap],
+            vec![after_edge],
+            vec![after_edge],
+            vec![complete],
+        )
+    } else {
+        assert_ne!(cells[0].fragment_index, cells[1].fragment_index);
+        assert!(after.y > before.y);
+        (
+            vec![before_edge, after_edge],
+            vec![before_edge, after_edge],
+            vec![before_edge],
+            vec![before, after],
+        )
+    };
+    for (start, end, expected) in [
+        (1, 2, separator),
+        (2, 3, extra),
+        (2, 2, internal),
+        (1, 1, vec![before_edge]),
+        (3, 3, vec![after_edge]),
+        (0, 4, complete),
+    ] {
+        assert_eq!(
+            generic_range_rects(&snapshot, source, start, end),
+            expected,
+            "Generic/PDF width{width} source[{start},{end}]"
+        );
+    }
+    assert_eq!(
+        snapshot.text_cluster_boxes_for_source(source),
+        cells,
+        "Range inference does not manufacture source cells"
+    );
+}
+#[test]
+fn generic_pdf_whitespace_ranges_keep_raw_placed_gaps_without_native_source_cells() {
+    for width in [1000, 14] {
+        assert_generic_whitespace_ranges(width);
+    }
+}

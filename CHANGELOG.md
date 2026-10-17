@@ -6,6 +6,11 @@ PyPI, and crates.io packages release in lockstep from a `v*` tag (PyPI on `pyv*`
 
 ## [0.3.8] — unreleased
 
+- Cover the unchanged generic/PDF source-range compatibility path with actual
+  raw placed gaps, extra collapsed separators, caret boundaries and soft wraps.
+  These public API controls preserve the separate legacy source policy while
+  native snapshots retain their complete whitespace cells.
+
 - Preserve native leading whitespace inside its actual inline owner after images
   and inline blocks. Keep the rendered first space and subsequent collapsed
   UTF-16 positions, including direct text, decorated/nested spans and prefixes
