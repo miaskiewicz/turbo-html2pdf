@@ -80,9 +80,18 @@ is not substituted for that control. Generic and PDF paths retain raw advances.
 Leading spaces after inline atoms remain inside their real text/inline owner.
 The first rendered space retains its raw advance; extra collapsed source cells
 follow that advance, and wrapping relocates a collapsed opening prefix to the
-text's new line. The fifteen `tests/fixtures/native-leading-spaces` observations
-cover direct text, nested/decorated spans, paragraph starts and forced breaks.
+text's new line. The nineteen `tests/fixtures/native-leading-spaces` observations
+cover direct text, nested/decorated spans, paragraph starts, forced breaks and
+ordinary bare-text separators. At soft wraps, a separator-only Range retains
+both real line affinities; positive selections keep their nonempty fragments.
 These source-mapping rules apply only to native HTML, preserving PDF whitespace.
+
+`GlyphSourceCluster` and `SourceClusterBox` expose `collapsed_whitespace`
+provenance. The rendered first collapsed space can still have positive advance;
+native caret canonicalization follows only a zero-space source suffix ending at
+an actual same-line glyph edge. Preformatted glyph spaces keep ordinary provenance.
+These unreleased candidate structs gain a field: callers constructing them with
+Rust struct literals must initialize the new flag (false for ordinary glyphs).
 
 Native text Range and block/replaced Element quads preserve each flat transform
 boundary and subsequent float ancestor offsets. Ordinary inline Element quads

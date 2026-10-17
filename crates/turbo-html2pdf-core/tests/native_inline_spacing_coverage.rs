@@ -140,7 +140,7 @@ fn control() -> Value {
     );
     assert_eq!(
         value["collectorSha256"],
-        "4cdc72f9eddd868bf1285b474b0e054030e177af53880541f4637732a6358687"
+        "e19bd2cc77b0db528c93613e9c5f50e6cc94396d72326261c82f002c73c0ce41"
     );
     assert_eq!(
         value["socketHelperSha256"],
@@ -152,7 +152,7 @@ fn control() -> Value {
     );
     assert_eq!(value["result"].as_array().unwrap().len(), 1);
     let row = &value["result"][0];
-    assert_eq!(row["geometry"]["cases"].as_array().unwrap().len(), 15);
+    assert_eq!(row["geometry"]["cases"].as_array().unwrap().len(), 19);
     assert!(row["platformFonts"]
         .as_array()
         .unwrap()
@@ -406,9 +406,14 @@ fn compare_case(case: &Value, errors: &mut Vec<String>) {
 fn leading_collapsible_space_after_images_and_inline_blocks_keeps_native_sources() {
     let oracle = control();
     let mut errors = Vec::new();
+    let mut count = 0;
     for case in oracle["result"][0]["geometry"]["cases"].as_array().unwrap() {
-        compare_case(case, &mut errors);
+        if case["mode"] != "ordinary" {
+            compare_case(case, &mut errors);
+            count += 1;
+        }
     }
+    assert_eq!(count, 15);
     assert!(errors.is_empty(), "{}", errors.join("\n"));
 }
 #[test]
@@ -517,5 +522,160 @@ fn box_rect(snapshot: &LayoutSnapshot, id: SourceId, transformed: bool) -> Rect 
         fragment.transformed_bounds
     } else {
         fragment.rect
+    }
+}
+
+fn compare_ordinary_source(
+    snapshot: &LayoutSnapshot,
+    source: SourceId,
+    case: &Value,
+    errors: &mut Vec<String>,
+) {
+    let text = case["text"].as_str().unwrap();
+    let glyphs = snapshot
+        .text_runs()
+        .iter()
+        .filter(|run| run.source_id == Some(source))
+        .flat_map(|run| &run.glyphs)
+        .collect::<Vec<_>>();
+    compare(
+        glyphs
+            .iter()
+            .map(|glyph| (glyph.source.utf16_start, glyph.source.utf16_end))
+            .collect::<Vec<_>>(),
+        (0..text.len())
+            .map(|offset| (offset, offset + 1))
+            .collect::<Vec<_>>(),
+        "ordinary complete original UTF16 cells",
+        errors,
+    );
+    for glyph in glyphs
+        .iter()
+        .filter(|glyph| glyph.source.utf16_start >= 3 && glyph.source.utf16_start < text.len() - 3)
+    {
+        let visible = case["width"] == 1000 && glyph.source.utf16_start == 3;
+        compare(
+            glyph.source.advance,
+            if visible { 9.599_991_f32 } else { 0.0 },
+            "ordinary visible/collapsed source advance",
+            errors,
+        );
+    }
+}
+fn compare_ordinary_case(case: &Value, errors: &mut Vec<String>) {
+    let text = case["text"].as_str().unwrap();
+    let width = case["width"].as_u64().unwrap() as usize;
+    let label = format!("ordinary/{text:?}/{width}");
+    let (snapshot, ids) = capture_html(&host_html(text, "caption", width), true);
+    compare(
+        actual(box_rect(&snapshot, ids.elements["caption"], false)),
+        expected(&case["host"]),
+        &format!("{label}/host"),
+        errors,
+    );
+    let source = ids.text["caption"];
+    compare_ordinary_source(&snapshot, source, case, errors);
+    for key in [
+        "firstWordRange",
+        "secondWordRange",
+        "fullRange",
+        "spacesRange",
+    ] {
+        compare_range(
+            &snapshot,
+            source,
+            &case[key],
+            &format!("{label}/{key}"),
+            errors,
+        );
+    }
+    for value in case["prefixRanges"].as_array().unwrap() {
+        compare_range(
+            &snapshot,
+            source,
+            value,
+            &format!("{label}/prefix[{},{}]", value["start"], value["end"]),
+            errors,
+        );
+    }
+    for value in case["individualRanges"].as_array().unwrap() {
+        compare_range(
+            &snapshot,
+            source,
+            value,
+            &format!("{label}/individual[{},{}]", value["start"], value["end"]),
+            errors,
+        );
+    }
+}
+#[test]
+fn ordinary_wrapping_keeps_trailing_whitespace_with_its_previous_word() {
+    let oracle = control();
+    let mut errors = Vec::new();
+    let mut count = 0;
+    for case in oracle["result"][0]["geometry"]["cases"].as_array().unwrap() {
+        if case["mode"] == "ordinary" {
+            compare_ordinary_case(case, &mut errors);
+            count += 1;
+        }
+    }
+    assert_eq!(count, 4);
+    assert!(errors.is_empty(), "{}", errors.join("\n"));
+}
+
+#[test]
+fn rendered_collapsible_space_keeps_its_real_caret_edges_and_provenance() {
+    use turbo_html2pdf_core::layout_snapshot::Point;
+    let (snapshot, ids) = capture(
+        "<span style='display:inline-block;width:10px;height:10px'></span>",
+        "  abc",
+        true,
+    );
+    let source = ids.text["caption"];
+    let cells = snapshot.text_cluster_boxes_for_source(source);
+    let first = cells.iter().find(|cell| cell.utf16_start == 0).unwrap();
+    let second = cells.iter().find(|cell| cell.utf16_start == 1).unwrap();
+    let letter = cells.iter().find(|cell| cell.utf16_start == 2).unwrap();
+    assert!(first.collapsed_whitespace);
+    assert!(first.rect.width > 0.0);
+    let glyph = snapshot
+        .text_runs()
+        .iter()
+        .filter(|run| run.source_id == Some(source))
+        .flat_map(|run| &run.glyphs)
+        .find(|glyph| glyph.source.utf16_start == 0)
+        .unwrap();
+    assert!(glyph.source.collapsed_whitespace);
+    assert!(glyph.source.advance > 0.0);
+    assert!(second.collapsed_whitespace);
+    assert_eq!(second.rect.width, 0.0);
+    assert_eq!(second.rect.x, letter.rect.x);
+    for (fraction, expected) in [(0.25, 0), (0.75, 2)] {
+        let point = Point {
+            x: first.rect.x + first.rect.width * fraction,
+            y: first.rect.y + first.rect.height / 2.0,
+        };
+        assert_eq!(
+            snapshot
+                .text_caret_offset_from_point(source, point)
+                .unwrap(),
+            expected
+        );
+    }
+    for whitespace in ["pre", "nowrap"] {
+        let html = host_html(
+            &format!("<span id=caption style='white-space:{whitespace}'>a b</span>"),
+            "host",
+            1000,
+        );
+        let (retained, ids) = capture_html(&html, true);
+        let cells = retained.text_cluster_boxes_for_source(ids.text["caption"]);
+        let space = cells.iter().find(|cell| cell.utf16_start == 1).unwrap();
+        assert_eq!(space.utf16_end, 2);
+        assert!(space.rect.width > 0.0);
+        assert!(
+            !space.collapsed_whitespace,
+            "{whitespace} retains a genuine glyph space"
+        );
     }
 }

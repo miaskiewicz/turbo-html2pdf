@@ -14,7 +14,51 @@
     { atom: "image", prefix: " ", mode: "direct-wrapped" },
     { atom: "inline-block", prefix: " ", mode: "direct-wrapped" },
   );
+  for (const text of ["abc def", "abc  def"])
+    for (const width of [1000, 45])
+      definitions.push({ atom: "none", mode: "ordinary", text, width });
+  const ordinaryCase = ({ text, width, mode, atom }) => {
+    document.body.innerHTML = "";
+    document.body.style.cssText = "margin:0";
+    const host = document.createElement("div");
+    host.id = "a";
+    host.style.cssText = `width:${width}px;font-family:${JSON.stringify(family)};font-size:16px;line-height:24px`;
+    host.textContent = text;
+    document.body.append(host);
+    const node = host.firstChild;
+    const range = (start, end) => {
+      const r = document.createRange();
+      r.setStart(node, start);
+      r.setEnd(node, end);
+      return {
+        start,
+        end,
+        rect: rect(r.getBoundingClientRect()),
+        rects: Array.from(r.getClientRects(), rect),
+      };
+    };
+    const second = text.length - 3;
+    const intervals = [];
+    for (let offset = 3; offset <= second; offset++) {
+      if (offset < second) intervals.push([offset, offset + 1]);
+      intervals.push([offset, offset]);
+    }
+    return {
+      atom,
+      mode,
+      text,
+      width,
+      host: rect(host.getBoundingClientRect()),
+      firstWordRange: range(0, 3),
+      secondWordRange: range(second, text.length),
+      fullRange: range(0, text.length),
+      spacesRange: range(3, second),
+      prefixRanges: Array.from({ length: second - 2 }, (_, index) => range(0, index + 3)),
+      individualRanges: intervals.map(([a, b]) => range(a, b)),
+    };
+  };
   const cases = definitions.map((definition) => {
+    if (definition.mode === "ordinary") return ordinaryCase(definition);
     const { atom, prefix, mode } = definition;
     const direct = mode === "direct" || mode === "direct-wrapped";
     document.body.innerHTML = "";

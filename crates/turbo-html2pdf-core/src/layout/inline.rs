@@ -169,6 +169,9 @@ pub struct GlyphSourceCluster {
     pub advance: f32,
     /// The direction selected by the actual native shaper for this segment.
     pub right_to_left: bool,
+    /// True for source cells created by CSS whitespace collapse, including the
+    /// first rendered space. Pre/nowrap glyph spaces retain ordinary provenance.
+    pub collapsed_whitespace: bool,
 }
 
 /// Native output and parallel per-line, per-run, per-glyph source records.
@@ -574,13 +577,21 @@ fn build_words(
         }
         let space_after = chars.get(i).map_or(0.0, |c| space_width(c, runs));
         let mut word = make_word(&chars[start..i], runs, space_after);
-        word.advance_space = chars
-            .get(i)
-            .filter(|_| native_advances)
-            .map(|space| make_seg(std::slice::from_ref(space), runs));
+        word.spaces = native_word_spaces(&chars[i..], runs, native_advances);
         words.push(word);
     }
     words
+}
+
+fn native_word_spaces(chars: &[CharInfo], runs: &[InlineRun], enabled: bool) -> Vec<Seg> {
+    if !enabled {
+        return Vec::new();
+    }
+    chars
+        .iter()
+        .take_while(|c| collapsible_space(c.ch, true) && !runs[c.run].nowrap)
+        .map(|c| make_seg(std::slice::from_ref(c), runs))
+        .collect()
 }
 
 #[derive(Clone, Copy)]
@@ -944,6 +955,26 @@ fn atom_source_prefix(previous: &Word, next: &Word) -> bool {
             .native_space
             .is_some_and(|(source, _)| next.segs.first().is_some_and(|seg| seg.node_id == source))
 }
+fn wrapped_source_spaces(previous: &mut Word, next: &Word) -> Vec<Seg> {
+    if opening_space_only(previous) || atom_source_prefix(previous, next) {
+        return std::mem::take(&mut previous.spaces);
+    }
+    if wrapped_extra_spaces(previous, next) {
+        // The first separator retains the preceding line's end affinity; extra
+        // collapsed units map to the next line's start, retaining their source IDs.
+        return previous.spaces.split_off(1);
+    }
+    Vec::new()
+}
+fn wrapped_extra_spaces(previous: &Word, next: &Word) -> bool {
+    previous.spaces.len() > 1
+        && !previous.segs.is_empty()
+        && previous
+            .spaces
+            .first()
+            .zip(next.segs.first())
+            .is_some_and(|(space, next)| space.node_id == next.node_id)
+}
 /// Running state of line breaking: the accumulated `cur` words, the current line
 /// `y`, the float region `(indent, lw)` at that y, and the pen `x`. Threads `y`
 /// top-down so each line's available width is queried from `region` at its own
@@ -1073,16 +1104,11 @@ impl<'a> Placer<'a> {
         if self.html_font_scale.is_none() {
             return Vec::new();
         }
-        let Some(last) = self
+        let last = self
             .cur
             .last_mut()
-            .filter(|word| opening_space_only(word) || atom_source_prefix(word, next))
-        else {
-            return Vec::new();
-        };
-        // The atom/opening boundary remains on the old line; a collapsed prefix
-        // of the next text source belongs to that text's new line.
-        std::mem::take(&mut last.spaces)
+            .expect("wrapping requires existing line content");
+        wrapped_source_spaces(last, next)
     }
 
     fn attach_trailing_close(&mut self, word: &Word) -> bool {
@@ -1488,6 +1514,7 @@ fn shape_seg(seg: &Seg, pen_x: f32, baseline: f32, policy: (bool, bool, Option<f
                 .1
             };
             clusters.push(GlyphSourceCluster {
+                collapsed_whitespace: false,
                 right_to_left,
                 byte_start: seg.source_bytes + start,
                 byte_end: seg.source_bytes + end,
@@ -1715,6 +1742,7 @@ fn shape_space(
     let mut run = shape_seg(space, pen, baseline, policy);
     for glyph in &mut run.clusters {
         glyph.advance = advance;
+        glyph.collapsed_whitespace = true;
     }
     run
 }

@@ -20,6 +20,7 @@ mod range_projection;
 pub(crate) mod sources;
 mod svg_viewports;
 pub(crate) mod text;
+mod text_caret_edges;
 mod text_carets;
 mod text_finite;
 mod text_geometry;

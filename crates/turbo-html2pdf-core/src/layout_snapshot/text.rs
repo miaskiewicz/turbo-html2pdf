@@ -139,6 +139,7 @@ mod tests {
     use super::*;
     fn cluster() -> GlyphSourceCluster {
         GlyphSourceCluster {
+            collapsed_whitespace: false,
             right_to_left: false,
             byte_start: 0,
             byte_end: 1,
