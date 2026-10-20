@@ -6,6 +6,16 @@ PyPI, and crates.io packages release in lockstep from a `v*` tag (PyPI on `pyv*`
 
 ## [0.3.8] — unreleased
 
+- Split ordinary native inline content around in-flow blocks, including result
+  links containing headings. Preserve zero-height continuations, nested source
+  ownership, first/last decoration slices and collapsed block margins, so an
+  unrelated following control can still be measured. Inline owners reference
+  the real lifted block fragment without duplicating paint or DOM identities.
+  Admit auto inline-block widths to the native physical LayoutUnit grid.
+  Six fresh Chrome 155.0.8059.85 graphs cover exact client rectangles and
+  neighboring control geometry; generic/PDF layout policy stays unchanged.
+  Positioned/floating split contexts remain explicit unsupported errors.
+
 - Cover the unchanged generic/PDF source-range compatibility path with actual
   raw placed gaps, extra collapsed separators, caret boundaries and soft wraps.
   These public API controls preserve the separate legacy source policy while

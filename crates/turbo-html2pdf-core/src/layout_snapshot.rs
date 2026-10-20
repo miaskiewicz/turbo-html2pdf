@@ -94,7 +94,7 @@ pub enum SnapshotError {
     OriginalTextBudget,
     #[error("fixed descendants of transformed ancestors require an unsupported containing block")]
     UnsupportedFixedContainingBlock,
-    #[error("native block-in-inline splitting is unsupported")]
+    #[error("native positioned/floating block-in-inline splitting is unsupported")]
     UnsupportedInlineBlockSplit,
     #[error("native ordinary inline top/bottom/middle alignment is unsupported")]
     UnsupportedInlineAlignment,
@@ -152,6 +152,8 @@ pub struct SnapshotSource {
     /// flattened/empty inline also has no box fragments, so absence alone cannot
     /// justify manufacturing a zero CSSOM rectangle.
     pub excluded_from_layout: bool,
+    /// Actual associated fragments. A split native inline also references the
+    /// lifted block's existing border fragment; its source_id remains the block.
     pub fragment_indices: Vec<usize>,
     pub descendant_fragment_indices: Vec<usize>,
 }
@@ -549,7 +551,7 @@ fn capture_styled_with_plan(
     let range_projection =
         range_projection::collect(&fragments, &transforms, font_layout_scale.is_some());
     let source_index = sources.iter().enumerate().map(|(i, s)| (s.id, i)).collect();
-    sources::index_fragments(&mut sources, &source_index, &fragments);
+    sources::index_fragments(&mut sources, &source_index, &fragments, &records);
     let exceeded = text.as_ref().is_some_and(|text| text.exceeded);
     let text_runs = text.map_or_else(Vec::new, |text| text.collect(&galley, &fragments));
     let mut snapshot = LayoutSnapshot {

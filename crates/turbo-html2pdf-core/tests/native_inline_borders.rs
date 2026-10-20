@@ -272,7 +272,7 @@ fn unsupported_ordinary_inline_contexts_reject_without_inventing_partial_boxes()
     use turbo_html2pdf_core::layout_snapshot::SnapshotError;
     let cases = [
         (
-            "<span><div>block</div></span>",
+            "<span style='position:relative'><div>block</div></span>",
             SnapshotError::UnsupportedInlineBlockSplit,
         ),
         (

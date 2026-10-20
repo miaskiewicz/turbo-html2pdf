@@ -10,6 +10,7 @@ use std::collections::{BTreeMap, BTreeSet, HashMap};
 pub(crate) struct SourceRecord {
     pub(crate) id: Option<SourceId>,
     pub(crate) ancestors: Vec<SourceId>,
+    pub(crate) inline_block_owners: Vec<SourceId>,
 }
 
 pub(crate) struct BuildSources {
@@ -24,6 +25,17 @@ pub(crate) struct BuildSources {
 }
 
 impl BuildSources {
+    pub(crate) fn inline_block_owner(&mut self, block: NodeId, owner: NodeId) {
+        let Some(owner) = self.records.get(&owner).and_then(|record| record.id) else {
+            return;
+        };
+        if let Some(record) = self.records.get_mut(&block) {
+            if !record.inline_block_owners.contains(&owner) {
+                record.inline_block_owners.push(owner);
+            }
+        }
+    }
+
     pub(crate) fn record(&mut self, node: NodeId, key: usize) {
         if let Some(source) = self.nodes.get(&key) {
             self.records.insert(node, source.clone());
@@ -131,6 +143,7 @@ impl Walker<'_> {
             SourceRecord {
                 id,
                 ancestors: ancestors.to_vec(),
+                inline_block_owners: Vec::new(),
             },
         );
         if let Some(id) = id {
@@ -198,15 +211,33 @@ pub(crate) fn index_fragments(
     sources: &mut [SnapshotSource],
     index: &BTreeMap<SourceId, usize>,
     fragments: &[SnapshotFragment],
+    records: &HashMap<NodeId, SourceRecord>,
 ) {
     for fragment in fragments {
         if let Some(id) = fragment.source_id {
             sources[index[&id]].fragment_indices.push(fragment.index);
         }
+        index_inline_blocks(fragment, records, sources, index);
         for id in &fragment.source_ancestors {
             sources[index[id]]
                 .descendant_fragment_indices
                 .push(fragment.index);
+        }
+    }
+}
+
+fn index_inline_blocks(
+    fragment: &SnapshotFragment,
+    records: &HashMap<NodeId, SourceRecord>,
+    sources: &mut [SnapshotSource],
+    index: &BTreeMap<SourceId, usize>,
+) {
+    if fragment.kind != super::GeometryKind::BorderBox {
+        return;
+    }
+    if let Some(record) = records.get(&fragment.layout_node_id) {
+        for owner in &record.inline_block_owners {
+            sources[index[owner]].fragment_indices.push(fragment.index);
         }
     }
 }

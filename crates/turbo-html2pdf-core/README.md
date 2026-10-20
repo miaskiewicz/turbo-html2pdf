@@ -64,7 +64,9 @@ The native text-enabled HTML path retains ordinary inline boundaries and real
 per-line border fragments, including sliced decorations, empty inlines, nested
 font metrics, relative positioning and super/sub atomic children. Its explicit
 `UsedBoxMetrics.inline_fragment` flag distinguishes these from inline replaced
-elements. Unsupported block-in-inline splitting, ordinary-inline top/bottom/middle
+elements. Ordinary static block-in-inline content uses real anonymous flow splits,
+including nested and decorated continuations. Positioned/floating split contexts,
+ordinary-inline top/bottom/middle
 alignment, out-of-flow positioning and non-horizontal/LTR writing return typed
 snapshot errors. The generic and PDF paths retain their existing layout policy.
 
