@@ -398,7 +398,14 @@ pub enum InlineItem {
 enum Level {
     Block(LayoutBox),
     Inline(Vec<InlineItem>),
-    Split(Vec<Level>),
+    Split(Vec<FlowLevel>),
+}
+
+/// Classification after native splits have been lifted into their containing flow.
+#[allow(clippy::large_enum_variant)]
+enum FlowLevel {
+    Block(LayoutBox),
+    Inline(Vec<InlineItem>),
 }
 
 /// A monotonic source of pre-order node ids.
@@ -626,14 +633,11 @@ fn native_inline_items(el: &StyledElement, ids: &mut Ids) -> Level {
     }
 }
 
-fn append_level(out: &mut Vec<Level>, level: Level) {
+fn append_level(out: &mut Vec<FlowLevel>, level: Level) {
     match level {
-        Level::Split(levels) => {
-            for level in levels {
-                append_level(out, level);
-            }
-        }
-        level => out.push(level),
+        Level::Split(levels) => out.extend(levels),
+        Level::Block(block) => out.push(FlowLevel::Block(block)),
+        Level::Inline(items) => out.push(FlowLevel::Inline(items)),
     }
 }
 
@@ -643,7 +647,7 @@ fn native_inline_run(
     source: &ComputedStyle,
     first: bool,
     last: bool,
-) -> Level {
+) -> Vec<InlineItem> {
     let style = source.inline_fragment_style(first, last);
     let mut run = Vec::with_capacity(items.len() + 2);
     run.push(InlineItem::Boundary {
@@ -657,7 +661,7 @@ fn native_inline_run(
         style,
         start: false,
     });
-    Level::Inline(run)
+    run
 }
 
 fn native_inline_flow(el: &StyledElement, ids: &mut Ids) -> Level {
@@ -673,28 +677,28 @@ fn native_inline_flow(el: &StyledElement, ids: &mut Ids) -> Level {
     let mut first = true;
     for child in children {
         match child {
-            Level::Inline(items) => run.extend(items),
-            Level::Block(block) => {
-                out.push(native_inline_run(
+            FlowLevel::Inline(items) => run.extend(items),
+            FlowLevel::Block(block) => {
+                out.push(FlowLevel::Inline(native_inline_run(
                     std::mem::take(&mut run),
                     node_id,
                     &el.style,
                     first,
                     false,
-                ));
+                )));
                 if let Some(sources) = &mut ids.sources {
                     sources.inline_block_owner(block.node_id, node_id);
                 }
-                out.push(Level::Block(block));
+                out.push(FlowLevel::Block(block));
                 first = false;
             }
-            Level::Split(_) => unreachable!("child levels were flattened"),
         }
     }
-    out.push(native_inline_run(run, node_id, &el.style, first, true));
+    let last = native_inline_run(run, node_id, &el.style, first, true);
     if first {
-        out.pop().unwrap()
+        Level::Inline(last)
     } else {
+        out.push(FlowLevel::Inline(last));
         Level::Split(out)
     }
 }
@@ -736,35 +740,13 @@ fn classify_element(el: &StyledElement, ids: &mut Ids) -> Option<Level> {
 /// Flatten an inline element's content into inline items (its own style applies;
 /// a nested block becomes an atomic inline).
 fn flatten_inline(el: &StyledElement, ids: &mut Ids) -> Vec<InlineItem> {
-    let mut out = Vec::new();
-    let boundary = ids
-        .sources
-        .as_ref()
-        .is_some_and(|sources| sources.inline_borders)
-        .then(|| ids.element(el));
-    if let Some(node_id) = boundary {
-        out.push(InlineItem::Boundary {
-            node_id,
-            style: el.style.clone(),
-            start: true,
-        });
-    }
-    super::contents::visit(&el.children, &el.style, &mut |child, style| match classify(
-        child, style, ids,
-    ) {
-        Some(Level::Inline(items)) => out.extend(items),
-        Some(Level::Block(b)) => out.push(InlineItem::Atomic(b)),
-        Some(Level::Split(_)) => unreachable!("generic inline flow never splits"),
-        None => {}
+    let mut levels = Vec::new();
+    super::contents::visit(&el.children, &el.style, &mut |child, style| {
+        if let Some(level) = classify(child, style, ids) {
+            append_level(&mut levels, level);
+        }
     });
-    if let Some(node_id) = boundary {
-        out.push(InlineItem::Boundary {
-            node_id,
-            style: el.style.clone(),
-            start: false,
-        });
-    }
-    out
+    inline_items_of(levels)
 }
 
 // --------------------------------------------------------------------------
@@ -1090,29 +1072,33 @@ fn flush_run(
     out.push(anon_lines_box(items, parent_style, ids));
 }
 
-fn wrap_runs(levels: Vec<Level>, parent_style: &ComputedStyle, ids: &mut Ids) -> Vec<LayoutBox> {
+fn wrap_runs(
+    levels: Vec<FlowLevel>,
+    parent_style: &ComputedStyle,
+    ids: &mut Ids,
+) -> Vec<LayoutBox> {
     let mut out = Vec::new();
     let mut run: Vec<InlineItem> = Vec::new();
     for level in levels {
         match level {
-            Level::Inline(items) => run.extend(items),
-            Level::Block(b) => {
+            FlowLevel::Inline(items) => run.extend(items),
+            FlowLevel::Block(b) => {
                 flush_run(&mut run, parent_style, ids, &mut out);
                 out.push(b);
             }
-            Level::Split(_) => unreachable!("flow levels were flattened"),
         }
     }
     flush_run(&mut run, parent_style, ids, &mut out);
     out
 }
 
-fn inline_items_of(levels: Vec<Level>) -> Vec<InlineItem> {
-    // Only reached when no level is block-level, so every level is `Inline`.
+fn inline_items_of(levels: Vec<FlowLevel>) -> Vec<InlineItem> {
+    // Generic inline flattening keeps its legacy atomic treatment of nested blocks.
     let mut out = Vec::new();
     for level in levels {
-        if let Level::Inline(items) = level {
-            out.extend(items);
+        match level {
+            FlowLevel::Inline(items) => out.extend(items),
+            FlowLevel::Block(block) => out.push(InlineItem::Atomic(block)),
         }
     }
     out
@@ -1127,7 +1113,7 @@ fn build_flow(children: &[StyledNode], parent_style: &ComputedStyle, ids: &mut I
             append_level(&mut levels, level);
         }
     });
-    if levels.iter().any(|l| matches!(l, Level::Block(_))) {
+    if levels.iter().any(|l| matches!(l, FlowLevel::Block(_))) {
         BoxKind::Block(wrap_runs(levels, parent_style, ids))
     } else {
         BoxKind::Lines(inline_items_of(levels))

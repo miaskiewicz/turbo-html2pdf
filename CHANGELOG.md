@@ -15,6 +15,9 @@ PyPI, and crates.io packages release in lockstep from a `v*` tag (PyPI on `pyv*`
   Six fresh Chrome 155.0.8059.85 graphs cover exact client rectangles and
   neighboring control geometry; generic/PDF layout policy stays unchanged.
   Positioned/floating split contexts remain explicit unsupported errors.
+  Partial source-ID requests and hidden descendants preserve that ownership and
+  geometry without inventing inline records; normalized flow types keep the
+  separate generic atomic policy free of obsolete native boundary branches.
 
 - Cover the unchanged generic/PDF source-range compatibility path with actual
   raw placed gaps, extra collapsed separators, caret boundaries and soft wraps.

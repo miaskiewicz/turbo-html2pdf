@@ -891,11 +891,9 @@ fn zero_min_height(value: LengthPct) -> bool {
 }
 
 fn trailing_margin(lb: &LayoutBox, bs: &BoxStyle, cw: f32) -> f32 {
-    if !bottom_margins_collapse_through(lb, bs) {
-        return bs.margin.bottom;
-    }
-    let BoxKind::Block(kids) = &lb.kind else {
-        return bs.margin.bottom;
+    let kids = match &lb.kind {
+        BoxKind::Block(kids) if bottom_margins_collapse_through(lb, bs) => kids,
+        _ => return bs.margin.bottom,
     };
     let cw = (border_box_width(bs, cw) - bs.padding.horizontal() - bs.border.widths().horizontal())
         .max(0.0);

@@ -66,6 +66,12 @@ fn capture(markup: &str) -> Captured {
 fn capture_result(
     markup: &str,
 ) -> Result<Captured, turbo_html2pdf_core::layout_snapshot::SvgSnapshotError> {
+    capture_with_partial_identities(markup, false)
+}
+fn capture_with_partial_identities(
+    markup: &str,
+    omit_inline: bool,
+) -> Result<Captured, turbo_html2pdf_core::layout_snapshot::SvgSnapshotError> {
     let html = format!("<div id=rso>{markup}</div><button id=dismiss>Reject</button><input name=q type=hidden value=hidden><form><textarea name=q></textarea><button>Search</button></form>");
     let element = |tag: &str, children| {
         Node::Element(turbo_html2pdf_core::Element {
@@ -85,6 +91,9 @@ fn capture_result(
     let mut ids = Vec::new();
     let mut names = HashMap::new();
     identities(&nodes, &mut Vec::new(), &mut ids, &mut names);
+    if omit_inline {
+        ids.retain(|identity| identity.id != names["a"]);
+    }
     let images = ImageCtx {
         resolver: &NoImages,
         body_height: None,
@@ -239,4 +248,36 @@ fn escaping_percentage_bottom_margin_uses_its_actual_containing_width() {
             rects(&pixels, pixel_ids["h3"])
         );
     }
+}
+
+#[test]
+fn partial_source_identities_keep_the_real_block_without_inventing_inline_owners() {
+    let markup = "<a>Before<h3>Old result</h3>After</a>";
+    let (complete, complete_ids) = capture(markup);
+    let (partial, ids) = capture_with_partial_identities(markup, true).unwrap();
+    assert!(partial.source(ids["a"]).is_none());
+    assert_eq!(partial.sources().len() + 1, complete.sources().len());
+    assert_eq!(
+        rects(&partial, ids["h3"]),
+        rects(&complete, complete_ids["h3"])
+    );
+    assert_eq!(
+        rects(&partial, ids["dismiss"]),
+        rects(&complete, complete_ids["dismiss"])
+    );
+    let heading = partial.source(ids["h3"]).unwrap();
+    let block = &partial.fragments()[heading.fragment_indices[0]];
+    assert_eq!(block.source_id, Some(ids["h3"]));
+    assert!(!block.source_ancestors.contains(&ids["a"]));
+}
+
+#[test]
+fn hidden_blocks_do_not_displace_or_reject_a_relative_inline() {
+    let (plain, names) = capture("<a style='position:relative;left:5px'>Before</a>");
+    let (hidden, hidden_names) = capture("<a style='position:relative;left:5px'>Before<span style='display:none'><h3>hidden</h3></span></a>");
+    assert_eq!(rects(&hidden, hidden_names["a"]), rects(&plain, names["a"]));
+    assert_eq!(
+        rects(&hidden, hidden_names["dismiss"]),
+        rects(&plain, names["dismiss"])
+    );
 }
