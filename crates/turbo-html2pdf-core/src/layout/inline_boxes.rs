@@ -37,10 +37,52 @@ fn validate_element(
     if element.style.get("display") == Some("contents") {
         return validate(&element.children, inside);
     }
+    validate_rendered_element(element, display, inside)
+}
+fn validate_rendered_element(
+    element: &crate::StyledElement,
+    display: Display,
+    inside: bool,
+) -> Result<(), crate::layout_snapshot::SnapshotError> {
     let ordinary = ordinary_inline(element, display);
     validate_context(display, inside, ordinary, &element.style)?;
+    validate_displaced_split(element, ordinary)?;
     validate(&element.children, inline_context(display, inside, ordinary))
 }
+fn validate_displaced_split(
+    element: &crate::StyledElement,
+    ordinary: bool,
+) -> Result<(), crate::layout_snapshot::SnapshotError> {
+    if ordinary && displaced_inline(&element.style) && contains_block(&element.children) {
+        return Err(crate::layout_snapshot::SnapshotError::UnsupportedInlineBlockSplit);
+    }
+    Ok(())
+}
+fn contains_block(nodes: &[crate::StyledNode]) -> bool {
+    let mut found = false;
+    super::contents::visit(nodes, &ComputedStyle::default(), &mut |node, _| {
+        found |= block_in_inline_node(node);
+    });
+    found
+}
+fn block_in_inline_node(node: &crate::StyledNode) -> bool {
+    let crate::StyledNode::Element(element) = node else {
+        return false;
+    };
+    let display = super::value::display_of(&element.style);
+    if display == Display::None {
+        return false;
+    }
+    if is_block_split(display) {
+        return true;
+    }
+    display == Display::Inline && !atomic_element(element) && contains_block(&element.children)
+}
+fn displaced_inline(style: &ComputedStyle) -> bool {
+    style.get("position") == Some("relative")
+        || style.get("float").is_some_and(|value| value != "none")
+}
+
 fn ordinary_inline(element: &crate::StyledElement, display: Display) -> bool {
     display == Display::Inline && !atomic_element(element)
 }
@@ -53,13 +95,20 @@ fn validate_context(
     ordinary: bool,
     style: &ComputedStyle,
 ) -> Result<(), crate::layout_snapshot::SnapshotError> {
-    if inside && is_block_split(display) {
+    if unsupported_block_split(display, inside, style) {
         return Err(crate::layout_snapshot::SnapshotError::UnsupportedInlineBlockSplit);
     }
     if ordinary {
         validate_inline_style(style)?;
     }
     Ok(())
+}
+fn unsupported_block_split(display: Display, inside: bool, style: &ComputedStyle) -> bool {
+    inside && is_block_split(display) && displaced_block(style)
+}
+fn displaced_block(style: &ComputedStyle) -> bool {
+    matches!(style.get("position"), Some("absolute" | "fixed" | "sticky"))
+        || style.get("float").is_some_and(|value| value != "none")
 }
 fn is_block_split(display: Display) -> bool {
     !matches!(display, Display::Inline | Display::InlineBlock)
@@ -331,6 +380,21 @@ fn has_horizontal_edges(used: &BoxStyle) -> bool {
     .iter()
     .any(|value| *value != 0.0)
 }
+pub(super) fn collapsible_run(items: &[InlineItem], font: f32, width: f32) -> bool {
+    items.iter().all(|item| match item {
+        InlineItem::Boundary { style: source, .. } => {
+            !has_horizontal_edges(&style(source, font, width, None))
+        }
+        InlineItem::Text { text, style, .. } => {
+            !preserved_space(style)
+                && text
+                    .chars()
+                    .all(|c| matches!(c, ' ' | '\t' | '\r' | '\n' | '\u{c}'))
+        }
+        _ => false,
+    })
+}
+
 pub(super) fn empty_fragments(
     items: &[InlineItem],
     font: f32,

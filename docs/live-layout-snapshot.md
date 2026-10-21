@@ -291,8 +291,24 @@ probe; its SHA-256 is checked against the recorded control. Regenerate the brows
 control with turbo-surf's reusable `harness/detection/authored-dom-chrome.mjs`
 collector, using that probe and the `chrome155.json` output path.
 
-Native admission rejects ordinary inline top/bottom/middle alignment, block-child
-splitting, absolute/fixed/sticky positioning, RTL and vertical writing modes with
+Ordinary static block descendants split inline flow into before/block/after
+segments. Boundary-only continuations keep their zero client rectangles without
+adding line height or stopping margin collapse. Interior horizontal decorations
+are sliced; the lifted block uses its own width, margins and style. Its real
+fragment is additionally associated with the original inline source, while the
+fragment's own source ID and ancestor chain remain unchanged. The generic/PDF
+flattening path remains intact. Auto native inline-block widths use the same
+physical LayoutUnit admission as explicit lengths.
+
+`tests/native_block_inline.rs` retains six independently measured Chrome
+155.0.8059.85 graphs and the reusable `fixtures/block-inline-probe.js`, including
+nested links, empty continuations, multiple blocks, sliced borders and the
+following button. The fixture constructs real live document roots and supplies
+the caller's measured browser button styles; PDF parsing intentionally returns
+body flow and the generic PDF user-agent stylesheet is a separate policy.
+
+Native admission still rejects positioned/floating split contexts, ordinary
+inline top/bottom/middle alignment, absolute/fixed/sticky positioning, RTL and vertical writing modes with
 specific `SnapshotError` variants. Atomic and inline-block top/bottom alignment
 remain available. These limits describe the supported native subset, rather than
 certifying the full CSS inline formatting model or complete browser layout.

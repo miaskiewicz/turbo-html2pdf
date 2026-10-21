@@ -32,6 +32,22 @@ impl ComputedStyle {
         )
     }
 
+    pub(crate) fn inline_fragment_style(&self, first: bool, last: bool) -> Self {
+        let mut style = self.clone();
+        for (side, retained) in [("left", first), ("right", last)] {
+            if !retained {
+                for property in [
+                    format!("margin-{side}"),
+                    format!("padding-{side}"),
+                    format!("border-{side}-width"),
+                ] {
+                    style.map.insert(property, "0px".into());
+                }
+            }
+        }
+        style
+    }
+
     /// Whether no value uses a containing-block-relative (`%`) or font-relative
     /// (`em`/`rem`) unit. When true, the box's resolved metrics do not depend on
     /// the layout context, so they can be resolved once and cached (a `font-size`
