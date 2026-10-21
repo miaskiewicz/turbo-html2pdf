@@ -111,12 +111,18 @@ fn load_font_file(
     let Ok(bytes) = std::fs::read(path) else {
         return;
     };
+    let bytes = std::sync::Arc::new(bytes);
     for i in 0..super::font::face_count(&bytes) {
         load_face(faces, platform_faces, &bytes, i);
     }
 }
 
-fn load_face(faces: &mut Vec<FontFace>, platform: &mut Vec<FontFace>, bytes: &[u8], index: u32) {
+fn load_face(
+    faces: &mut Vec<FontFace>,
+    platform: &mut Vec<FontFace>,
+    bytes: &std::sync::Arc<Vec<u8>>,
+    index: u32,
+) {
     let (target, description) = match super::font::describe(bytes, index) {
         Some(description) => (faces, Some(description)),
         None => (platform, super::font::describe_platform(bytes, index)),
@@ -124,7 +130,9 @@ fn load_face(faces: &mut Vec<FontFace>, platform: &mut Vec<FontFace>, bytes: &[u
     let Some((family, weight, italic)) = description else {
         return;
     };
-    if let Some(face) = FontFace::from_bytes_index(bytes.to_vec(), index, family, weight, italic) {
+    if let Some(face) =
+        FontFace::from_shared_bytes_index(bytes.clone(), index, family, weight, italic)
+    {
         target.push(face);
     }
 }
@@ -508,7 +516,7 @@ mod tests {
         assert!(super::super::font::describe(&bytes, 0).is_none());
         let mut public = Vec::new();
         let mut private = Vec::new();
-        load_face(&mut public, &mut private, &bytes, 0);
+        load_face(&mut public, &mut private, &std::sync::Arc::new(bytes), 0);
         assert_eq!(public.len(), 0);
         assert_eq!(private.len(), 1);
         assert!(private[0].has_glyph('a'));
@@ -551,7 +559,12 @@ mod tests {
             with_caller.select(&[alias], 400, false).unwrap().data(),
             caller.data()
         );
-        load_face(&mut public, &mut private, b"invalid font", 0);
+        load_face(
+            &mut public,
+            &mut private,
+            &std::sync::Arc::new(b"invalid font".to_vec()),
+            0,
+        );
         assert_eq!(public.len(), 0);
         assert_eq!(private.len(), 1);
     }
@@ -574,6 +587,50 @@ mod tests {
             .unwrap()
             .starts_with("Menlo"));
     }
+    #[test]
+    fn loaded_collection_shares_program_without_changing_registration_order() {
+        let name = format!(
+            "turbo-font-collection-{}-{}.ttc",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        );
+        let path = std::env::temp_dir().join(name);
+        let bytes = FontFace::collection_fixture_bytes();
+        std::fs::write(&path, &bytes).unwrap();
+        let mut faces = Vec::new();
+        let mut platform = Vec::new();
+        load_font_file(&mut faces, &mut platform, &path);
+        std::fs::remove_file(path).unwrap();
+        assert_eq!(faces.len(), 2);
+        assert!(platform.is_empty());
+        assert_eq!(faces[0].data().as_ptr(), faces[1].data().as_ptr());
+        for (index, face) in faces.iter().enumerate() {
+            let (family, weight, italic) =
+                super::super::font::describe(&bytes, index as u32).unwrap();
+            assert_eq!(face.index(), index as u32);
+            assert_eq!(
+                (face.family(), face.weight(), face.is_italic()),
+                (family.as_str(), weight, italic)
+            );
+            assert_eq!(face.data(), bytes);
+        }
+        let mut registry = FontRegistry {
+            faces,
+            ..Default::default()
+        };
+        let cloned = registry.clone();
+        registry.alias_generics();
+        assert_eq!(
+            cloned.faces[0].data().as_ptr(),
+            registry.faces[0].data().as_ptr()
+        );
+        assert_eq!(registry.select(&["Roboto"], 400, false).unwrap().index(), 0);
+        assert_eq!(registry.select(&["Go"], 400, false).unwrap().index(), 1);
+    }
+
     #[test]
     fn load_font_file_covers_ext_read_and_parse() {
         // A real font file: extension ok, read ok, face parsed and pushed.

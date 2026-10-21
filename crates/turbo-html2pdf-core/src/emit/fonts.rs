@@ -31,10 +31,12 @@ pub struct FontStore {
     fonts: Vec<UsedFont>,
 }
 
-/// Two faces are the same embedded font when they share the same font program.
-/// Clones of a registry face share an `Arc`, so the data pointer is stable.
+/// Collection faces share a program but still require separate subsets.
+/// Clones and family aliases of the same indexed face reuse one resource.
 fn same_face(a: &FontFace, b: &FontFace) -> bool {
-    std::ptr::eq(a.data().as_ptr(), b.data().as_ptr()) && a.data().len() == b.data().len()
+    std::ptr::eq(a.data().as_ptr(), b.data().as_ptr())
+        && a.data().len() == b.data().len()
+        && a.index() == b.index()
 }
 
 impl FontStore {
@@ -343,4 +345,37 @@ fn embed_program(chunk: &mut Chunk, refs: &FontRefs, face: &FontFace, subset: &[
         stream.pair(Name(b"Subtype"), Name(b"OpenType"));
     }
     stream.finish();
+}
+
+#[cfg(test)]
+mod collection_identity_tests {
+    use super::*;
+
+    #[test]
+    fn shared_collection_faces_get_separate_pdf_resources() {
+        let [first, second] = FontFace::collection_fixture_faces();
+        let mut store = FontStore::default();
+        let first_glyph = first.shape("A")[0].glyph_id;
+        let second_glyph = second.shape("B")[0].glyph_id;
+        store.record_glyphs(&first, &[first_glyph]);
+        store.record_glyphs(&second, &[second_glyph]);
+        store.record_glyphs(&first.with_family("alias"), &[first_glyph]);
+        assert_eq!(store.len(), 2);
+        assert_eq!(store.index_of(&first), 0);
+        assert_eq!(store.index_of(&second), 1);
+        assert_eq!(store.fonts[0].face.index(), 0);
+        assert_eq!(store.fonts[1].face.index(), 1);
+        assert_eq!(store.fonts[0].glyphs, BTreeSet::from([first_glyph]));
+        assert_eq!(store.fonts[1].glyphs, BTreeSet::from([second_glyph]));
+        for font in &store.fonts {
+            let subset = subset_bytes(&font.face, &font.remapper());
+            let parsed = rustybuzz::ttf_parser::Face::parse(&subset, 0).unwrap();
+            let glyph = *font.glyphs.first().unwrap();
+            let subset_glyph = font.remapper().get(glyph).unwrap();
+            assert_eq!(
+                parsed.glyph_hor_advance(rustybuzz::ttf_parser::GlyphId(subset_glyph)),
+                Some(font.face.glyph_advance(glyph))
+            );
+        }
+    }
 }

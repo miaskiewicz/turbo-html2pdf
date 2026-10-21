@@ -6,6 +6,13 @@ PyPI, and crates.io packages release in lockstep from a `v*` tag (PyPI on `pyv*`
 
 ## [0.3.8] — unreleased
 
+- Share each loaded system font program across its collection faces instead of
+  copying the whole TTC for every index. Keep per-face parsing, shaping caches,
+  registration order and public byte constructors intact. Distinguish collection
+  indexes when grouping PDF resources and merging inline source runs. Add a
+  reusable `font_startup` example reporting eager registry timing, byte ownership
+  and selected-face/shaping fingerprints without changing font discovery.
+
 - Split ordinary native inline content around in-flow blocks, including result
   links containing headings. Preserve zero-height continuations, nested source
   ownership, first/last decoration slices and collapsed block margins, so an
