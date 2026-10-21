@@ -6,6 +6,9 @@ PyPI, and crates.io packages release in lockstep from a `v*` tag (PyPI on `pyv*`
 
 ## [0.3.8] — unreleased
 
+- Correct README status after verified0.3.7 publication and preserve the actual
+  merge/tag/registry release proof.
+
 - Cover the unchanged generic/PDF source-range compatibility path with actual
   raw placed gaps, extra collapsed separators, caret boundaries and soft wraps.
   These public API controls preserve the separate legacy source policy while
