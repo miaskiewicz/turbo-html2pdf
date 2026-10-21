@@ -26,6 +26,9 @@ PyPI, and crates.io packages release in lockstep from a `v*` tag (PyPI on `pyv*`
   geometry without inventing inline records; normalized flow types keep the
   separate generic atomic policy free of obsolete native boundary branches.
 
+- Correct README status after verified0.3.7 publication and preserve the actual
+  merge/tag/registry release proof.
+
 - Cover the unchanged generic/PDF source-range compatibility path with actual
   raw placed gaps, extra collapsed separators, caret boundaries and soft wraps.
   These public API controls preserve the separate legacy source policy while

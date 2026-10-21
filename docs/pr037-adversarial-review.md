@@ -62,3 +62,15 @@ for both zero and center transform origins.
 
 Final local gates and the exact tested candidate SHA are recorded on the PR.
 No release tags are authorized by this receipt.
+
+
+## Publication verification — 2026-10-15
+
+The user subsequently authorized the dependency release. PR21 merged at
+`33853374bdeae040e596858bcbf3da9670543b0e`; its tree matches the tested
+`502c21eed06a53cc03235f291a5713f816556e3b` head. Both annotated tags,
+`v0.3.7` and `pyv0.3.7`, point to that actual two-parent merge commit.
+The npm/MCP, crates.io and PyPI workflows all completed successfully.
+Registry checks verify all six npm packages, both crates, four PyPI wheels
+and the source distribution at0.3.7. This supersedes candidate wording;
+the scope limits above remain applicable.
