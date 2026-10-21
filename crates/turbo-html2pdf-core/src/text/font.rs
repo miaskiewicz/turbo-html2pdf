@@ -18,9 +18,10 @@ struct Parsed<'a> {
 
 self_cell::self_cell!(
     /// Owns the font bytes and the faces parsed from them (a self-referential
-    /// pair: the faces borrow the bytes). Built once per [`FontFace`].
+    /// pair: the faces borrow the bytes). Collection indexes share the immutable
+    /// program allocation while retaining separate parsed faces and shape caches.
     struct OwnedFaces {
-        owner: Vec<u8>,
+        owner: Arc<Vec<u8>>,
         #[covariant]
         dependent: Parsed,
     }
@@ -177,6 +178,16 @@ impl FontFace {
     /// collection (0 for a single-face `.ttf`/`.otf`).
     pub fn from_bytes_index(
         data: Vec<u8>,
+        index: u32,
+        family: impl Into<String>,
+        weight: u16,
+        italic: bool,
+    ) -> Option<FontFace> {
+        Self::from_shared_bytes_index(Arc::new(data), index, family, weight, italic)
+    }
+
+    pub(super) fn from_shared_bytes_index(
+        data: Arc<Vec<u8>>,
         index: u32,
         family: impl Into<String>,
         weight: u16,
@@ -483,6 +494,42 @@ fn collect_glyphs(shaped: &rustybuzz::GlyphBuffer) -> Vec<ShapedGlyph> {
 }
 
 #[cfg(test)]
+impl FontFace {
+    pub(crate) fn collection_fixture_bytes() -> Vec<u8> {
+        let fonts: [&[u8]; 2] = [
+            include_bytes!("../../assets/fonts/roboto/Roboto-Regular.ttf"),
+            include_bytes!("../../assets/fonts/Go-Regular.ttf"),
+        ];
+        let mut bytes = b"ttcf\0\x01\0\0\0\0\0\x02\0\0\0\0\0\0\0\0".to_vec();
+        for (index, font) in fonts.into_iter().enumerate() {
+            bytes.resize(bytes.len().next_multiple_of(4), 0);
+            let start = bytes.len();
+            bytes[12 + index * 4..16 + index * 4].copy_from_slice(&(start as u32).to_be_bytes());
+            bytes.extend_from_slice(font);
+            relocate_fixture_tables(&mut bytes[start..], start as u32);
+        }
+        bytes
+    }
+
+    pub(crate) fn collection_fixture_faces() -> [Self; 2] {
+        let bytes = Arc::new(Self::collection_fixture_bytes());
+        [0, 1].map(|index| {
+            Self::from_shared_bytes_index(bytes.clone(), index, "same CSS alias", 400, false)
+                .unwrap()
+        })
+    }
+}
+
+#[cfg(test)]
+fn relocate_fixture_tables(font: &mut [u8], start: u32) {
+    let count = u16::from_be_bytes([font[4], font[5]]) as usize;
+    for table in (0..count).map(|index| 12 + index * 16 + 8) {
+        let offset = u32::from_be_bytes(font[table..table + 4].try_into().unwrap());
+        font[table..table + 4].copy_from_slice(&(offset + start).to_be_bytes());
+    }
+}
+
+#[cfg(test)]
 mod tests {
     use super::*;
 
@@ -527,6 +574,60 @@ mod tests {
         bytes[rec + 6] = 0x00;
         bytes[rec + 7] = 16; // relabel name-id 1 → 16 (typographic family)
         bytes
+    }
+
+    #[test]
+    fn public_vec_constructor_keeps_its_original_allocation() {
+        let bytes = ROBOTO.to_vec();
+        let pointer = bytes.as_ptr();
+        let face = FontFace::from_bytes(bytes, "Roboto", 400, false).unwrap();
+        assert_eq!(face.data().as_ptr(), pointer);
+        assert!(face.has_glyph('A'));
+    }
+
+    #[test]
+    fn shared_collection_retains_distinct_faces_and_original_font_results() {
+        let faces = FontFace::collection_fixture_faces();
+        assert_eq!(face_count(faces[0].data()), 2);
+        assert_eq!(faces[0].data().as_ptr(), faces[1].data().as_ptr());
+        assert_eq!([faces[0].index(), faces[1].index()], [0, 1]);
+        let originals: [&[u8]; 2] = [ROBOTO, include_bytes!("../../assets/fonts/Go-Regular.ttf")];
+        for (face, bytes) in faces.iter().zip(originals) {
+            let expected = FontFace::from_bytes(bytes.to_vec(), "reference", 400, false).unwrap();
+            assert_eq!(face.units_per_em(), expected.units_per_em());
+            assert_eq!(face.html_metrics(18.72), expected.html_metrics(18.72));
+            assert_eq!(face.bbox(), expected.bbox());
+            assert_eq!(face.shape("AV office ffi"), expected.shape("AV office ffi"));
+            assert_eq!(
+                face.measure("AV office ffi", 18.72, 0.0),
+                expected.measure("AV office ffi", 18.72, 0.0)
+            );
+        }
+        assert_ne!(
+            faces[0].shape("AV office ffi"),
+            faces[1].shape("AV office ffi")
+        );
+        assert!(FontFace::from_shared_bytes_index(
+            Arc::new(faces[0].data().to_vec()),
+            2,
+            "missing",
+            400,
+            false
+        )
+        .is_none());
+        assert!(!Arc::ptr_eq(&faces[0].shape_cache, &faces[1].shape_cache));
+        let alias = faces[1].with_family("retained alias");
+        drop(faces);
+        assert_eq!(alias.index(), 1);
+        assert!(alias.has_glyph('A'));
+        assert!(FontFace::from_shared_bytes_index(
+            Arc::new(b"invalid".to_vec()),
+            0,
+            "bad",
+            400,
+            false
+        )
+        .is_none());
     }
 
     #[test]

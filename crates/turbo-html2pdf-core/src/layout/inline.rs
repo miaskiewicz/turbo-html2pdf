@@ -1559,7 +1559,10 @@ fn shape_seg(seg: &Seg, pen_x: f32, baseline: f32, policy: (bool, bool, Option<f
 }
 
 fn same_face(a: &FontFace, b: &FontFace) -> bool {
-    a.family() == b.family() && a.weight() == b.weight() && a.is_italic() == b.is_italic()
+    a.family() == b.family()
+        && a.weight() == b.weight()
+        && a.is_italic() == b.is_italic()
+        && a.index() == b.index()
 }
 
 fn can_merge(a: &GlyphRun, b: &GlyphRun) -> bool {
@@ -1576,7 +1579,9 @@ fn source_metadata_compatible(a: &SourceRun, b: &SourceRun, enabled: bool) -> bo
     if !enabled {
         return true;
     }
-    a.font_box == b.font_box && a.run.face.data().as_ptr() == b.run.face.data().as_ptr()
+    a.font_box == b.font_box
+        && a.run.face.data().as_ptr() == b.run.face.data().as_ptr()
+        && a.run.face.index() == b.run.face.index()
 }
 
 fn merge_runs(runs: Vec<SourceRun>, capture_sources: bool) -> Vec<SourceRun> {
@@ -2040,6 +2045,57 @@ pub fn layout_runs(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn collection_source_run(face: FontFace) -> SourceRun {
+        SourceRun {
+            run: GlyphRun {
+                node_id: NodeId(7),
+                glyphs: vec![PositionedGlyph {
+                    glyph_id: face.shape("A")[0].glyph_id,
+                    x: 0.0,
+                    y: 0.0,
+                }],
+                face,
+                font_size: 16.0,
+                color: Rgba {
+                    r: 0,
+                    g: 0,
+                    b: 0,
+                    a: 255,
+                },
+            },
+            clusters: Vec::new(),
+            font_box: SourceFontBox {
+                baseline: 12.0,
+                ascent: 12.0,
+                descent: 4.0,
+            },
+        }
+    }
+
+    #[test]
+    fn shared_collection_indexes_do_not_merge_text_runs() {
+        let [first, second] = FontFace::collection_fixture_faces();
+        for capture_sources in [false, true] {
+            let runs = vec![
+                collection_source_run(first.clone()),
+                collection_source_run(second.clone()),
+            ];
+            let merged = merge_runs(runs, capture_sources);
+            assert_eq!(merged.len(), 2);
+            assert_eq!(
+                [merged[0].run.face.index(), merged[1].run.face.index()],
+                [0, 1]
+            );
+            let copies = vec![
+                collection_source_run(first.clone()),
+                collection_source_run(first.clone()),
+            ];
+            let merged = merge_runs(copies, capture_sources);
+            assert_eq!(merged.len(), 1);
+            assert_eq!(merged[0].run.glyphs.len(), 2);
+        }
+    }
 
     fn face(reg: &FontRegistry) -> FontFace {
         reg.select(&["sans-serif"], 400, false)
