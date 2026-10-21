@@ -31,10 +31,14 @@ pub(crate) fn ranges(
 ) -> Result<Vec<SourceRangeBox>, TextGeometryError> {
     let text = source_text(snapshot, id, start, end)?;
     let cells = source_cells(snapshot, id);
+    if snapshot.collapsed_text_sources.contains(&id) {
+        return Ok(Vec::new());
+    }
     validate_source_coverage(&cells, &text, start, end)?;
     let mut boxes = selected_boxes(&cells, start, end);
     append_placed_gaps(&mut boxes, &cells, &text, start, end);
     append_empty_boundaries(&mut boxes, &cells, &text, start, end)?;
+    append_native_wrap_boundary(snapshot, &mut boxes, &cells, &text, start, end);
     coalesce_native_runs(snapshot, &mut boxes);
     encompass_native_edges(snapshot, &cells, &mut boxes);
     transform_boxes(snapshot, &mut boxes);
@@ -96,8 +100,12 @@ fn require_collapsible(text: &[u16]) -> Result<(), TextGeometryError> {
 
 fn selected_boxes(cells: &[SourceClusterBox], start: usize, end: usize) -> Vec<SourceRangeBox> {
     let selected = selected_cells(cells, start, end);
+    let has_advance = selected.iter().any(|cell| cell.rect.width > 0.0);
     let mut boxes = Vec::new();
-    for cell in selected {
+    for cell in selected
+        .into_iter()
+        .filter(|cell| !has_advance || cell.rect.width > 0.0)
+    {
         append_box(&mut boxes, cell.fragment_index, cell.rect);
     }
     boxes
@@ -127,6 +135,67 @@ fn append_empty_boundaries(
     Ok(())
 }
 
+// A separator-only selection retains both actual line affinities at a soft
+// wrap. Positive selections continue to discard zero-advance cells globally.
+fn append_native_wrap_boundary(
+    snapshot: &LayoutSnapshot,
+    boxes: &mut Vec<SourceRangeBox>,
+    cells: &[SourceClusterBox],
+    text: &[u16],
+    start: usize,
+    end: usize,
+) {
+    if !native_zero_selection(snapshot, boxes, text, start, end) {
+        return;
+    }
+    let Some((before, after)) = wrap_boundary_cells(cells, end) else {
+        return;
+    };
+    if different_line_origins(snapshot, before, after) {
+        append_box(
+            boxes,
+            after.fragment_index,
+            Rect {
+                x: boundary_x(after, true),
+                width: 0.0,
+                ..after.rect
+            },
+        );
+    }
+}
+fn native_zero_selection(
+    snapshot: &LayoutSnapshot,
+    boxes: &[SourceRangeBox],
+    text: &[u16],
+    start: usize,
+    end: usize,
+) -> bool {
+    snapshot.html_layout_scale.is_some()
+        && start < end
+        && is_collapsible(text[end - 1])
+        && boxes.iter().all(|box_| box_.rect.width == 0.0)
+}
+fn wrap_boundary_cells(
+    cells: &[SourceClusterBox],
+    end: usize,
+) -> Option<(&SourceClusterBox, &SourceClusterBox)> {
+    let before = cells
+        .iter()
+        .rev()
+        .find(|cell| cell.utf16_end == end && cell.rect.width == 0.0)?;
+    let after = cells.iter().find(|cell| cell.utf16_start == end)?;
+    Some((before, after))
+}
+fn different_line_origins(
+    snapshot: &LayoutSnapshot,
+    before: &SourceClusterBox,
+    after: &SourceClusterBox,
+) -> bool {
+    let before = &snapshot.fragments[before.fragment_index];
+    let after = &snapshot.fragments[after.fragment_index];
+    before.parent == after.parent && before.rect.y != after.rect.y
+}
+
 // Chrome's source-scoped FragmentItem selection encompasses nonempty offsets,
 // while equal offsets retain one floored LayoutUnit edge. Quantize within the
 // native fragment before transforms; generic/PDF source queries keep raw units.
@@ -145,8 +214,7 @@ fn encompass_native_edges(
             .filter(|cell| {
                 cell.rect.y == box_.rect.y
                     && cell.rect.height == box_.rect.height
-                    && snapshot.native_transforms[cell.fragment_index]
-                        == snapshot.native_transforms[box_.fragment_index]
+                    && same_projection(snapshot, cell.fragment_index, box_.fragment_index)
             })
             .map(|cell| cell.rect.x)
             .reduce(f32::min)
@@ -164,6 +232,11 @@ fn encompass_native_edges(
     }
 }
 
+fn same_projection(snapshot: &LayoutSnapshot, a: usize, b: usize) -> bool {
+    snapshot.native_transforms[a] == snapshot.native_transforms[b]
+        && super::range_projection::compatible(snapshot, a, b)
+}
+
 fn coalesce_native_runs(snapshot: &LayoutSnapshot, boxes: &mut Vec<SourceRangeBox>) {
     if snapshot.html_layout_scale.is_none() {
         return;
@@ -174,8 +247,7 @@ fn coalesce_native_runs(snapshot: &LayoutSnapshot, boxes: &mut Vec<SourceRangeBo
             previous.rect.y == box_.rect.y
                 && previous.rect.height == box_.rect.height
                 && (previous.rect.x + previous.rect.width - box_.rect.x).abs() < 0.0001
-                && snapshot.native_transforms[previous.fragment_index]
-                    == snapshot.native_transforms[box_.fragment_index]
+                && same_projection(snapshot, previous.fragment_index, box_.fragment_index)
         });
         match contiguous {
             Some(previous) => previous.rect.width = box_.rect.x + box_.rect.width - previous.rect.x,
@@ -189,9 +261,13 @@ fn transform_boxes(snapshot: &LayoutSnapshot, boxes: &mut [SourceRangeBox]) {
     boxes.sort_by_key(|box_| box_.fragment_index);
     for box_ in boxes {
         let matrix = snapshot.native_transforms[box_.fragment_index];
-        box_.transformed_bounds = geometry::bounds(
-            geometry::rect_quad(box_.rect).map(|point| geometry::transform(point, matrix)),
-        );
+        box_.transformed_bounds = if snapshot.html_layout_scale.is_some() {
+            super::range_projection::project(snapshot, box_.fragment_index, box_.rect)
+        } else {
+            geometry::bounds(
+                geometry::rect_quad(box_.rect).map(|point| geometry::transform(point, matrix)),
+            )
+        };
     }
 }
 

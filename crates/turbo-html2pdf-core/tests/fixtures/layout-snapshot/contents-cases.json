@@ -1,0 +1,197 @@
+{
+  "viewport": {
+    "width": 200,
+    "height": 200
+  },
+  "intrinsicImage": {
+    "width": 4,
+    "height": 2
+  },
+  "cases": [
+    {
+      "name": "contents-block",
+      "nodes": [
+        {
+          "sourceId": 1,
+          "tag": "section",
+          "style": "display:contents;padding:30px;margin:40px;transform:translate(80px,90px)",
+          "children": [
+            {
+              "sourceId": 2,
+              "tag": "div",
+              "style": "display:contents;width:900px",
+              "children": [
+                {
+                  "sourceId": 3,
+                  "tag": "div",
+                  "style": "width:40px;height:12px",
+                  "children": []
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "sourceId": 4,
+          "tag": "div",
+          "style": "width:20px;height:7px",
+          "children": []
+        }
+      ]
+    },
+    {
+      "name": "contents-flex",
+      "nodes": [
+        {
+          "sourceId": 1,
+          "tag": "div",
+          "style": "display:flex;width:200px",
+          "children": [
+            {
+              "sourceId": 2,
+              "tag": "section",
+              "style": "display:contents;width:900px;padding:50px",
+              "children": [
+                {
+                  "sourceId": 3,
+                  "tag": "div",
+                  "style": "width:20px;height:10px",
+                  "children": []
+                },
+                {
+                  "sourceId": 4,
+                  "tag": "div",
+                  "style": "width:30px;height:10px",
+                  "children": []
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "contents-img",
+      "nodes": [
+        {
+          "sourceId": 1,
+          "tag": "img",
+          "style": "display:contents;width:90px;height:90px",
+          "children": []
+        },
+        {
+          "sourceId": 3,
+          "tag": "div",
+          "style": "height:5px",
+          "children": []
+        }
+      ]
+    },
+    {
+      "name": "contents-input",
+      "nodes": [
+        {
+          "sourceId": 1,
+          "tag": "input",
+          "style": "display:contents;width:90px;height:90px",
+          "children": []
+        },
+        {
+          "sourceId": 3,
+          "tag": "div",
+          "style": "height:5px",
+          "children": []
+        }
+      ]
+    },
+    {
+      "name": "contents-textarea",
+      "nodes": [
+        {
+          "sourceId": 1,
+          "tag": "textarea",
+          "style": "display:contents;width:90px;height:90px",
+          "children": [
+            {
+              "sourceId": 2,
+              "tag": "div",
+              "style": "width:80px;height:80px",
+              "children": []
+            }
+          ]
+        },
+        {
+          "sourceId": 3,
+          "tag": "div",
+          "style": "height:5px",
+          "children": []
+        }
+      ]
+    },
+    {
+      "name": "contents-select",
+      "nodes": [
+        {
+          "sourceId": 1,
+          "tag": "select",
+          "style": "display:contents;width:90px;height:90px",
+          "children": [
+            {
+              "sourceId": 2,
+              "tag": "div",
+              "style": "width:80px;height:80px",
+              "children": []
+            }
+          ]
+        },
+        {
+          "sourceId": 3,
+          "tag": "div",
+          "style": "height:5px",
+          "children": []
+        }
+      ]
+    },
+    {
+      "name": "contents-object",
+      "nodes": [
+        {
+          "sourceId": 1,
+          "tag": "object",
+          "style": "display:contents;width:90px;height:90px",
+          "children": [
+            {
+              "sourceId": 2,
+              "tag": "div",
+              "style": "width:80px;height:80px",
+              "children": []
+            }
+          ]
+        },
+        {
+          "sourceId": 3,
+          "tag": "div",
+          "style": "height:5px",
+          "children": []
+        }
+      ]
+    },
+    {
+      "name": "contents-br",
+      "nodes": [
+        {
+          "sourceId": 1,
+          "tag": "br",
+          "style": "display:contents;width:90px;height:90px",
+          "children": []
+        },
+        {
+          "sourceId": 3,
+          "tag": "div",
+          "style": "height:5px",
+          "children": []
+        }
+      ]
+    }
+  ]
+}

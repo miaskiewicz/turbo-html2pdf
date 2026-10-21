@@ -495,9 +495,17 @@ fn font_color_decl(element: &Element) -> Option<Declaration> {
 fn attr_length(v: &str) -> Option<String> {
     let v = v.trim();
     if let Some(pct) = v.strip_suffix('%') {
-        return pct.trim().parse::<f32>().ok().map(|_| v.to_string());
+        return valid_attr_length(pct).map(|_| v.to_string());
     }
-    v.parse::<f32>().ok().map(|n| format!("{n}px"))
+    valid_attr_length(v).map(|n| format!("{n}px"))
+}
+
+fn valid_attr_length(value: &str) -> Option<f32> {
+    value
+        .trim()
+        .parse::<f32>()
+        .ok()
+        .filter(|value| value.is_finite() && *value >= 0.0)
 }
 
 fn is_tag(element: &Element, name: &str) -> bool {
@@ -922,5 +930,33 @@ fn root_pos() -> ElemPos {
         of_type_index: 0,
         of_type_total: 1,
         siblings: 1,
+    }
+}
+
+#[path = "matched.rs"]
+mod matched;
+pub use matched::{
+    presentational_declarations, resolve_matched_style, CascadeOrigin, MatchedDeclaration,
+};
+
+#[cfg(test)]
+mod dimension_hint_tests {
+    #[test]
+    fn presentational_dimensions_ignore_invalid_values_and_preserve_zero_and_percentages() {
+        for value in ["-1", "-0.5%", "NaN", "inf", "Infinity%", "*", "2px"] {
+            assert_eq!(super::attr_length(value), None, "{value}");
+        }
+        for (value, expected) in [
+            ("0", "0px"),
+            (" 12.5 ", "12.5px"),
+            ("0%", "0%"),
+            ("50%", "50%"),
+        ] {
+            assert_eq!(
+                super::attr_length(value).as_deref(),
+                Some(expected),
+                "{value}"
+            );
+        }
     }
 }

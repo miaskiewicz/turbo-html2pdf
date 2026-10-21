@@ -18,6 +18,7 @@ pub(crate) struct BuildSources {
     nodes: HashMap<usize, SourceRecord>,
     pub(crate) svg_viewports: std::collections::HashSet<usize>,
     pub(crate) svg_layout_scale: f32,
+    pub(crate) inline_borders: bool,
     pub(crate) records: HashMap<NodeId, SourceRecord>,
     pub(crate) text_sources: Vec<SnapshotTextSource>,
 }
@@ -34,6 +35,7 @@ pub(crate) fn prepare(
     styled: &[StyledNode],
     identities: &[SourceIdentity],
     capture_text: bool,
+    native_html: bool,
 ) -> Result<(BuildSources, Vec<SnapshotSource>), SnapshotError> {
     let wanted = validate_identities(identities)?;
     let mut walker = Walker {
@@ -42,6 +44,7 @@ pub(crate) fn prepare(
         sources: Vec::new(),
         text_sources: Vec::new(),
         capture_text,
+        native_html,
     };
     walker.visit(styled, &mut Vec::new(), &[], false);
     check_found(&wanted, &walker.sources)?;
@@ -50,6 +53,7 @@ pub(crate) fn prepare(
             nodes: walker.nodes,
             svg_viewports: std::collections::HashSet::new(),
             svg_layout_scale: 1.0,
+            inline_borders: false,
             records: HashMap::new(),
             text_sources: walker.text_sources,
         },
@@ -92,6 +96,7 @@ struct Walker<'a> {
     sources: Vec<SnapshotSource>,
     text_sources: Vec<SnapshotTextSource>,
     capture_text: bool,
+    native_html: bool,
 }
 
 impl Walker<'_> {
@@ -117,7 +122,8 @@ impl Walker<'_> {
         excluded: bool,
     ) {
         let excluded = excluded
-            || matches!(node, StyledNode::Element(element) if display_of(&element.style) == Display::None);
+            || matches!(node, StyledNode::Element(element) if display_of(&element.style) == Display::None
+                || crate::layout::contents::suppresses_subtree(element));
         let id = self.wanted.get(path).copied();
         let (key, kind) = node_key(node);
         self.nodes.insert(
@@ -153,6 +159,11 @@ impl Walker<'_> {
         }
     }
 
+    fn excludes_child_content(&self, element: &crate::StyledElement) -> bool {
+        self.native_html
+            && matches!(&element.tag, crate::Tag::Html(name) if name.eq_ignore_ascii_case("iframe"))
+    }
+
     fn children(
         &mut self,
         node: &StyledNode,
@@ -166,6 +177,9 @@ impl Walker<'_> {
         };
         let mut next = ancestors.to_vec();
         next.extend(id);
+        // Fallback descendants remain in the DOM/source inventory, but a live
+        // embedded viewport never renders them in its parent's formatting tree.
+        let excluded = excluded || self.excludes_child_content(element);
         self.visit(&element.children, path, &next, excluded);
     }
 }

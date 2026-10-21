@@ -7,6 +7,8 @@ use crate::layout::value::{Display, Edges, Position};
 /// scrollable-overflow metrics.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct UsedBoxMetrics {
+    /// Real non-replaced inline fragment, distinguished from inline images/controls.
+    pub inline_fragment: bool,
     pub border: Edges,
     pub padding: Edges,
     pub margin: Edges,

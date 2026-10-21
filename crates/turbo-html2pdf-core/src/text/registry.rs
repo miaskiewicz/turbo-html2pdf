@@ -36,6 +36,26 @@ pub struct FontRegistry {
     native_glyphs: std::sync::Arc<std::sync::Mutex<NativeGlyphCache>>,
 }
 
+fn html_generic_candidates<'a>(
+    generic: &str,
+    candidates: &'a [&'a str],
+    prefer_native_mac_serif: bool,
+) -> &'a [&'a str] {
+    // Chrome's macOS serif default is the physical Times face. PDF callers
+    // keep the prior Times New Roman preference and explicit families keep theirs.
+    if prefer_native_mac_serif && generic == "serif" {
+        &[
+            "Times",
+            "Times New Roman",
+            "Georgia",
+            "Liberation Serif",
+            "DejaVu Serif",
+        ]
+    } else {
+        candidates
+    }
+}
+
 fn family_matches(face: &FontFace, name: &str) -> bool {
     face.family().eq_ignore_ascii_case(name.trim())
 }
@@ -165,6 +185,18 @@ impl FontRegistry {
     /// a page that names an installed font — or a generic — renders in it, matching
     /// a browser on the same machine. Best-effort: unreadable dirs/files skipped.
     pub fn load_system_fonts(&mut self) {
+        self.load_system_fonts_with_primary_policy(false);
+    }
+
+    /// Load installed fonts for continuous native HTML layout, including faces
+    /// whose family exists only in platform name records. Choose generic aliases
+    /// after admitting those real primary faces (for example Menlo on macOS).
+    /// Ordinary PDF callers retain the policy of [`Self::load_system_fonts`].
+    pub fn load_system_fonts_for_html(&mut self) {
+        self.load_system_fonts_with_primary_policy(true);
+    }
+
+    fn load_system_fonts_with_primary_policy(&mut self, platform_primary: bool) {
         self.native_glyphs = Default::default();
         self.platform_cascades = Default::default();
         for dir in system_font_dirs() {
@@ -175,12 +207,25 @@ impl FontRegistry {
                 load_font_file(&mut self.faces, &mut self.platform_faces, &entry.path());
             }
         }
-        self.alias_generics();
+        if platform_primary {
+            self.register_platform_primary();
+            self.alias_generics_with_primary_policy(cfg!(target_os = "macos"));
+        } else {
+            self.alias_generics();
+        }
+    }
+
+    fn register_platform_primary(&mut self) {
+        self.faces.extend(self.platform_faces.iter().cloned());
     }
 
     /// Alias each CSS generic to the first installed candidate family (all its
     /// weights/styles), so `font-family: sans-serif` resolves to a system font.
     fn alias_generics(&mut self) {
+        self.alias_generics_with_primary_policy(false);
+    }
+
+    fn alias_generics_with_primary_policy(&mut self, prefer_native_mac_serif: bool) {
         const GENERIC_CANDIDATES: &[(&str, &[&str])] = &[
             (
                 "sans-serif",
@@ -214,6 +259,7 @@ impl FontRegistry {
             ),
         ];
         for (generic, candidates) in GENERIC_CANDIDATES {
+            let candidates = html_generic_candidates(generic, candidates, prefer_native_mac_serif);
             if let Some(cand) = candidates
                 .iter()
                 .find(|c| self.faces.iter().any(|f| family_matches(f, c)))
@@ -440,7 +486,8 @@ mod tests {
         assert!(!super::super::platform_fallback::families(&go).is_empty());
     }
     #[test]
-    fn legacy_only_real_fonts_stay_private_and_invalid_programs_do_not_register() {
+    fn platform_only_fonts_require_html_opt_in_and_keep_caller_priority() {
+        let _guard = ENV_LOCK.lock().unwrap();
         let mut bytes =
             include_bytes!("../../assets/fonts/liberation-serif/LiberationSerif-Regular.ttf")
                 .to_vec();
@@ -479,9 +526,53 @@ mod tests {
         assert!(registry
             .glyph_for_native_families(&[family], '\u{10ffff}', 400, false)
             .is_none());
+        let legacy = registry.select(&[private[0].family()], 400, false);
+        assert!(legacy.is_none_or(|face| face.data() != private[0].data()));
+        // A unique CSS alias keeps installed copies of Liberation Serif from
+        // satisfying the request before the platform-only face is admitted.
+        let alias = "Turbo HTML platform-only fixture";
+        registry.platform_faces[0] = registry.platform_faces[0].with_family(alias);
+        registry.load_system_fonts_for_html();
+        let primary = registry.select(&[alias], 400, false).unwrap();
+        assert_eq!(primary.family(), alias);
+        assert_eq!(primary.data(), private[0].data());
+        let caller = FontFace::from_bytes(
+            include_bytes!("../../assets/fonts/Go-Regular.ttf").to_vec(),
+            alias,
+            400,
+            false,
+        )
+        .unwrap();
+        let mut with_caller = FontRegistry::new();
+        with_caller.add(caller.clone());
+        with_caller.platform_faces = vec![private[0].with_family(alias)];
+        with_caller.load_system_fonts_for_html();
+        assert_eq!(
+            with_caller.select(&[alias], 400, false).unwrap().data(),
+            caller.data()
+        );
         load_face(&mut public, &mut private, b"invalid font", 0);
         assert_eq!(public.len(), 0);
         assert_eq!(private.len(), 1);
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn html_system_generics_select_real_menlo_with_platform_only_family_records() {
+        let _guard = ENV_LOCK.lock().unwrap();
+        let bytes = std::fs::read("/System/Library/Fonts/Menlo.ttc").unwrap();
+        assert!(super::super::font::describe(&bytes, 0).is_none());
+        let mut registry = FontRegistry::new();
+        registry.load_system_fonts_for_html();
+        let explicit = registry.select(&["Menlo"], 400, false).unwrap();
+        let generic = registry.select(&["monospace"], 400, false).unwrap();
+        assert_eq!(explicit.data(), bytes);
+        assert_eq!(generic.data(), explicit.data());
+        assert_eq!(generic.index(), explicit.index());
+        assert!(generic
+            .native_postscript_name()
+            .unwrap()
+            .starts_with("Menlo"));
     }
     #[test]
     fn load_font_file_covers_ext_read_and_parse() {
@@ -547,6 +638,46 @@ mod tests {
         assert!(
             reg.select(&["sans-serif"], 400, false).is_some(),
             "sans-serif now resolves to the aliased Helvetica face"
+        );
+    }
+    #[test]
+    fn native_mac_serif_policy_selects_real_faces_without_changing_pdf_or_explicit_families() {
+        let times = FontFace::from_bytes(ROBOTO.to_vec(), "Times", 400, false).unwrap();
+        let tnr = FontFace::from_bytes(
+            include_bytes!("../../assets/fonts/Go-Regular.ttf").to_vec(),
+            "Times New Roman",
+            400,
+            false,
+        )
+        .unwrap();
+        let mut original = FontRegistry::default();
+        original.add(times.clone());
+        original.add(tnr.clone());
+        for (native, expected) in [(false, &tnr), (true, &times)] {
+            let mut registry = original.clone();
+            registry.alias_generics_with_primary_policy(native);
+            assert_eq!(
+                registry.select(&["serif"], 400, false).unwrap().data(),
+                expected.data()
+            );
+            assert_eq!(
+                registry
+                    .select(&["Times New Roman"], 400, false)
+                    .unwrap()
+                    .data(),
+                tnr.data()
+            );
+            assert_eq!(
+                registry.select(&["Times"], 400, false).unwrap().data(),
+                times.data()
+            );
+        }
+        let caller = tnr.with_family("serif");
+        original.add(caller.clone());
+        original.alias_generics_with_primary_policy(true);
+        assert_eq!(
+            original.select(&["serif"], 400, false).unwrap().data(),
+            caller.data()
         );
     }
 }

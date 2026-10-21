@@ -16,9 +16,11 @@ mod fixed_containing;
 mod geometry;
 mod hit_geometry;
 mod metrics;
+mod range_projection;
 pub(crate) mod sources;
 mod svg_viewports;
 pub(crate) mod text;
+mod text_caret_edges;
 mod text_carets;
 mod text_finite;
 mod text_geometry;
@@ -84,12 +86,22 @@ pub struct SnapshotInputs<'a> {
 pub enum SnapshotError {
     #[error("viewport dimensions must be finite and greater than zero")]
     InvalidViewport,
+    #[error("native HTML viewport dimensions must be finite and non-negative")]
+    InvalidNativeViewport,
     #[error("original UTF-16 text source {0:?} is invalid or duplicated")]
     InvalidOriginalText(SourceId),
     #[error("original UTF-16 text inputs exceed the source unit budget")]
     OriginalTextBudget,
     #[error("fixed descendants of transformed ancestors require an unsupported containing block")]
     UnsupportedFixedContainingBlock,
+    #[error("native block-in-inline splitting is unsupported")]
+    UnsupportedInlineBlockSplit,
+    #[error("native ordinary inline top/bottom/middle alignment is unsupported")]
+    UnsupportedInlineAlignment,
+    #[error("native ordinary inline vertical/RTL writing is unsupported")]
+    UnsupportedInlineWriting,
+    #[error("native ordinary inline absolute/fixed/sticky positioning is unsupported")]
+    UnsupportedInlinePosition,
     #[error("source ID {0:?} is assigned more than once")]
     DuplicateId(SourceId),
     #[error("source path {0:?} is assigned more than once")]
@@ -149,19 +161,23 @@ pub struct LayoutSnapshot {
     fragments: Vec<SnapshotFragment>,
     native_transforms: Vec<[f64; 6]>,
     native_hit_transforms: Vec<[f64; 6]>,
+    range_projection: Vec<range_projection::Projection>,
     sources: Vec<SnapshotSource>,
     source_index: BTreeMap<SourceId, usize>,
     viewport: (f32, f32),
     text_runs: Vec<SnapshotTextRun>,
     text_sources: Vec<SnapshotTextSource>,
     original_text_units: BTreeMap<SourceId, std::sync::Arc<[u16]>>,
+    collapsed_text_sources: std::collections::BTreeSet<SourceId>,
     html_layout_scale: Option<f32>,
     unsupported_svg_sources: std::collections::BTreeSet<SourceId>,
 }
 
 impl LayoutSnapshot {
-    /// Native affine composition retains double precision until final float points.
-    /// The legacy fragment matrix remains available with its original float type.
+    /// Global native affine coefficients retain double precision. Native box and
+    /// text-selection quads additionally preserve each flat FloatQuad boundary;
+    /// ordinary inline quads use this accumulated matrix. The legacy fragment
+    /// matrix remains available with its original float type.
     pub fn native_world_transform(&self, fragment_index: usize) -> Option<[f64; 6]> {
         self.native_transforms.get(fragment_index).copied()
     }
@@ -328,7 +344,7 @@ pub fn snapshot_html_styled_tree_with_text(
     inputs: &SnapshotInputs,
     diags: &mut Diagnostics,
 ) -> Result<LayoutSnapshot, TextSnapshotError> {
-    validate_viewport(inputs)?;
+    validate_native_viewport(inputs)?;
     text::validate_source_budget(styled)?;
     let (snapshot, exceeded) = capture_styled(styled, identities, inputs, diags, Some(true))?;
     checked_text_capture(snapshot, exceeded)
@@ -342,7 +358,7 @@ pub fn snapshot_html_live_tree_with_text(
     inputs: &SnapshotInputs,
     diags: &mut Diagnostics,
 ) -> Result<LayoutSnapshot, TextSnapshotError> {
-    validate_viewport(inputs)?;
+    validate_native_viewport(inputs)?;
     crate::style::set_layout_viewport(inputs.width, inputs.height);
     let styled = crate::style_tree(nodes, cascade);
     snapshot_html_styled_tree_with_text(&styled, identities, inputs, diags)
@@ -359,7 +375,7 @@ pub fn snapshot_html_styled_tree_with_svg_viewports(
     inputs: &SnapshotInputs,
     diags: &mut Diagnostics,
 ) -> Result<LayoutSnapshot, SvgSnapshotError> {
-    validate_viewport(inputs)?;
+    validate_native_viewport(inputs)?;
     text::validate_source_budget(styled)?;
     let plan = svg_viewports::prepare(styled, identities, viewports, layout_scale)?;
     let (snapshot, exceeded) = capture_styled_with_plan(
@@ -382,7 +398,7 @@ pub fn snapshot_html_styled_tree_with_native_text(
     inputs: &SnapshotInputs,
     diags: &mut Diagnostics,
 ) -> Result<LayoutSnapshot, SvgSnapshotError> {
-    validate_viewport(inputs)?;
+    validate_native_viewport(inputs)?;
     text::validate_source_budget(styled)?;
     let plan = svg_viewports::prepare(
         styled,
@@ -410,7 +426,7 @@ pub fn snapshot_html_live_tree_with_native_text(
     inputs: &SnapshotInputs,
     diags: &mut Diagnostics,
 ) -> Result<LayoutSnapshot, SvgSnapshotError> {
-    validate_viewport(inputs)?;
+    validate_native_viewport(inputs)?;
     crate::style::set_layout_viewport(inputs.width, inputs.height);
     let styled = crate::style_tree(nodes, cascade);
     snapshot_html_styled_tree_with_native_text(&styled, identities, options, inputs, diags)
@@ -433,7 +449,7 @@ pub fn snapshot_html_live_tree_with_svg_viewports(
     inputs: &SnapshotInputs,
     diags: &mut Diagnostics,
 ) -> Result<LayoutSnapshot, SvgSnapshotError> {
-    validate_viewport(inputs)?;
+    validate_native_viewport(inputs)?;
     crate::style::set_layout_viewport(inputs.width, inputs.height);
     let styled = crate::style_tree(nodes, cascade);
     snapshot_html_styled_tree_with_svg_viewports(
@@ -464,6 +480,27 @@ fn capture_styled(
     )
 }
 
+fn validate_native_context(
+    styled: &[StyledNode],
+    html_text_metrics: Option<bool>,
+) -> Result<(), SnapshotError> {
+    fixed_containing::validate(styled, false)?;
+    if html_text_metrics == Some(true) {
+        crate::layout::inline_boxes::validate(styled, false)?;
+    }
+    Ok(())
+}
+fn validate_capture_viewport(
+    inputs: &SnapshotInputs,
+    html: Option<bool>,
+) -> Result<(), SnapshotError> {
+    if html == Some(true) {
+        validate_native_viewport(inputs)
+    } else {
+        validate_viewport(inputs)
+    }
+}
+
 fn capture_styled_with_plan(
     styled: &[StyledNode],
     identities: &[SourceIdentity],
@@ -473,11 +510,16 @@ fn capture_styled_with_plan(
     plan: Option<svg_viewports::Plan>,
     original_text: &[SourceTextUnits<'_>],
 ) -> Result<(LayoutSnapshot, bool), SnapshotError> {
-    validate_viewport(inputs)?;
+    validate_capture_viewport(inputs, html_text_metrics)?;
     crate::style::set_layout_viewport(inputs.width, inputs.height);
-    fixed_containing::validate(styled, false)?;
-    let (mut build_sources, mut sources) =
-        sources::prepare(styled, identities, html_text_metrics.is_some())?;
+    validate_native_context(styled, html_text_metrics)?;
+    let (mut build_sources, mut sources) = sources::prepare(
+        styled,
+        identities,
+        html_text_metrics.is_some(),
+        html_text_metrics == Some(true),
+    )?;
+    build_sources.inline_borders = html_text_metrics == Some(true);
     let (font_layout_scale, unsupported_svg_sources) = apply_native_plan(&mut build_sources, plan);
     let text_sources = std::mem::take(&mut build_sources.text_sources);
     let original_text_units = text_units::prepare(&text_sources, original_text)?;
@@ -496,29 +538,38 @@ fn capture_styled_with_plan(
         },
     );
     text::alias_sources(text.as_ref(), &mut records);
+    let collapsed_text_sources = text
+        .as_ref()
+        .into_iter()
+        .flat_map(|capture| capture.collapsed_sources.iter())
+        .filter_map(|node| records.get(node).and_then(|record| record.id))
+        .collect();
     let (fragments, native_transforms, native_hit_transforms) =
         geometry::collect(&galley, &records, &metrics, &transforms, font_layout_scale);
+    let range_projection =
+        range_projection::collect(&fragments, &transforms, font_layout_scale.is_some());
     let source_index = sources.iter().enumerate().map(|(i, s)| (s.id, i)).collect();
     sources::index_fragments(&mut sources, &source_index, &fragments);
     let exceeded = text.as_ref().is_some_and(|text| text.exceeded);
     let text_runs = text.map_or_else(Vec::new, |text| text.collect(&galley, &fragments));
-    Ok((
-        LayoutSnapshot {
-            galley,
-            fragments,
-            native_transforms,
-            native_hit_transforms,
-            sources,
-            source_index,
-            viewport: (inputs.width, inputs.height),
-            text_runs,
-            text_sources,
-            original_text_units,
-            html_layout_scale: font_layout_scale,
-            unsupported_svg_sources,
-        },
-        exceeded,
-    ))
+    let mut snapshot = LayoutSnapshot {
+        galley,
+        fragments,
+        native_transforms,
+        native_hit_transforms,
+        range_projection,
+        sources,
+        source_index,
+        viewport: (inputs.width, inputs.height),
+        text_runs,
+        text_sources,
+        original_text_units,
+        collapsed_text_sources,
+        html_layout_scale: font_layout_scale,
+        unsupported_svg_sources,
+    };
+    range_projection::place_boxes(&mut snapshot);
+    Ok((snapshot, exceeded))
 }
 
 fn apply_native_plan(
@@ -533,6 +584,15 @@ fn apply_native_plan(
         }
         None => (None, Default::default()),
     }
+}
+
+fn validate_native_viewport(inputs: &SnapshotInputs) -> Result<(), SnapshotError> {
+    for value in [inputs.width, inputs.height] {
+        if !value.is_finite() || value < 0.0 {
+            return Err(SnapshotError::InvalidNativeViewport);
+        }
+    }
+    Ok(())
 }
 
 fn validate_viewport(inputs: &SnapshotInputs) -> Result<(), SnapshotError> {

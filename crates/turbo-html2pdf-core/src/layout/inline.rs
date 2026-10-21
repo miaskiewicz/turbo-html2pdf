@@ -13,6 +13,10 @@ use crate::text::{Align, FontFace, FontRegistry};
 
 use super::fragment::{NodeId, PositionedGlyph};
 use super::value::{Rgba, VAlign};
+#[path = "inline_advances.rs"]
+mod inline_advances;
+#[path = "native_text_advance.rs"]
+mod native_text_advance;
 
 /// One styled run of text entering inline layout. `face` is the run's primary
 /// face (already selected); `families`/`weight`/`italic` drive per-glyph fallback.
@@ -81,9 +85,31 @@ impl InlineAtom {
 /// is exactly one strut tall — not a block of fixed height.
 #[derive(Debug, Clone)]
 pub enum Piece {
+    NativeAtom(InlineAtom, f32),
+    SourceBreak(InlineEdge),
+    Edge(InlineEdge),
     Run(InlineRun),
     Atom(InlineAtom),
     Break,
+}
+
+/// Source-owned inline edge. Vertical decorations do not grow the line box.
+#[derive(Debug, Clone)]
+pub struct InlineEdge {
+    pub node_id: NodeId,
+    pub start: bool,
+    pub advance: f32,
+    pub face: FontFace,
+    pub font_size: f32,
+    pub line_height: Option<f32>,
+    pub baseline_shift: f32,
+    pub contributes_metrics: bool,
+    pub valign: VAlign,
+}
+#[derive(Debug, Clone)]
+pub struct PlacedInlineEdge {
+    pub edge: InlineEdge,
+    pub x: f32,
 }
 
 /// Where an atom landed: its `id` and top-left relative to the line's top-left.
@@ -109,6 +135,9 @@ pub struct GlyphRun {
 /// and box height.
 #[derive(Debug, Clone)]
 pub struct InlineLine {
+    pub inline_edges: Vec<PlacedInlineEdge>,
+    pub baseline: f32,
+    pub inline_origin: f32,
     pub runs: Vec<GlyphRun>,
     pub atoms: Vec<PlacedAtom>,
     pub width: f32,
@@ -140,6 +169,9 @@ pub struct GlyphSourceCluster {
     pub advance: f32,
     /// The direction selected by the actual native shaper for this segment.
     pub right_to_left: bool,
+    /// True for source cells created by CSS whitespace collapse, including the
+    /// first rendered space. Pre/nowrap glyph spaces retain ordinary provenance.
+    pub collapsed_whitespace: bool,
 }
 
 /// Native output and parallel per-line, per-run, per-glyph source records.
@@ -381,6 +413,7 @@ fn character_face(
 // --------------------------------------------------------------------------
 
 struct Seg {
+    baseline_shift: Option<f32>,
     source_bytes: usize,
     source_utf16: usize,
     face: FontFace,
@@ -394,9 +427,16 @@ struct Seg {
     line_height: Option<f32>,
     node_id: NodeId,
     width: f32,
+    native_width: f64,
 }
 
 struct Word {
+    atom_shift: f32,
+    spaces: Vec<Seg>,
+    leading_spaces: Vec<Seg>,
+    advance_space: Option<Seg>,
+    native_space: Option<(NodeId, f64)>,
+    edges: Vec<(usize, InlineEdge)>,
     segs: Vec<Seg>,
     width: f32,
     space_after: f32,
@@ -426,6 +466,7 @@ fn make_seg(chars: &[CharInfo], runs: &[InlineRun]) -> Seg {
         |units| face.measure_original_utf16(units, run.font_size, run.letter_spacing),
     );
     Seg {
+        baseline_shift: None,
         source_bytes: chars[0].byte_offset,
         source_utf16: chars[0].utf16_offset,
         face,
@@ -439,6 +480,7 @@ fn make_seg(chars: &[CharInfo], runs: &[InlineRun]) -> Seg {
         line_height: run.line_height,
         node_id: run.node_id,
         width,
+        native_width: f64::from(width),
     }
 }
 
@@ -470,6 +512,12 @@ fn make_word(chars: &[CharInfo], runs: &[InlineRun], space_after: f32) -> Word {
     }
     let width = segs.iter().map(|s| s.width).sum();
     Word {
+        atom_shift: 0.0,
+        spaces: Vec::new(),
+        leading_spaces: Vec::new(),
+        advance_space: None,
+        native_space: None,
+        edges: Vec::new(),
         segs,
         width,
         space_after,
@@ -481,6 +529,12 @@ fn make_word(chars: &[CharInfo], runs: &[InlineRun], space_after: f32) -> Word {
 /// A zero-width forced-break word (`<br>`): no glyphs, flushes its line.
 fn break_word() -> Word {
     Word {
+        atom_shift: 0.0,
+        spaces: Vec::new(),
+        leading_spaces: Vec::new(),
+        advance_space: None,
+        native_space: None,
+        edges: Vec::new(),
         segs: Vec::new(),
         width: 0.0,
         space_after: 0.0,
@@ -501,7 +555,12 @@ fn collapsible_space(character: char, capture_sources: bool) -> bool {
     matches!(character, ' ' | '\t' | '\n' | '\r' | '\u{c}')
 }
 
-fn build_words(chars: &[CharInfo], runs: &[InlineRun], capture_sources: bool) -> Vec<Word> {
+fn build_words(
+    chars: &[CharInfo],
+    runs: &[InlineRun],
+    capture_sources: bool,
+    native_advances: bool,
+) -> Vec<Word> {
     // A space is a line-break opportunity only when its run wraps; a `nowrap` run's
     // spaces stay inside the word so its whole text is one unbreakable unit.
     let breakable = |c: &CharInfo| collapsible_space(c.ch, capture_sources) && !runs[c.run].nowrap;
@@ -517,52 +576,98 @@ fn build_words(chars: &[CharInfo], runs: &[InlineRun], capture_sources: bool) ->
             i += 1;
         }
         let space_after = chars.get(i).map_or(0.0, |c| space_width(c, runs));
-        words.push(make_word(&chars[start..i], runs, space_after));
+        let mut word = make_word(&chars[start..i], runs, space_after);
+        word.spaces = native_word_spaces(&chars[i..], runs, native_advances);
+        words.push(word);
     }
     words
 }
 
-/// Build the word list from inline pieces in document order: consecutive text
-/// runs are grouped (so a word may still span adjacent runs, e.g. `<b>x</b>y`),
-/// and each atom becomes an unbreakable atom-word at its position.
+fn native_word_spaces(chars: &[CharInfo], runs: &[InlineRun], enabled: bool) -> Vec<Seg> {
+    if !enabled {
+        return Vec::new();
+    }
+    chars
+        .iter()
+        .take_while(|c| collapsible_space(c.ch, true) && !runs[c.run].nowrap)
+        .map(|c| make_seg(std::slice::from_ref(c), runs))
+        .collect()
+}
+
+#[derive(Clone, Copy)]
+struct SourcePolicy {
+    capture: bool,
+    advances: bool,
+}
+
+/// Build words in document order; adjacent runs share a word, while each atom
+/// remains unbreakable. Native advance metadata is kept out of PDF callers.
 fn build_pieces(
     pieces: &[Piece],
     reg: &FontRegistry,
     diags: &mut Diagnostics,
-    capture_sources: bool,
+    policy: SourcePolicy,
     original_units: Option<&crate::layout_snapshot::text_units::NativeUnitMap>,
 ) -> Vec<Word> {
     let mut words = Vec::new();
     let mut group: Vec<InlineRun> = Vec::new();
+    let mut edges: Vec<(usize, InlineEdge)> = Vec::new();
     for piece in pieces {
         match piece {
             Piece::Run(run) => group.push(run.clone()),
+            Piece::Edge(edge) => edges.push((group.len(), edge.clone())),
             Piece::Atom(atom) => {
                 flush_run_group(
                     &mut group,
+                    &mut edges,
                     reg,
                     diags,
                     &mut words,
-                    capture_sources,
+                    policy,
                     original_units,
                 );
-                words.push(Word {
-                    segs: Vec::new(),
-                    // The atom occupies its MARGIN box inline, so horizontal margins
-                    // count toward wrapping + advance.
-                    width: atom.width + atom.margin_left + atom.margin_right,
-                    space_after: 0.0,
-                    atom: Some(*atom),
-                    break_after: false,
-                });
+                words.push(atom_word(*atom, 0.0));
+            }
+            Piece::NativeAtom(atom, shift) => {
+                flush_run_group(
+                    &mut group,
+                    &mut edges,
+                    reg,
+                    diags,
+                    &mut words,
+                    policy,
+                    original_units,
+                );
+                let mut atom = *atom;
+                if matches!(atom.valign, VAlign::Super | VAlign::Sub) {
+                    atom.valign = VAlign::Baseline;
+                }
+                words.push(atom_word(atom, *shift));
+            }
+            Piece::SourceBreak(edge) => {
+                flush_run_group(
+                    &mut group,
+                    &mut edges,
+                    reg,
+                    diags,
+                    &mut words,
+                    policy,
+                    original_units,
+                );
+                let mut word = break_word();
+                let mut end = edge.clone();
+                end.start = false;
+                word.edges = vec![(0, edge.clone()), (0, end)];
+                words.push(word);
             }
             Piece::Break => {
                 flush_run_group(
                     &mut group,
+                    &mut edges,
                     reg,
                     diags,
                     &mut words,
-                    capture_sources,
+                    policy,
                     original_units,
                 );
                 words.push(break_word());
@@ -571,31 +676,229 @@ fn build_pieces(
     }
     flush_run_group(
         &mut group,
+        &mut edges,
         reg,
         diags,
         &mut words,
-        capture_sources,
+        policy,
         original_units,
     );
     words
 }
 
+fn atom_word(atom: InlineAtom, shift: f32) -> Word {
+    Word {
+        atom_shift: shift,
+        spaces: Vec::new(),
+        leading_spaces: Vec::new(),
+        advance_space: None,
+        native_space: None,
+        edges: Vec::new(),
+        segs: Vec::new(),
+        width: atom.width + atom.margin_left + atom.margin_right,
+        space_after: 0.0,
+        atom: Some(atom),
+        break_after: false,
+    }
+}
 /// Flush a run of consecutive text pieces into words (itemize + word-break),
 /// clearing the group.
 fn flush_run_group(
     group: &mut Vec<InlineRun>,
+    edges: &mut Vec<(usize, InlineEdge)>,
     reg: &FontRegistry,
     diags: &mut Diagnostics,
     out: &mut Vec<Word>,
-    capture_sources: bool,
+    policy: SourcePolicy,
     original_units: Option<&crate::layout_snapshot::text_units::NativeUnitMap>,
 ) {
-    if !group.is_empty() {
-        let native = capture_sources || original_units.is_some();
+    if !group.is_empty() || !edges.is_empty() {
+        let native = policy.capture || original_units.is_some();
         let chars = flatten_chars(group, reg, diags, native, original_units);
-        hand_off_leading_space(&chars, group, out, native);
-        out.extend(build_words(&chars, group, native));
+        let continue_space = group_leading_space(&chars, group, edges, out, native, policy);
+        if edges.is_empty() {
+            out.extend(build_words(&chars, group, native, policy.advances));
+        } else {
+            out.extend(build_marked_words(
+                chars,
+                group,
+                edges,
+                native,
+                !continue_space,
+            ));
+        }
+        edges.clear();
         group.clear();
+    }
+}
+
+fn group_leading_space(
+    chars: &[CharInfo],
+    group: &[InlineRun],
+    edges: &[(usize, InlineEdge)],
+    out: &mut [Word],
+    capture: bool,
+    policy: SourcePolicy,
+) -> bool {
+    if !policy.advances {
+        hand_off_leading_space(chars, group, out, capture, false);
+        return false;
+    }
+    let continuation = preceding_inline_content(out);
+    if continuation && !edges.first().is_some_and(|(at, _)| *at == 0) {
+        hand_off_leading_space(chars, group, out, capture, true);
+    }
+    continuation
+}
+
+fn contains_inline_content(word: &Word) -> bool {
+    word.atom.is_some() || !word.segs.is_empty()
+}
+// Empty inline boundaries do not reset whitespace collapse, but forced line
+// breaks and an already captured trailing space do.
+fn preceding_inline_content(words: &[Word]) -> bool {
+    for word in words.iter().rev() {
+        if word.break_after || word.space_after != 0.0 {
+            return false;
+        }
+        if contains_inline_content(word) {
+            return true;
+        }
+    }
+    false
+}
+
+enum SourceItem {
+    Character(CharInfo),
+    Edge(InlineEdge),
+}
+fn marked_items(
+    chars: Vec<CharInfo>,
+    runs: &[InlineRun],
+    edges: &[(usize, InlineEdge)],
+) -> Vec<SourceItem> {
+    let mut chars = chars.into_iter().peekable();
+    let mut events = edges.iter().peekable();
+    let mut items = Vec::new();
+    for run in 0..=runs.len() {
+        while events.peek().is_some_and(|(at, _)| *at == run) {
+            items.push(SourceItem::Edge(events.next().unwrap().1.clone()));
+        }
+        while chars.peek().is_some_and(|c| c.run == run) {
+            items.push(SourceItem::Character(chars.next().unwrap()));
+        }
+    }
+    items
+}
+struct MarkedWords<'a> {
+    words: Vec<Word>,
+    current: Vec<SourceItem>,
+    in_space: bool,
+    runs: &'a [InlineRun],
+    native: bool,
+}
+impl MarkedWords<'_> {
+    fn push(&mut self, item: SourceItem) {
+        match item {
+            SourceItem::Character(c)
+                if collapsible_space(c.ch, self.native) && !self.runs[c.run].nowrap =>
+            {
+                self.space(c)
+            }
+            item => {
+                if matches!(item, SourceItem::Character(_)) {
+                    self.in_space = false;
+                }
+                self.current.push(item);
+            }
+        }
+    }
+    fn space(&mut self, c: CharInfo) {
+        let width = if self.in_space {
+            0.0
+        } else {
+            space_width(&c, self.runs)
+        };
+        if !self.current.is_empty() {
+            self.words.push(marked_word(
+                std::mem::take(&mut self.current),
+                self.runs,
+                width,
+            ));
+        }
+        if let Some(previous) = self.words.last_mut() {
+            previous
+                .spaces
+                .push(make_seg(std::slice::from_ref(&c), self.runs));
+        }
+        self.in_space = true;
+    }
+    fn finish(mut self) -> Vec<Word> {
+        if !self.current.is_empty() {
+            self.words.push(marked_word(self.current, self.runs, 0.0));
+        }
+        self.words
+    }
+}
+fn build_marked_words(
+    chars: Vec<CharInfo>,
+    runs: &[InlineRun],
+    edges: &[(usize, InlineEdge)],
+    native: bool,
+    in_space: bool,
+) -> Vec<Word> {
+    let mut builder = MarkedWords {
+        words: Vec::new(),
+        current: Vec::new(),
+        in_space,
+        runs,
+        native,
+    };
+    for item in marked_items(chars, runs, edges) {
+        builder.push(item);
+    }
+    builder.finish()
+}
+fn push_character(c: CharInfo, chars: &mut Vec<CharInfo>, segs: &mut Vec<Seg>, runs: &[InlineRun]) {
+    if chars.first().is_some_and(|old| seg_key(old) != seg_key(&c)) {
+        segs.push(make_seg(chars, runs));
+        chars.clear();
+    }
+    chars.push(c);
+}
+fn marked_word(items: Vec<SourceItem>, runs: &[InlineRun], space_after: f32) -> Word {
+    let mut segs = Vec::new();
+    let mut edges = Vec::new();
+    let mut chars = Vec::new();
+    for item in items {
+        match item {
+            SourceItem::Edge(edge) => {
+                if !chars.is_empty() {
+                    segs.push(make_seg(&chars, runs));
+                    chars.clear();
+                }
+                edges.push((segs.len(), edge));
+            }
+            SourceItem::Character(c) => push_character(c, &mut chars, &mut segs, runs),
+        }
+    }
+    if !chars.is_empty() {
+        segs.push(make_seg(&chars, runs));
+    }
+    let width = segs.iter().map(|s| s.width).sum::<f32>()
+        + edges.iter().map(|(_, e)| e.advance).sum::<f32>();
+    Word {
+        atom_shift: 0.0,
+        spaces: Vec::new(),
+        leading_spaces: Vec::new(),
+        advance_space: None,
+        native_space: None,
+        segs,
+        edges,
+        width,
+        space_after,
+        atom: None,
+        break_after: false,
     }
 }
 
@@ -609,6 +912,7 @@ fn hand_off_leading_space(
     group: &[InlineRun],
     out: &mut [Word],
     capture_sources: bool,
+    native_advances: bool,
 ) {
     let (Some(first), Some(last)) = (chars.first(), out.last_mut()) else {
         return;
@@ -616,6 +920,17 @@ fn hand_off_leading_space(
     let breakable = collapsible_space(first.ch, capture_sources) && !group[first.run].nowrap;
     if breakable && last.space_after == 0.0 {
         last.space_after = space_width(first, group);
+        if native_advances {
+            last.advance_space = Some(make_seg(std::slice::from_ref(first), group));
+            last.spaces.extend(
+                chars
+                    .iter()
+                    .take_while(|c| {
+                        collapsible_space(c.ch, capture_sources) && !group[c.run].nowrap
+                    })
+                    .map(|c| make_seg(std::slice::from_ref(c), group)),
+            );
+        }
     }
 }
 
@@ -628,6 +943,38 @@ fn hand_off_leading_space(
 /// free for that line. The default (no floats) is `(0, max_width)` for every y.
 pub type LineRegion<'a> = &'a dyn Fn(f32) -> (f32, f32);
 
+fn opening_space_only(word: &Word) -> bool {
+    word.width == 0.0 && word.atom.is_none() && word.segs.is_empty() && opening_edges(&word.edges)
+}
+fn opening_edges(edges: &[(usize, InlineEdge)]) -> bool {
+    !edges.is_empty() && edges.iter().all(|(_, edge)| edge.start)
+}
+fn atom_source_prefix(previous: &Word, next: &Word) -> bool {
+    previous.atom.is_some()
+        && previous
+            .native_space
+            .is_some_and(|(source, _)| next.segs.first().is_some_and(|seg| seg.node_id == source))
+}
+fn wrapped_source_spaces(previous: &mut Word, next: &Word) -> Vec<Seg> {
+    if opening_space_only(previous) || atom_source_prefix(previous, next) {
+        return std::mem::take(&mut previous.spaces);
+    }
+    if wrapped_extra_spaces(previous, next) {
+        // The first separator retains the preceding line's end affinity; extra
+        // collapsed units map to the next line's start, retaining their source IDs.
+        return previous.spaces.split_off(1);
+    }
+    Vec::new()
+}
+fn wrapped_extra_spaces(previous: &Word, next: &Word) -> bool {
+    previous.spaces.len() > 1
+        && !previous.segs.is_empty()
+        && previous
+            .spaces
+            .first()
+            .zip(next.segs.first())
+            .is_some_and(|(space, next)| space.node_id == next.node_id)
+}
 /// Running state of line breaking: the accumulated `cur` words, the current line
 /// `y`, the float region `(indent, lw)` at that y, and the pen `x`. Threads `y`
 /// top-down so each line's available width is queried from `region` at its own
@@ -642,10 +989,13 @@ struct Placer<'a> {
     capture_sources: bool,
     html_font_metrics: bool,
     html_font_scale: Option<f32>,
+    advances: Option<inline_advances::Cursor>,
+    strut_metrics: Option<(f32, f32)>,
     first_indent: f32,
     clearance: Option<&'a dyn Fn(f32, f32) -> f32>,
     out: Vec<SourceLine>,
     cur: Vec<Word>,
+    open_edges: Vec<InlineEdge>,
     y: f32,
     indent: f32,
     lw: f32,
@@ -668,10 +1018,13 @@ impl<'a> Placer<'a> {
             capture_sources,
             html_font_metrics,
             html_font_scale,
+            advances: html_font_scale.map(|scale| inline_advances::Cursor::new(scale, 0.0)),
+            strut_metrics: None,
             first_indent: 0.0,
             clearance: None,
             out: Vec::new(),
             cur: Vec::new(),
+            open_edges: Vec::new(),
             y: 0.0,
             indent,
             lw,
@@ -685,40 +1038,115 @@ impl<'a> Placer<'a> {
         if self.cur.is_empty() {
             return;
         }
+        let current = std::mem::take(&mut self.cur);
+        let mut next_open = self.open_edges.clone();
+        for word in &current {
+            for (_, edge) in &word.edges {
+                if edge.start {
+                    next_open.push(edge.clone());
+                } else {
+                    next_open.retain(|open| open.node_id != edge.node_id);
+                }
+            }
+        }
         let mut line = place_line(
-            std::mem::take(&mut self.cur),
+            current,
             self.lw,
             self.align,
             self.strut,
+            &self.open_edges,
+            self.strut_metrics,
             (
                 self.capture_sources,
                 self.html_font_metrics,
                 self.html_font_scale,
             ),
         );
+        self.open_edges = next_open;
         line.line.top = self.y;
         line.line.indent = self.indent;
         self.y += line.line.height;
         self.out.push(line);
         (self.indent, self.lw) = (self.region)(self.y);
         self.x = 0.0;
+        self.advances = self
+            .html_font_scale
+            .map(|scale| inline_advances::Cursor::new(scale, 0.0));
     }
 
     /// Add one word: wrap first if it no longer fits, then flush after it if it is
     /// a forced break (so a `<br>` ends its line and the next word starts below).
-    fn add(&mut self, word: Word) {
-        if !self.cur.is_empty() && self.x + word.width > self.lw {
+    fn add(&mut self, mut word: Word) {
+        if self.attach_trailing_close(&word) {
+            return;
+        }
+        if self.needs_wrap(&word) {
+            word.leading_spaces = self.wrapped_leading_spaces(&word);
             self.flush();
         }
-        self.avoid_floats(word.width);
+        let width = self.html_font_scale.map_or(word.width, |scale| {
+            inline_advances::Cursor::new(scale, 0.0).candidate_width(&word)
+        });
+        self.avoid_floats(width);
         let forced = word.break_after;
         self.x += word.width + word.space_after;
+        if let Some(advances) = &mut self.advances {
+            advances.word(&word);
+            advances.space(&word);
+        }
         self.cur.push(word);
         if forced {
             self.flush();
         }
     }
 
+    fn wrapped_leading_spaces(&mut self, next: &Word) -> Vec<Seg> {
+        if self.html_font_scale.is_none() {
+            return Vec::new();
+        }
+        let last = self
+            .cur
+            .last_mut()
+            .expect("wrapping requires existing line content");
+        wrapped_source_spaces(last, next)
+    }
+
+    fn attach_trailing_close(&mut self, word: &Word) -> bool {
+        if !self.cur.is_empty() || !closing_only(word) {
+            return false;
+        }
+        let Some(last) = self.out.last_mut() else {
+            return false;
+        };
+        let mut x = last.line.inline_origin + last.line.width;
+        for (_, edge) in &word.edges {
+            last.line.inline_edges.push(PlacedInlineEdge {
+                edge: edge.clone(),
+                x,
+            });
+            x += edge.advance;
+            self.open_edges.retain(|open| open.node_id != edge.node_id);
+        }
+        last.line.width = x - last.line.inline_origin;
+        true
+    }
+    fn needs_wrap(&self, word: &Word) -> bool {
+        if !self.html_font_metrics {
+            return !self.cur.is_empty() && self.x + word.width > self.lw;
+        }
+        let width = self
+            .advances
+            .as_ref()
+            .map_or(self.x + word.width, |advances| {
+                advances.candidate_width(word)
+            });
+        word.width > 0.0
+            && width > self.lw
+            && self
+                .cur
+                .iter()
+                .any(|previous| previous.width > 0.0 || previous.atom.is_some())
+    }
     fn avoid_floats(&mut self, width: f32) {
         if !self.cur.is_empty() {
             return;
@@ -743,6 +1171,12 @@ impl<'a> Placer<'a> {
     }
 }
 
+fn closing_only(word: &Word) -> bool {
+    !word.edges.is_empty()
+        && word.segs.is_empty()
+        && word.spaces.is_empty()
+        && word.edges.iter().all(|(_, edge)| !edge.start)
+}
 /// Break `words` into placed lines via a [`Placer`].
 fn wrap_and_place(
     words: Vec<Word>,
@@ -839,22 +1273,155 @@ fn fold_atom_metrics(atom: &InlineAtom, m: &mut Metrics) {
 /// `<br><br>` gap — is exactly one strut tall), then each word's text segments and
 /// atoms grow it. The PDF policy floors the height at the font box; explicit
 /// HTML line-height permits negative leading and overlapping glyph font boxes.
-fn line_metrics(words: &[Word], strut: f32, capture_sources: bool, scale: Option<f32>) -> Metrics {
+pub(super) fn native_font_height(
+    ascent: f32,
+    descent: f32,
+    line_height: f32,
+    shift: f32,
+    scale: f32,
+) -> (f32, f32) {
+    let line_height = super::value::html_used_value(line_height, Some(scale));
+    let extra = line_height - ascent - descent;
+    let units = (extra * scale * 64.0).round() as i64;
+    let above = (units / 2).div_euclid(64) as f32 / scale;
+    (ascent + above + shift, descent + extra - above - shift)
+}
+fn native_line_metrics(
+    words: &[Word],
+    open: &[InlineEdge],
+    strut: (f32, f32),
+    scale: Option<f32>,
+) -> Metrics {
+    let mut metrics = Metrics {
+        ascent: strut.0,
+        descent: strut.1,
+        height: 0.0,
+    };
+    for edge in open {
+        fold_native_edge(edge, &mut metrics, scale);
+    }
+    for word in words {
+        fold_native_word(word, &mut metrics, scale);
+    }
+    metrics.height = metrics.height.max(metrics.ascent + metrics.descent);
+    metrics
+}
+fn fold_native_word(word: &Word, metrics: &mut Metrics, scale: Option<f32>) {
+    for (_, edge) in &word.edges {
+        fold_native_edge(edge, metrics, scale);
+    }
+    for seg in &word.segs {
+        let font = source_font_metrics(seg, scale);
+        let lh = seg
+            .line_height
+            .unwrap_or(font.ascent + font.descent + font.line_gap);
+        unite_native(
+            metrics,
+            native_font_height(
+                font.ascent,
+                font.descent,
+                lh,
+                seg.baseline_shift.unwrap_or_default(),
+                scale.unwrap_or(1.0),
+            ),
+        );
+    }
+    if let Some(atom) = word.atom {
+        fold_native_atom(&atom, word.atom_shift, metrics);
+    }
+}
+fn fold_native_atom(atom: &InlineAtom, shift: f32, metrics: &mut Metrics) {
+    if matches!(atom.valign, VAlign::Top | VAlign::Bottom | VAlign::Middle) {
+        fold_atom_metrics(atom, metrics);
+        return;
+    }
+    metrics.ascent = metrics.ascent.max(atom.outer_height() + shift);
+    metrics.descent = metrics.descent.max(-shift);
+}
+fn fold_native_edge(edge: &InlineEdge, metrics: &mut Metrics, scale: Option<f32>) {
+    if !edge.contributes_metrics {
+        return;
+    }
+    let scale = scale.unwrap_or(1.0);
+    let font = edge.face.html_metrics(edge.font_size * scale);
+    let lh = edge
+        .line_height
+        .unwrap_or((font.ascent + font.descent + font.line_gap) / scale);
+    unite_native(
+        metrics,
+        native_font_height(
+            font.ascent / scale,
+            font.descent / scale,
+            lh,
+            edge.baseline_shift,
+            scale,
+        ),
+    );
+}
+fn unite_native(metrics: &mut Metrics, height: (f32, f32)) {
+    metrics.ascent = metrics.ascent.max(height.0);
+    metrics.descent = metrics.descent.max(height.1);
+}
+fn apply_baselines(words: &mut [Word], baselines: &std::collections::HashMap<NodeId, f32>) {
+    for word in words {
+        for (_, edge) in &mut word.edges {
+            edge.baseline_shift = baselines.get(&edge.node_id).copied().unwrap_or_default();
+        }
+        apply_run_baselines(word, baselines);
+    }
+}
+fn apply_run_baselines(word: &mut Word, baselines: &std::collections::HashMap<NodeId, f32>) {
+    for seg in word.segs.iter_mut().chain(word.spaces.iter_mut()) {
+        seg.baseline_shift = baselines.get(&seg.node_id).copied();
+    }
+}
+
+fn line_metrics(
+    words: &[Word],
+    strut: f32,
+    capture_sources: bool,
+    scale: Option<f32>,
+    open_edges: &[InlineEdge],
+) -> Metrics {
     let mut m = Metrics {
         ascent: 0.0,
         descent: 0.0,
         height: strut,
     };
+    for edge in open_edges {
+        fold_edge_metrics(edge, &mut m, scale);
+    }
     for word in words {
-        for seg in &word.segs {
-            fold_seg_metrics(seg, &mut m, capture_sources, scale);
-        }
-        if let Some(atom) = word.atom {
-            fold_atom_metrics(&atom, &mut m);
-        }
+        fold_word_metrics(word, &mut m, capture_sources, scale);
     }
     finish_line_height(&mut m, words, capture_sources);
     m
+}
+
+fn fold_word_metrics(word: &Word, m: &mut Metrics, capture_sources: bool, scale: Option<f32>) {
+    for (_, edge) in &word.edges {
+        fold_edge_metrics(edge, m, scale);
+    }
+    for seg in &word.segs {
+        fold_seg_metrics(seg, m, capture_sources, scale);
+    }
+    if let Some(atom) = word.atom {
+        fold_atom_metrics(&atom, m);
+    }
+}
+fn fold_edge_metrics(edge: &InlineEdge, m: &mut Metrics, scale: Option<f32>) {
+    if !edge.contributes_metrics {
+        return;
+    }
+    let scale = scale.unwrap_or(1.0);
+    let font = edge.face.html_metrics(edge.font_size * scale);
+    let shift = valign_shift(edge.valign, edge.font_size);
+    m.ascent = m.ascent.max(font.ascent / scale + shift);
+    m.descent = m.descent.max(font.descent / scale - shift);
+    m.height = m.height.max(
+        edge.line_height
+            .unwrap_or((font.ascent + font.descent + font.line_gap) / scale),
+    );
 }
 
 fn finish_line_height(metrics: &mut Metrics, words: &[Word], html_font_metrics: bool) {
@@ -889,10 +1456,14 @@ fn source_shaper_is_rtl(text: &str, enabled: bool) -> bool {
 fn shape_seg(seg: &Seg, pen_x: f32, baseline: f32, policy: (bool, bool, Option<f32>)) -> SourceRun {
     let (capture_sources, html_font_metrics, html_font_scale) = policy;
     let scale = seg.face.scale(seg.font_size);
-    let seg_baseline = baseline - valign_shift(seg.valign, seg.font_size);
+    let shift = seg
+        .baseline_shift
+        .unwrap_or_else(|| valign_shift(seg.valign, seg.font_size));
+    let seg_baseline = baseline - shift;
     let mut glyphs = Vec::new();
     let mut clusters = Vec::new();
     let mut x = pen_x;
+    let mut native_x = f64::from(pen_x);
     let shaped = seg.original_units.as_deref().map_or_else(
         || seg.face.shape(&seg.text),
         |units| seg.face.shape_original_utf16(units),
@@ -919,6 +1490,17 @@ fn shape_seg(seg: &Seg, pen_x: f32, baseline: f32, policy: (bool, bool, Option<f
         (Vec::new(), Vec::new())
     };
     for g in shaped {
+        let ordinary_advance = scale * g.x_advance as f32 + seg.letter_spacing;
+        let native_advance = html_font_scale.map_or(f64::from(ordinary_advance), |_| {
+            native_text_advance::glyph_advance(
+                &seg.face,
+                seg.font_size,
+                g.x_advance,
+                seg.letter_spacing,
+            )
+        });
+        let advance = html_font_scale.map_or(ordinary_advance, |_| native_advance as f32);
+        let position = html_font_scale.map_or(x, |_| native_x as f32);
         if capture_sources {
             let start = g.cluster as usize;
             let end = boundaries[boundaries
@@ -932,21 +1514,23 @@ fn shape_seg(seg: &Seg, pen_x: f32, baseline: f32, policy: (bool, bool, Option<f
                 .1
             };
             clusters.push(GlyphSourceCluster {
+                collapsed_whitespace: false,
                 right_to_left,
                 byte_start: seg.source_bytes + start,
                 byte_end: seg.source_bytes + end,
                 utf16_start: seg.source_utf16 + offset(start),
                 utf16_end: seg.source_utf16 + offset(end),
-                pen_x: x,
-                advance: scale * g.x_advance as f32 + seg.letter_spacing,
+                pen_x: position,
+                advance,
             });
         }
         glyphs.push(PositionedGlyph {
             glyph_id: g.glyph_id,
-            x: x + scale * g.x_offset as f32,
+            x: position + scale * g.x_offset as f32,
             y: seg_baseline - scale * g.y_offset as f32,
         });
-        x += scale * g.x_advance as f32 + seg.letter_spacing;
+        x += advance;
+        native_x += native_advance;
     }
     let (ascent, descent) = if html_font_metrics {
         let metrics = source_font_metrics(seg, html_font_scale);
@@ -1025,40 +1609,192 @@ fn atom_margin_top(atom: &InlineAtom, height: f32, baseline: f32) -> f32 {
     }
 }
 
+struct LinePlacement {
+    pen: f32,
+    baseline: f32,
+    height: f32,
+    policy: (bool, bool, Option<f32>),
+    runs: Vec<SourceRun>,
+    atoms: Vec<PlacedAtom>,
+    inline_edges: Vec<PlacedInlineEdge>,
+    advances: Option<inline_advances::Cursor>,
+}
+impl LinePlacement {
+    fn word(&mut self, word: &Word, has_next: bool) {
+        for space in &word.leading_spaces {
+            self.runs.push(shape_space(
+                space,
+                self.pen,
+                self.baseline,
+                self.policy,
+                0.0,
+            ));
+        }
+        if let Some(atom) = word.atom {
+            self.atom(&atom, word.atom_shift);
+        } else {
+            self.text(word);
+        }
+        self.begin_space(word, has_next);
+        self.spaces(word, has_next);
+        self.advance_space(word, has_next);
+    }
+    fn atom(&mut self, atom: &InlineAtom, shift: f32) {
+        self.native_barrier(0.0);
+        let margin_top = atom_margin_top(atom, self.height, self.baseline) - shift;
+        self.atoms.push(PlacedAtom {
+            id: atom.id,
+            x: self.pen + atom.margin_left,
+            y: margin_top + atom.margin_top,
+        });
+        let width = atom.width + atom.margin_left + atom.margin_right;
+        self.pen += width;
+        self.native_barrier(width);
+    }
+    fn begin_space(&mut self, word: &Word, has_next: bool) {
+        if !has_next {
+            return;
+        }
+        if let (Some(advances), Some((source, _))) = (&mut self.advances, word.native_space) {
+            advances.begin(source);
+            self.pen = advances.position();
+        }
+    }
+    fn advance_space(&mut self, word: &Word, has_next: bool) {
+        if let Some(advances) = &mut self.advances {
+            if has_next {
+                advances.space(word);
+            }
+            self.pen = advances.position();
+        } else {
+            self.pen += word.space_after;
+        }
+    }
+    fn native_barrier(&mut self, advance: f32) {
+        if let Some(advances) = &mut self.advances {
+            advances.barrier(advance);
+            self.pen = advances.position();
+        }
+    }
+    fn edge(&mut self, edge: &InlineEdge) {
+        self.native_barrier(0.0);
+        self.inline_edges.push(PlacedInlineEdge {
+            edge: edge.clone(),
+            x: self.pen,
+        });
+        self.pen += edge.advance;
+        self.native_barrier(edge.advance);
+    }
+    fn segment(&mut self, seg: &Seg) {
+        if let Some(advances) = &mut self.advances {
+            advances.begin(seg.node_id);
+            self.pen = advances.position();
+        }
+        self.runs
+            .push(shape_seg(seg, self.pen, self.baseline, self.policy));
+        if let Some(advances) = &mut self.advances {
+            advances.text(seg.node_id, seg.native_width);
+            self.pen = advances.position();
+        } else {
+            self.pen += seg.width;
+        }
+    }
+    fn text(&mut self, word: &Word) {
+        for index in 0..=word.segs.len() {
+            for (_, edge) in word.edges.iter().filter(|(at, _)| *at == index) {
+                self.edge(edge);
+            }
+            if let Some(seg) = word.segs.get(index) {
+                self.segment(seg);
+            }
+        }
+    }
+    fn spaces(&mut self, word: &Word, has_next: bool) {
+        if !self.policy.1 {
+            return;
+        }
+        let mut pen = self.pen;
+        for (index, space) in word.spaces.iter().enumerate() {
+            let advance = visible_space_advance(word, index, has_next);
+            self.runs
+                .push(shape_space(space, pen, self.baseline, self.policy, advance));
+            if self.policy.2.is_some() {
+                pen += advance;
+            }
+        }
+    }
+}
+fn visible_space_advance(word: &Word, index: usize, has_next: bool) -> f32 {
+    if index == 0 && has_next {
+        word.native_space
+            .map_or(word.space_after, |(_, advance)| advance as f32)
+    } else {
+        0.0
+    }
+}
+fn shape_space(
+    space: &Seg,
+    pen: f32,
+    baseline: f32,
+    policy: (bool, bool, Option<f32>),
+    advance: f32,
+) -> SourceRun {
+    let mut run = shape_seg(space, pen, baseline, policy);
+    for glyph in &mut run.clusters {
+        glyph.advance = advance;
+        glyph.collapsed_whitespace = true;
+    }
+    run
+}
 fn place_line(
     words: Vec<Word>,
     max_width: f32,
     align: Align,
     strut: f32,
+    open_edges: &[InlineEdge],
+    strut_metrics: Option<(f32, f32)>,
     policy: (bool, bool, Option<f32>),
 ) -> SourceLine {
-    let m = line_metrics(&words, strut, policy.1, policy.2);
+    let m = match strut_metrics {
+        Some(strut) => native_line_metrics(&words, open_edges, strut, policy.2),
+        None => line_metrics(&words, strut, policy.1, policy.2, open_edges),
+    };
     let half_leading = (m.height - m.ascent - m.descent) / 2.0;
     let leading = policy
         .2
         .map_or(half_leading, |scale| (half_leading * scale).floor() / scale);
-    let baseline = m.ascent + leading;
-    let width = line_used_width(&words);
-    let mut pen = align_offset(align, width, max_width);
-    let mut runs = Vec::new();
-    let mut atoms = Vec::new();
-    for word in &words {
-        if let Some(atom) = word.atom {
-            let margin_top = atom_margin_top(&atom, m.height, baseline);
-            atoms.push(PlacedAtom {
-                id: atom.id,
-                x: pen + atom.margin_left,
-                y: margin_top + atom.margin_top,
-            });
-            pen += atom.width + atom.margin_left + atom.margin_right;
+    let baseline = m.ascent
+        + if strut_metrics.is_some() {
+            0.0
         } else {
-            for seg in &word.segs {
-                runs.push(shape_seg(seg, pen, baseline, policy));
-                pen += seg.width;
-            }
-        }
-        pen += word.space_after;
+            leading
+        };
+    let width = policy.2.map_or_else(
+        || line_used_width(&words),
+        |scale| inline_advances::line_width(&words, scale),
+    );
+    let pen = align_offset(align, width, max_width);
+    let mut placement = LinePlacement {
+        pen,
+        runs: Vec::new(),
+        atoms: Vec::new(),
+        inline_edges: Vec::new(),
+        baseline,
+        height: m.height,
+        policy,
+        advances: policy
+            .2
+            .map(|scale| inline_advances::Cursor::new(scale, pen)),
+    };
+    for (index, word) in words.iter().enumerate() {
+        placement.word(word, index + 1 < words.len());
     }
+    let LinePlacement {
+        runs,
+        atoms,
+        inline_edges,
+        ..
+    } = placement;
     let mut output_runs = Vec::new();
     let mut clusters = Vec::new();
     let mut font_boxes = Vec::new();
@@ -1071,6 +1807,9 @@ fn place_line(
         font_boxes,
         clusters,
         line: InlineLine {
+            inline_edges,
+            baseline,
+            inline_origin: align_offset(align, width, max_width),
             runs: output_runs,
             atoms,
             width,
@@ -1135,7 +1874,16 @@ pub fn layout_paragraph_in(
     region: LineRegion,
     strut: f32,
 ) -> ParagraphLayout {
-    let words = build_pieces(pieces, reg, diags, false, None);
+    let words = build_pieces(
+        pieces,
+        reg,
+        diags,
+        SourcePolicy {
+            capture: false,
+            advances: false,
+        },
+        None,
+    );
     finalize(wrap_and_place(
         words,
         align,
@@ -1157,7 +1905,16 @@ pub fn layout_paragraph_in_with_sources(
     region: LineRegion,
     strut: f32,
 ) -> ParagraphSourceLayout {
-    let words = build_pieces(pieces, reg, diags, true, None);
+    let words = build_pieces(
+        pieces,
+        reg,
+        diags,
+        SourcePolicy {
+            capture: true,
+            advances: false,
+        },
+        None,
+    );
     finalize(wrap_and_place(
         words,
         align,
@@ -1177,7 +1934,16 @@ pub fn layout_html_paragraph_in_with_sources(
     region: LineRegion,
     strut: f32,
 ) -> ParagraphSourceLayout {
-    let words = build_pieces(pieces, reg, diags, true, None);
+    let words = build_pieces(
+        pieces,
+        reg,
+        diags,
+        SourcePolicy {
+            capture: true,
+            advances: false,
+        },
+        None,
+    );
     finalize(wrap_and_place(
         words,
         align,
@@ -1196,8 +1962,22 @@ pub(crate) fn layout_html_paragraph_in_with_sources_at_scale(
     strut: f32,
     options: NativeLineOptions<'_>,
 ) -> ParagraphSourceLayout {
-    let words = build_pieces(pieces, reg, diags, true, options.original_units);
+    let mut words = build_pieces(
+        pieces,
+        reg,
+        diags,
+        SourcePolicy {
+            capture: true,
+            advances: options.scale.is_some(),
+        },
+        options.original_units,
+    );
+    apply_baselines(&mut words, options.baselines);
+    if options.scale.is_some() {
+        inline_advances::prepare(&mut words);
+    }
     let mut placer = Placer::new(align, region, strut, (true, true, options.scale));
+    placer.strut_metrics = options.strut_metrics;
     placer.first_indent = options.first_indent;
     placer.clearance = Some(options.clearance);
     for word in words {
@@ -1207,6 +1987,8 @@ pub(crate) fn layout_html_paragraph_in_with_sources_at_scale(
 }
 
 pub(crate) struct NativeLineOptions<'a> {
+    pub baselines: &'a std::collections::HashMap<NodeId, f32>,
+    pub strut_metrics: Option<(f32, f32)>,
     pub scale: Option<f32>,
     pub first_indent: f32,
     pub clearance: &'a dyn Fn(f32, f32) -> f32,
@@ -1219,15 +2001,25 @@ pub(crate) fn layout_runs_with_units(
     width: f32,
     diags: &mut Diagnostics,
     original: Option<&crate::layout_snapshot::text_units::NativeUnitMap>,
+    html_metrics: bool,
 ) -> ParagraphLayout {
     let pieces: Vec<_> = runs.iter().cloned().map(Piece::Run).collect();
-    let words = build_pieces(&pieces, fonts, diags, false, original);
+    let words = build_pieces(
+        &pieces,
+        fonts,
+        diags,
+        SourcePolicy {
+            capture: html_metrics,
+            advances: false,
+        },
+        original,
+    );
     finalize(wrap_and_place(
         words,
         Align::Left,
         &|_| (0.0, width),
         0.0,
-        (false, false, None),
+        (html_metrics, html_metrics, None),
     ))
     .layout
 }

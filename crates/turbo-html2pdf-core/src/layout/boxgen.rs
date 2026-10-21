@@ -25,7 +25,7 @@ use super::value::{
 #[derive(Debug, Clone)]
 pub struct LayoutBox {
     pub node_id: NodeId,
-    pub(crate) document_root: bool,
+    source_role: SourceRole,
     pub style: ComputedStyle,
     /// Source element attributes (e.g. `colspan`, `href`); empty for anonymous
     /// boxes. Layout/emit read HTML attributes that are not CSS properties here.
@@ -110,9 +110,25 @@ enum StyleCache {
     Cached(Box<BoxStyle>),
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum SourceRole {
+    Ordinary,
+    DocumentRoot,
+    NativeIframe,
+}
+
 impl LayoutBox {
+    pub(crate) fn document_root(&self) -> bool {
+        self.source_role == SourceRole::DocumentRoot
+    }
+    pub(crate) fn native_iframe(&self) -> bool {
+        self.source_role == SourceRole::NativeIframe
+    }
+
     pub(crate) fn is_replaced(&self) -> bool {
-        self.svg_viewport.is_some() || self.image.as_ref().is_some_and(|source| source.replaced)
+        self.native_iframe()
+            || self.svg_viewport.is_some()
+            || self.image.as_ref().is_some_and(|source| source.replaced)
     }
 
     /// The memoized max-content width, computing it once via `f` on a miss.
@@ -182,6 +198,9 @@ impl LayoutBox {
     fn native_scale(&self) -> Option<f32> {
         let scale = self.html_layout_policy.get().1;
         (scale != 0.0).then_some(scale)
+    }
+    pub(crate) fn uses_html_font_metrics(&self) -> bool {
+        self.html_layout_policy.get().0
     }
     pub(crate) fn set_html_layout_policy(&self, policy: (bool, Option<f32>)) {
         let encoded = (policy.0, policy.1.unwrap_or(0.0));
@@ -333,6 +352,16 @@ pub enum BoxKind {
 /// One inline-level item inside a [`BoxKind::Lines`] context.
 #[derive(Debug, Clone)]
 pub enum InlineItem {
+    SourceBreak {
+        node_id: NodeId,
+        style: ComputedStyle,
+    },
+    /// A real native HTML inline boundary, retained before flattening text.
+    Boundary {
+        node_id: NodeId,
+        style: ComputedStyle,
+        start: bool,
+    },
     /// A run of text, styled by its containing element.
     Text {
         node_id: NodeId,
@@ -518,12 +547,26 @@ fn is_br(el: &StyledElement) -> bool {
     matches!(&el.tag, Tag::Html(n) if n == "br")
 }
 
+fn line_break(el: &StyledElement, ids: &mut Ids) -> InlineItem {
+    if ids
+        .sources
+        .as_ref()
+        .is_some_and(|sources| sources.inline_borders)
+    {
+        InlineItem::SourceBreak {
+            node_id: ids.element(el),
+            style: el.style.clone(),
+        }
+    } else {
+        InlineItem::LineBreak
+    }
+}
 fn classify_html(el: &StyledElement, ids: &mut Ids) -> Option<Level> {
     if ids.hidden(&el.style) {
         return None;
     }
     if is_br(el) {
-        return Some(Level::Inline(vec![InlineItem::LineBreak]));
+        return Some(Level::Inline(vec![line_break(el, ids)]));
     }
     #[cfg(feature = "xref")]
     if xref::internal_link_href(el).is_some() {
@@ -533,10 +576,17 @@ fn classify_html(el: &StyledElement, ids: &mut Ids) -> Option<Level> {
             el, ids,
         ))]));
     }
+    classify_display(el, ids)
+}
+
+fn classify_display(el: &StyledElement, ids: &mut Ids) -> Option<Level> {
+    if native_out_of_flow(el, ids) {
+        return Some(Level::Block(build_block_box(el, ids)));
+    }
     // `display:none` was already dropped by the `is_hidden` guard above, so it can
     // never reach here — no `Display::None` arm (it would be dead code).
     match display_of(&el.style) {
-        Display::Inline => Some(Level::Inline(flatten_inline(el, ids))),
+        Display::Inline => Some(Level::Inline(native_inline_items(el, ids))),
         Display::InlineBlock => Some(Level::Inline(vec![InlineItem::Atomic(build_block_box(
             el, ids,
         ))])),
@@ -544,6 +594,25 @@ fn classify_html(el: &StyledElement, ids: &mut Ids) -> Option<Level> {
     }
 }
 
+fn native_out_of_flow(element: &StyledElement, ids: &Ids) -> bool {
+    ids.sources
+        .as_ref()
+        .is_some_and(|sources| sources.inline_borders)
+        && matches!(element.style.get("position"), Some("absolute" | "fixed"))
+}
+
+fn native_inline_items(el: &StyledElement, ids: &mut Ids) -> Vec<InlineItem> {
+    let native = ids
+        .sources
+        .as_ref()
+        .is_some_and(|sources| sources.inline_borders);
+    let atomic = super::inline_boxes::atomic_element(el);
+    if native && atomic {
+        vec![InlineItem::Atomic(build_block_box(el, ids))]
+    } else {
+        flatten_inline(el, ids)
+    }
+}
 fn classify_svg_viewport(element: &StyledElement, ids: &mut Ids) -> Level {
     match super::svg_viewport::display(element) {
         Display::Inline | Display::InlineBlock => {
@@ -582,12 +651,31 @@ fn classify_element(el: &StyledElement, ids: &mut Ids) -> Option<Level> {
 /// a nested block becomes an atomic inline).
 fn flatten_inline(el: &StyledElement, ids: &mut Ids) -> Vec<InlineItem> {
     let mut out = Vec::new();
-    for child in &el.children {
-        match classify(child, &el.style, ids) {
-            Some(Level::Inline(items)) => out.extend(items),
-            Some(Level::Block(b)) => out.push(InlineItem::Atomic(b)),
-            None => {}
-        }
+    let boundary = ids
+        .sources
+        .as_ref()
+        .is_some_and(|sources| sources.inline_borders)
+        .then(|| ids.element(el));
+    if let Some(node_id) = boundary {
+        out.push(InlineItem::Boundary {
+            node_id,
+            style: el.style.clone(),
+            start: true,
+        });
+    }
+    super::contents::visit(&el.children, &el.style, &mut |child, style| match classify(
+        child, style, ids,
+    ) {
+        Some(Level::Inline(items)) => out.extend(items),
+        Some(Level::Block(b)) => out.push(InlineItem::Atomic(b)),
+        None => {}
+    });
+    if let Some(node_id) = boundary {
+        out.push(InlineItem::Boundary {
+            node_id,
+            style: el.style.clone(),
+            start: false,
+        });
     }
     out
 }
@@ -605,8 +693,8 @@ fn box_kind_for(display: Display, el: &StyledElement, ids: &mut Ids) -> BoxKind 
         return build_flow(&text, &el.style, ids);
     }
     match display {
-        Display::Flex => BoxKind::Flex(child_block_boxes(el, ids)),
-        Display::Grid => BoxKind::Grid(child_block_boxes(el, ids)),
+        Display::Flex => BoxKind::Flex(flex_grid_children(el, ids)),
+        Display::Grid => BoxKind::Grid(flex_grid_children(el, ids)),
         Display::Table => BoxKind::Table(child_block_boxes(el, ids)),
         _ => build_flow(&el.children, &el.style, ids),
     }
@@ -624,12 +712,32 @@ fn input_button_text(el: &StyledElement) -> Option<String> {
         .flatten()
 }
 
+fn source_role(element: &StyledElement, ids: &Ids) -> SourceRole {
+    if native_iframe(element, ids) {
+        SourceRole::NativeIframe
+    } else if ids
+        .document_roots
+        .contains(&(element as *const StyledElement as usize))
+    {
+        SourceRole::DocumentRoot
+    } else {
+        SourceRole::Ordinary
+    }
+}
+
+fn native_iframe(element: &StyledElement, ids: &Ids) -> bool {
+    ids.sources
+        .as_ref()
+        .is_some_and(|sources| sources.inline_borders)
+        && matches!(&element.tag, Tag::Html(name) if name == "iframe")
+}
+
 fn build_block_box(el: &StyledElement, ids: &mut Ids) -> LayoutBox {
     let node_id = ids.element(el);
     if let Tag::Directive(kind) = &el.tag {
         return LayoutBox {
             node_id,
-            document_root: false,
+            source_role: SourceRole::Ordinary,
             style: el.style.clone(),
             attrs: el.attrs.clone(),
             display: Display::Block,
@@ -663,9 +771,7 @@ fn build_block_box(el: &StyledElement, ids: &mut Ids) -> LayoutBox {
     };
     LayoutBox {
         node_id,
-        document_root: ids
-            .document_roots
-            .contains(&(el as *const StyledElement as usize)),
+        source_role: source_role(el, ids),
         style: el.style.clone(),
         attrs: el.attrs.clone(),
         display,
@@ -792,13 +898,45 @@ fn url_token(token: &str) -> Option<String> {
     (!name.is_empty()).then(|| name.to_string())
 }
 
-/// Build a flex/table container's children as block-level boxes (raw text and
-/// `display:none` dropped; v1 does not synthesize anonymous flex/table items).
+/// Table anonymous-row/cell synthesis remains separate from flex/grid items.
 fn child_block_boxes(el: &StyledElement, ids: &mut Ids) -> Vec<LayoutBox> {
-    el.children
-        .iter()
-        .filter_map(|n| block_child(n, ids))
-        .collect()
+    let mut boxes = Vec::new();
+    super::contents::visit(&el.children, &el.style, &mut |node, _| {
+        boxes.extend(block_child(node, ids));
+    });
+    boxes
+}
+
+fn flex_grid_children(el: &StyledElement, ids: &mut Ids) -> Vec<LayoutBox> {
+    let mut boxes = Vec::new();
+    let mut text = Vec::new();
+    super::contents::visit(&el.children, &el.style, &mut |node, style| match node {
+        StyledNode::Text(value) => text.push(text_item(node, value, style, ids)),
+        _ => {
+            if let Some(child) = block_child(node, ids) {
+                flush_flex_text(&mut text, &el.style, ids, &mut boxes);
+                boxes.push(child);
+            }
+        }
+    });
+    flush_flex_text(&mut text, &el.style, ids, &mut boxes);
+    boxes
+}
+
+fn flush_flex_text(
+    text: &mut Vec<InlineItem>,
+    style: &ComputedStyle,
+    ids: &mut Ids,
+    boxes: &mut Vec<LayoutBox>,
+) {
+    if text.is_empty() || run_is_blank(text) {
+        text.clear();
+        return;
+    }
+    let mut anonymous = anon_lines_box(std::mem::take(text), style, ids);
+    // The item inherits text properties, never the container's width or frame.
+    anonymous.style = style.inherited_only();
+    boxes.push(anonymous);
 }
 
 fn block_child(node: &StyledNode, ids: &mut Ids) -> Option<LayoutBox> {
@@ -814,7 +952,7 @@ fn run_is_blank(run: &[InlineItem]) -> bool {
 }
 
 fn is_blank_text(item: &InlineItem) -> bool {
-    matches!(item, InlineItem::Text { text, .. } if text.trim().is_empty())
+    matches!(item, InlineItem::Text { text, .. } if text.chars().all(|ch| matches!(ch, ' ' | '\t' | '\n' | '\r' | '\x0c')))
 }
 
 fn anon_lines_box(
@@ -829,7 +967,7 @@ fn anon_lines_box(
     };
     LayoutBox {
         node_id: ids.alloc(),
-        document_root: false,
+        source_role: SourceRole::Ordinary,
         style,
         attrs: Vec::new(),
         display: Display::Block,
@@ -895,10 +1033,10 @@ fn inline_items_of(levels: Vec<Level>) -> Vec<InlineItem> {
 /// Build the formatting context for a flow of children: a block context (with
 /// anonymous-block wrapping) if any child is block-level, else an inline context.
 fn build_flow(children: &[StyledNode], parent_style: &ComputedStyle, ids: &mut Ids) -> BoxKind {
-    let levels: Vec<Level> = children
-        .iter()
-        .filter_map(|n| classify(n, parent_style, ids))
-        .collect();
+    let mut levels = Vec::new();
+    super::contents::visit(children, parent_style, &mut |node, style| {
+        levels.extend(classify(node, style, ids));
+    });
     if levels.iter().any(|l| matches!(l, Level::Block(_))) {
         BoxKind::Block(wrap_runs(levels, parent_style, ids))
     } else {
@@ -953,7 +1091,7 @@ fn build_root(styled: &[StyledNode], ids: &mut Ids) -> LayoutBox {
     let kind = build_flow(styled, &style, ids);
     LayoutBox {
         node_id,
-        document_root: false,
+        source_role: SourceRole::Ordinary,
         style,
         attrs: Vec::new(),
         display: Display::Block,

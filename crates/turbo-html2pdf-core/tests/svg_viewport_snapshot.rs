@@ -316,7 +316,7 @@ fn text_paths_directives_and_invalid_viewports_cannot_be_declared_svg_sources() 
         2.0,
         &build_cascade("", "", Default::default()),
         &SnapshotInputs {
-            width: 0.0,
+            width: -1.0,
             height: 300.0,
             fonts: &fonts,
             images: &images,
@@ -326,7 +326,7 @@ fn text_paths_directives_and_invalid_viewports_cannot_be_declared_svg_sources() 
     assert!(matches!(
         result,
         Err(SvgSnapshotError::Text(TextSnapshotError::Snapshot(
-            SnapshotError::InvalidViewport
+            SnapshotError::InvalidNativeViewport
         )))
     ));
 }

@@ -1,0 +1,217 @@
+[
+  {
+    "name": "baseline-top",
+    "html": "<span id=\"outer\" style=\"vertical-align:baseline;padding:2px;border:1px solid\">a<img id=\"inner\" style=\"display:inline;width:12px;height:8px;vertical-align:top\">b</span>",
+    "boxStyle": ""
+  },
+  {
+    "name": "baseline-bottom",
+    "html": "<span id=\"outer\" style=\"vertical-align:baseline;padding:2px;border:1px solid\">a<img id=\"inner\" style=\"display:inline;width:12px;height:8px;vertical-align:bottom\">b</span>",
+    "boxStyle": ""
+  },
+  {
+    "name": "super-top",
+    "html": "<span id=\"outer\" style=\"vertical-align:super;padding:2px;border:1px solid\">a<img id=\"inner\" style=\"display:inline;width:12px;height:8px;vertical-align:top\">b</span>",
+    "boxStyle": ""
+  },
+  {
+    "name": "super-bottom",
+    "html": "<span id=\"outer\" style=\"vertical-align:super;padding:2px;border:1px solid\">a<img id=\"inner\" style=\"display:inline;width:12px;height:8px;vertical-align:bottom\">b</span>",
+    "boxStyle": ""
+  },
+  {
+    "name": "sub-top",
+    "html": "<span id=\"outer\" style=\"vertical-align:sub;padding:2px;border:1px solid\">a<img id=\"inner\" style=\"display:inline;width:12px;height:8px;vertical-align:top\">b</span>",
+    "boxStyle": ""
+  },
+  {
+    "name": "sub-bottom",
+    "html": "<span id=\"outer\" style=\"vertical-align:sub;padding:2px;border:1px solid\">a<img id=\"inner\" style=\"display:inline;width:12px;height:8px;vertical-align:bottom\">b</span>",
+    "boxStyle": ""
+  },
+  {
+    "name": "empty-top-margin",
+    "html": "<span id=\"outer\" style=\"margin-top:15px;margin-bottom:7px\"></span>",
+    "boxStyle": ""
+  },
+  {
+    "name": "plain",
+    "html": "<span id=\"outer\">abc</span>",
+    "boxStyle": ""
+  },
+  {
+    "name": "super-image",
+    "html": "<span id=\"outer\" style=\"vertical-align:super;padding:2px;border:1px solid\">a<img id=\"inner\" style=\"display:inline;width:12px;height:8px\">b</span>",
+    "boxStyle": ""
+  },
+  {
+    "name": "sub-inline-block",
+    "html": "<span id=\"outer\" style=\"vertical-align:sub;padding:2px;border:1px solid\">a<span id=\"inner\" style=\"display:inline-block;width:12px;height:8px\"></span>b</span>",
+    "boxStyle": ""
+  },
+  {
+    "name": "empty-transparent",
+    "html": "<span id=\"outer\"></span>",
+    "boxStyle": ""
+  },
+  {
+    "name": "only-space",
+    "html": "<span id=\"outer\"> </span>",
+    "boxStyle": ""
+  },
+  {
+    "name": "empty-offset",
+    "html": "<span id=\"outer\"></span>",
+    "boxStyle": "margin-left:11px;padding-top:7px"
+  },
+  {
+    "name": "empty-vertical-decoration",
+    "html": "<span id=\"outer\" style=\"padding-top:3px;border-top:2px solid\"></span>",
+    "boxStyle": ""
+  },
+  {
+    "name": "empty-background",
+    "html": "<span id=\"outer\" style=\"background:rgba(255,0,0,.5)\"></span>",
+    "boxStyle": ""
+  },
+  {
+    "name": "empty-margin",
+    "html": "<span id=\"outer\" style=\"margin:0 7px\"></span>",
+    "boxStyle": ""
+  },
+  {
+    "name": "margin-transparent-child",
+    "html": "<span id=\"outer\" style=\"margin:0 7px\"><span id=\"inner\">abc</span></span>",
+    "boxStyle": ""
+  },
+  {
+    "name": "trailing-break",
+    "html": "<span id=\"outer\" style=\"padding:2px;border:1px solid\">abc<br></span>",
+    "boxStyle": ""
+  },
+  {
+    "name": "consecutive-break",
+    "html": "<span id=\"outer\" style=\"padding:2px;border:1px solid\">abc<br><br>def</span>",
+    "boxStyle": ""
+  },
+  {
+    "name": "transparent-background",
+    "html": "<span id=\"outer\" style=\"background:rgba(255,0,0,0)\">a<span id=\"inner\">b</span>c</span>",
+    "boxStyle": ""
+  },
+  {
+    "name": "alpha-background",
+    "html": "<span id=\"outer\" style=\"background:rgba(255,0,0,.5)\">a<span id=\"inner\">b</span>c</span>",
+    "boxStyle": ""
+  },
+  {
+    "name": "fractional-negative-leading",
+    "html": "<span id=\"outer\">abc</span>",
+    "boxStyle": "line-height:18.9921875px"
+  },
+  {
+    "name": "relative",
+    "html": "<span id=\"outer\" style=\"position:relative;left:10px;top:6px;padding:2px;border:1px solid\">a<span id=\"inner\">b</span>c</span><span id=\"after\">z</span>",
+    "boxStyle": ""
+  },
+  {
+    "name": "zero-width-fragment",
+    "html": "<span id=\"outer\"><br>abc</span>",
+    "boxStyle": "text-indent:100px"
+  },
+  {
+    "name": "parent24-super",
+    "html": "<span id=\"outer\" style=\"font-size:16px;vertical-align:super;padding:2px;border:1px solid\">abc</span>",
+    "boxStyle": "font-size:24px;line-height:36px"
+  },
+  {
+    "name": "parent24-sub",
+    "html": "<span id=\"outer\" style=\"font-size:16px;vertical-align:sub;padding:2px;border:1px solid\">abc</span>",
+    "boxStyle": "font-size:24px;line-height:36px"
+  },
+  {
+    "name": "nested-super",
+    "html": "<span id=\"outer\" style=\"vertical-align:super;padding:2px;border:1px solid\">a<span id=\"inner\" style=\"font-size:24px;vertical-align:super\">bc</span>d</span>",
+    "boxStyle": ""
+  },
+  {
+    "name": "super",
+    "html": "<span id=\"outer\" style=\"vertical-align:super;padding:2px;border:1px solid\">abc</span>",
+    "boxStyle": ""
+  },
+  {
+    "name": "sub",
+    "html": "<span id=\"outer\" style=\"vertical-align:sub;padding:2px;border:1px solid\">abc</span>",
+    "boxStyle": ""
+  },
+  {
+    "name": "ignored-transform",
+    "html": "<span id=\"outer\" style=\"transform:translate(50px,30px);padding:2px;border:1px solid\">a<span id=\"inner\">b</span>c</span>",
+    "boxStyle": ""
+  },
+  {
+    "name": "transparent-child",
+    "html": "<span id=\"outer\"><span id=\"inner\">abc</span></span>",
+    "boxStyle": ""
+  },
+  {
+    "name": "transparent-decorated-child",
+    "html": "<span id=\"outer\"><span id=\"inner\" style=\"padding:2px;border:1px solid\">a<span>b</span>c</span></span>",
+    "boxStyle": ""
+  },
+  {
+    "name": "replaced-image",
+    "html": "<img id=\"outer\" style=\"display:inline;width:20px;height:10px;padding:3px;border:2px solid\">",
+    "boxStyle": ""
+  },
+  {
+    "name": "split-space",
+    "html": "<span id=\"outer\">a <span id=\"inner\"> b</span> c</span>",
+    "boxStyle": ""
+  },
+  {
+    "name": "empty-space",
+    "html": "<span id=\"outer\">a<span id=\"inner\"> </span> b</span>",
+    "boxStyle": ""
+  },
+  {
+    "name": "decorated",
+    "html": "<span id=\"outer\" style=\"padding:3px 5px;border:2px solid;margin:0 7px\">abc</span><span id=\"after\">z</span>",
+    "boxStyle": ""
+  },
+  {
+    "name": "mutated-decoration",
+    "html": "<span id=\"outer\" style=\"padding:3px 5px;padding-left:11px;border:2px solid;margin:0 7px\">abc</span><span id=\"after\">z</span>",
+    "boxStyle": ""
+  },
+  {
+    "name": "empty",
+    "html": "<span id=\"outer\" style=\"padding:3px 5px;border:2px solid;margin:0 7px\"></span><span id=\"after\">z</span>",
+    "boxStyle": ""
+  },
+  {
+    "name": "mixed-font",
+    "html": "<span id=\"outer\" style=\"padding:2px 3px;border:1px solid\">a<span id=\"inner\" style=\"font-size:24px\">bc</span>d</span>",
+    "boxStyle": ""
+  },
+  {
+    "name": "wrapped",
+    "html": "<span id=\"outer\" style=\"padding:3px 5px;border:2px solid;margin:0 7px\">one two three four five</span>",
+    "boxStyle": ""
+  },
+  {
+    "name": "nested-wrapped",
+    "html": "<span id=\"outer\" style=\"padding:3px 5px;border:2px solid\">one <span id=\"inner\" style=\"padding:1px 3px;border:1px solid\">two three four</span> five</span>",
+    "boxStyle": ""
+  },
+  {
+    "name": "unbreakable-nested",
+    "html": "<span id=\"outer\" style=\"padding:0 3px;border:1px solid\">ab<span id=\"inner\" style=\"padding:0 2px;border:1px solid\">cd</span>ef</span>",
+    "boxStyle": ""
+  },
+  {
+    "name": "forced-break",
+    "html": "<span id=\"outer\" style=\"padding:3px 5px;border:2px solid\">one<br>two</span>",
+    "boxStyle": ""
+  }
+]

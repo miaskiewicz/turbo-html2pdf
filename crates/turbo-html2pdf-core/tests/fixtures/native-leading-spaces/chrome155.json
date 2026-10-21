@@ -1,0 +1,2367 @@
+{
+  "browser": "Chrome/155.0.8059.80",
+  "v8": "15.5.35.23",
+  "collectorNode": "v24.0.0",
+  "mode": "headed-direct-cdp",
+  "flags": [
+    "--remote-debugging-port=0",
+    "--user-data-dir=<fresh-profile>",
+    "--no-first-run",
+    "--no-default-browser-check",
+    "--disable-extensions",
+    "--disable-component-extensions-with-background-pages",
+    "about:blank"
+  ],
+  "recordedAt": "2026-10-17T13:37:49.206Z",
+  "producer": {
+    "repository": "miaskiewicz/turbo-html2pdf",
+    "commit": "2eac7f64142d8e6bde37f7ae46006c991b6f2347"
+  },
+  "probeKind": "private-leading-spaces",
+  "probeSha256": "fe53f35ea368b9d84e274aba6669706fbb4efc80ea86180049cef10cc49583d5",
+  "socketHelperSha256": "0ab10b0e21e1c8385ce29dd1df131c24f587121c6222eb00201935496116e7c2",
+  "collectorSha256": "e19bd2cc77b0db528c93613e9c5f50e6cc94396d72326261c82f002c73c0ce41",
+  "htmlSha256": "166a4ec3cb90d525f7f744c7616c01b36bebd6dcecd486c8f5be14ccc0a7b3da",
+  "fonts": [
+    {
+      "family": "IBM Plex Mono",
+      "path": "crates/turbo-html2pdf-core/assets/fonts/ibm-plex-mono/IBMPlexMono-Regular.ttf",
+      "sha256": "6a3412f058c7d8dfd9170c41e85ade48e5156ecb89356110ca57a0a27734af46",
+      "bytes": 135580,
+      "publicPinnedBytesIdentical": true
+    }
+  ],
+  "fontRequests": [
+    {
+      "family": "IBM Plex Mono",
+      "bytes": 135580,
+      "sha256": "6a3412f058c7d8dfd9170c41e85ade48e5156ecb89356110ca57a0a27734af46"
+    }
+  ],
+  "errors": [],
+  "result": [
+    {
+      "viewportMode": "natural",
+      "requestedDpr": null,
+      "fontSetup": {
+        "faceStatus": "loaded",
+        "fontAvailable": true
+      },
+      "platformFonts": [
+        {
+          "familyName": "IBM Plex Mono",
+          "postScriptName": "IBMPlexMono-Regular",
+          "isCustomFont": true,
+          "glyphCount": 6
+        }
+      ],
+      "canvas": [
+        {
+          "text": "a",
+          "width": 9.599990844726562
+        },
+        {
+          "text": "ab",
+          "width": 19.199981689453125
+        },
+        {
+          "text": "abc",
+          "width": 28.799972534179688
+        },
+        {
+          "text": "abcd",
+          "width": 38.39996337890625
+        },
+        {
+          "text": "abcde",
+          "width": 47.99995422363281
+        },
+        {
+          "text": "abcdefgh",
+          "width": 76.7999267578125
+        },
+        {
+          "text": "AV",
+          "width": 19.199981689453125
+        },
+        {
+          "text": "fi",
+          "width": 19.199981689453125
+        },
+        {
+          "text": "a b",
+          "width": 28.799972534179688
+        },
+        {
+          "text": "a b c",
+          "width": 47.99995422363281
+        }
+      ],
+      "geometry": {
+        "family": "IBM Plex Mono",
+        "devicePixelRatio": 2,
+        "cases": [
+          {
+            "atom": "image",
+            "prefix": "",
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 1000,
+              "height": 24
+            },
+            "atomBox": {
+              "x": 0,
+              "y": 8,
+              "width": 10,
+              "height": 10
+            },
+            "captionBox": {
+              "x": 10,
+              "y": 1.5,
+              "width": 28.8046875,
+              "height": 21
+            },
+            "followingBox": {
+              "x": 38.8046875,
+              "y": 1.5,
+              "width": 9.6015625,
+              "height": 21
+            },
+            "visibleRange": {
+              "start": 0,
+              "end": 3,
+              "rect": {
+                "x": 10,
+                "y": 1.5,
+                "width": 28.8046875,
+                "height": 21
+              },
+              "rects": [
+                {
+                  "x": 10,
+                  "y": 1.5,
+                  "width": 28.8046875,
+                  "height": 21
+                }
+              ]
+            },
+            "fullRange": {
+              "start": 0,
+              "end": 3,
+              "rect": {
+                "x": 10,
+                "y": 1.5,
+                "width": 28.8046875,
+                "height": 21
+              },
+              "rects": [
+                {
+                  "x": 10,
+                  "y": 1.5,
+                  "width": 28.8046875,
+                  "height": 21
+                }
+              ]
+            },
+            "prefixRange": {
+              "start": 0,
+              "end": 0,
+              "rect": {
+                "x": 10,
+                "y": 1.5,
+                "width": 0,
+                "height": 21
+              },
+              "rects": [
+                {
+                  "x": 10,
+                  "y": 1.5,
+                  "width": 0,
+                  "height": 21
+                }
+              ]
+            }
+          },
+          {
+            "atom": "image",
+            "prefix": " ",
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 1000,
+              "height": 24
+            },
+            "atomBox": {
+              "x": 0,
+              "y": 8,
+              "width": 10,
+              "height": 10
+            },
+            "captionBox": {
+              "x": 10,
+              "y": 1.5,
+              "width": 38.40625,
+              "height": 21
+            },
+            "followingBox": {
+              "x": 48.40625,
+              "y": 1.5,
+              "width": 9.6015625,
+              "height": 21
+            },
+            "visibleRange": {
+              "start": 1,
+              "end": 4,
+              "rect": {
+                "x": 19.59375,
+                "y": 1.5,
+                "width": 28.8125,
+                "height": 21
+              },
+              "rects": [
+                {
+                  "x": 19.59375,
+                  "y": 1.5,
+                  "width": 28.8125,
+                  "height": 21
+                }
+              ]
+            },
+            "fullRange": {
+              "start": 0,
+              "end": 4,
+              "rect": {
+                "x": 10,
+                "y": 1.5,
+                "width": 38.40625,
+                "height": 21
+              },
+              "rects": [
+                {
+                  "x": 10,
+                  "y": 1.5,
+                  "width": 38.40625,
+                  "height": 21
+                }
+              ]
+            },
+            "prefixRange": {
+              "start": 0,
+              "end": 1,
+              "rect": {
+                "x": 10,
+                "y": 1.5,
+                "width": 9.6015625,
+                "height": 21
+              },
+              "rects": [
+                {
+                  "x": 10,
+                  "y": 1.5,
+                  "width": 9.6015625,
+                  "height": 21
+                }
+              ]
+            }
+          },
+          {
+            "atom": "image",
+            "prefix": "  ",
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 1000,
+              "height": 24
+            },
+            "atomBox": {
+              "x": 0,
+              "y": 8,
+              "width": 10,
+              "height": 10
+            },
+            "captionBox": {
+              "x": 10,
+              "y": 1.5,
+              "width": 38.40625,
+              "height": 21
+            },
+            "followingBox": {
+              "x": 48.40625,
+              "y": 1.5,
+              "width": 9.6015625,
+              "height": 21
+            },
+            "visibleRange": {
+              "start": 2,
+              "end": 5,
+              "rect": {
+                "x": 19.59375,
+                "y": 1.5,
+                "width": 28.8125,
+                "height": 21
+              },
+              "rects": [
+                {
+                  "x": 19.59375,
+                  "y": 1.5,
+                  "width": 28.8125,
+                  "height": 21
+                }
+              ]
+            },
+            "fullRange": {
+              "start": 0,
+              "end": 5,
+              "rect": {
+                "x": 10,
+                "y": 1.5,
+                "width": 38.40625,
+                "height": 21
+              },
+              "rects": [
+                {
+                  "x": 10,
+                  "y": 1.5,
+                  "width": 38.40625,
+                  "height": 21
+                }
+              ]
+            },
+            "prefixRange": {
+              "start": 0,
+              "end": 2,
+              "rect": {
+                "x": 10,
+                "y": 1.5,
+                "width": 9.6015625,
+                "height": 21
+              },
+              "rects": [
+                {
+                  "x": 10,
+                  "y": 1.5,
+                  "width": 9.6015625,
+                  "height": 21
+                }
+              ]
+            },
+            "individualRanges": [
+              {
+                "start": 0,
+                "end": 1,
+                "rect": {
+                  "x": 10,
+                  "y": 1.5,
+                  "width": 9.6015625,
+                  "height": 21
+                },
+                "rects": [
+                  {
+                    "x": 10,
+                    "y": 1.5,
+                    "width": 9.6015625,
+                    "height": 21
+                  }
+                ]
+              },
+              {
+                "start": 1,
+                "end": 2,
+                "rect": {
+                  "x": 19.59375,
+                  "y": 1.5,
+                  "width": 0,
+                  "height": 21
+                },
+                "rects": [
+                  {
+                    "x": 19.59375,
+                    "y": 1.5,
+                    "width": 0,
+                    "height": 21
+                  }
+                ]
+              },
+              {
+                "start": 1,
+                "end": 1,
+                "rect": {
+                  "x": 19.59375,
+                  "y": 1.5,
+                  "width": 0,
+                  "height": 21
+                },
+                "rects": [
+                  {
+                    "x": 19.59375,
+                    "y": 1.5,
+                    "width": 0,
+                    "height": 21
+                  }
+                ]
+              },
+              {
+                "start": 2,
+                "end": 2,
+                "rect": {
+                  "x": 19.59375,
+                  "y": 1.5,
+                  "width": 0,
+                  "height": 21
+                },
+                "rects": [
+                  {
+                    "x": 19.59375,
+                    "y": 1.5,
+                    "width": 0,
+                    "height": 21
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "atom": "inline-block",
+            "prefix": "",
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 1000,
+              "height": 24
+            },
+            "atomBox": {
+              "x": 0,
+              "y": 8,
+              "width": 10,
+              "height": 10
+            },
+            "captionBox": {
+              "x": 10,
+              "y": 1.5,
+              "width": 28.8046875,
+              "height": 21
+            },
+            "followingBox": {
+              "x": 38.8046875,
+              "y": 1.5,
+              "width": 9.6015625,
+              "height": 21
+            },
+            "visibleRange": {
+              "start": 0,
+              "end": 3,
+              "rect": {
+                "x": 10,
+                "y": 1.5,
+                "width": 28.8046875,
+                "height": 21
+              },
+              "rects": [
+                {
+                  "x": 10,
+                  "y": 1.5,
+                  "width": 28.8046875,
+                  "height": 21
+                }
+              ]
+            },
+            "fullRange": {
+              "start": 0,
+              "end": 3,
+              "rect": {
+                "x": 10,
+                "y": 1.5,
+                "width": 28.8046875,
+                "height": 21
+              },
+              "rects": [
+                {
+                  "x": 10,
+                  "y": 1.5,
+                  "width": 28.8046875,
+                  "height": 21
+                }
+              ]
+            },
+            "prefixRange": {
+              "start": 0,
+              "end": 0,
+              "rect": {
+                "x": 10,
+                "y": 1.5,
+                "width": 0,
+                "height": 21
+              },
+              "rects": [
+                {
+                  "x": 10,
+                  "y": 1.5,
+                  "width": 0,
+                  "height": 21
+                }
+              ]
+            }
+          },
+          {
+            "atom": "inline-block",
+            "prefix": " ",
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 1000,
+              "height": 24
+            },
+            "atomBox": {
+              "x": 0,
+              "y": 8,
+              "width": 10,
+              "height": 10
+            },
+            "captionBox": {
+              "x": 10,
+              "y": 1.5,
+              "width": 38.40625,
+              "height": 21
+            },
+            "followingBox": {
+              "x": 48.40625,
+              "y": 1.5,
+              "width": 9.6015625,
+              "height": 21
+            },
+            "visibleRange": {
+              "start": 1,
+              "end": 4,
+              "rect": {
+                "x": 19.59375,
+                "y": 1.5,
+                "width": 28.8125,
+                "height": 21
+              },
+              "rects": [
+                {
+                  "x": 19.59375,
+                  "y": 1.5,
+                  "width": 28.8125,
+                  "height": 21
+                }
+              ]
+            },
+            "fullRange": {
+              "start": 0,
+              "end": 4,
+              "rect": {
+                "x": 10,
+                "y": 1.5,
+                "width": 38.40625,
+                "height": 21
+              },
+              "rects": [
+                {
+                  "x": 10,
+                  "y": 1.5,
+                  "width": 38.40625,
+                  "height": 21
+                }
+              ]
+            },
+            "prefixRange": {
+              "start": 0,
+              "end": 1,
+              "rect": {
+                "x": 10,
+                "y": 1.5,
+                "width": 9.6015625,
+                "height": 21
+              },
+              "rects": [
+                {
+                  "x": 10,
+                  "y": 1.5,
+                  "width": 9.6015625,
+                  "height": 21
+                }
+              ]
+            }
+          },
+          {
+            "atom": "inline-block",
+            "prefix": "  ",
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 1000,
+              "height": 24
+            },
+            "atomBox": {
+              "x": 0,
+              "y": 8,
+              "width": 10,
+              "height": 10
+            },
+            "captionBox": {
+              "x": 10,
+              "y": 1.5,
+              "width": 38.40625,
+              "height": 21
+            },
+            "followingBox": {
+              "x": 48.40625,
+              "y": 1.5,
+              "width": 9.6015625,
+              "height": 21
+            },
+            "visibleRange": {
+              "start": 2,
+              "end": 5,
+              "rect": {
+                "x": 19.59375,
+                "y": 1.5,
+                "width": 28.8125,
+                "height": 21
+              },
+              "rects": [
+                {
+                  "x": 19.59375,
+                  "y": 1.5,
+                  "width": 28.8125,
+                  "height": 21
+                }
+              ]
+            },
+            "fullRange": {
+              "start": 0,
+              "end": 5,
+              "rect": {
+                "x": 10,
+                "y": 1.5,
+                "width": 38.40625,
+                "height": 21
+              },
+              "rects": [
+                {
+                  "x": 10,
+                  "y": 1.5,
+                  "width": 38.40625,
+                  "height": 21
+                }
+              ]
+            },
+            "prefixRange": {
+              "start": 0,
+              "end": 2,
+              "rect": {
+                "x": 10,
+                "y": 1.5,
+                "width": 9.6015625,
+                "height": 21
+              },
+              "rects": [
+                {
+                  "x": 10,
+                  "y": 1.5,
+                  "width": 9.6015625,
+                  "height": 21
+                }
+              ]
+            },
+            "individualRanges": [
+              {
+                "start": 0,
+                "end": 1,
+                "rect": {
+                  "x": 10,
+                  "y": 1.5,
+                  "width": 9.6015625,
+                  "height": 21
+                },
+                "rects": [
+                  {
+                    "x": 10,
+                    "y": 1.5,
+                    "width": 9.6015625,
+                    "height": 21
+                  }
+                ]
+              },
+              {
+                "start": 1,
+                "end": 2,
+                "rect": {
+                  "x": 19.59375,
+                  "y": 1.5,
+                  "width": 0,
+                  "height": 21
+                },
+                "rects": [
+                  {
+                    "x": 19.59375,
+                    "y": 1.5,
+                    "width": 0,
+                    "height": 21
+                  }
+                ]
+              },
+              {
+                "start": 1,
+                "end": 1,
+                "rect": {
+                  "x": 19.59375,
+                  "y": 1.5,
+                  "width": 0,
+                  "height": 21
+                },
+                "rects": [
+                  {
+                    "x": 19.59375,
+                    "y": 1.5,
+                    "width": 0,
+                    "height": 21
+                  }
+                ]
+              },
+              {
+                "start": 2,
+                "end": 2,
+                "rect": {
+                  "x": 19.59375,
+                  "y": 1.5,
+                  "width": 0,
+                  "height": 21
+                },
+                "rects": [
+                  {
+                    "x": 19.59375,
+                    "y": 1.5,
+                    "width": 0,
+                    "height": 21
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "atom": "image",
+            "prefix": " ",
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 1000,
+              "height": 24
+            },
+            "atomBox": {
+              "x": 0,
+              "y": 8,
+              "width": 10,
+              "height": 10
+            },
+            "captionBox": null,
+            "followingBox": {
+              "x": 48.40625,
+              "y": 1.5,
+              "width": 9.6015625,
+              "height": 21
+            },
+            "visibleRange": {
+              "start": 1,
+              "end": 4,
+              "rect": {
+                "x": 19.59375,
+                "y": 1.5,
+                "width": 28.8125,
+                "height": 21
+              },
+              "rects": [
+                {
+                  "x": 19.59375,
+                  "y": 1.5,
+                  "width": 28.8125,
+                  "height": 21
+                }
+              ]
+            },
+            "fullRange": {
+              "start": 0,
+              "end": 4,
+              "rect": {
+                "x": 10,
+                "y": 1.5,
+                "width": 38.40625,
+                "height": 21
+              },
+              "rects": [
+                {
+                  "x": 10,
+                  "y": 1.5,
+                  "width": 38.40625,
+                  "height": 21
+                }
+              ]
+            },
+            "prefixRange": {
+              "start": 0,
+              "end": 1,
+              "rect": {
+                "x": 10,
+                "y": 1.5,
+                "width": 9.6015625,
+                "height": 21
+              },
+              "rects": [
+                {
+                  "x": 10,
+                  "y": 1.5,
+                  "width": 9.6015625,
+                  "height": 21
+                }
+              ]
+            },
+            "mode": "direct"
+          },
+          {
+            "atom": "inline-block",
+            "prefix": " ",
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 1000,
+              "height": 24
+            },
+            "atomBox": {
+              "x": 0,
+              "y": 8,
+              "width": 10,
+              "height": 10
+            },
+            "captionBox": null,
+            "followingBox": {
+              "x": 48.40625,
+              "y": 1.5,
+              "width": 9.6015625,
+              "height": 21
+            },
+            "visibleRange": {
+              "start": 1,
+              "end": 4,
+              "rect": {
+                "x": 19.59375,
+                "y": 1.5,
+                "width": 28.8125,
+                "height": 21
+              },
+              "rects": [
+                {
+                  "x": 19.59375,
+                  "y": 1.5,
+                  "width": 28.8125,
+                  "height": 21
+                }
+              ]
+            },
+            "fullRange": {
+              "start": 0,
+              "end": 4,
+              "rect": {
+                "x": 10,
+                "y": 1.5,
+                "width": 38.40625,
+                "height": 21
+              },
+              "rects": [
+                {
+                  "x": 10,
+                  "y": 1.5,
+                  "width": 38.40625,
+                  "height": 21
+                }
+              ]
+            },
+            "prefixRange": {
+              "start": 0,
+              "end": 1,
+              "rect": {
+                "x": 10,
+                "y": 1.5,
+                "width": 9.6015625,
+                "height": 21
+              },
+              "rects": [
+                {
+                  "x": 10,
+                  "y": 1.5,
+                  "width": 9.6015625,
+                  "height": 21
+                }
+              ]
+            },
+            "mode": "direct"
+          },
+          {
+            "atom": "inline-block",
+            "prefix": " ",
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 1000,
+              "height": 24
+            },
+            "atomBox": {
+              "x": 0,
+              "y": 8,
+              "width": 10,
+              "height": 10
+            },
+            "captionBox": {
+              "x": 10,
+              "y": 1.5,
+              "width": 38.40625,
+              "height": 21
+            },
+            "followingBox": {
+              "x": 48.40625,
+              "y": 1.5,
+              "width": 9.6015625,
+              "height": 21
+            },
+            "visibleRange": {
+              "start": 1,
+              "end": 4,
+              "rect": {
+                "x": 19.59375,
+                "y": 1.5,
+                "width": 28.8125,
+                "height": 21
+              },
+              "rects": [
+                {
+                  "x": 19.59375,
+                  "y": 1.5,
+                  "width": 28.8125,
+                  "height": 21
+                }
+              ]
+            },
+            "fullRange": {
+              "start": 0,
+              "end": 4,
+              "rect": {
+                "x": 10,
+                "y": 1.5,
+                "width": 38.40625,
+                "height": 21
+              },
+              "rects": [
+                {
+                  "x": 10,
+                  "y": 1.5,
+                  "width": 38.40625,
+                  "height": 21
+                }
+              ]
+            },
+            "prefixRange": {
+              "start": 0,
+              "end": 1,
+              "rect": {
+                "x": 10,
+                "y": 1.5,
+                "width": 9.6015625,
+                "height": 21
+              },
+              "rects": [
+                {
+                  "x": 10,
+                  "y": 1.5,
+                  "width": 9.6015625,
+                  "height": 21
+                }
+              ]
+            },
+            "mode": "nested-wrapper",
+            "captionRects": [
+              {
+                "x": 10,
+                "y": 1.5,
+                "width": 38.40625,
+                "height": 21
+              }
+            ],
+            "wrapperBox": {
+              "x": 10,
+              "y": 1.5,
+              "width": 38.40625,
+              "height": 21
+            }
+          },
+          {
+            "atom": "inline-block",
+            "prefix": " ",
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 45,
+              "height": 48
+            },
+            "atomBox": {
+              "x": 0,
+              "y": 8,
+              "width": 10,
+              "height": 10
+            },
+            "captionBox": {
+              "x": 0,
+              "y": 25.5,
+              "width": 28.8046875,
+              "height": 21
+            },
+            "followingBox": {
+              "x": 28.8046875,
+              "y": 25.5,
+              "width": 9.6015625,
+              "height": 21
+            },
+            "visibleRange": {
+              "start": 1,
+              "end": 4,
+              "rect": {
+                "x": 0,
+                "y": 25.5,
+                "width": 28.8046875,
+                "height": 21
+              },
+              "rects": [
+                {
+                  "x": 0,
+                  "y": 25.5,
+                  "width": 28.8046875,
+                  "height": 21
+                }
+              ]
+            },
+            "fullRange": {
+              "start": 0,
+              "end": 4,
+              "rect": {
+                "x": 0,
+                "y": 25.5,
+                "width": 28.8046875,
+                "height": 21
+              },
+              "rects": [
+                {
+                  "x": 0,
+                  "y": 25.5,
+                  "width": 28.8046875,
+                  "height": 21
+                }
+              ]
+            },
+            "prefixRange": {
+              "start": 0,
+              "end": 1,
+              "rect": {
+                "x": 0,
+                "y": 25.5,
+                "width": 0,
+                "height": 21
+              },
+              "rects": [
+                {
+                  "x": 0,
+                  "y": 25.5,
+                  "width": 0,
+                  "height": 21
+                }
+              ]
+            },
+            "mode": "line-wrapped",
+            "captionRects": [
+              {
+                "x": 0,
+                "y": 25.5,
+                "width": 28.8046875,
+                "height": 21
+              }
+            ]
+          },
+          {
+            "atom": "inline-block",
+            "prefix": " ",
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 1000,
+              "height": 24
+            },
+            "atomBox": {
+              "x": 0,
+              "y": 8,
+              "width": 10,
+              "height": 10
+            },
+            "captionBox": {
+              "x": 17,
+              "y": -3.5,
+              "width": 52.40625,
+              "height": 31
+            },
+            "followingBox": {
+              "x": 76.40625,
+              "y": 1.5,
+              "width": 9.6015625,
+              "height": 21
+            },
+            "visibleRange": {
+              "start": 1,
+              "end": 4,
+              "rect": {
+                "x": 33.59375,
+                "y": 1.5,
+                "width": 28.8125,
+                "height": 21
+              },
+              "rects": [
+                {
+                  "x": 33.59375,
+                  "y": 1.5,
+                  "width": 28.8125,
+                  "height": 21
+                }
+              ]
+            },
+            "fullRange": {
+              "start": 0,
+              "end": 4,
+              "rect": {
+                "x": 24,
+                "y": 1.5,
+                "width": 38.40625,
+                "height": 21
+              },
+              "rects": [
+                {
+                  "x": 24,
+                  "y": 1.5,
+                  "width": 38.40625,
+                  "height": 21
+                }
+              ]
+            },
+            "prefixRange": {
+              "start": 0,
+              "end": 1,
+              "rect": {
+                "x": 24,
+                "y": 1.5,
+                "width": 9.6015625,
+                "height": 21
+              },
+              "rects": [
+                {
+                  "x": 24,
+                  "y": 1.5,
+                  "width": 9.6015625,
+                  "height": 21
+                }
+              ]
+            },
+            "mode": "decorated",
+            "captionRects": [
+              {
+                "x": 17,
+                "y": -3.5,
+                "width": 52.40625,
+                "height": 31
+              }
+            ]
+          },
+          {
+            "atom": "none",
+            "prefix": " ",
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 1000,
+              "height": 24
+            },
+            "atomBox": null,
+            "captionBox": {
+              "x": 0,
+              "y": 1.5,
+              "width": 28.8046875,
+              "height": 21
+            },
+            "followingBox": {
+              "x": 28.8046875,
+              "y": 1.5,
+              "width": 9.6015625,
+              "height": 21
+            },
+            "visibleRange": {
+              "start": 1,
+              "end": 4,
+              "rect": {
+                "x": 0,
+                "y": 1.5,
+                "width": 28.8046875,
+                "height": 21
+              },
+              "rects": [
+                {
+                  "x": 0,
+                  "y": 1.5,
+                  "width": 28.8046875,
+                  "height": 21
+                }
+              ]
+            },
+            "fullRange": {
+              "start": 0,
+              "end": 4,
+              "rect": {
+                "x": 0,
+                "y": 1.5,
+                "width": 28.8046875,
+                "height": 21
+              },
+              "rects": [
+                {
+                  "x": 0,
+                  "y": 1.5,
+                  "width": 28.8046875,
+                  "height": 21
+                }
+              ]
+            },
+            "prefixRange": {
+              "start": 0,
+              "end": 1,
+              "rect": {
+                "x": 0,
+                "y": 1.5,
+                "width": 0,
+                "height": 21
+              },
+              "rects": [
+                {
+                  "x": 0,
+                  "y": 1.5,
+                  "width": 0,
+                  "height": 21
+                }
+              ]
+            },
+            "mode": "paragraph-start",
+            "captionRects": [
+              {
+                "x": 0,
+                "y": 1.5,
+                "width": 28.8046875,
+                "height": 21
+              }
+            ]
+          },
+          {
+            "atom": "none",
+            "prefix": " ",
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 1000,
+              "height": 48
+            },
+            "atomBox": null,
+            "captionBox": {
+              "x": 0,
+              "y": 25.5,
+              "width": 28.8046875,
+              "height": 21
+            },
+            "followingBox": {
+              "x": 28.8046875,
+              "y": 25.5,
+              "width": 9.6015625,
+              "height": 21
+            },
+            "visibleRange": {
+              "start": 1,
+              "end": 4,
+              "rect": {
+                "x": 0,
+                "y": 25.5,
+                "width": 28.8046875,
+                "height": 21
+              },
+              "rects": [
+                {
+                  "x": 0,
+                  "y": 25.5,
+                  "width": 28.8046875,
+                  "height": 21
+                }
+              ]
+            },
+            "fullRange": {
+              "start": 0,
+              "end": 4,
+              "rect": {
+                "x": 0,
+                "y": 25.5,
+                "width": 28.8046875,
+                "height": 21
+              },
+              "rects": [
+                {
+                  "x": 0,
+                  "y": 25.5,
+                  "width": 28.8046875,
+                  "height": 21
+                }
+              ]
+            },
+            "prefixRange": {
+              "start": 0,
+              "end": 1,
+              "rect": {
+                "x": 0,
+                "y": 25.5,
+                "width": 0,
+                "height": 21
+              },
+              "rects": [
+                {
+                  "x": 0,
+                  "y": 25.5,
+                  "width": 0,
+                  "height": 21
+                }
+              ]
+            },
+            "mode": "after-br",
+            "captionRects": [
+              {
+                "x": 0,
+                "y": 25.5,
+                "width": 28.8046875,
+                "height": 21
+              }
+            ]
+          },
+          {
+            "atom": "image",
+            "prefix": " ",
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 45,
+              "height": 48
+            },
+            "atomBox": {
+              "x": 0,
+              "y": 8,
+              "width": 10,
+              "height": 10
+            },
+            "captionBox": null,
+            "followingBox": {
+              "x": 28.8046875,
+              "y": 25.5,
+              "width": 9.6015625,
+              "height": 21
+            },
+            "visibleRange": {
+              "start": 1,
+              "end": 4,
+              "rect": {
+                "x": 0,
+                "y": 25.5,
+                "width": 28.8046875,
+                "height": 21
+              },
+              "rects": [
+                {
+                  "x": 0,
+                  "y": 25.5,
+                  "width": 28.8046875,
+                  "height": 21
+                }
+              ]
+            },
+            "fullRange": {
+              "start": 0,
+              "end": 4,
+              "rect": {
+                "x": 0,
+                "y": 25.5,
+                "width": 28.8046875,
+                "height": 21
+              },
+              "rects": [
+                {
+                  "x": 0,
+                  "y": 25.5,
+                  "width": 28.8046875,
+                  "height": 21
+                }
+              ]
+            },
+            "prefixRange": {
+              "start": 0,
+              "end": 1,
+              "rect": {
+                "x": 0,
+                "y": 25.5,
+                "width": 0,
+                "height": 21
+              },
+              "rects": [
+                {
+                  "x": 0,
+                  "y": 25.5,
+                  "width": 0,
+                  "height": 21
+                }
+              ]
+            },
+            "mode": "direct-wrapped"
+          },
+          {
+            "atom": "inline-block",
+            "prefix": " ",
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 45,
+              "height": 48
+            },
+            "atomBox": {
+              "x": 0,
+              "y": 8,
+              "width": 10,
+              "height": 10
+            },
+            "captionBox": null,
+            "followingBox": {
+              "x": 28.8046875,
+              "y": 25.5,
+              "width": 9.6015625,
+              "height": 21
+            },
+            "visibleRange": {
+              "start": 1,
+              "end": 4,
+              "rect": {
+                "x": 0,
+                "y": 25.5,
+                "width": 28.8046875,
+                "height": 21
+              },
+              "rects": [
+                {
+                  "x": 0,
+                  "y": 25.5,
+                  "width": 28.8046875,
+                  "height": 21
+                }
+              ]
+            },
+            "fullRange": {
+              "start": 0,
+              "end": 4,
+              "rect": {
+                "x": 0,
+                "y": 25.5,
+                "width": 28.8046875,
+                "height": 21
+              },
+              "rects": [
+                {
+                  "x": 0,
+                  "y": 25.5,
+                  "width": 28.8046875,
+                  "height": 21
+                }
+              ]
+            },
+            "prefixRange": {
+              "start": 0,
+              "end": 1,
+              "rect": {
+                "x": 0,
+                "y": 25.5,
+                "width": 0,
+                "height": 21
+              },
+              "rects": [
+                {
+                  "x": 0,
+                  "y": 25.5,
+                  "width": 0,
+                  "height": 21
+                }
+              ]
+            },
+            "mode": "direct-wrapped"
+          },
+          {
+            "atom": "none",
+            "mode": "ordinary",
+            "text": "abc def",
+            "width": 1000,
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 1000,
+              "height": 24
+            },
+            "firstWordRange": {
+              "start": 0,
+              "end": 3,
+              "rect": {
+                "x": 0,
+                "y": 1.5,
+                "width": 28.8046875,
+                "height": 21
+              },
+              "rects": [
+                {
+                  "x": 0,
+                  "y": 1.5,
+                  "width": 28.8046875,
+                  "height": 21
+                }
+              ]
+            },
+            "secondWordRange": {
+              "start": 4,
+              "end": 7,
+              "rect": {
+                "x": 38.3984375,
+                "y": 1.5,
+                "width": 28.8046875,
+                "height": 21
+              },
+              "rects": [
+                {
+                  "x": 38.3984375,
+                  "y": 1.5,
+                  "width": 28.8046875,
+                  "height": 21
+                }
+              ]
+            },
+            "fullRange": {
+              "start": 0,
+              "end": 7,
+              "rect": {
+                "x": 0,
+                "y": 1.5,
+                "width": 67.203125,
+                "height": 21
+              },
+              "rects": [
+                {
+                  "x": 0,
+                  "y": 1.5,
+                  "width": 67.203125,
+                  "height": 21
+                }
+              ]
+            },
+            "spacesRange": {
+              "start": 3,
+              "end": 4,
+              "rect": {
+                "x": 28.796875,
+                "y": 1.5,
+                "width": 9.609375,
+                "height": 21
+              },
+              "rects": [
+                {
+                  "x": 28.796875,
+                  "y": 1.5,
+                  "width": 9.609375,
+                  "height": 21
+                }
+              ]
+            },
+            "prefixRanges": [
+              {
+                "start": 0,
+                "end": 3,
+                "rect": {
+                  "x": 0,
+                  "y": 1.5,
+                  "width": 28.8046875,
+                  "height": 21
+                },
+                "rects": [
+                  {
+                    "x": 0,
+                    "y": 1.5,
+                    "width": 28.8046875,
+                    "height": 21
+                  }
+                ]
+              },
+              {
+                "start": 0,
+                "end": 4,
+                "rect": {
+                  "x": 0,
+                  "y": 1.5,
+                  "width": 38.40625,
+                  "height": 21
+                },
+                "rects": [
+                  {
+                    "x": 0,
+                    "y": 1.5,
+                    "width": 38.40625,
+                    "height": 21
+                  }
+                ]
+              }
+            ],
+            "individualRanges": [
+              {
+                "start": 3,
+                "end": 4,
+                "rect": {
+                  "x": 28.796875,
+                  "y": 1.5,
+                  "width": 9.609375,
+                  "height": 21
+                },
+                "rects": [
+                  {
+                    "x": 28.796875,
+                    "y": 1.5,
+                    "width": 9.609375,
+                    "height": 21
+                  }
+                ]
+              },
+              {
+                "start": 3,
+                "end": 3,
+                "rect": {
+                  "x": 28.796875,
+                  "y": 1.5,
+                  "width": 0,
+                  "height": 21
+                },
+                "rects": [
+                  {
+                    "x": 28.796875,
+                    "y": 1.5,
+                    "width": 0,
+                    "height": 21
+                  }
+                ]
+              },
+              {
+                "start": 4,
+                "end": 4,
+                "rect": {
+                  "x": 38.3984375,
+                  "y": 1.5,
+                  "width": 0,
+                  "height": 21
+                },
+                "rects": [
+                  {
+                    "x": 38.3984375,
+                    "y": 1.5,
+                    "width": 0,
+                    "height": 21
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "atom": "none",
+            "mode": "ordinary",
+            "text": "abc def",
+            "width": 45,
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 45,
+              "height": 48
+            },
+            "firstWordRange": {
+              "start": 0,
+              "end": 3,
+              "rect": {
+                "x": 0,
+                "y": 1.5,
+                "width": 28.8046875,
+                "height": 21
+              },
+              "rects": [
+                {
+                  "x": 0,
+                  "y": 1.5,
+                  "width": 28.8046875,
+                  "height": 21
+                }
+              ]
+            },
+            "secondWordRange": {
+              "start": 4,
+              "end": 7,
+              "rect": {
+                "x": 0,
+                "y": 25.5,
+                "width": 28.8046875,
+                "height": 21
+              },
+              "rects": [
+                {
+                  "x": 0,
+                  "y": 25.5,
+                  "width": 28.8046875,
+                  "height": 21
+                }
+              ]
+            },
+            "fullRange": {
+              "start": 0,
+              "end": 7,
+              "rect": {
+                "x": 0,
+                "y": 1.5,
+                "width": 28.8046875,
+                "height": 45
+              },
+              "rects": [
+                {
+                  "x": 0,
+                  "y": 1.5,
+                  "width": 28.8046875,
+                  "height": 21
+                },
+                {
+                  "x": 0,
+                  "y": 25.5,
+                  "width": 28.8046875,
+                  "height": 21
+                }
+              ]
+            },
+            "spacesRange": {
+              "start": 3,
+              "end": 4,
+              "rect": {
+                "x": 28.796875,
+                "y": 1.5,
+                "width": 0,
+                "height": 21
+              },
+              "rects": [
+                {
+                  "x": 28.796875,
+                  "y": 1.5,
+                  "width": 0,
+                  "height": 21
+                },
+                {
+                  "x": 0,
+                  "y": 25.5,
+                  "width": 0,
+                  "height": 21
+                }
+              ]
+            },
+            "prefixRanges": [
+              {
+                "start": 0,
+                "end": 3,
+                "rect": {
+                  "x": 0,
+                  "y": 1.5,
+                  "width": 28.8046875,
+                  "height": 21
+                },
+                "rects": [
+                  {
+                    "x": 0,
+                    "y": 1.5,
+                    "width": 28.8046875,
+                    "height": 21
+                  }
+                ]
+              },
+              {
+                "start": 0,
+                "end": 4,
+                "rect": {
+                  "x": 0,
+                  "y": 1.5,
+                  "width": 28.8046875,
+                  "height": 21
+                },
+                "rects": [
+                  {
+                    "x": 0,
+                    "y": 1.5,
+                    "width": 28.8046875,
+                    "height": 21
+                  }
+                ]
+              }
+            ],
+            "individualRanges": [
+              {
+                "start": 3,
+                "end": 4,
+                "rect": {
+                  "x": 28.796875,
+                  "y": 1.5,
+                  "width": 0,
+                  "height": 21
+                },
+                "rects": [
+                  {
+                    "x": 28.796875,
+                    "y": 1.5,
+                    "width": 0,
+                    "height": 21
+                  },
+                  {
+                    "x": 0,
+                    "y": 25.5,
+                    "width": 0,
+                    "height": 21
+                  }
+                ]
+              },
+              {
+                "start": 3,
+                "end": 3,
+                "rect": {
+                  "x": 28.796875,
+                  "y": 1.5,
+                  "width": 0,
+                  "height": 21
+                },
+                "rects": [
+                  {
+                    "x": 28.796875,
+                    "y": 1.5,
+                    "width": 0,
+                    "height": 21
+                  }
+                ]
+              },
+              {
+                "start": 4,
+                "end": 4,
+                "rect": {
+                  "x": 0,
+                  "y": 25.5,
+                  "width": 0,
+                  "height": 21
+                },
+                "rects": [
+                  {
+                    "x": 0,
+                    "y": 25.5,
+                    "width": 0,
+                    "height": 21
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "atom": "none",
+            "mode": "ordinary",
+            "text": "abc  def",
+            "width": 1000,
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 1000,
+              "height": 24
+            },
+            "firstWordRange": {
+              "start": 0,
+              "end": 3,
+              "rect": {
+                "x": 0,
+                "y": 1.5,
+                "width": 28.8046875,
+                "height": 21
+              },
+              "rects": [
+                {
+                  "x": 0,
+                  "y": 1.5,
+                  "width": 28.8046875,
+                  "height": 21
+                }
+              ]
+            },
+            "secondWordRange": {
+              "start": 5,
+              "end": 8,
+              "rect": {
+                "x": 38.3984375,
+                "y": 1.5,
+                "width": 28.8046875,
+                "height": 21
+              },
+              "rects": [
+                {
+                  "x": 38.3984375,
+                  "y": 1.5,
+                  "width": 28.8046875,
+                  "height": 21
+                }
+              ]
+            },
+            "fullRange": {
+              "start": 0,
+              "end": 8,
+              "rect": {
+                "x": 0,
+                "y": 1.5,
+                "width": 67.203125,
+                "height": 21
+              },
+              "rects": [
+                {
+                  "x": 0,
+                  "y": 1.5,
+                  "width": 67.203125,
+                  "height": 21
+                }
+              ]
+            },
+            "spacesRange": {
+              "start": 3,
+              "end": 5,
+              "rect": {
+                "x": 28.796875,
+                "y": 1.5,
+                "width": 9.609375,
+                "height": 21
+              },
+              "rects": [
+                {
+                  "x": 28.796875,
+                  "y": 1.5,
+                  "width": 9.609375,
+                  "height": 21
+                }
+              ]
+            },
+            "prefixRanges": [
+              {
+                "start": 0,
+                "end": 3,
+                "rect": {
+                  "x": 0,
+                  "y": 1.5,
+                  "width": 28.8046875,
+                  "height": 21
+                },
+                "rects": [
+                  {
+                    "x": 0,
+                    "y": 1.5,
+                    "width": 28.8046875,
+                    "height": 21
+                  }
+                ]
+              },
+              {
+                "start": 0,
+                "end": 4,
+                "rect": {
+                  "x": 0,
+                  "y": 1.5,
+                  "width": 38.40625,
+                  "height": 21
+                },
+                "rects": [
+                  {
+                    "x": 0,
+                    "y": 1.5,
+                    "width": 38.40625,
+                    "height": 21
+                  }
+                ]
+              },
+              {
+                "start": 0,
+                "end": 5,
+                "rect": {
+                  "x": 0,
+                  "y": 1.5,
+                  "width": 38.40625,
+                  "height": 21
+                },
+                "rects": [
+                  {
+                    "x": 0,
+                    "y": 1.5,
+                    "width": 38.40625,
+                    "height": 21
+                  }
+                ]
+              }
+            ],
+            "individualRanges": [
+              {
+                "start": 3,
+                "end": 4,
+                "rect": {
+                  "x": 28.796875,
+                  "y": 1.5,
+                  "width": 9.609375,
+                  "height": 21
+                },
+                "rects": [
+                  {
+                    "x": 28.796875,
+                    "y": 1.5,
+                    "width": 9.609375,
+                    "height": 21
+                  }
+                ]
+              },
+              {
+                "start": 3,
+                "end": 3,
+                "rect": {
+                  "x": 28.796875,
+                  "y": 1.5,
+                  "width": 0,
+                  "height": 21
+                },
+                "rects": [
+                  {
+                    "x": 28.796875,
+                    "y": 1.5,
+                    "width": 0,
+                    "height": 21
+                  }
+                ]
+              },
+              {
+                "start": 4,
+                "end": 5,
+                "rect": {
+                  "x": 38.3984375,
+                  "y": 1.5,
+                  "width": 0,
+                  "height": 21
+                },
+                "rects": [
+                  {
+                    "x": 38.3984375,
+                    "y": 1.5,
+                    "width": 0,
+                    "height": 21
+                  }
+                ]
+              },
+              {
+                "start": 4,
+                "end": 4,
+                "rect": {
+                  "x": 38.3984375,
+                  "y": 1.5,
+                  "width": 0,
+                  "height": 21
+                },
+                "rects": [
+                  {
+                    "x": 38.3984375,
+                    "y": 1.5,
+                    "width": 0,
+                    "height": 21
+                  }
+                ]
+              },
+              {
+                "start": 5,
+                "end": 5,
+                "rect": {
+                  "x": 38.3984375,
+                  "y": 1.5,
+                  "width": 0,
+                  "height": 21
+                },
+                "rects": [
+                  {
+                    "x": 38.3984375,
+                    "y": 1.5,
+                    "width": 0,
+                    "height": 21
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "atom": "none",
+            "mode": "ordinary",
+            "text": "abc  def",
+            "width": 45,
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 45,
+              "height": 48
+            },
+            "firstWordRange": {
+              "start": 0,
+              "end": 3,
+              "rect": {
+                "x": 0,
+                "y": 1.5,
+                "width": 28.8046875,
+                "height": 21
+              },
+              "rects": [
+                {
+                  "x": 0,
+                  "y": 1.5,
+                  "width": 28.8046875,
+                  "height": 21
+                }
+              ]
+            },
+            "secondWordRange": {
+              "start": 5,
+              "end": 8,
+              "rect": {
+                "x": 0,
+                "y": 25.5,
+                "width": 28.8046875,
+                "height": 21
+              },
+              "rects": [
+                {
+                  "x": 0,
+                  "y": 25.5,
+                  "width": 28.8046875,
+                  "height": 21
+                }
+              ]
+            },
+            "fullRange": {
+              "start": 0,
+              "end": 8,
+              "rect": {
+                "x": 0,
+                "y": 1.5,
+                "width": 28.8046875,
+                "height": 45
+              },
+              "rects": [
+                {
+                  "x": 0,
+                  "y": 1.5,
+                  "width": 28.8046875,
+                  "height": 21
+                },
+                {
+                  "x": 0,
+                  "y": 25.5,
+                  "width": 28.8046875,
+                  "height": 21
+                }
+              ]
+            },
+            "spacesRange": {
+              "start": 3,
+              "end": 5,
+              "rect": {
+                "x": 28.796875,
+                "y": 1.5,
+                "width": 0,
+                "height": 21
+              },
+              "rects": [
+                {
+                  "x": 28.796875,
+                  "y": 1.5,
+                  "width": 0,
+                  "height": 21
+                },
+                {
+                  "x": 0,
+                  "y": 25.5,
+                  "width": 0,
+                  "height": 21
+                }
+              ]
+            },
+            "prefixRanges": [
+              {
+                "start": 0,
+                "end": 3,
+                "rect": {
+                  "x": 0,
+                  "y": 1.5,
+                  "width": 28.8046875,
+                  "height": 21
+                },
+                "rects": [
+                  {
+                    "x": 0,
+                    "y": 1.5,
+                    "width": 28.8046875,
+                    "height": 21
+                  }
+                ]
+              },
+              {
+                "start": 0,
+                "end": 4,
+                "rect": {
+                  "x": 0,
+                  "y": 1.5,
+                  "width": 28.8046875,
+                  "height": 21
+                },
+                "rects": [
+                  {
+                    "x": 0,
+                    "y": 1.5,
+                    "width": 28.8046875,
+                    "height": 21
+                  }
+                ]
+              },
+              {
+                "start": 0,
+                "end": 5,
+                "rect": {
+                  "x": 0,
+                  "y": 1.5,
+                  "width": 28.8046875,
+                  "height": 21
+                },
+                "rects": [
+                  {
+                    "x": 0,
+                    "y": 1.5,
+                    "width": 28.8046875,
+                    "height": 21
+                  }
+                ]
+              }
+            ],
+            "individualRanges": [
+              {
+                "start": 3,
+                "end": 4,
+                "rect": {
+                  "x": 28.796875,
+                  "y": 1.5,
+                  "width": 0,
+                  "height": 21
+                },
+                "rects": [
+                  {
+                    "x": 28.796875,
+                    "y": 1.5,
+                    "width": 0,
+                    "height": 21
+                  },
+                  {
+                    "x": 0,
+                    "y": 25.5,
+                    "width": 0,
+                    "height": 21
+                  }
+                ]
+              },
+              {
+                "start": 3,
+                "end": 3,
+                "rect": {
+                  "x": 28.796875,
+                  "y": 1.5,
+                  "width": 0,
+                  "height": 21
+                },
+                "rects": [
+                  {
+                    "x": 28.796875,
+                    "y": 1.5,
+                    "width": 0,
+                    "height": 21
+                  }
+                ]
+              },
+              {
+                "start": 4,
+                "end": 5,
+                "rect": {
+                  "x": 0,
+                  "y": 25.5,
+                  "width": 0,
+                  "height": 21
+                },
+                "rects": [
+                  {
+                    "x": 0,
+                    "y": 25.5,
+                    "width": 0,
+                    "height": 21
+                  }
+                ]
+              },
+              {
+                "start": 4,
+                "end": 4,
+                "rect": {
+                  "x": 0,
+                  "y": 25.5,
+                  "width": 0,
+                  "height": 21
+                },
+                "rects": [
+                  {
+                    "x": 0,
+                    "y": 25.5,
+                    "width": 0,
+                    "height": 21
+                  }
+                ]
+              },
+              {
+                "start": 5,
+                "end": 5,
+                "rect": {
+                  "x": 0,
+                  "y": 25.5,
+                  "width": 0,
+                  "height": 21
+                },
+                "rects": [
+                  {
+                    "x": 0,
+                    "y": 25.5,
+                    "width": 0,
+                    "height": 21
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    }
+  ]
+}

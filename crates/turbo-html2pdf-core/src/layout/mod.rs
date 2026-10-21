@@ -5,10 +5,12 @@
 
 pub mod block;
 pub mod boxgen;
+pub(crate) mod contents;
 pub mod flex;
 pub mod fragment;
 pub mod imgsize;
 pub mod inline;
+pub(crate) mod inline_boxes;
 mod svg_numbers;
 pub(crate) mod svg_viewport;
 pub mod table;

@@ -32,6 +32,7 @@ pub(crate) struct CapturedRun {
     font_box: SourceFontBox,
 }
 pub(crate) struct TextCapture {
+    pub(crate) collapsed_sources: std::collections::HashSet<NodeId>,
     next: u32,
     count: usize,
     pub(crate) exceeded: bool,
@@ -40,6 +41,7 @@ pub(crate) struct TextCapture {
 impl TextCapture {
     pub(crate) fn new(next: u32) -> Self {
         Self {
+            collapsed_sources: Default::default(),
             next,
             count: 0,
             exceeded: false,
@@ -137,6 +139,7 @@ mod tests {
     use super::*;
     fn cluster() -> GlyphSourceCluster {
         GlyphSourceCluster {
+            collapsed_whitespace: false,
             right_to_left: false,
             byte_start: 0,
             byte_end: 1,

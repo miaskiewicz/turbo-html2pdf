@@ -14,23 +14,39 @@ const { values } = parseArgs({
     runner: { type: "string" },
     out: { type: "string" },
     chrome: { type: "string" },
+    fixture: { type: "string" },
   },
 });
 if (!values.runner || !values.out)
   throw new Error("Pass --runner /absolute/chrome-cdp-trace.mjs and --out /absolute/oracle.json");
-const fixture = JSON.parse(
-  readFileSync(
+const fixturePath = resolve(
+  values.fixture ??
     join(root, "crates/turbo-html2pdf-core/tests/fixtures/layout-snapshot/cases.json"),
-    "utf8",
-  ),
 );
+const fixtureBytes = readFileSync(fixturePath);
+const fixture = JSON.parse(fixtureBytes);
+const fontBytes =
+  fixture.font === "Go"
+    ? readFileSync(join(root, "crates/turbo-html2pdf-core/assets/fonts/Go-Regular.ttf"))
+    : null;
 const temporary = mkdtempSync(join(tmpdir(), "turbo-layout-oracle-"));
-const server = createServer((_request, response) =>
-  response.end("<!doctype html><html><head></head><body></body></html>"),
-);
+const server = createServer((request, response) => {
+  response.setHeader("Content-Type", request.url === "/font.ttf" ? "font/ttf" : "text/html");
+  response.end(
+    request.url === "/font.ttf"
+      ? fontBytes
+      : "<!doctype html><html><head></head><body></body></html>",
+  );
+});
 await new Promise((done) => server.listen(0, "127.0.0.1", done));
 
 async function collect(fixture) {
+  if (fixture.font === "Go") {
+    const face = new FontFace("ParityGo", "url(/font.ttf)");
+    await face.load();
+    document.fonts.add(face);
+    await document.fonts.ready;
+  }
   document.documentElement.style.cssText = "margin:0;padding:0;height:100%;";
   document.body.style.cssText = "margin:0;padding:0;height:100%;";
   const canvas = document.createElement("canvas");
@@ -47,6 +63,7 @@ async function collect(fixture) {
     const elements = [];
     const ready = [];
     const node = (definition) => {
+      if (typeof definition.text === "string") return document.createTextNode(definition.text);
       const element =
         test.documentRoot && definition.tag === "html"
           ? document.documentElement
@@ -122,18 +139,13 @@ try {
     browser: trace.browserVersion,
     v8: trace.browserV8Version,
     recordedAt: new Date().toISOString(),
-    fixture: "cases.json",
-    fixtureSha256: createHash("sha256")
-      .update(
-        readFileSync(
-          join(root, "crates/turbo-html2pdf-core/tests/fixtures/layout-snapshot/cases.json"),
-        ),
-      )
-      .digest("hex"),
+    fixture: fixturePath.slice(fixturePath.lastIndexOf("/") + 1),
+    fixtureSha256: createHash("sha256").update(fixtureBytes).digest("hex"),
     probeSha256: createHash("sha256").update(readFileSync(probe)).digest("hex"),
     collectorSha256: createHash("sha256")
       .update(readFileSync(fileURLToPath(import.meta.url)))
       .digest("hex"),
+    ...(fontBytes ? { fontSha256: createHash("sha256").update(fontBytes).digest("hex") } : {}),
     effectiveExtensionFlags: trace.effectiveExtensionFlags,
     ...result.result,
   };

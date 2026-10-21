@@ -57,4 +57,67 @@ composed transforms. It preserves hidden layout boxes and sizes replaced images
 without PDF page caps. PDF filtering, page-fit and legacy layout policies are preserved; shared CSS
 cascade fixes also improve valid PDF output. See
 [the snapshot contract and current geometry boundaries](../../docs/live-layout-snapshot.md);
-text-line provenance does not imply implemented Range, caret, or scroll metrics.
+native text-source range/caret queries do not implement DOM Range assembly,
+browser hit testing or scroll metrics for the embedding application.
+
+The native text-enabled HTML path retains ordinary inline boundaries and real
+per-line border fragments, including sliced decorations, empty inlines, nested
+font metrics, relative positioning and super/sub atomic children. Its explicit
+`UsedBoxMetrics.inline_fragment` flag distinguishes these from inline replaced
+elements. Unsupported block-in-inline splitting, ordinary-inline top/bottom/middle
+alignment, out-of-flow positioning and non-horizontal/LTR writing return typed
+snapshot errors. The generic and PDF paths retain their existing layout policy.
+
+Native HTML source items admit their aggregate advance to the physical
+LayoutUnit grid before line breaking and placement, while glyph positions and
+partial selections retain their real signed 16.16 advances. Aggregation crosses
+words and collapsed spaces within one text source; adjacent text nodes remain
+separate items. The pinned-font controls in `tests/fixtures/native-font-runs`
+record normal headed Chrome155 with real IBM Plex Mono and Fira Code bytes.
+Headless automation with forced font-rendering flags is a separate profile and
+is not substituted for that control. Generic and PDF paths retain raw advances.
+
+Leading spaces after inline atoms remain inside their real text/inline owner.
+The first rendered space retains its raw advance; extra collapsed source cells
+follow that advance, and wrapping relocates a collapsed opening prefix to the
+text's new line. The nineteen `tests/fixtures/native-leading-spaces` observations
+cover direct text, nested/decorated spans, paragraph starts, forced breaks and
+ordinary bare-text separators. At soft wraps, a separator-only Range retains
+both real line affinities; positive selections keep their nonempty fragments.
+These source-mapping rules apply only to native HTML, preserving PDF whitespace.
+
+`GlyphSourceCluster` and `SourceClusterBox` expose `collapsed_whitespace`
+provenance. The rendered first collapsed space can still have positive advance;
+native caret canonicalization follows only a zero-space source suffix ending at
+an actual same-line glyph edge. Preformatted glyph spaces keep ordinary provenance.
+These unreleased candidate structs gain a field: callers constructing them with
+Rust struct literals must initialize the new flag (false for ordinary glyphs).
+
+Native text Range and block/replaced Element quads preserve each flat transform
+boundary and subsequent float ancestor offsets. Ordinary inline Element quads
+retain their accumulated global matrix, as in Chrome. The sibling
+`tests/fixtures/native-range-transforms` controls retain the distinct margin,
+padding, viewport-positioned and nested-transform observations. A fixed child
+under a transformed containing block remains an explicit unsupported snapshot;
+its Chrome observation stays in the fixture rather than being claimed as parity.
+
+Native HTML iframe replacements use the CSS 300×150 default object size when
+attributes and CSS do not provide dimensions. Valid zero-width/height viewports
+retain fixed-size descendants, viewport units and definite-zero percentage bases,
+including zero-width bodies under real HTML document roots;
+normal-flow relative positioning does not substitute the absolute containing block.
+Iframe fallback descendants retain source identities and text while being excluded
+from the parent layout. Embedders use that explicit exclusion to return empty DOM Range geometry.
+The lower-level glyph query retains its `UnresolvedSource` error when no glyphs
+are placed; invalid UTF-16 offsets and genuinely lost visible glyphs remain errors.
+Native viewport admission accepts finite dimensions at least zero. Generic/PDF
+snapshot admission continues to require positive dimensions.
+
+The snapshot input does not yet carry HTML document compatibility mode. Its line
+layout follows the standards policy: an independently measured zero-viewport
+standards document with fixed and inline-iframe descendants has a 34px body;
+Chrome's BackCompat sibling suppresses the inline-only line strut and has a 30px
+body. Both raw Chrome controls are retained in `tests/fixtures/native-iframe`.
+Quirks-mode line-strut/aggregate-height parity requires a real document-mode input
+and remains outside this API's current contract; fixed descendant boxes match in
+both measurements. No rectangle is clipped or normalized to conceal this gap.
