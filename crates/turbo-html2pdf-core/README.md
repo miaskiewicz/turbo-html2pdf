@@ -92,7 +92,7 @@ These source-mapping rules apply only to native HTML, preserving PDF whitespace.
 provenance. The rendered first collapsed space can still have positive advance;
 native caret canonicalization follows only a zero-space source suffix ending at
 an actual same-line glyph edge. Preformatted glyph spaces keep ordinary provenance.
-These unreleased candidate structs gain a field: callers constructing them with
+In v0.3.8 these structs gain a field: callers constructing them with
 Rust struct literals must initialize the new flag (false for ordinary glyphs).
 
 Native text Range and block/replaced Element quads preserve each flat transform

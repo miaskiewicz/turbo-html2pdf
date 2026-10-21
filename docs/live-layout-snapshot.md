@@ -120,7 +120,7 @@ This seam exposes the real native engine; it does not turn its CSS subset into
 Blink. Remaining work before a complete browser geometry API includes:
 
 - Broader collapsed-whitespace mapping, bidi/ligature
-  caret positions and complete selection rectangles. The unreleased optional
+  caret positions and complete selection rectangles. The v0.3.8 optional
   text path below retains actual original byte/UTF-16 cluster provenance; the
   published box-only path does not invent this information.
 - Full overflow/clip/scrollbar regions, scroll offsets, sticky behavior, hit
@@ -168,7 +168,7 @@ a visible empty/flattened inline in the box-only path, so embedders must not inv
 from fragment absence.
 
 
-## Optional native text-source provenance (unreleased)
+## Optional native text-source provenance (v0.3.8)
 
 `snapshot_live_tree_with_text` and `snapshot_styled_tree_with_text` return the same
 immutable snapshot with `text_runs()`. Each record identifies an actual native
@@ -263,7 +263,7 @@ font-fallback behavior remain unfinished. The controlled-font comparisons do not
 certify installed fallback fonts, platform-specific hinted metrics or complete
 CSSOM View behavior.
 
-## Native inline boundaries and border fragments (unreleased)
+## Native inline boundaries and border fragments (v0.3.8)
 
 The native text-enabled HTML entry point preserves ordinary inline start/end
 boundaries before word breaking. Horizontal margins, borders and padding advance
@@ -323,7 +323,7 @@ and Courier at 13, 16 and 24 CSS pixels. Tests compare real physical font metric
 text advances, source Range rectangles and normal container line heights; a
 separate actual-font identity check preserves the existing PDF selection.
 
-## Original-scope matched declarations and unboxed elements (unreleased)
+## Original-scope matched declarations and unboxed elements (v0.3.8)
 
 An embedder with its own DOM and shadow trees can call
 `style::resolve_matched_style(parent, declarations)` after matching selectors in
@@ -358,7 +358,7 @@ are retained in `tests/fixtures/layout-snapshot/contents-chrome155.json` and
 `contents-text-chrome155.json`; the latter loads the same bundled Go font bytes
 in both engines and records their hash.
 
-## Explicit outer SVG viewports (unreleased)
+## Explicit outer SVG viewports (v0.3.8)
 
 `snapshot_html_live_tree_with_svg_viewports` and its already-styled counterpart
 accept the complete original forest, source identities, explicit outer-SVG
