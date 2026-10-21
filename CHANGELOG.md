@@ -4,7 +4,7 @@ All notable changes to turbo-html2pdf are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/); versions follow SemVer. The npm,
 PyPI, and crates.io packages release in lockstep from a `v*` tag (PyPI on `pyv*`).
 
-## [0.3.8] — unreleased
+## [0.3.8] — 2026-10-21
 
 - Share each loaded system font program across its collection faces instead of
   copying the whole TTC for every index. Keep per-face parsing, shaping caches,
