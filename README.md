@@ -50,7 +50,7 @@ string* — they pair with a render package (`turbo-html2pdf` on Node, a
 PDF. The Rust engine lives in
 [`crates/turbo-html2pdf-core`](https://github.com/miaskiewicz/turbo-html2pdf/tree/main/crates/turbo-html2pdf-core).
 
-> Release version: **`v0.3.8`**. See [CHANGELOG.md](./CHANGELOG.md) and
+> Release version: **`v0.3.9`**. See [CHANGELOG.md](./CHANGELOG.md) and
 > [publishing and registry verification](./PUBLISHING.md).
 
 ## 🌐 Bonus: the same engine runs *inside* a web browser
@@ -468,7 +468,7 @@ npm i turbo-html2pdf-svg    # identical API, SVG support baked in (resvg)
 
 ## Status
 
-**`v0.3.8`** is the current release version for npm, PyPI and crates.io.
+**`v0.3.9`** is the current release version for npm, PyPI and crates.io.
 The [release procedure](./PUBLISHING.md) records the tag triggers and registry checks. The core engine is heavily tested (the
 `turbo-html2pdf-core` crate holds 100% line coverage with a cyclomatic-complexity ≤ 5
 gate). Bindings: Node (N-API), WebAssembly (lean + fonts), and Python (PyO3). See

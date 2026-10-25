@@ -4,6 +4,13 @@ All notable changes to turbo-html2pdf are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/); versions follow SemVer. The npm,
 PyPI, and crates.io packages release in lockstep from a `v*` tag (PyPI on `pyv*`).
 
+## [0.3.9] — 2026-10-25 — iterate computed style pairs
+
+- Add `ComputedStyle::iter` to iterate computed property name/value pairs, small
+  and additive. Consumed by turbo-surf's standardized CSS `zoom` (turbo-surf#28),
+  which scales absolute lengths after the cascade; verified there against a
+  Chrome 156 zoom/layout control.
+
 ## [0.3.8] — 2026-10-21
 
 - Share each loaded system font program across its collection faces instead of
