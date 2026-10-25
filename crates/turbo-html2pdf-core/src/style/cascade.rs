@@ -22,6 +22,15 @@ impl ComputedStyle {
         self.map.get(property).map(String::as_str)
     }
 
+    /// Every computed property and value, in property-name order. Consumers that
+    /// derive used values (for example CSS `zoom` scaling) rebuild a style from
+    /// these pairs with [`ComputedStyle::from_pairs`].
+    pub fn iter(&self) -> impl Iterator<Item = (&str, &str)> {
+        self.map
+            .iter()
+            .map(|(name, value)| (name.as_str(), value.as_str()))
+    }
+
     /// Anonymous live formatting boxes inherit text properties, never the
     /// parent's frame/transform/position a second time.
     pub(crate) fn inherited_only(&self) -> Self {
@@ -974,5 +983,19 @@ mod dimension_hint_tests {
                 "{value}"
             );
         }
+    }
+}
+
+#[cfg(test)]
+mod iteration_tests {
+    use super::ComputedStyle;
+
+    #[test]
+    fn iteration_yields_every_pair_in_name_order_and_round_trips() {
+        let style = ComputedStyle::from_pairs([("width", "10px"), ("--x", "1"), ("color", "red")]);
+        let pairs: Vec<_> = style.iter().collect();
+        assert_eq!(pairs, [("--x", "1"), ("color", "red"), ("width", "10px")]);
+        assert_eq!(ComputedStyle::from_pairs(style.iter()), style);
+        assert_eq!(ComputedStyle::default().iter().count(), 0);
     }
 }
