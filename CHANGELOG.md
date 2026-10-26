@@ -26,6 +26,19 @@ PyPI, and crates.io packages release in lockstep from a `v*` tag (PyPI on `pyv*`
   `print-color` features no longer forward to turbo-dom-layout (they set its
   runtime options). The root `layout_html` / `layout_boxes` / `parse_html` stay
   html2pdf-mode; `html_layout::*` is turbo-dom-layout's directive-free drive.
+- Selectors are parsed and matched by turbo-dom's one selector engine (the engine
+  behind turbo-dom's `matches` / `querySelector*`), through its stylesheet entry points
+  `parse_for_cascade` / `match_for_cascade`; html2pdf's own selector parser and matcher
+  are gone. Behaviour changes only where the old matcher disagreed with Chrome 156, each
+  backed by turbo-dom's Chrome control: CSS escapes, `*|`/`|` namespace prefixes, `of S`,
+  `:has()`, `:read-only`/`:read-write`, `:required`/`:optional`, `:nth-last-*`,
+  `:lang()`, `:defined` and case-insensitive pseudo-class names now work; an unknown
+  pseudo-class or pseudo-element drops its rule (it used to be ignored, so the rest of
+  the compound matched); pseudo-elements never style the element; `[href]` no longer
+  matches a namespaced `xlink:href`; specificity follows Selectors 4 (`:where()` = 0,
+  `:is()`/`:not()`/`:has()` = their most specific argument). Every rendered output of the
+  release corpora is byte-identical. `Rule::selectors` is a `RuleSelectors` (prelude +
+  the parsed list) instead of `Vec<Selector>`. See docs/css-support.md.
 
 ## [0.3.9] — 2026-10-25 — iterate computed style pairs
 
