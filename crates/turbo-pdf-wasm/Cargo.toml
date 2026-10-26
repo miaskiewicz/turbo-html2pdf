@@ -59,3 +59,8 @@ threads = []
 # `turbo-html2pdf-wasm` lean; the `turbo-html2pdf-wasm-fonts` package is built
 # with `wasm-pack build --features bundled-fonts` to turn this on.
 bundled-fonts = ["turbo-html2pdf-core/bundled-fonts"]
+
+# TEMPORARY consolidation gate (S3b, turbo-dom docs/selector-dual-gate.md): forwards the
+# selector-dual gate (old vs new selector engine on every cascade decision). Never enable
+# outside the gate; removed with the gate at the end of S3b.
+selector-dual = ["turbo-html2pdf-core/selector-dual"]

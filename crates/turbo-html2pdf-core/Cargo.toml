@@ -100,6 +100,11 @@ pdf-ua = []
 # the output stays byte-deterministic.
 encrypt = ["dep:aes", "dep:cbc", "dep:sha2", "dep:getrandom"]
 
+# TEMPORARY consolidation gate (S3b, turbo-dom docs/selector-dual-gate.md): forwards the
+# selector-dual gate (old vs new selector engine on every cascade decision). Never enable
+# outside the gate; removed with the gate at the end of S3b.
+selector-dual = ["turbo-dom-layout/selector-dual"]
+
 [dependencies]
 minijinja = { workspace = true }
 serde = { workspace = true }

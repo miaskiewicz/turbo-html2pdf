@@ -50,3 +50,8 @@ serde_json = { workspace = true }
 # default so the standard binary matches the standard `turbo-html2pdf` npm
 # package; build with `--features svg` for vector image support.
 svg = ["turbo-html2pdf-core/svg"]
+
+# TEMPORARY consolidation gate (S3b, turbo-dom docs/selector-dual-gate.md): forwards the
+# selector-dual gate (old vs new selector engine on every cascade decision). Never enable
+# outside the gate; removed with the gate at the end of S3b.
+selector-dual = ["turbo-html2pdf-core/selector-dual"]

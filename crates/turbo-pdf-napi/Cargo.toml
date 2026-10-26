@@ -37,5 +37,10 @@ napi-derive = "2"
 # `build-napi-svg`/`publish-svg` jobs in .github/workflows/release.yml).
 svg = ["turbo-html2pdf-core/svg"]
 
+# TEMPORARY consolidation gate (S3b, turbo-dom docs/selector-dual-gate.md): forwards the
+# selector-dual gate (old vs new selector engine on every cascade decision). Never enable
+# outside the gate; removed with the gate at the end of S3b.
+selector-dual = ["turbo-html2pdf-core/selector-dual"]
+
 [build-dependencies]
 napi-build = "2"
