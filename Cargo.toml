@@ -36,5 +36,5 @@ codegen-units = 1
 # the turbo-dom consolidation branch until they are on crates.io; remove this block and
 # re-lock (`cargo update -p turbo-dom-layout -p turbo-dom`) at release (see PUBLISHING.md).
 [patch.crates-io]
-turbo-dom-layout = { git = "https://github.com/miaskiewicz/turbo-dom", rev = "af25a7e67a4892d737ed8f6874bf892e6da9bfab" }
-turbo-dom = { git = "https://github.com/miaskiewicz/turbo-dom", rev = "af25a7e67a4892d737ed8f6874bf892e6da9bfab" }
+turbo-dom-layout = { git = "https://github.com/miaskiewicz/turbo-dom", rev = "2676799a45c1d964c0cecc397b31ec3cf9aa935c" }
+turbo-dom = { git = "https://github.com/miaskiewicz/turbo-dom", rev = "2676799a45c1d964c0cecc397b31ec3cf9aa935c" }
