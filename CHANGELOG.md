@@ -4,6 +4,27 @@ All notable changes to turbo-html2pdf are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/); versions follow SemVer. The npm,
 PyPI, and crates.io packages release in lockstep from a `v*` tag (PyPI on `pyv*`).
 
+## [Unreleased]
+
+- **Fixed (#31)**: paginated PDFs place blocks at page starts as Chrome 156 prints them
+  (CSS Fragmentation §5.2): the first page keeps the leading top margins (and the
+  `<html>`/`<body>` margin, border and padding), a forced break keeps the next block's
+  gap, an unforced break still truncates it. `<html>`/`<body>` backgrounds, borders and
+  shadows are painted on every page fragment (`box-decoration-break: slice`: top edge on
+  the first page, bottom edge on the last, the box running to the page area's end in
+  between); new `paginate_document`. Control: `scripts/pagination-chrome-control.mjs`
+  (Chrome `page.pdf()` rasterized at 96 dpi) → `tests/pagination_chrome.rs`. Every
+  rendered PDF whose first block sits below the top of the page area changes (page 1
+  moves down by the body margin + first margin) — turbo-dom
+  `tools/parity/expected/p5b-w2-turbo-html2pdf-31.json`.
+- **Fixed (#28)**: CI tests and lints the core in the configurations the workspace run
+  never builds: `--features svg`, `--all-features` (the `perf` hot-path budgets) and
+  `--no-default-features` (the font-less wasm build). The last `--no-default-features`
+  failure (`native_inline_coverage`, which shapes text) is gated on `bundled-fonts`, and
+  the `perf` shape budget is restated for the bounded shape cache (distinct runs are
+  shaped at most twice: 6096 for the 3000-run table on every platform, budget
+  `<= 2 x 3000 + 100`), with a new repeated-runs test pinning the dedupe (3 shapes).
+
 ## [0.6.0] — 2026-10-26 — turbo-dom consolidation
 
 The engine is now built on the turbo-dom workspace crates instead of carrying its own
@@ -24,7 +45,8 @@ turbo-test, turbo-html2pdf, turbo-surf) releases on one version line.
   `rem` follows the root font size, `<style>`/`<script>`/`<noscript>` text is no longer
   painted into the PDF, and the root/`<body>` background colour fills each page's page area
   (`Page::canvas`). The `<html>`/`<body>` boxes are dissolved into the page flow before
-  pagination (their own borders are not painted, as for any block split across pages).
+  pagination (their own borders were not painted, as for any block split across pages;
+  sliced onto every page since #31, see [Unreleased]).
   Nearly every PDF/`layoutBoxes` output of the corpora changes (body margin); the
   conformance pages' boxes now match Chrome 156 for 172 of 209 tagged elements (was 1).
 - **Fixed (#30)**: EXIF orientation (JPEG APP1, PNG eXIf — as Chrome 156; WebP EXIF is

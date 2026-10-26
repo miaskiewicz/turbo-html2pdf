@@ -1,6 +1,10 @@
 //! Split at the S1 relocation: the layout-only cases moved to turbo-dom-layout's
 //! `tests/native_inline_coverage.rs`; the ones here need TKind directives, templating
 //! or the PDF emitter.
+//!
+//! The cases shape text with the default family, so they need the bundled faces (a
+//! font-less `--no-default-features` build has no text sources; turbo-html2pdf#28).
+#![cfg(feature = "bundled-fonts")]
 
 use std::collections::HashMap;
 use turbo_dom_layout::test_support::literal::{parse_html, Node};

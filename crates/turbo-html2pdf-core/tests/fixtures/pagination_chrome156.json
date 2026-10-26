@@ -1,0 +1,658 @@
+{
+ "generator": "scripts/pagination-chrome-control.mjs",
+ "chrome": "156.0.8078.4",
+ "playwright_core": "1.61.0",
+ "raster": "pdftoppm -r 96",
+ "cases": [
+  {
+   "id": "first-page-margin",
+   "html": "<!DOCTYPE html><html><head><style>@page{size:600px 400px;margin:40px}</style></head><body><div style=\"height:100px;background:#ff0000;break-inside:avoid;margin-top:30px\"></div><div style=\"height:120px;background:#00ff00;break-inside:avoid;\"></div><div style=\"height:120px;background:#0000ff;break-inside:avoid;\"></div><div style=\"height:120px;background:#ffff00;break-inside:avoid;\"></div></body></html>",
+   "colors": {
+    "red": "#ff0000",
+    "green": "#00ff00",
+    "blue": "#0000ff",
+    "yellow": "#ffff00"
+   },
+   "pages": [
+    {
+     "size": [
+      600,
+      400
+     ],
+     "boxes": {
+      "red": {
+       "bbox": [
+        48,
+        70,
+        551,
+        169
+       ],
+       "top": true,
+       "bottom": true
+      },
+      "green": {
+       "bbox": [
+        48,
+        170,
+        551,
+        289
+       ],
+       "top": true,
+       "bottom": true
+      },
+      "blue": null,
+      "yellow": null
+     }
+    },
+    {
+     "size": [
+      600,
+      400
+     ],
+     "boxes": {
+      "red": null,
+      "green": null,
+      "blue": {
+       "bbox": [
+        48,
+        40,
+        551,
+        159
+       ],
+       "top": true,
+       "bottom": true
+      },
+      "yellow": {
+       "bbox": [
+        48,
+        160,
+        551,
+        279
+       ],
+       "top": true,
+       "bottom": true
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "split-block-margin",
+   "html": "<!DOCTYPE html><html><head><style>@page{size:600px 400px;margin:40px}body{margin:0}</style></head><body><div style=\"margin-top:50px;padding-top:6px\"><div style=\"height:90px;background:#ff0000;break-inside:avoid;margin-top:10px\"></div><div style=\"height:90px;background:#00ff00;break-inside:avoid;margin-top:10px\"></div><div style=\"height:90px;background:#0000ff;break-inside:avoid;margin-top:10px\"></div><div style=\"height:90px;background:#ffff00;break-inside:avoid;margin-top:10px\"></div><div style=\"height:90px;background:#ff00ff;break-inside:avoid;margin-top:10px\"></div></div></body></html>",
+   "colors": {
+    "red": "#ff0000",
+    "green": "#00ff00",
+    "blue": "#0000ff",
+    "yellow": "#ffff00",
+    "magenta": "#ff00ff"
+   },
+   "pages": [
+    {
+     "size": [
+      600,
+      400
+     ],
+     "boxes": {
+      "red": {
+       "bbox": [
+        40,
+        106,
+        559,
+        195
+       ],
+       "top": true,
+       "bottom": true
+      },
+      "green": {
+       "bbox": [
+        40,
+        206,
+        559,
+        295
+       ],
+       "top": true,
+       "bottom": true
+      },
+      "blue": null,
+      "yellow": null,
+      "magenta": null
+     }
+    },
+    {
+     "size": [
+      600,
+      400
+     ],
+     "boxes": {
+      "red": null,
+      "green": null,
+      "blue": {
+       "bbox": [
+        40,
+        40,
+        559,
+        129
+       ],
+       "top": true,
+       "bottom": true
+      },
+      "yellow": {
+       "bbox": [
+        40,
+        140,
+        559,
+        229
+       ],
+       "top": true,
+       "bottom": true
+      },
+      "magenta": {
+       "bbox": [
+        40,
+        240,
+        559,
+        329
+       ],
+       "top": true,
+       "bottom": true
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "unforced-break-margin",
+   "html": "<!DOCTYPE html><html><head><style>@page{size:600px 400px;margin:40px}body{margin:0}</style></head><body><div style=\"height:140px;background:#ff0000;break-inside:avoid;margin-top:25px\"></div><div style=\"height:140px;background:#00ff00;break-inside:avoid;margin-top:25px\"></div><div style=\"height:140px;background:#0000ff;break-inside:avoid;margin-top:25px\"></div><div style=\"height:140px;background:#ffff00;break-inside:avoid;margin-top:25px\"></div></body></html>",
+   "colors": {
+    "red": "#ff0000",
+    "green": "#00ff00",
+    "blue": "#0000ff",
+    "yellow": "#ffff00"
+   },
+   "pages": [
+    {
+     "size": [
+      600,
+      400
+     ],
+     "boxes": {
+      "red": {
+       "bbox": [
+        40,
+        65,
+        559,
+        204
+       ],
+       "top": true,
+       "bottom": true
+      },
+      "green": null,
+      "blue": null,
+      "yellow": null
+     }
+    },
+    {
+     "size": [
+      600,
+      400
+     ],
+     "boxes": {
+      "red": null,
+      "green": {
+       "bbox": [
+        40,
+        40,
+        559,
+        179
+       ],
+       "top": true,
+       "bottom": true
+      },
+      "blue": {
+       "bbox": [
+        40,
+        205,
+        559,
+        344
+       ],
+       "top": true,
+       "bottom": true
+      },
+      "yellow": null
+     }
+    },
+    {
+     "size": [
+      600,
+      400
+     ],
+     "boxes": {
+      "red": null,
+      "green": null,
+      "blue": null,
+      "yellow": {
+       "bbox": [
+        40,
+        40,
+        559,
+        179
+       ],
+       "top": true,
+       "bottom": true
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "forced-break-margin",
+   "html": "<!DOCTYPE html><html><head><style>@page{size:600px 400px;margin:40px}body{margin:0}</style></head><body><div style=\"height:60px;background:#ff0000;break-inside:avoid;\"></div><div style=\"height:60px;background:#00ff00;break-inside:avoid;break-before:page;margin-top:30px\"></div></body></html>",
+   "colors": {
+    "red": "#ff0000",
+    "green": "#00ff00"
+   },
+   "pages": [
+    {
+     "size": [
+      600,
+      400
+     ],
+     "boxes": {
+      "red": {
+       "bbox": [
+        40,
+        40,
+        559,
+        99
+       ],
+       "top": true,
+       "bottom": true
+      },
+      "green": null
+     }
+    },
+    {
+     "size": [
+      600,
+      400
+     ],
+     "boxes": {
+      "red": null,
+      "green": {
+       "bbox": [
+        40,
+        70,
+        559,
+        129
+       ],
+       "top": true,
+       "bottom": true
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "body-border",
+   "html": "<!DOCTYPE html><html><head><style>@page{size:600px 400px;margin:40px}body{border:4px solid #ff0000;padding:6px}</style></head><body><div style=\"height:140px;background:#00ff00;break-inside:avoid;\"></div><div style=\"height:140px;background:#0000ff;break-inside:avoid;\"></div><div style=\"height:140px;background:#ffff00;break-inside:avoid;\"></div><div style=\"height:140px;background:#ff00ff;break-inside:avoid;\"></div></body></html>",
+   "colors": {
+    "red": "#ff0000",
+    "green": "#00ff00",
+    "blue": "#0000ff",
+    "yellow": "#ffff00",
+    "magenta": "#ff00ff"
+   },
+   "pages": [
+    {
+     "size": [
+      600,
+      400
+     ],
+     "boxes": {
+      "red": {
+       "bbox": [
+        48,
+        48,
+        551,
+        359
+       ],
+       "top": true,
+       "bottom": false
+      },
+      "green": {
+       "bbox": [
+        58,
+        58,
+        541,
+        197
+       ],
+       "top": true,
+       "bottom": true
+      },
+      "blue": {
+       "bbox": [
+        58,
+        198,
+        541,
+        337
+       ],
+       "top": true,
+       "bottom": true
+      },
+      "yellow": null,
+      "magenta": null
+     }
+    },
+    {
+     "size": [
+      600,
+      400
+     ],
+     "boxes": {
+      "red": {
+       "bbox": [
+        48,
+        40,
+        551,
+        329
+       ],
+       "top": false,
+       "bottom": true
+      },
+      "green": null,
+      "blue": null,
+      "yellow": {
+       "bbox": [
+        58,
+        40,
+        541,
+        179
+       ],
+       "top": true,
+       "bottom": true
+      },
+      "magenta": {
+       "bbox": [
+        58,
+        180,
+        541,
+        319
+       ],
+       "top": true,
+       "bottom": true
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "body-border-single-page",
+   "html": "<!DOCTYPE html><html><head><style>@page{size:600px 400px;margin:40px}body{border:4px solid #ff0000;padding:6px}</style></head><body><div style=\"height:100px;background:#00ff00;break-inside:avoid;\"></div></body></html>",
+   "colors": {
+    "red": "#ff0000",
+    "green": "#00ff00"
+   },
+   "pages": [
+    {
+     "size": [
+      600,
+      400
+     ],
+     "boxes": {
+      "red": {
+       "bbox": [
+        48,
+        48,
+        551,
+        167
+       ],
+       "top": true,
+       "bottom": true
+      },
+      "green": {
+       "bbox": [
+        58,
+        58,
+        541,
+        157
+       ],
+       "top": true,
+       "bottom": true
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "body-border-empty",
+   "html": "<!DOCTYPE html><html><head><style>@page{size:600px 400px;margin:40px}body{border:4px solid #ff0000;padding:6px}</style></head><body></body></html>",
+   "colors": {
+    "red": "#ff0000"
+   },
+   "pages": [
+    {
+     "size": [
+      600,
+      400
+     ],
+     "boxes": {
+      "red": {
+       "bbox": [
+        48,
+        48,
+        551,
+        67
+       ],
+       "top": true,
+       "bottom": true
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "html-and-body-border",
+   "html": "<!DOCTYPE html><html><head><style>@page{size:600px 400px;margin:40px}html{border:5px solid #ff0000} body{border:3px solid #0000ff}</style></head><body><div style=\"height:150px;background:#00ff00;break-inside:avoid;\"></div><div style=\"height:150px;background:#ffff00;break-inside:avoid;\"></div><div style=\"height:150px;background:#ff00ff;break-inside:avoid;\"></div></body></html>",
+   "colors": {
+    "red": "#ff0000",
+    "blue": "#0000ff",
+    "green": "#00ff00",
+    "yellow": "#ffff00",
+    "magenta": "#ff00ff"
+   },
+   "pages": [
+    {
+     "size": [
+      600,
+      400
+     ],
+     "boxes": {
+      "red": {
+       "bbox": [
+        40,
+        40,
+        559,
+        359
+       ],
+       "top": true,
+       "bottom": false
+      },
+      "blue": {
+       "bbox": [
+        53,
+        53,
+        546,
+        359
+       ],
+       "top": true,
+       "bottom": false
+      },
+      "green": {
+       "bbox": [
+        56,
+        56,
+        543,
+        205
+       ],
+       "top": true,
+       "bottom": true
+      },
+      "yellow": {
+       "bbox": [
+        56,
+        206,
+        543,
+        355
+       ],
+       "top": true,
+       "bottom": true
+      },
+      "magenta": null
+     }
+    },
+    {
+     "size": [
+      600,
+      400
+     ],
+     "boxes": {
+      "red": {
+       "bbox": [
+        40,
+        40,
+        559,
+        205
+       ],
+       "top": false,
+       "bottom": true
+      },
+      "blue": {
+       "bbox": [
+        53,
+        40,
+        546,
+        192
+       ],
+       "top": false,
+       "bottom": true
+      },
+      "green": null,
+      "yellow": null,
+      "magenta": {
+       "bbox": [
+        56,
+        40,
+        543,
+        189
+       ],
+       "top": true,
+       "bottom": true
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "body-background-not-propagated",
+   "html": "<!DOCTYPE html><html><head><style>@page{size:600px 400px;margin:40px}html{background:#00ffff} body{background:#ff8000;padding:10px}</style></head><body><div style=\"height:150px;background:#00ff00;break-inside:avoid;\"></div><div style=\"height:150px;background:#0000ff;break-inside:avoid;\"></div><div style=\"height:150px;background:#ff00ff;break-inside:avoid;\"></div></body></html>",
+   "colors": {
+    "cyan": "#00ffff",
+    "orange": "#ff8000",
+    "green": "#00ff00",
+    "blue": "#0000ff",
+    "magenta": "#ff00ff"
+   },
+   "pages": [
+    {
+     "size": [
+      600,
+      400
+     ],
+     "boxes": {
+      "cyan": {
+       "bbox": [
+        40,
+        40,
+        559,
+        359
+       ],
+       "top": true,
+       "bottom": false
+      },
+      "orange": {
+       "bbox": [
+        48,
+        48,
+        551,
+        359
+       ],
+       "top": true,
+       "bottom": true
+      },
+      "green": {
+       "bbox": [
+        58,
+        58,
+        541,
+        207
+       ],
+       "top": true,
+       "bottom": true
+      },
+      "blue": {
+       "bbox": [
+        58,
+        208,
+        541,
+        357
+       ],
+       "top": true,
+       "bottom": true
+      },
+      "magenta": null
+     }
+    },
+    {
+     "size": [
+      600,
+      400
+     ],
+     "boxes": {
+      "cyan": {
+       "bbox": [
+        40,
+        40,
+        559,
+        359
+       ],
+       "top": false,
+       "bottom": true
+      },
+      "orange": {
+       "bbox": [
+        48,
+        40,
+        551,
+        199
+       ],
+       "top": false,
+       "bottom": true
+      },
+      "green": null,
+      "blue": null,
+      "magenta": {
+       "bbox": [
+        58,
+        40,
+        541,
+        189
+       ],
+       "top": true,
+       "bottom": true
+      }
+     }
+    }
+   ]
+  }
+ ]
+}
