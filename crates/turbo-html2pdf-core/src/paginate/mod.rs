@@ -166,28 +166,23 @@ pub fn paginate_document(
         root: extracted.as_ref().map_or(galley.root, |e| &e.root),
         ..galley
     };
-    let needed = extracted
-        .as_ref()
-        .map(out_of_flow::Extracted::needed)
-        .unwrap_or_default();
     let footnotes::Resolved {
         mut pages,
         bands,
         mut spans,
         anchors,
-    } = footnotes::resolve(flow, &needed, geometry, notes, diags);
+        deferred,
+    } = footnotes::resolve(flow, geometry, notes, diags);
     let (mut bodies, mut bands): (Vec<_>, Vec<_>) =
         trim_trailing_pages(&mut pages, bands).into_iter().unzip();
     spans.truncate(bodies.len());
-    if let Some(extracted) = &extracted {
-        let pages = out_of_flow::Paged {
-            bodies: &mut bodies,
-            spans: &mut spans,
-            bands: &mut bands,
-            capacity,
-        };
-        out_of_flow::place(extracted, &anchors, pages);
-    }
+    let pages = out_of_flow::Paged {
+        bodies: &mut bodies,
+        spans: &mut spans,
+        bands: &mut bands,
+        capacity,
+    };
+    out_of_flow::place(extracted.as_ref(), &deferred, &anchors, pages);
     decorate::decorate(&mut bodies, &spans, galley.wrappers, flow.root.y);
     bodies
         .into_iter()

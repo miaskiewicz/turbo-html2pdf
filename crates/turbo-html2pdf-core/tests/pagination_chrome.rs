@@ -249,3 +249,15 @@ fn paginated_boxes_match_chrome_156() {
     }
     assert!(failures.is_empty(), "{}", failures.join("\n"));
 }
+
+#[test]
+fn an_absolute_box_stays_inside_its_positioned_parent_placed_whole() {
+    // Its containing block moves as a whole, so the box stays its child (its paint and
+    // tagged structure with it) rather than being re-placed at the page level.
+    let html = r#"<!DOCTYPE html><html><head><style>@page{size:600px 400px;margin:40px}body{margin:0}</style></head><body><div style="height:300px"></div><div style="position:relative;height:200px;break-inside:avoid"><div style="position:absolute;top:20px;left:30px;width:50px;height:30px;background:#f00"></div></div></body></html>"#;
+    let pages = pages(html);
+    assert_eq!(pages.len(), 2);
+    let parent = &pages[1].body[0];
+    assert_eq!(parent.children.len(), 1);
+    assert_eq!(parent.children[0].y - parent.y, 20.0);
+}

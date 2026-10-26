@@ -27,6 +27,14 @@ pub struct BoxFacts {
     pub shift: f32,
 }
 
+impl BoxFacts {
+    /// Whether an out-of-flow box is placed by a vertical inset (`top` or `bottom` set)
+    /// rather than at its static position.
+    pub(super) fn anchored(&self) -> bool {
+        self.inset_top != LengthPct::Auto || self.inset_bottom != LengthPct::Auto
+    }
+}
+
 /// [`BoxFacts`] by box id, for one laid-out flow.
 #[derive(Debug, Clone, Default)]
 pub struct FlowBoxes {

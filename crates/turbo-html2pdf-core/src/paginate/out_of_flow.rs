@@ -12,14 +12,17 @@
 //! - An `absolute` box with neither inset stays in the flow at its static position (the
 //!   walker places it there without advancing).
 //!
-//! [`extract`] takes the first two kinds out of the galley before the walk; the walk
-//! records where each containing block they need starts ([`Anchors`]); [`place`] adds
-//! them to the pages afterwards.
+//! [`extract`] takes the fixed boxes and the inset absolute boxes of the initial
+//! containing block out of the galley before the walk. An absolute box whose containing
+//! block is a positioned box stays its descendant: placed whole, the containing block
+//! carries it (its paint and tagged structure with it); split, the walker defers it from
+//! that block's start ([`Anchors`], `Walker::place_out_of_flow`). [`place`] adds the taken
+//! and deferred boxes to the pages after the walk, after each page's flow.
 
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 
 use crate::layout::fragment::{Fragment, NodeId};
-use crate::layout::value::{LengthPct, Position};
+use crate::layout::value::Position;
 
 use super::boxes::{BoxFacts, FlowBoxes};
 use super::walk::PageSpan;
@@ -28,16 +31,17 @@ use super::FootnoteBand;
 /// Where a containing block starts: its 0-based page and its border-box top there.
 pub(super) type Anchors = HashMap<NodeId, (usize, f32)>;
 
-/// An out-of-flow box taken out of the galley, with its offset from its containing
+/// An out-of-flow box placed apart from the flow, with its offset from its containing
 /// block's top (`cb` = `None`: the initial containing block / the page area).
 #[derive(Debug, Clone)]
-struct Taken {
-    frag: Fragment,
-    cb: Option<NodeId>,
-    dy: f32,
+pub(super) struct Taken {
+    pub frag: Fragment,
+    pub cb: Option<NodeId>,
+    pub dy: f32,
 }
 
-/// The galley without its fixed and inset-anchored absolute boxes, and those boxes.
+/// The galley without its fixed boxes and the inset absolute boxes of the initial
+/// containing block, and those boxes.
 #[derive(Debug, Clone)]
 pub(super) struct Extracted {
     pub root: Fragment,
@@ -45,24 +49,16 @@ pub(super) struct Extracted {
     absolute: Vec<Taken>,
 }
 
-impl Extracted {
-    /// The containing blocks whose start the walk must record.
-    pub fn needed(&self) -> HashSet<NodeId> {
-        self.absolute.iter().filter_map(|t| t.cb).collect()
-    }
-}
-
 /// Take the fixed boxes and the absolute boxes with a vertical inset out of `root`
 /// (`None`: it has none, the galley is walked as is). `area` is the page area height
 /// (the fragmenter's base body capacity) a `bottom` inset anchors to.
 pub(super) fn extract(root: &Fragment, boxes: &FlowBoxes, area: f32) -> Option<Extracted> {
-    if !has_taken(root, boxes) {
+    if !has_taken(root, boxes, false) {
         return None;
     }
     let mut root = root.clone();
     let mut taken = Vec::new();
-    let top = root.y;
-    take(&mut root, (None, top), boxes, &mut taken);
+    take(&mut root, false, boxes, &mut taken);
     let (fixed, absolute): (Vec<_>, Vec<_>) = taken
         .into_iter()
         .map(|(t, facts)| (anchor_bottom(t, &facts, area), facts.position))
@@ -74,56 +70,44 @@ pub(super) fn extract(root: &Fragment, boxes: &FlowBoxes, area: f32) -> Option<E
     })
 }
 
-/// The facts of `f`'s box when it is taken out of the galley.
-fn taken_facts(f: &Fragment, boxes: &FlowBoxes) -> Option<BoxFacts> {
+/// The facts of `f`'s box when it is taken out of the galley (`positioned`: it has a
+/// positioned ancestor, its containing block).
+fn taken_facts(f: &Fragment, boxes: &FlowBoxes, positioned: bool) -> Option<BoxFacts> {
     boxes.get(f.node_id).copied().filter(|b| {
         b.position == Position::Fixed
-            || (b.position == Position::Absolute
-                && (b.inset_top != LengthPct::Auto || b.inset_bottom != LengthPct::Auto))
+            || (b.position == Position::Absolute && b.anchored() && !positioned)
     })
 }
 
-fn has_taken(f: &Fragment, boxes: &FlowBoxes) -> bool {
-    f.children
-        .iter()
-        .any(|c| taken_facts(c, boxes).is_some() || has_taken(c, boxes))
+fn has_taken(f: &Fragment, boxes: &FlowBoxes, positioned: bool) -> bool {
+    f.children.iter().any(|c| {
+        taken_facts(c, boxes, positioned).is_some()
+            || has_taken(c, boxes, positioned || c.is_positioned)
+    })
 }
 
-/// Move every taken descendant of `f` into `out` (with its facts). `cb` is the
-/// containing block of `f`'s absolute descendants (`(id, galley top)`, `id` = `None`:
-/// the initial containing block, at the galley top).
-fn take(
-    f: &mut Fragment,
-    cb: (Option<NodeId>, f32),
-    boxes: &FlowBoxes,
-    out: &mut Vec<(Taken, BoxFacts)>,
-) {
+/// Move every taken descendant of `f` into `out` (with its facts); `positioned`: `f` is
+/// (inside) a positioned box, the containing block of its absolute descendants. A taken
+/// box's offset is from the galley top (the page area / the initial containing block).
+fn take(f: &mut Fragment, positioned: bool, boxes: &FlowBoxes, out: &mut Vec<(Taken, BoxFacts)>) {
     let children = std::mem::take(&mut f.children);
     for mut child in children {
-        if let Some(facts) = taken_facts(&child, boxes) {
-            out.push((taken(child, &facts, cb), facts));
+        if let Some(facts) = taken_facts(&child, boxes, positioned) {
+            let dy = child.y;
+            out.push((
+                Taken {
+                    frag: child,
+                    cb: None,
+                    dy,
+                },
+                facts,
+            ));
             continue;
         }
-        let inner = if child.is_positioned {
-            (Some(child.node_id), child.y)
-        } else {
-            cb
-        };
+        let inner = positioned || child.is_positioned;
         take(&mut child, inner, boxes, out);
         f.children.push(child);
     }
-}
-
-/// A taken box with its offset from its containing block (a fixed box's is the page
-/// area, at the galley top).
-fn taken(frag: Fragment, facts: &BoxFacts, cb: (Option<NodeId>, f32)) -> Taken {
-    let (cb, origin) = if facts.position == Position::Fixed {
-        (None, 0.0)
-    } else {
-        cb
-    };
-    let dy = frag.y - origin;
-    Taken { frag, cb, dy }
 }
 
 /// Anchor a box of the page area / initial containing block with only `bottom` set to
@@ -133,7 +117,7 @@ fn anchor_bottom(mut t: Taken, facts: &BoxFacts, area: f32) -> Taken {
         facts.inset_top.resolve(area),
         facts.inset_bottom.resolve(area),
     );
-    if let (None, Some(bottom), None) = (insets.0, insets.1, t.cb) {
+    if let (None, Some(bottom)) = insets {
         t.dy = area - bottom - facts.margin_bottom - t.frag.height;
     }
     t
@@ -148,11 +132,17 @@ pub(super) struct Paged<'a> {
     pub capacity: f32,
 }
 
-/// Add the taken boxes to the pages: each absolute box at its offset from its
-/// containing block's start, continued through the page capacities (adding pages), then
-/// every fixed box on every page.
-pub(super) fn place(extracted: &Extracted, anchors: &Anchors, pages: Paged) {
-    for t in &extracted.absolute {
+/// Add the taken boxes and the walker's `deferred` ones to the pages: each absolute box at
+/// its offset from its containing block's start, continued through the page capacities
+/// (adding pages), then every fixed box on every page.
+pub(super) fn place(
+    extracted: Option<&Extracted>,
+    deferred: &[Taken],
+    anchors: &Anchors,
+    pages: Paged,
+) {
+    let taken = extracted.map_or(&[][..], |e| &e.absolute);
+    for t in taken.iter().chain(deferred) {
         let start = t.cb.and_then(|id| anchors.get(&id)).copied();
         let (page, y) = start.unwrap_or((0, 0.0));
         put(
@@ -164,8 +154,9 @@ pub(super) fn place(extracted: &Extracted, anchors: &Anchors, pages: Paged) {
             pages.capacity,
         );
     }
+    let fixed = extracted.map_or(&[][..], |e| &e.fixed);
     for body in pages.bodies.iter_mut() {
-        for t in &extracted.fixed {
+        for t in fixed {
             body.push(moved(&t.frag, t.dy));
         }
     }

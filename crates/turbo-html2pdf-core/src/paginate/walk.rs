@@ -59,12 +59,10 @@ use crate::error::{Diagnostics, LintCode, Span};
 use crate::layout::fragment::{Fragment, FragmentContent, NodeId, RepeatKind};
 use crate::layout::value::BreakRule;
 
-use std::collections::HashSet;
-
 use super::boxes::{
-    last_content, leading_margin, remaining_height, trailing, wrapper_tail, FlowBoxes,
+    last_content, leading_margin, remaining_height, trailing, wrapper_tail, BoxFacts, FlowBoxes,
 };
-use super::out_of_flow::Anchors;
+use super::out_of_flow::{Anchors, Taken};
 use super::Galley;
 
 /// Per-page footnote reservation: the area (px) the page at the given 0-based
@@ -86,8 +84,10 @@ pub struct PageSpan {
 pub struct Walked {
     pub pages: Vec<Vec<Fragment>>,
     pub spans: Vec<PageSpan>,
-    /// Where each needed containing block starts (page, page-local top).
+    /// Where each split positioned block starts (page, page-local top).
     pub anchors: Anchors,
+    /// The inset absolute boxes of split positioned blocks, placed from those starts.
+    pub deferred: Vec<Taken>,
 }
 
 /// How the current page started, for the gap kept above its first fragment.
@@ -142,21 +142,18 @@ struct Walker<'a> {
     /// emitted as separate fragments, so each carries the block's positioned paint
     /// level (`z-index`), or they would paint under the flow that follows the block.
     layer: Option<Option<i32>>,
-    /// The containing blocks whose start the out-of-flow placement needs, where they
-    /// started, and the needed blocks being split that placed nothing yet (their galley
-    /// tops): the first fragment placed anchors them.
-    needed: &'a HashSet<NodeId>,
+    /// The positioned blocks being split (id, galley top): the containing blocks of the
+    /// absolute boxes the walk meets; where they start (`anchors`; `open`: those that
+    /// placed nothing yet, anchored by their first fragment placed); and the inset
+    /// absolute boxes deferred to be placed from those starts.
+    positioned: Vec<(NodeId, f32)>,
     anchors: Anchors,
     open: Vec<(NodeId, f32)>,
+    deferred: Vec<Taken>,
 }
 
 impl<'a> Walker<'a> {
-    fn new(
-        capacity: f32,
-        reserve: &'a Reserve<'a>,
-        galley: Galley<'a>,
-        needed: &'a HashSet<NodeId>,
-    ) -> Walker<'a> {
+    fn new(capacity: f32, reserve: &'a Reserve<'a>, galley: Galley<'a>) -> Walker<'a> {
         let top = galley.root.y;
         Walker {
             boxes: galley.boxes,
@@ -174,9 +171,10 @@ impl<'a> Walker<'a> {
             pending: None,
             shift: 0.0,
             layer: None,
-            needed,
+            positioned: Vec::new(),
             anchors: Anchors::new(),
             open: Vec::new(),
+            deferred: Vec::new(),
         }
     }
 
@@ -287,7 +285,6 @@ impl<'a> Walker<'a> {
             self.anchors
                 .insert(id, (page, clone.y - (f.y - galley_top)));
         }
-        anchor_within(&clone, self.needed, page, &mut self.anchors);
         self.current().push(clone);
     }
 
@@ -296,6 +293,21 @@ impl<'a> Walker<'a> {
     fn put_static(&mut self, f: &Fragment) {
         let top = self.cursor + self.gap_before(f);
         self.put(f, top);
+    }
+
+    /// An out-of-flow box the walk meets: an inset absolute box of the positioned block
+    /// being split is deferred, placed from that block's start after the walk; one at its
+    /// static position is placed there.
+    fn place_out_of_flow(&mut self, f: &Fragment) {
+        let anchored = self.boxes.get(f.node_id).is_some_and(BoxFacts::anchored);
+        match self.positioned.last() {
+            Some(&(cb, top)) if anchored => self.deferred.push(Taken {
+                frag: f.clone(),
+                cb: Some(cb),
+                dy: f.y - top,
+            }),
+            _ => self.put_static(f),
+        }
     }
 
     /// True if `f`, followed by `tail` px that must stay on its page, fits in the
@@ -325,7 +337,7 @@ impl<'a> Walker<'a> {
             .get(f.node_id)
             .is_some_and(|b| b.position.is_out_of_flow())
         {
-            return self.put_static(f);
+            return self.place_out_of_flow(f);
         }
         if f.break_meta.break_before == BreakRule::Page {
             self.forced_page(headers);
@@ -404,16 +416,18 @@ impl<'a> Walker<'a> {
         }
         self.layer = layer;
         self.shift -= shift;
+        self.close_block(f);
         if opened {
             self.pending = None;
         }
     }
 
     /// Start splitting `f`: it becomes the pending page-start block unless an enclosing
-    /// one is (returns whether it did), and a needed containing block is anchored by its
-    /// first fragment placed.
+    /// one is (returns whether it did), and a positioned block becomes the containing
+    /// block of the absolute boxes met inside it, anchored by its first fragment placed.
     fn open_block(&mut self, f: &Fragment) -> bool {
-        if self.needed.contains(&f.node_id) {
+        if f.is_positioned {
+            self.positioned.push((f.node_id, f.y));
             self.open.push((f.node_id, f.y));
         }
         let opened = self.pending.is_none();
@@ -421,6 +435,16 @@ impl<'a> Walker<'a> {
             self.pending = Some((self.flow_top(f), leading_margin(self.boxes, f)));
         }
         opened
+    }
+
+    /// Done splitting `f`: a positioned block stops being the containing block of what the
+    /// walk meets (had it placed nothing, its start is unknown: its deferred boxes fall
+    /// back to the first page).
+    fn close_block(&mut self, f: &Fragment) {
+        if f.is_positioned {
+            self.positioned.pop();
+            self.open.retain(|&(id, _)| id != f.node_id);
+        }
     }
 
     /// An atomic fragment taller than a whole page: place it on a fresh page and
@@ -456,14 +480,26 @@ impl<'a> Walker<'a> {
             self.emit(h);
         }
         let last = last_content(self.boxes, &f.children);
+        self.place_children(f, &active, (tail, last), diags);
+        if let Some(i) = last {
+            self.carry_remaining(f, &f.children[i], headers);
+        }
+    }
+
+    /// Place split block `f`'s children (its repeated headers aside) below `headers`; its
+    /// last content (index `last`) carries `f`'s tail.
+    fn place_children(
+        &mut self,
+        f: &Fragment,
+        headers: &[Fragment],
+        (tail, last): (f32, Option<usize>),
+        diags: &mut Diagnostics,
+    ) {
         for (i, child) in f.children.iter().enumerate() {
             if !is_repeat_header(child) {
                 let after = self.tail_of(f, child, tail, Some(i) == last);
-                self.place_one(child, &active, after, diags);
+                self.place_one(child, headers, after, diags);
             }
-        }
-        if let Some(i) = last {
-            self.carry_remaining(f, &f.children[i], headers);
         }
     }
 
@@ -586,19 +622,6 @@ impl<'a> Walker<'a> {
             count += 1;
         }
         force_progress(count, empty, lines.is_empty(), diags)
-    }
-}
-
-/// Record the page-local top of every needed containing block within the placed `f`.
-fn anchor_within(f: &Fragment, needed: &HashSet<NodeId>, page: usize, anchors: &mut Anchors) {
-    if needed.is_empty() {
-        return;
-    }
-    if needed.contains(&f.node_id) {
-        anchors.entry(f.node_id).or_insert((page, f.y));
-    }
-    for child in &f.children {
-        anchor_within(child, needed, page, anchors);
     }
 }
 
@@ -740,12 +763,11 @@ fn headers_height(headers: &[Fragment]) -> f32 {
 /// of `root`.
 pub fn walk_reserved(
     galley: Galley,
-    needed: &HashSet<NodeId>,
     capacity: f32,
     reserve: &Reserve,
     diags: &mut Diagnostics,
 ) -> Walked {
-    let mut w = Walker::new(capacity, reserve, galley, needed);
+    let mut w = Walker::new(capacity, reserve, galley);
     let children = &galley.root.children;
     let last = last_content(galley.boxes, children);
     for (i, child) in children.iter().enumerate() {
@@ -760,6 +782,7 @@ pub fn walk_reserved(
         pages: w.pages,
         spans: w.spans,
         anchors: w.anchors,
+        deferred: w.deferred,
     }
 }
 
