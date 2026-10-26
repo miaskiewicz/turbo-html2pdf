@@ -12,7 +12,8 @@
 // registry registers the bundled faces under their real family name), and it
 // ignores the `@font-face` data URL (its registry is fixed, not fed from author
 // CSS) — so the same injected `<style>` pins Chromium and is a harmless no-op for
-// the engine. Styles live in `<body>` because the engine drops `<head>` styles.
+// the engine. The style is injected at the start of `<body>` (head and body styles
+// both apply since #29).
 
 import { readFileSync } from "node:fs";
 import { join, resolve } from "node:path";

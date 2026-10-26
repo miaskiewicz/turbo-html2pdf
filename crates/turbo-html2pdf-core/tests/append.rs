@@ -22,6 +22,7 @@ fn empty_pages(n: u32) -> Vec<Page> {
             footer: Vec::new(),
             footnotes: Vec::new(),
             semantics: Default::default(),
+            canvas: None,
         })
         .collect()
 }

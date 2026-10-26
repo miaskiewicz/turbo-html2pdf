@@ -11,11 +11,22 @@ copies: `turbo-html2pdf-core` depends on **turbo-dom-layout 0.6** (style cascade
 layout, text/fonts incl. the bundled faces, images, SVG, layout snapshots) and
 **turbo-dom 0.6** (the DOM templates are parsed into and the one Chrome-correct selector
 engine). Every rendered PDF of the release corpora (templates, conformance pages, PDF/UA,
-CMYK, PDF/A, the image matrix, with and without `svg`) is byte-identical to 0.3.9; the
-only behaviour changes are the selector fixes below, each backed by a Chrome 156 control.
+CMYK, PDF/A, the image matrix, with and without `svg`) is byte-identical to 0.3.9 through
+the consolidation steps; the behaviour changes are the selector fixes and the P5b bug fixes
+below, each backed by a Chrome 156 control.
 The version jumps from 0.3.9 to 0.6.0 so every consolidated package (turbo-dom,
 turbo-test, turbo-html2pdf, turbo-surf) releases on one version line.
 
+- **Fixed (#29)**: HTML documents render like Chrome. `<head>` `<style>` sheets apply (in
+  the PDF render as well as `layoutBoxes`/`layout_html`; document sheets come before the
+  caller's `css`, a caller `@page` rule takes precedence over the document's), `<html>` and
+  `<body>` are real boxes (UA `body { margin: 8px }`, html/body margin, padding, width),
+  `rem` follows the root font size, `<style>`/`<script>`/`<noscript>` text is no longer
+  painted into the PDF, and the root/`<body>` background colour fills each page's page area
+  (`Page::canvas`). The `<html>`/`<body>` boxes are dissolved into the page flow before
+  pagination (their own borders are not painted, as for any block split across pages).
+  Nearly every PDF/`layoutBoxes` output of the corpora changes (body margin); the
+  conformance pages' boxes now match Chrome 156 for 172 of 209 tagged elements (was 1).
 - Summary for users: same public paths (`turbo_html2pdf_core::style::…`, `::layout::…`,
   `::Tag`, `::Fragment`, …, re-exported from turbo-dom-layout); selectors match like
   Chrome (escapes, namespaces, `:has()`, `of S`, `:nth-last-*`, `:lang()`, `:defined`,

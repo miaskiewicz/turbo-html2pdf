@@ -50,8 +50,8 @@ So the harness injects, into every fixture on **both** sides, a `<style>` that:
 3. Zeroes `html,body` margin so the two coordinate origins line up. Per-element UA
    defaults (heading/list margins) are left intact — those are under test.
 
-Styles live in the fixture `<body>`, because the engine collects `<body>` styles
-but drops `<head>` ones.
+The pin is injected at the start of the fixture `<body>` (the engine applies `<head>` and
+`<body>` styles alike since #29; the reset still lines the origins up).
 
 ## Running
 

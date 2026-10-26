@@ -179,6 +179,7 @@ fn red_box_page() -> Page {
         footer: Vec::new(),
         footnotes: Vec::new(),
         semantics: Default::default(),
+        canvas: None,
     }
 }
 

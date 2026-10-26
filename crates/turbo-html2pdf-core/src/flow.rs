@@ -4,7 +4,8 @@
 
 use turbo_dom::{Handle, Tree};
 use turbo_dom_layout::{
-    style_input, Cascade, LayoutOptions, Roots, StyleInput, StyleOptions, StyledNode, TreeView,
+    collect_style_css_tree, style_input, Cascade, LayoutOptions, Roots, StyleInput, StyleOptions,
+    StyledNode, TreeView,
 };
 
 /// The style-time switches of this build: `cmyk(...)` colours with `print-color`.
@@ -86,6 +87,27 @@ impl Flow {
     /// Style the flow (detached from the document: no ancestors, default parent).
     pub fn style(&self, cascade: &Cascade) -> Vec<StyledNode> {
         self.style_roots(&self.roots, cascade)
+    }
+
+    /// The text of every `<style>` element of the document (head and body), in
+    /// document order — the document's own author CSS.
+    pub fn document_css(&self) -> String {
+        let view = TreeView::new(&self.tree);
+        collect_style_css_tree(&view, &view.children(self.tree.root()))
+    }
+
+    /// Style the whole document as a browser does (miaskiewicz/turbo-html2pdf#29):
+    /// `<html>` and `<body>` are real elements around the flow (the body content),
+    /// non-visual elements (`<style>`, `<script>`, …) are not rendered, and `cascade`
+    /// must already carry the document's own sheets
+    /// ([`Cascade::for_document`](turbo_dom_layout::Cascade::for_document)). Returns
+    /// the styled root element.
+    pub fn style_document(&self, cascade: &Cascade) -> Vec<StyledNode> {
+        let input = StyleInput {
+            view: self.view().strip_non_visual(true),
+            roots: Roots::Document,
+        };
+        style_input(&input, cascade, &style_options())
     }
 
     /// Style `roots` of this document as a detached flow of their own.

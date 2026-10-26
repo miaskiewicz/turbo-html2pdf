@@ -19,6 +19,7 @@ fn options() -> HtmlOptions<'static> {
         markers: Some(&crate::markers::classify),
         atomic_internal_links: cfg!(feature = "xref"),
         accept_cmyk: cfg!(feature = "print-color"),
+        linked_css: "",
     }
 }
 
@@ -30,8 +31,9 @@ pub fn parse_html(html: &str) -> Result<Flow, RenderError> {
 }
 
 /// Lay a raw HTML string out into a [`Fragment`] galley at content width
-/// `cb_width` px, Jinja-free (see [`turbo_dom_layout::layout_html`]: body
-/// `<style>` blocks are author CSS, `extra_css` is appended after them).
+/// `cb_width` px, Jinja-free (see [`turbo_dom_layout::layout_html`]: the whole
+/// document is styled — head and body `<style>` blocks are author CSS, `extra_css` is
+/// appended after them — with `<html>`/`<body>` as real boxes).
 pub fn layout_html(
     html: &str,
     extra_css: &str,

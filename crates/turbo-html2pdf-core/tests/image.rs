@@ -166,6 +166,7 @@ fn page_with(body: Vec<turbo_html2pdf_core::Fragment>) -> Page {
         footer: Vec::new(),
         footnotes: Vec::new(),
         semantics: Default::default(),
+        canvas: None,
     }
 }
 
