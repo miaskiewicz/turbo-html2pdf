@@ -32,9 +32,10 @@ opt-level = 3
 lto = "thin"
 codegen-units = 1
 
-# Pre-publish only: turbo-dom-layout 0.6.0 and turbo-dom (S2 Tree API, S3b selector engine) come from
+# Pre-publish only: turbo-dom-layout 0.6.0 and turbo-dom (S2 Tree API, S3b selector engine, S5a image
+# layer + test-support fixtures) come from
 # the turbo-dom consolidation branch until they are on crates.io; remove this block and
 # re-lock (`cargo update -p turbo-dom-layout -p turbo-dom`) at release (see PUBLISHING.md).
 [patch.crates-io]
-turbo-dom-layout = { git = "https://github.com/miaskiewicz/turbo-dom", rev = "6b58d7bd08a84a63201975fee1190f6568498d9c" }
-turbo-dom = { git = "https://github.com/miaskiewicz/turbo-dom", rev = "6b58d7bd08a84a63201975fee1190f6568498d9c" }
+turbo-dom-layout = { git = "https://github.com/miaskiewicz/turbo-dom", rev = "4c0ffe84eb71b85637442555306834b0e7d19e8b" }
+turbo-dom = { git = "https://github.com/miaskiewicz/turbo-dom", rev = "4c0ffe84eb71b85637442555306834b0e7d19e8b" }
