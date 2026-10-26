@@ -6,6 +6,11 @@ PyPI, and crates.io packages release in lockstep from a `v*` tag (PyPI on `pyv*`
 
 ## [Unreleased]
 
+- **Fixed (turbo-dom#41)**: paged layouts keep a last child's bottom margin inside a
+  padded / bordered parent (and collapse it through an auto-height one) as Chrome does —
+  turbo-dom-layout's generic policy used to drop it. The pagination control's
+  `exact-fill-child-margin` case (#32 item 6) now matches Chrome 156 (no longer pending).
+  Changes the galley of every document whose blocks end with a margined child.
 - **Fixed (turbo-dom#52)**: a partially clipped box (`position: absolute` with
   `clip: rect(…)`, e.g. a CSS sprite) no longer vanishes from the PDF: turbo-dom-layout
   keeps it and records its region in `Fragment::clip`, and the emitter paints the box and
