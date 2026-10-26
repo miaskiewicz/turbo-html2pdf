@@ -377,6 +377,11 @@ impl<'a> Walker<'a> {
     /// last content moves on; a leaf moves on if it fits on an empty page with its
     /// tail, and otherwise stays.
     fn placement(&self, f: &Fragment, headers: &[Fragment], tail: f32) -> Placement {
+        // A forced break inside `f` breaks the page there (miaskiewicz/turbo-html2pdf#38):
+        // the walker must visit its children.
+        if f.children.iter().any(has_forced_break) {
+            return Placement::Split;
+        }
         if self.fits_now(f, tail) {
             return Placement::Here;
         }
@@ -645,6 +650,15 @@ fn lift(f: &mut Fragment, z: Option<i32>) {
         f.z_index = z.or(f.z_index);
         f.is_positioned = true;
     }
+}
+
+/// Whether `f` or a fragment inside it carries a forced break (`break-before` /
+/// `break-after: page`).
+fn has_forced_break(f: &Fragment) -> bool {
+    let forced = |rule: BreakRule| rule == BreakRule::Page;
+    forced(f.break_meta.break_before)
+        || forced(f.break_meta.break_after)
+        || f.children.iter().any(has_forced_break)
 }
 
 /// Where [`Walker::placement`] puts a fragment.

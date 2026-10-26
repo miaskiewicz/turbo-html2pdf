@@ -219,9 +219,6 @@ fn compare_case(case: &serde_json::Value, failures: &mut Vec<String>) {
 /// Cases that do not match Chrome yet (each must still differ, so a fixed case is
 /// removed from the list).
 const PENDING: &[&str] = &[
-    // #38: forced breaks inside a block that fits.
-    "forced-break-nested",
-    "forced-break-after-nested",
     // #37 item 1: split blocks paint a slice of their box on every page.
     "split-decorated",
     "split-decorated-nested",
