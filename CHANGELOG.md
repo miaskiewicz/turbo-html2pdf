@@ -6,6 +6,14 @@ PyPI, and crates.io packages release in lockstep from a `v*` tag (PyPI on `pyv*`
 
 ## [Unreleased]
 
+- **Fixed (turbo-dom#52)**: a partially clipped box (`position: absolute` with
+  `clip: rect(…)`, e.g. a CSS sprite) no longer vanishes from the PDF: turbo-dom-layout
+  keeps it and records its region in `Fragment::clip`, and the emitter paints the box and
+  its subtree inside a saved graphics state with that rectangle as the clipping path
+  (`q … re W n … Q`). A box whose clip keeps nothing (the sr-only pattern) is still left
+  out of layout, so its text stays out of the PDF and its tags; `clip` on a box that is
+  not absolutely positioned is ignored, as in Chrome. Control: turbo-dom's `clip-*`
+  Chrome 156 cases; `tests/clip_rect.rs` (clip operators, `pdftoppm` probes).
 - **Fixed (turbo-dom#51)**: a table `<caption>` is laid out (by turbo-dom-layout) as
   Chrome does — in the table wrapper box above or below the grid, with its own box,
   widening the table to its min-content; before, its content became grid rows and its

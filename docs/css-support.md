@@ -127,6 +127,7 @@ ignored.
 | `min-width`, `min-height` | length (default `0`) |
 | `max-width`, `max-height` | length / `%` / `auto` |
 | `box-sizing` | `border-box` or `content-box` (default) |
+| `clip` | `rect(top, right, bottom, left)` (lengths or `auto`, commas optional) on an absolutely positioned box: the box and its descendants paint only inside it; a rect that keeps nothing (the sr-only pattern) drops the box; ignored on other boxes |
 | `background-color` | any color (the `background` shorthand is **not** parsed) |
 
 ### Text

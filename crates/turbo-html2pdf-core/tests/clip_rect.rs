@@ -41,7 +41,6 @@ fn contains(haystack: &[u8], needle: &[u8]) -> bool {
 }
 
 #[test]
-#[ignore = "miaskiewicz/turbo-dom#52: fails until the fix"]
 fn a_partially_clipped_box_paints_inside_its_clip_region() {
     let pdf = emit_pdf(&pages(CLIPPED), &EmitOptions::default());
     // The red box paints, inside a clipping path that is popped afterwards.
@@ -87,7 +86,6 @@ fn raster(pdf: &[u8]) -> Option<(usize, Vec<u8>)> {
 }
 
 #[test]
-#[ignore = "miaskiewicz/turbo-dom#52: fails until the fix"]
 fn a_partially_clipped_box_rasterizes_like_chrome_156() {
     let pages = pages(CLIPPED);
     let pdf = emit_pdf(&pages, &EmitOptions::default());
@@ -95,9 +93,10 @@ fn a_partially_clipped_box_rasterizes_like_chrome_156() {
         eprintln!("pdftoppm not on PATH; skipping the raster probe");
         return;
     };
-    let margin = pages[0].geometry.margin;
+    // The containing block (the relative `<div>`), in page coordinates.
+    let cb = &pages[0].body[0];
     let red = |x: f32, y: f32| {
-        let (px, py) = ((margin.left + x) as usize, (margin.top + y) as usize);
+        let (px, py) = ((cb.x + x) as usize, (cb.y + y) as usize);
         let p = &rgb[(py * width + px) * 3..][..3];
         p[0] > 160 && p[1] < 96 && p[2] < 96
     };
