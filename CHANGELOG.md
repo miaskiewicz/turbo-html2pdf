@@ -32,6 +32,10 @@ turbo-test, turbo-html2pdf, turbo-surf) releases on one version line.
   5-8 swap width/height) and the embedded image is drawn turned (the stored JPEG still
   rides through as `DCTDecode`; the placement `cm` rotates/flips it). `image-orientation:
   none` keeps the stored orientation.
+- **Image formats (turbo-surf#30, shared image layer)**: BMP, ICO/CUR and AVIF `<img>` /
+  background images are now sized from their headers (as Chrome loads them); like GIF and
+  WebP they are not embedded in the PDF yet. `layoutBoxes` decodes percent-encoded
+  `data:` image URLs too (e.g. inline `data:image/svg+xml,…` icons under the `svg` build).
 - Summary for users: same public paths (`turbo_html2pdf_core::style::…`, `::layout::…`,
   `::Tag`, `::Fragment`, …, re-exported from turbo-dom-layout); selectors match like
   Chrome (escapes, namespaces, `:has()`, `of S`, `:nth-last-*`, `:lang()`, `:defined`,
