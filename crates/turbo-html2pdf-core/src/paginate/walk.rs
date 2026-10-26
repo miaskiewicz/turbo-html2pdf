@@ -256,8 +256,6 @@ impl<'a> Walker<'a> {
             let before = self.prev_bottom;
             self.new_page(headers);
             self.start = PageStart::Forced(before);
-        } else if self.prev_bottom.is_none() && self.start == PageStart::Unforced {
-            self.start = PageStart::Forced(None);
         }
     }
 
