@@ -305,7 +305,7 @@ lines after a break), default `2` each.
 `<thead>` rows (UA `display: table-header-group`) and `<tfoot>` rows
 (`table-footer-group`) are marked repeatable, so when a table spans multiple
 pages the header is **re-emitted atop every continued page** (`layout/table.rs`,
-`paginate/walk.rs`). This needs no extra attribute — just use `<thead>`:
+`paginate/walk.rs`), and the next rows follow it directly (#36). This needs no extra attribute — just use `<thead>`:
 
 ```html
 <table>

@@ -23,6 +23,9 @@ PyPI, and crates.io packages release in lockstep from a `v*` tag (PyPI on `pyv*`
   bottom padding) at the top of the next page.
 - **Fixed (#34)**: a relatively positioned block's offset no longer shifts the rest of
   the paginated flow. The content of a split positioned block keeps its paint level.
+- **Fixed (#36)**: on a continued page the rows of a split table follow its repeated
+  header directly. Before, they sat at their distance from the header's original
+  position: `template-report` printed 4 pages, and now prints 2 like Chrome.
 - **Fixed (#35)**: the PDF emitter paints fragments in stacking order (negative
   `z-index`, flow, positioned, positive `z-index`), as the raster does. Tagged PDFs
   number their marked content in that order and keep the structure in document order.
