@@ -15,12 +15,11 @@
 // the engine. Styles live in `<body>` because the engine drops `<head>` styles.
 
 import { readFileSync } from "node:fs";
-import { dirname, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
+import { join, resolve } from "node:path";
+import { layoutFontsDir } from "../../../scripts/layout-crate-dir.mjs";
 
-const HERE = dirname(fileURLToPath(import.meta.url));
-// benches/conformance/src -> repo root -> the engine's bundled Inter faces.
-const FONT_DIR = resolve(HERE, "../../../crates/turbo-html2pdf-core/assets/fonts/inter");
+// The engine's bundled Inter faces (turbo-dom-layout's assets/fonts, via cargo).
+const FONT_DIR = join(layoutFontsDir(), "inter");
 
 function dataUri(file: string): string {
   const bytes = readFileSync(resolve(FONT_DIR, file));

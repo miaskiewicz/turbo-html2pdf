@@ -10,7 +10,7 @@ mod common;
 use turbo_html2pdf_core::layout::block::layout_tree;
 use turbo_html2pdf_core::layout::boxgen::build_box_tree;
 use turbo_html2pdf_core::layout::fragment::Fragment;
-use turbo_html2pdf_core::node::Tag;
+use turbo_html2pdf_core::tag::Tag;
 use turbo_html2pdf_core::TKind;
 use turbo_html2pdf_core::{ComputedStyle, Diagnostics, StyledElement, StyledNode};
 

@@ -16,11 +16,12 @@ mod common;
 
 use std::collections::HashMap;
 use std::io::Cursor;
+use turbo_dom_layout::test_support::literal::Node;
 use turbo_html2pdf_core::paginate::{paginate, Page, PageGeometry};
 use turbo_html2pdf_core::style::TokenSet;
 use turbo_html2pdf_core::{
     build_cascade, emit_pdf, emit_pdf_with_images, layout_with_images, ComputedStyle, Diagnostics,
-    EmitOptions, ImageResolver, Node, StyledElement, StyledNode, Tag,
+    EmitOptions, ImageResolver, StyledElement, StyledNode, Tag,
 };
 use turbo_html2pdf_core::{Attr, FragmentContent, ImageCtx};
 
@@ -138,14 +139,16 @@ fn contains(haystack: &[u8], needle: &[u8]) -> bool {
 // --------------------------------------------------------------------------
 
 fn img_node(src: &str) -> Vec<Node> {
-    vec![Node::Element(turbo_html2pdf_core::Element {
-        tag: Tag::Html("img".into()),
-        attrs: vec![Attr {
-            name: "src".into(),
-            value: src.into(),
-        }],
-        children: Vec::new(),
-    })]
+    vec![Node::Element(
+        turbo_dom_layout::test_support::literal::Element {
+            tag: Tag::Html("img".into()),
+            attrs: vec![Attr {
+                name: "src".into(),
+                value: src.into(),
+            }],
+            children: Vec::new(),
+        },
+    )]
 }
 
 fn styled_img(src: &str) -> Vec<StyledNode> {

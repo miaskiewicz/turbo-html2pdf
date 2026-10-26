@@ -35,7 +35,7 @@ the right place at the right size; pixel fidelity on top of that is a separate
 Text-metric-driven boxes — line-box heights, wrap points, intrinsic widths — only
 match if **both sides shape with the same font**. The engine renders with its
 bundled default face (`font-family: sans-serif` → **Inter**, from
-`turbo-html2pdf-core/assets/fonts/inter`).
+turbo-dom-layout's `assets/fonts/inter`, located through `cargo metadata`).
 
 So the harness injects, into every fixture on **both** sides, a `<style>` that:
 
