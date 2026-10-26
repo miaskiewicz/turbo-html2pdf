@@ -487,6 +487,60 @@ const CASES = [
     ),
     colors: ["red", "green", "blue", "yellow", "magenta"],
   },
+  // --- miaskiewicz/turbo-html2pdf#37 ---
+  {
+    // Item 1: a block with a background and border split across pages paints a slice of
+    // its box on every page (box-decoration-break: slice): top edge on the first, bottom
+    // edge on the last, the box running to the page area's end in between.
+    id: "split-decorated",
+    html: DOC(
+      "body{margin:0}",
+      `<div style="border:4px solid ${C.blue[0]};background:${C.orange[0]};padding:6px">${blocks(["green", "yellow", "magenta"], 140)}</div>`,
+    ),
+    colors: ["blue", "orange", "green", "yellow", "magenta"],
+  },
+  {
+    // Item 1: nested decorated blocks split together; the inner box paints over the outer.
+    id: "split-decorated-nested",
+    html: DOC(
+      "body{margin:0}",
+      `<div style="border:4px solid ${C.blue[0]};background:${C.orange[0]};padding:6px">` +
+        `<div style="border:3px solid ${C.red[0]};background:${C.cyan[0]};padding:4px">${blocks(["green", "yellow", "magenta"], 120)}</div></div>`,
+    ),
+    colors: ["blue", "orange", "red", "cyan", "green", "yellow", "magenta"],
+  },
+  {
+    // Item 1: a decorated block that starts on page 1 below other content and splits.
+    id: "split-decorated-after-content",
+    html: DOC(
+      "body{margin:0}",
+      block(C.red[0], 100) +
+        `<div style="border-top:5px solid ${C.blue[0]};border-bottom:5px solid ${C.blue[0]};background:${C.orange[0]}">${blocks(["green", "yellow"], 150)}</div>`,
+    ),
+    colors: ["red", "blue", "orange", "green", "yellow"],
+  },
+  {
+    // Item 2: a percentage top margin resolves against the containing block's width
+    // (10% of 200px = 20px), here kept after a forced break.
+    id: "percent-margin-nested",
+    html: DOC(
+      "body{margin:0}",
+      block(C.red[0], 60, "margin-bottom:80px") +
+        `<div style="width:200px">${block(C.green[0], 60, "break-before:page;margin-top:10%")}</div>`,
+    ),
+    colors: ["red", "green"],
+  },
+  {
+    // Item 2: a percentage bottom padding (10% of its 200px containing block = 20px)
+    // follows the last block, which exactly fills the page and so moves on with it.
+    id: "percent-padding-nested",
+    html: DOC(
+      "body{margin:0}",
+      `<div style="width:200px"><div style="padding-bottom:10%">${block(C.blue[0], 100)}${block(C.red[0], 220)}</div></div>` +
+        block(C.green[0], 60),
+    ),
+    colors: ["blue", "red", "green"],
+  },
 ];
 
 /** Parse a binary PPM (P6, maxval 255) into { width, height, px(x, y) -> [r,g,b] }. */
