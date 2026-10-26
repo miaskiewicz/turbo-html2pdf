@@ -14,9 +14,14 @@
 //! the top edge on the first page, the bottom edge on the last, the box running to the
 //! page area's end in between).
 //!
-//! Not compared: `cyan` in `body-background-not-propagated` is the propagated canvas
-//! (`html` background), which Chrome paints over the page area inside the `@page` margins
-//! and `Page::canvas` paints over the whole sheet (a separate difference).
+//! miaskiewicz/turbo-html2pdf#32 extends it: fixed boxes repeat on every page and absolute
+//! boxes sit relative to their containing block; the canvas (`Page::canvas`, painted here
+//! over the page area as the emitter paints it) covers the page area only; a forced break
+//! before the first content makes no blank page; a split block keeps its top border and
+//! padding at a page start; after a forced break only the next block's own top margin is
+//! kept; and a block that exactly fills a page moves on with its ancestors' bottom padding.
+//! Fragments paint in their parent's paint order (`Fragment::paint_order`, positioned
+//! boxes over the flow), as the emitter paints them.
 
 mod common;
 
@@ -72,11 +77,34 @@ fn rasterize(page: &Page) -> (usize, usize, Vec<[u8; 3]>) {
             for (rect, c) in box_paint(f) {
                 fill(buf, w, rect, c);
             }
-            walk(buf, w, &f.children);
+            let kids: Vec<Fragment> = f
+                .paint_order()
+                .into_iter()
+                .map(|i| f.children[i].clone())
+                .collect();
+            walk(buf, w, &kids);
         }
     }
-    walk(&mut buf, w, &page.body);
+    if let Some(c) = page.canvas {
+        let g = &page.geometry;
+        let area = (
+            g.margin.left,
+            g.margin.top,
+            g.width - g.margin.horizontal(),
+            g.height - g.margin.vertical(),
+        );
+        fill(&mut buf, w, area, c);
+    }
+    walk(&mut buf, w, &in_paint_order(&page.body));
     (w, h, buf)
+}
+
+/// A page body's top-level fragments in paint order (as `Fragment::paint_order` orders a
+/// parent's children).
+fn in_paint_order(body: &[Fragment]) -> Vec<Fragment> {
+    let mut sorted = body.to_vec();
+    sorted.sort_by_key(|f| (f.paint_z(), f.is_positioned));
+    sorted
 }
 
 type Rect = (f32, f32, f32, f32);
@@ -162,11 +190,7 @@ fn compare_page(
     failures: &mut Vec<String>,
 ) {
     let raster = rasterize(page);
-    // `cyan` in `body-background-not-propagated` is the canvas (see the module docs).
-    let compared = colors
-        .iter()
-        .filter(|(name, _)| !(id == "body-background-not-propagated" && *name == "cyan"));
-    for (name, css) in compared {
+    for (name, css) in colors {
         let (got, want) = (measure(&raster, rgb(css)), chrome_box(&want["boxes"][name]));
         if got != want {
             failures.push(format!("{id} page {n} {name}: {got:?}, Chrome {want:?}"));
@@ -192,6 +216,43 @@ fn compare_case(case: &serde_json::Value, failures: &mut Vec<String>) {
     }
 }
 
+/// Cases that do not match Chrome yet (each must still differ, so a fixed case is
+/// removed from the list).
+const PENDING: &[&str] = &[
+    // #32 item 1: out-of-flow boxes.
+    "fixed-repeats",
+    "fixed-bottom-right",
+    "fixed-static-position",
+    "fixed-negative-z-index",
+    "absolute-root-offset",
+    "absolute-root-bottom",
+    "absolute-root-past-content",
+    "absolute-static-position",
+    "absolute-in-split-relative",
+    "absolute-in-split-relative-page-1",
+    "absolute-in-moved-static",
+    // #32 item 3: forced break before the first content / at one break point.
+    "break-before-first",
+    "forced-break-after-and-before",
+    // #32 item 4: split block at a page start.
+    "split-block-page-start",
+    "split-block-page-start-nested",
+    // #32 item 5: gap after a forced break.
+    "forced-break-prev-margin",
+    "forced-break-after-margin",
+    "forced-break-child-margin",
+    // #32 item 6: exact fill followed by bottom padding/border.
+    "exact-fill-parent-padding",
+    "exact-fill-parent-border",
+    "exact-fill-child-margin",
+    "exact-fill-body-padding",
+    "exact-fill-grandparent-padding",
+    // A split block's remaining height after an unforced break.
+    "split-block-explicit-height",
+    // The flow under a relatively offset block.
+    "relative-offset-flow",
+];
+
 #[test]
 fn paginated_boxes_match_chrome_156() {
     let path = concat!(
@@ -202,7 +263,16 @@ fn paginated_boxes_match_chrome_156() {
         serde_json::from_str(&std::fs::read_to_string(path).expect("fixture")).unwrap();
     let mut failures = Vec::new();
     for case in fixture["cases"].as_array().unwrap() {
-        compare_case(case, &mut failures);
+        let mut differences = Vec::new();
+        compare_case(case, &mut differences);
+        let id = case["id"].as_str().unwrap();
+        if PENDING.contains(&id) {
+            if differences.is_empty() {
+                failures.push(format!("{id}: matches Chrome, remove it from PENDING"));
+            }
+        } else {
+            failures.extend(differences);
+        }
     }
     assert!(failures.is_empty(), "{}", failures.join("\n"));
 }

@@ -1,7 +1,13 @@
 // Chrome-156 control for paginated box geometry (miaskiewicz/turbo-html2pdf#31): margins at
 // page starts (CSS Fragmentation §5.2 — a block's top margin is kept at the start of its first
 // fragment, truncated only after a break) and `<html>`/`<body>` box decorations painted on
-// every page fragment (`box-decoration-break: slice`).
+// every page fragment (`box-decoration-break: slice`). miaskiewicz/turbo-html2pdf#32 adds:
+// fixed boxes repeated on every page and absolute boxes placed from their containing block
+// through the page capacities; the canvas inside the page area; no blank page for a forced
+// break before the first content (or a doubled one); a split block's top border/padding at
+// a page start; only the next block's own margin after a forced break; a block that exactly
+// fills the page moving on with its ancestors' bottom padding/border; plus a split block's
+// remaining height after its content and the flow under a relatively offset block.
 //
 // Each case is an HTML document with `@page { size: 600px 400px; margin: 40px }` whose boxes
 // are solid-colour, text-free, unbreakable blocks. Chrome for Testing 156 prints it with `page.pdf()`
@@ -67,7 +73,10 @@ const CASES = [
   {
     // The first block's top margin (collapsed with body's 8px) is kept on page 1.
     id: "first-page-margin",
-    html: DOC("", block(C.red[0], 100, "margin-top:30px") + blocks(["green", "blue", "yellow"], 120)),
+    html: DOC(
+      "",
+      block(C.red[0], 100, "margin-top:30px") + blocks(["green", "blue", "yellow"], 120),
+    ),
     colors: ["red", "green", "blue", "yellow"],
   },
   {
@@ -89,13 +98,19 @@ const CASES = [
   {
     // After a forced break (`break-before: page`).
     id: "forced-break-margin",
-    html: DOC("body{margin:0}", block(C.red[0], 60) + block(C.green[0], 60, "break-before:page;margin-top:30px")),
+    html: DOC(
+      "body{margin:0}",
+      block(C.red[0], 60) + block(C.green[0], 60, "break-before:page;margin-top:30px"),
+    ),
     colors: ["red", "green"],
   },
   {
     // `<body>`'s border on every page fragment (slice: top edge on the first, bottom on the last).
     id: "body-border",
-    html: DOC("body{border:4px solid #ff0000;padding:6px}", blocks(["green", "blue", "yellow", "magenta"], 140)),
+    html: DOC(
+      "body{border:4px solid #ff0000;padding:6px}",
+      blocks(["green", "blue", "yellow", "magenta"], 140),
+    ),
     colors: ["red", "green", "blue", "yellow", "magenta"],
   },
   {
@@ -123,8 +138,327 @@ const CASES = [
     // With an `<html>` background, `<body>`'s background is not propagated to the canvas:
     // it paints in the body box on each page fragment.
     id: "body-background-not-propagated",
-    html: DOC("html{background:#00ffff} body{background:#ff8000;padding:10px}", blocks(["green", "blue", "magenta"], 150)),
+    html: DOC(
+      "html{background:#00ffff} body{background:#ff8000;padding:10px}",
+      blocks(["green", "blue", "magenta"], 150),
+    ),
     colors: ["cyan", "orange", "green", "blue", "magenta"],
+  },
+  // --- miaskiewicz/turbo-html2pdf#32 ---
+  {
+    // Item 1: a `position: fixed` box repeats on every page at its insets from the page
+    // area (the print initial containing block), wherever it sits in the source, and
+    // takes no space in the flow.
+    id: "fixed-repeats",
+    html: DOC(
+      "body{margin:0}",
+      block(C.green[0], 140) +
+        `<div style="position:fixed;top:10px;left:20px;width:50px;height:30px;background:${C.red[0]}"></div>` +
+        blocks(["blue", "yellow", "magenta", "orange"], 140),
+    ),
+    colors: ["red", "green", "blue", "yellow", "magenta", "orange"],
+  },
+  {
+    // Item 1: `bottom`/`right` insets of a fixed box resolve against the page area.
+    id: "fixed-bottom-right",
+    html: DOC(
+      "body{margin:0}",
+      `<div style="position:fixed;bottom:10px;right:20px;width:50px;height:30px;background:${C.red[0]}"></div>` +
+        blocks(["green", "blue", "yellow"], 140),
+    ),
+    colors: ["red", "green", "blue", "yellow"],
+  },
+  {
+    // Item 1: an absolute box with no positioned ancestor (the initial containing
+    // block, the first page area) whose offset runs past the first page.
+    id: "absolute-root-offset",
+    html: DOC(
+      "body{margin:0}",
+      `<div style="position:absolute;top:350px;left:20px;width:50px;height:30px;background:${C.red[0]}"></div>` +
+        blocks(["green", "blue", "yellow"], 140),
+    ),
+    colors: ["red", "green", "blue", "yellow"],
+  },
+  {
+    // Item 1: an absolute box inside a relative container that lands on page 2 sits at
+    // its insets from the container, and takes no space in the container's flow.
+    id: "absolute-in-relative",
+    html: DOC(
+      "body{margin:0}",
+      block(C.green[0], 200) +
+        `<div style="position:relative;height:200px;background:${C.blue[0]};break-inside:avoid">` +
+        `<div style="position:absolute;top:20px;left:30px;width:50px;height:30px;background:${C.red[0]}"></div>` +
+        block(C.yellow[0], 40) +
+        `</div>`,
+    ),
+    colors: ["red", "green", "blue", "yellow"],
+  },
+  {
+    // Item 1: an absolute box with auto insets sits at its static position and the
+    // next block follows the previous one directly.
+    id: "absolute-static-position",
+    html: DOC(
+      "body{margin:0}",
+      block(C.green[0], 100) +
+        `<div style="position:absolute;width:50px;height:30px;background:${C.red[0]}"></div>` +
+        blocks(["blue", "yellow"], 140),
+    ),
+    colors: ["red", "green", "blue", "yellow"],
+  },
+  {
+    // Item 2: the root background (canvas) paints the page area only, on every page.
+    id: "canvas-root-background",
+    html: DOC("html{background:#00ffff}", blocks(["green", "blue", "yellow"], 140)),
+    colors: ["cyan", "green", "blue", "yellow"],
+  },
+  {
+    // Item 2: `<body>`'s background propagated to the canvas.
+    id: "canvas-body-background",
+    html: DOC("body{background:#ff8000}", blocks(["green", "blue"], 200)),
+    colors: ["orange", "green", "blue"],
+  },
+  {
+    // Item 3: a forced break before the first content is ignored (no blank page 1);
+    // the block keeps its top margin.
+    id: "break-before-first",
+    html: DOC(
+      "body{margin:0}",
+      block(C.red[0], 60, "break-before:page;margin-top:20px") + block(C.green[0], 60),
+    ),
+    colors: ["red", "green"],
+  },
+  {
+    // Item 3: the same through a wrapper (the break propagates to the start of the flow).
+    id: "break-before-first-nested",
+    html: DOC(
+      "",
+      `<div>${block(C.red[0], 60, "break-before:page")}${block(C.green[0], 60)}</div>` +
+        block(C.blue[0], 60, "break-before:page"),
+    ),
+    colors: ["red", "green", "blue"],
+  },
+  {
+    // Item 4: a split block that starts a page after an unforced break keeps its top
+    // border and padding on its first fragment (only its margin is truncated).
+    id: "split-block-page-start",
+    html: DOC(
+      "body{margin:0}",
+      block(C.red[0], 250) +
+        `<div style="margin-top:30px;border-top:5px solid transparent;padding-top:10px">${blocks(["green", "yellow", "magenta"], 140)}</div>`,
+    ),
+    colors: ["red", "green", "yellow", "magenta"],
+  },
+  {
+    // Item 4: nested split blocks at a page start: both top borders + paddings are kept.
+    id: "split-block-page-start-nested",
+    html: DOC(
+      "body{margin:0}",
+      block(C.red[0], 250) +
+        `<div style="margin-top:30px;padding-top:7px"><div style="margin-top:12px;border-top:3px solid transparent;padding-top:4px">${blocks(["green", "yellow", "magenta"], 140)}</div></div>`,
+    ),
+    colors: ["red", "green", "yellow", "magenta"],
+  },
+  {
+    // Item 5: after a forced break only the next block's own top margin is kept, not
+    // the larger bottom margin of the block before the break.
+    id: "forced-break-prev-margin",
+    html: DOC(
+      "body{margin:0}",
+      block(C.red[0], 60, "margin-bottom:80px") +
+        block(C.green[0], 60, "break-before:page;margin-top:20px"),
+    ),
+    colors: ["red", "green"],
+  },
+  {
+    // Item 5: `break-after` on the previous block, with no top margin on the next one.
+    id: "forced-break-after-margin",
+    html: DOC(
+      "body{margin:0}",
+      block(C.red[0], 60, "margin-bottom:80px;break-after:page") + block(C.green[0], 60),
+    ),
+    colors: ["red", "green"],
+  },
+  {
+    // Item 5: the next block's top margin collapses with its first child's.
+    id: "forced-break-child-margin",
+    html: DOC(
+      "body{margin:0}",
+      block(C.red[0], 60, "margin-bottom:80px") +
+        `<div style="break-before:page;margin-top:10px">${block(C.green[0], 60, "margin-top:25px")}</div>`,
+    ),
+    colors: ["red", "green"],
+  },
+  {
+    // Item 6: a block that exactly fills the page, followed by its parent's bottom
+    // padding, moves to the next page with the padding.
+    id: "exact-fill-parent-padding",
+    html: DOC(
+      "body{margin:0}",
+      `<div style="padding-bottom:20px">${block(C.blue[0], 100)}${block(C.red[0], 220)}</div>` +
+        block(C.green[0], 60),
+    ),
+    colors: ["blue", "red", "green"],
+  },
+  {
+    // Item 6: the same with a bottom border instead of padding.
+    id: "exact-fill-parent-border",
+    html: DOC(
+      "body{margin:0}",
+      `<div style="border-bottom:20px solid transparent">${block(C.blue[0], 100)}${block(C.red[0], 220)}</div>` +
+        block(C.green[0], 60),
+    ),
+    colors: ["blue", "red", "green"],
+  },
+  {
+    // Item 6 (control): the exact fill without a parent padding stays on the page.
+    id: "exact-fill-no-padding",
+    html: DOC(
+      "body{margin:0}",
+      `<div>${block(C.blue[0], 100)}${block(C.red[0], 220)}</div>` + block(C.green[0], 60),
+    ),
+    colors: ["blue", "red", "green"],
+  },
+  {
+    // Item 6: the last child's bottom margin inside the padded parent counts too.
+    id: "exact-fill-child-margin",
+    html: DOC(
+      "body{margin:0}",
+      `<div style="padding-bottom:20px">${block(C.blue[0], 100)}${block(C.red[0], 200, "margin-bottom:20px")}</div>` +
+        block(C.green[0], 60),
+    ),
+    colors: ["blue", "red", "green"],
+  },
+  {
+    // Item 3: `break-after` on one block and `break-before` on the next are one break
+    // point: one page break, no blank page between.
+    id: "forced-break-after-and-before",
+    html: DOC(
+      "body{margin:0}",
+      block(C.red[0], 60, "break-after:page") + block(C.green[0], 60, "break-before:page"),
+    ),
+    colors: ["red", "green"],
+  },
+  {
+    // Item 6: `<body>`'s bottom padding follows the last block the same way.
+    id: "exact-fill-body-padding",
+    html: DOC("body{margin:0;padding-bottom:20px}", block(C.blue[0], 100) + block(C.red[0], 220)),
+    colors: ["blue", "red"],
+  },
+  {
+    // Item 6 (control): a trailing margin is truncated at the page end: the block stays.
+    id: "exact-fill-body-margin",
+    html: DOC("body{margin:0 0 20px}", block(C.blue[0], 100) + block(C.red[0], 220)),
+    colors: ["blue", "red"],
+  },
+  {
+    // Item 6: the padding of a grandparent the block's parent ends with.
+    id: "exact-fill-grandparent-padding",
+    html: DOC(
+      "body{margin:0}",
+      `<div style="padding-bottom:20px"><div>${block(C.blue[0], 100)}${block(C.red[0], 220)}</div></div>` +
+        block(C.green[0], 60),
+    ),
+    colors: ["blue", "red", "green"],
+  },
+  {
+    // A split block taller than its content: the block stays (its remaining height can
+    // break), and the remaining height + bottom padding continue at the top of the next
+    // page before the next block.
+    id: "split-block-explicit-height",
+    html: DOC(
+      "body{margin:0}",
+      `<div style="height:380px;padding-bottom:10px">${block(C.blue[0], 100)}${block(C.red[0], 220)}</div>` +
+        block(C.green[0], 60),
+    ),
+    colors: ["blue", "red", "green"],
+  },
+  {
+    // Item 1: an absolute box far past the content creates the pages it lands on.
+    id: "absolute-root-past-content",
+    html: DOC(
+      "body{margin:0}",
+      `<div style="position:absolute;top:900px;left:20px;width:50px;height:30px;background:${C.red[0]}"></div>` +
+        block(C.green[0], 100),
+    ),
+    colors: ["red", "green"],
+  },
+  {
+    // Item 1: `bottom` of an absolute box in the initial containing block (the first
+    // page area).
+    id: "absolute-root-bottom",
+    html: DOC(
+      "body{margin:0}",
+      `<div style="position:absolute;bottom:10px;left:20px;width:50px;height:30px;background:${C.red[0]}"></div>` +
+        blocks(["green", "blue", "yellow"], 140),
+    ),
+    colors: ["red", "green", "blue", "yellow"],
+  },
+  {
+    // Item 1: a fixed box with auto insets repeats at its static position.
+    id: "fixed-static-position",
+    html: DOC(
+      "body{margin:0}",
+      block(C.green[0], 100) +
+        `<div style="position:fixed;width:50px;height:30px;background:${C.red[0]}"></div>` +
+        blocks(["blue", "yellow"], 140),
+    ),
+    colors: ["red", "green", "blue", "yellow"],
+  },
+  {
+    // Item 1: an absolute box in a relative container split across pages: offsets run
+    // from the container's start (here page 2, its first child moved there) through the
+    // page capacities.
+    id: "absolute-in-split-relative",
+    html: DOC(
+      "body{margin:0}",
+      block(C.green[0], 200) +
+        `<div style="position:relative">${blocks(["yellow", "magenta", "orange"], 140)}` +
+        `<div style="position:absolute;top:400px;left:20px;width:50px;height:30px;background:${C.red[0]}"></div></div>`,
+    ),
+    colors: ["red", "green", "yellow", "magenta", "orange"],
+  },
+  {
+    // Item 1: the same container starting on page 1.
+    id: "absolute-in-split-relative-page-1",
+    html: DOC(
+      "body{margin:0}",
+      block(C.green[0], 100) +
+        `<div style="position:relative">${blocks(["yellow", "magenta", "orange"], 140)}` +
+        `<div style="position:absolute;top:400px;left:20px;width:50px;height:30px;background:${C.red[0]}"></div></div>`,
+    ),
+    colors: ["red", "green", "yellow", "magenta", "orange"],
+  },
+  {
+    // Item 1: an absolute box in a static block that moves to page 2 stays relative to
+    // the initial containing block (page 1).
+    id: "absolute-in-moved-static",
+    html: DOC(
+      "body{margin:0}",
+      block(C.green[0], 200) +
+        `<div style="height:200px;background:${C.blue[0]};break-inside:avoid">` +
+        `<div style="position:absolute;top:10px;left:20px;width:50px;height:30px;background:${C.red[0]}"></div></div>`,
+    ),
+    colors: ["red", "green", "blue"],
+  },
+  {
+    // Item 1: a fixed box with a negative `z-index` paints under the flow.
+    id: "fixed-negative-z-index",
+    html: DOC(
+      "body{margin:0}",
+      `<div style="position:fixed;top:10px;left:20px;width:50px;height:30px;background:${C.red[0]};z-index:-1"></div>` +
+        blocks(["green"], 140),
+    ),
+    colors: ["red", "green"],
+  },
+  {
+    // A relatively positioned block is painted shifted, but the flow continues from its
+    // unshifted position (and it paints over the next block).
+    id: "relative-offset-flow",
+    html: DOC(
+      "body{margin:0}",
+      block(C.red[0], 60, "position:relative;top:30px") + block(C.green[0], 60),
+    ),
+    colors: ["red", "green"],
   },
 ];
 
@@ -148,7 +482,11 @@ function readPpm(buf) {
   const width = Number(w);
   const height = Number(h);
   const data = buf.subarray(i);
-  return { width, height, px: (x, y) => [...data.subarray((y * width + x) * 3, (y * width + x) * 3 + 3)] };
+  return {
+    width,
+    height,
+    px: (x, y) => [...data.subarray((y * width + x) * 3, (y * width + x) * 3 + 3)],
+  };
 }
 
 function measure(img, rgb) {
@@ -194,7 +532,12 @@ for (const testCase of CASES) {
     for (const name of testCase.colors) boxes[name] = measure(img, C[name][1]);
     return { size: [img.width, img.height], boxes };
   });
-  cases.push({ id: testCase.id, html: testCase.html, colors: Object.fromEntries(testCase.colors.map((n) => [n, C[n][0]])), pages });
+  cases.push({
+    id: testCase.id,
+    html: testCase.html,
+    colors: Object.fromEntries(testCase.colors.map((n) => [n, C[n][0]])),
+    pages,
+  });
 }
 await browser.close();
 rmSync(work, { recursive: true, force: true });
