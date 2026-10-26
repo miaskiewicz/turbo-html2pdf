@@ -6,6 +6,29 @@ PyPI, and crates.io packages release in lockstep from a `v*` tag (PyPI on `pyv*`
 
 ## [Unreleased]
 
+- **Fixed (#32)**: pagination matches Chrome 156 `page.pdf()` for positioned boxes and
+  breaks. `position: fixed` boxes repeat on every page at their page-area position.
+  `position: absolute` boxes with `top`/`bottom` sit at their offset from their
+  containing block's start, continued across pages (new pages past the content);
+  static-position ones take no space. A forced break before the first content (or a
+  second one at the same break point) makes no blank page. A split block starting a page
+  keeps its top border and padding. After a forced break only the next block's own top
+  margin is kept. A block's last content moves to the next page with its ancestors'
+  bottom padding/border. The canvas already painted only the page area (now covered by
+  the control). `paginate_document` takes a `Galley { root, wrappers, boxes }`;
+  `render_pages` records the body's used box values (`FlowBoxes`/`BoxFacts`). Control:
+  `scripts/pagination-chrome-control.mjs` (41 cases); corpus changes in turbo-dom
+  `tools/parity/expected/p5b-w4-turbo-html2pdf-32-*.json`.
+- **Fixed (#33)**: a split block taller than its content keeps its remaining height (and
+  bottom padding) at the top of the next page.
+- **Fixed (#34)**: a relatively positioned block's offset no longer shifts the rest of
+  the paginated flow. The content of a split positioned block keeps its paint level.
+- **Fixed (#36)**: on a continued page the rows of a split table follow its repeated
+  header directly. Before, they sat at their distance from the header's original
+  position: `template-report` printed 4 pages, and now prints 2 like Chrome.
+- **Fixed (#35)**: the PDF emitter paints fragments in stacking order (negative
+  `z-index`, flow, positioned, positive `z-index`), as the raster does. Tagged PDFs
+  number their marked content in that order and keep the structure in document order.
 - **Fixed (#31)**: paginated PDFs place blocks at page starts as Chrome 156 prints them
   (CSS Fragmentation §5.2): the first page keeps the leading top margins (and the
   `<html>`/`<body>` margin, border and padding), a forced break keeps the next block's

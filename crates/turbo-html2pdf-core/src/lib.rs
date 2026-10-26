@@ -15,6 +15,7 @@ pub mod emit;
 #[cfg(feature = "endnotes")]
 pub mod endnotes;
 pub mod flow;
+mod flow_boxes;
 mod html;
 pub mod markers;
 pub mod options;
@@ -65,7 +66,7 @@ pub use markers::TKind;
 pub use options::{CompileOptions, MissingPolicy, DEFAULT_INCLUDE_DEPTH};
 pub use paginate::{
     paginate, paginate_document, paginate_with_footnotes, paginate_with_geometry, resolve_geometry,
-    FootnoteBand, Note, Page, PageGeometry, PageKind,
+    BoxFacts, FlowBoxes, FootnoteBand, Galley, Note, Page, PageGeometry, PageKind,
 };
 pub use render::{render_pages, PageContext, RenderInputs};
 pub use semantics::Semantics;
