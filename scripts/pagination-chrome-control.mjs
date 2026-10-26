@@ -487,6 +487,26 @@ const CASES = [
     ),
     colors: ["red", "green", "blue", "yellow", "magenta"],
   },
+  // --- miaskiewicz/turbo-html2pdf#38 ---
+  {
+    // A forced break between the children of a block that fits on the page.
+    id: "forced-break-nested",
+    html: DOC(
+      "body{margin:0}",
+      `<div>${block(C.red[0], 60)}${block(C.green[0], 60, "break-before:page")}</div>`,
+    ),
+    colors: ["red", "green"],
+  },
+  {
+    // `break-after` two levels down.
+    id: "forced-break-after-nested",
+    html: DOC(
+      "body{margin:0}",
+      `<div><div>${block(C.red[0], 60, "break-after:page")}${block(C.green[0], 60)}</div></div>` +
+        block(C.blue[0], 60),
+    ),
+    colors: ["red", "green", "blue"],
+  },
   // --- miaskiewicz/turbo-html2pdf#37 ---
   {
     // Item 1: a block with a background and border split across pages paints a slice of

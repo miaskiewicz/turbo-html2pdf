@@ -2818,6 +2818,114 @@
    ]
   },
   {
+   "id": "forced-break-nested",
+   "html": "<!DOCTYPE html><html><head><style>@page{size:600px 400px;margin:40px}body{margin:0}</style></head><body><div><div style=\"height:60px;background:#ff0000;break-inside:avoid;\"></div><div style=\"height:60px;background:#00ff00;break-inside:avoid;break-before:page\"></div></div></body></html>",
+   "colors": {
+    "red": "#ff0000",
+    "green": "#00ff00"
+   },
+   "pages": [
+    {
+     "size": [
+      600,
+      400
+     ],
+     "boxes": {
+      "red": {
+       "bbox": [
+        40,
+        40,
+        559,
+        99
+       ],
+       "top": true,
+       "bottom": true
+      },
+      "green": null
+     }
+    },
+    {
+     "size": [
+      600,
+      400
+     ],
+     "boxes": {
+      "red": null,
+      "green": {
+       "bbox": [
+        40,
+        40,
+        559,
+        99
+       ],
+       "top": true,
+       "bottom": true
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "forced-break-after-nested",
+   "html": "<!DOCTYPE html><html><head><style>@page{size:600px 400px;margin:40px}body{margin:0}</style></head><body><div><div><div style=\"height:60px;background:#ff0000;break-inside:avoid;break-after:page\"></div><div style=\"height:60px;background:#00ff00;break-inside:avoid;\"></div></div></div><div style=\"height:60px;background:#0000ff;break-inside:avoid;\"></div></body></html>",
+   "colors": {
+    "red": "#ff0000",
+    "green": "#00ff00",
+    "blue": "#0000ff"
+   },
+   "pages": [
+    {
+     "size": [
+      600,
+      400
+     ],
+     "boxes": {
+      "red": {
+       "bbox": [
+        40,
+        40,
+        559,
+        99
+       ],
+       "top": true,
+       "bottom": true
+      },
+      "green": null,
+      "blue": null
+     }
+    },
+    {
+     "size": [
+      600,
+      400
+     ],
+     "boxes": {
+      "red": null,
+      "green": {
+       "bbox": [
+        40,
+        40,
+        559,
+        99
+       ],
+       "top": true,
+       "bottom": true
+      },
+      "blue": {
+       "bbox": [
+        40,
+        100,
+        559,
+        159
+       ],
+       "top": true,
+       "bottom": true
+      }
+     }
+    }
+   ]
+  },
+  {
    "id": "split-decorated",
    "html": "<!DOCTYPE html><html><head><style>@page{size:600px 400px;margin:40px}body{margin:0}</style></head><body><div style=\"border:4px solid #0000ff;background:#ff8000;padding:6px\"><div style=\"height:140px;background:#00ff00;break-inside:avoid;\"></div><div style=\"height:140px;background:#ffff00;break-inside:avoid;\"></div><div style=\"height:140px;background:#ff00ff;break-inside:avoid;\"></div></div></body></html>",
    "colors": {
