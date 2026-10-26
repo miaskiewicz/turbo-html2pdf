@@ -10,16 +10,24 @@
 //! (`{{ page.number }}`, `<t:page/>`) are layered on by the `render` orchestrator,
 //! which also resolves the footnote *content*; the `header`/`footer`/`footnotes`
 //! page bands it paints into are exposed here. Page masters remain TODO(phase7b).
+//!
+//! [`paginate_document`] walks a whole document's [`Galley`]: with the used box values
+//! of its boxes ([`FlowBoxes`]) it keeps margins, paddings and borders at breaks as
+//! Chrome 156 prints them and places out-of-flow boxes (fixed boxes on every page,
+//! absolute boxes from their containing block) — miaskiewicz/turbo-html2pdf#32.
 
+mod boxes;
 mod decorate;
 mod footnotes;
 mod geometry;
+mod out_of_flow;
 mod walk;
 
 use crate::error::{Diagnostics, RenderError};
 use crate::layout::fragment::Fragment;
 use crate::style::AtRule;
 
+pub use boxes::{BoxFacts, FlowBoxes};
 pub use footnotes::{FootnoteBand, Note};
 pub use geometry::{resolve_geometry, PageGeometry};
 
@@ -121,37 +129,66 @@ pub fn paginate_with_footnotes(
     notes: &[Note],
     diags: &mut Diagnostics,
 ) -> Vec<Page> {
-    paginate_document(root, geometry, notes, &[], diags)
+    let galley = Galley {
+        root,
+        wrappers: &[],
+        boxes: &FlowBoxes::default(),
+    };
+    paginate_document(galley, geometry, notes, diags)
 }
 
-/// [`paginate_with_footnotes`] for a document whose `<html>`/`<body>` boxes were
-/// dissolved into `root` before pagination: `wrappers` are those boxes (outermost
-/// first, in galley coordinates; their children are ignored), and each one that paints
-/// a background or border is sliced onto every page (miaskiewicz/turbo-html2pdf#31,
-/// `box-decoration-break: slice`).
+/// A laid-out body flow as the fragmenter walks it.
+#[derive(Debug, Clone, Copy)]
+pub struct Galley<'a> {
+    /// The galley root; its children are the page flow.
+    pub root: &'a Fragment,
+    /// The document's `<html>`/`<body>` boxes when they were dissolved into `root`
+    /// before pagination (outermost first, in galley coordinates; their children are
+    /// ignored): each one that paints a background or border is sliced onto every page
+    /// (miaskiewicz/turbo-html2pdf#31, `box-decoration-break: slice`).
+    pub wrappers: &'a [Fragment],
+    /// The used box values of the flow's boxes (miaskiewicz/turbo-html2pdf#32): margins,
+    /// paddings, `position`, insets. Empty = every box in flow, margins unknown.
+    pub boxes: &'a FlowBoxes,
+}
+
+/// [`paginate_with_footnotes`] for a whole document: its [`Galley`] with the dissolved
+/// `<html>`/`<body>` boxes and the boxes' used values.
 pub fn paginate_document(
-    root: &Fragment,
+    galley: Galley,
     geometry: PageGeometry,
     notes: &[Note],
-    wrappers: &[Fragment],
     diags: &mut Diagnostics,
 ) -> Vec<Page> {
-    let resolved = footnotes::resolve(root, geometry, notes, diags);
+    let capacity = geometry.body_height();
+    let extracted = out_of_flow::extract(galley.root, galley.boxes, capacity);
+    let flow = Galley {
+        root: extracted.as_ref().map_or(galley.root, |e| &e.root),
+        ..galley
+    };
     let footnotes::Resolved {
         mut pages,
         bands,
-        spans,
-    } = resolved;
-    let mut trimmed = trim_trailing_pages(&mut pages, bands);
-    let mut bodies: Vec<Vec<Fragment>> =
-        trimmed.iter_mut().map(|(b, _)| std::mem::take(b)).collect();
-    let kept = bodies.len();
-    decorate::decorate(&mut bodies, &spans[..kept], wrappers, root.y);
-    trimmed
+        mut spans,
+        anchors,
+        deferred,
+    } = footnotes::resolve(flow, geometry, notes, diags);
+    let (mut bodies, mut bands): (Vec<_>, Vec<_>) =
+        trim_trailing_pages(&mut pages, bands).into_iter().unzip();
+    spans.truncate(bodies.len());
+    let pages = out_of_flow::Paged {
+        bodies: &mut bodies,
+        spans: &mut spans,
+        bands: &mut bands,
+        capacity,
+    };
+    out_of_flow::place(extracted.as_ref(), &deferred, &anchors, pages);
+    decorate::decorate(&mut bodies, &spans, galley.wrappers, flow.root.y);
+    bodies
         .into_iter()
-        .zip(bodies)
+        .zip(bands)
         .enumerate()
-        .map(|(i, ((_, band), body))| assemble_page(geometry, i as u32 + 1, body, band))
+        .map(|(i, (body, band))| assemble_page(geometry, i as u32 + 1, body, band))
         .collect()
 }
 

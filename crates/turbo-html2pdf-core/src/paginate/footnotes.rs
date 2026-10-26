@@ -25,7 +25,9 @@ use crate::layout::fragment::{Fragment, FragmentContent, NodeId};
 use crate::layout::value::Rgba;
 
 use super::geometry::PageGeometry;
+use super::out_of_flow::{Anchors, Taken};
 use super::walk::{walk_reserved, PageSpan, Walked};
+use super::Galley;
 
 /// Hard cap on fixpoint passes (§6.4, K=4). Beyond this we accept the current
 /// placement and lint rather than loop forever.
@@ -95,27 +97,31 @@ pub struct Resolved {
     pub pages: Vec<Vec<Fragment>>,
     /// The walk's per-page spans, aligned with `pages`.
     pub spans: Vec<PageSpan>,
+    /// Where the walk placed the split positioned blocks, and the absolute boxes it
+    /// deferred to be placed from them.
+    pub anchors: Anchors,
+    pub deferred: Vec<Taken>,
 }
 
 /// Run the body/footnote fixpoint (§6.4). Returns the paginated body together
 /// with each page's footnote band. With no notes this degenerates to a single
 /// zero-reservation walk.
 pub fn resolve(
-    root: &Fragment,
+    galley: Galley,
     geometry: PageGeometry,
     notes: &[Note],
     diags: &mut Diagnostics,
 ) -> Resolved {
     let base = geometry.body_height();
     let mut reservation: Vec<f32> = Vec::new();
-    let mut walked = walk_pass(root, base, &reservation, diags);
+    let mut walked = walk_pass(galley, base, &reservation, diags);
     for _ in 0..MAX_ITERS {
         let next = measure_reservation(&walked.pages, notes, base);
         if next == reservation {
             return assemble(walked, base, notes);
         }
         reservation = next;
-        walked = walk_pass(root, base, &reservation, diags);
+        walked = walk_pass(galley, base, &reservation, diags);
     }
     let next = measure_reservation(&walked.pages, notes, base);
     if next != reservation {
@@ -129,9 +135,9 @@ pub fn resolve(
 }
 
 /// One pagination pass against a per-page reservation lookup.
-fn walk_pass(root: &Fragment, base: f32, reservation: &[f32], diags: &mut Diagnostics) -> Walked {
+fn walk_pass(galley: Galley, base: f32, reservation: &[f32], diags: &mut Diagnostics) -> Walked {
     let reserve = |page: usize| reservation.get(page).copied().unwrap_or(0.0);
-    walk_reserved(root, base, &reserve, diags)
+    walk_reserved(galley, base, &reserve, diags)
 }
 
 /// The footnote indices a page references, in document order, read off the
@@ -219,7 +225,12 @@ fn content_room(base: f32) -> f32 {
 /// Build the painted footnote band for each page from the converged placement,
 /// splitting any note that overruns the band onto the next page (§3.18).
 fn assemble(walked: Walked, base: f32, notes: &[Note]) -> Resolved {
-    let Walked { pages, spans } = walked;
+    let Walked {
+        pages,
+        spans,
+        anchors,
+        deferred,
+    } = walked;
     let mut carry: Vec<Fragment> = Vec::new();
     let mut bands = Vec::with_capacity(pages.len());
     for page in &pages {
@@ -231,6 +242,8 @@ fn assemble(walked: Walked, base: f32, notes: &[Note]) -> Resolved {
         bands,
         pages,
         spans,
+        anchors,
+        deferred,
     }
 }
 

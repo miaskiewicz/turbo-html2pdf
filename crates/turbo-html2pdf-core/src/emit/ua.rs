@@ -14,8 +14,12 @@
 //!   `/ParentTree`. Reading order is document order.
 //!
 //! The two walks must assign MCIDs identically; both rely on [`wrap_kind`] and
-//! the band split ([`super::page`]) to decide what is content vs. artifact, so a
-//! given page yields the same MCID sequence in both passes.
+//! the band split ([`super::page`]) to decide what is content vs. artifact. The
+//! painter numbers content in paint order ([`super::page::painted`]); the planner
+//! walks document order (the reading order) and gives each content fragment the
+//! MCID of its paint position ([`paint_mcids`]).
+
+use std::collections::HashMap;
 
 use pdf_writer::types::StructRole;
 use pdf_writer::{Content, Finish, Name, Pdf, Ref, TextStr};
@@ -253,6 +257,9 @@ struct TreeBuilder {
     mcid_counts: Vec<i32>,
     /// The fragment semantics of the page being walked.
     semantics: Semantics,
+    /// The MCID of each content fragment of the page being walked (by address: the
+    /// pages are borrowed for the whole walk).
+    order: HashMap<*const Fragment, i32>,
 }
 
 impl TreeBuilder {
@@ -260,6 +267,7 @@ impl TreeBuilder {
     fn run(&mut self, pages: &[Page]) {
         for (page, frags) in pages.iter().enumerate() {
             self.semantics = frags.semantics.clone();
+            self.order = paint_mcids([&frags.body, &frags.footnotes]);
             let mut mcid = 0i32;
             self.walk_band(&frags.body, page, None, &mut mcid);
             self.walk_band(&frags.footnotes, page, None, &mut mcid);
@@ -325,7 +333,7 @@ impl TreeBuilder {
             return;
         }
         let owner = holder.unwrap_or_else(|| self.synthetic_paragraph(page));
-        let id = *mcid;
+        let id = self.order[&std::ptr::from_ref(frag)];
         *mcid += 1;
         self.nodes[owner].mcids.push(id);
     }
@@ -349,6 +357,26 @@ impl TreeBuilder {
             mcids: Vec::new(),
         });
         idx
+    }
+}
+
+/// Each content fragment of a page's content bands (body, then footnotes) by its MCID:
+/// its position in paint order, as the painter numbers them.
+fn paint_mcids(bands: [&[Fragment]; 2]) -> HashMap<*const Fragment, i32> {
+    let mut order = HashMap::new();
+    for band in bands {
+        number_in_paint_order(&super::page::painted(band), &mut order);
+    }
+    order
+}
+
+fn number_in_paint_order(frags: &[&Fragment], order: &mut HashMap<*const Fragment, i32>) {
+    for &frag in frags {
+        if is_content(frag) {
+            let next = order.len() as i32;
+            order.insert(std::ptr::from_ref(frag), next);
+        }
+        number_in_paint_order(&super::page::painted(&frag.children), order);
     }
 }
 

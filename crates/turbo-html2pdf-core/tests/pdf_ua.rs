@@ -258,6 +258,51 @@ fn passes_verapdf_ua1() {
     );
 }
 
+/// A tagged render of a document whose first paragraph is positioned (painted after
+/// the second, miaskiewicz/turbo-html2pdf#35).
+fn positioned_pdf() -> Vec<u8> {
+    let template = r#"<p style="position:relative;top:4px">First</p><p>Second</p>"#;
+    let (program, _) = compile(template, &CompileOptions::default()).expect("compile");
+    let cascade = build_cascade(CSS, "", TokenSet::default());
+    let fonts = common::registry();
+    let inputs = RenderInputs {
+        program: &program,
+        data: &serde_json::json!({}),
+        cascade: &cascade,
+        at_rules: &[],
+        fonts: &fonts,
+        images: &turbo_html2pdf_core::NoImages,
+        now: Some(0),
+    };
+    let pages = render_pages(&inputs, &mut Diagnostics::default()).expect("render pages");
+    emit_pdf(&pages, &opts())
+}
+
+#[test]
+fn marked_content_follows_paint_order_and_the_tree_reading_order() {
+    // The painter numbers content in paint order (the positioned paragraph last); the
+    // structure keeps document order: the first P owns the last-painted MCID.
+    let pdf = positioned_pdf();
+    let at = |needle: &[u8]| pdf.windows(needle.len()).position(|w| w == needle);
+    let (first, second) = (
+        at(b"/S /P\n  /P 12 0 R\n  /Pg 3 0 R\n  /K [1]"),
+        at(b"/K [0]"),
+    );
+    assert!(
+        first.is_some() && first < second,
+        "the first P owns MCID 1, written first"
+    );
+    if have("verapdf") {
+        let path = write_temp(&pdf, "turbo_pdf_ua_positioned_verapdf.pdf");
+        let out = Command::new("verapdf")
+            .args(["--flavour", "ua1"])
+            .arg(&path)
+            .output()
+            .expect("run verapdf");
+        assert!(String::from_utf8_lossy(&out.stdout).contains("isCompliant=\"true\""));
+    }
+}
+
 /// A captioned table (miaskiewicz/turbo-dom#51), tagged: the template and the PDF.
 fn caption_pdf() -> Vec<u8> {
     const CAPTIONED: &str = "<table><caption>Quarterly revenue</caption>\

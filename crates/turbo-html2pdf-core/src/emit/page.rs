@@ -161,13 +161,22 @@ fn paint_watermark(
     super::ua::end_watermark_artifact(content, tagged);
 }
 
+/// `frags` (siblings) in paint order: [`Fragment::paint_order`]'s stable sort by
+/// stacking level — negative `z-index`, in-flow boxes, positioned boxes, positive
+/// `z-index`; source order within a level (miaskiewicz/turbo-html2pdf#35).
+pub(super) fn painted(frags: &[Fragment]) -> Vec<&Fragment> {
+    let mut sorted: Vec<&Fragment> = frags.iter().collect();
+    sorted.sort_by_key(|f| (f.paint_z(), f.is_positioned));
+    sorted
+}
+
 /// Paint every band of a page in back-to-front order. Without `pdf-ua` the band
 /// identity is irrelevant; with a tagged render the header/footer bands paint as
 /// artifacts.
 #[cfg(not(feature = "pdf-ua"))]
 fn paint_bands(content: &mut Content, page: &Page, ctx: &PaintCtx) {
     for band in bands(page) {
-        for frag in band {
+        for frag in painted(band) {
             paint_fragment(content, frag, ctx);
         }
     }
@@ -183,7 +192,7 @@ fn paint_bands(
     mut marker: Option<&mut super::ua::Marker>,
 ) {
     for (index, band) in bands(page).into_iter().enumerate() {
-        for frag in band {
+        for frag in painted(band) {
             paint_fragment(
                 content,
                 frag,
@@ -208,10 +217,11 @@ fn bands(page: &Page) -> [&[Fragment]; 4] {
     [&page.body, &page.header, &page.footer, &page.footnotes]
 }
 
-/// Paint one fragment (its own content first, then its children atop it), inside its
-/// `clip: rect()` region when it has one (miaskiewicz/turbo-dom#52): a saved graphics
-/// state with a rectangular clipping path. An empty region still paints (nothing shows),
-/// so tagged renders number their marked content the same as the structure walk.
+/// Paint one fragment (its own content first, then its children atop it, in paint
+/// order), inside its `clip: rect()` region when it has one (miaskiewicz/turbo-dom#52): a
+/// saved graphics state with a rectangular clipping path. An empty region still paints
+/// (nothing shows), so tagged renders number their marked content the same as the
+/// structure walk.
 fn paint_fragment(
     content: &mut Content,
     frag: &Fragment,
@@ -232,7 +242,7 @@ fn paint_fragment(
         #[cfg(feature = "pdf-ua")]
         artifact_band,
     );
-    for child in &frag.children {
+    for child in painted(&frag.children) {
         paint_fragment(
             content,
             child,

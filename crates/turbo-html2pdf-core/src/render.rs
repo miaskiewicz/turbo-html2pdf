@@ -65,7 +65,9 @@ use crate::image::ImageResolver;
 use crate::layout::fragment::{Fragment, NodeId};
 use crate::layout::ImageCtx;
 use crate::markers::{directive_of, TKind};
-use crate::paginate::{paginate_document, resolve_geometry, Note, Page, PageGeometry};
+use crate::paginate::{
+    paginate_document, resolve_geometry, FlowBoxes, Galley, Note, Page, PageGeometry,
+};
 use crate::style::{AtRule, Cascade};
 use crate::template::{Program, FOOTER, HEADER};
 use crate::text::FontRegistry;
@@ -185,6 +187,7 @@ pub fn render_pages<T: Serialize>(
     let paged = PagedBody {
         root: &body,
         wrappers: &document.wrappers,
+        boxes: &document.boxes,
     };
     let mut pages = paged.paginate(geometry, &notes, run.diags);
     let notes = NoteFlow {
@@ -214,6 +217,8 @@ struct DocumentStyle {
     canvas: Option<crate::layout::value::Rgba>,
     /// The dissolved `<html>`/`<body>` boxes (outermost first, children removed).
     wrappers: Vec<Fragment>,
+    /// The body flow's used box values, for the fragmenter (miaskiewicz/turbo-html2pdf#32).
+    boxes: FlowBoxes,
 }
 
 /// The body galley the fragmenter walks, with the `<html>`/`<body>` boxes dissolved
@@ -221,6 +226,7 @@ struct DocumentStyle {
 struct PagedBody<'a> {
     root: &'a Fragment,
     wrappers: &'a [Fragment],
+    boxes: &'a FlowBoxes,
 }
 
 impl PagedBody<'_> {
@@ -230,7 +236,12 @@ impl PagedBody<'_> {
         notes: &[Note],
         diags: &mut Diagnostics,
     ) -> Vec<Page> {
-        paginate_document(self.root, geometry, notes, self.wrappers, diags)
+        let galley = Galley {
+            root: self.root,
+            wrappers: self.wrappers,
+            boxes: self.boxes,
+        };
+        paginate_document(galley, geometry, notes, diags)
     }
 }
 
@@ -246,6 +257,7 @@ impl DocumentStyle {
             root_font_px: 16.0,
             canvas: None,
             wrappers: Vec::new(),
+            boxes: FlowBoxes::default(),
         }
     }
 }
@@ -321,6 +333,8 @@ fn lay_out_body<T: Serialize>(
         &image_ctx,
     );
     let mut galley = laid.galley;
+    document.boxes =
+        crate::flow_boxes::flow_boxes(&styled, &laid.sources, &galley, geo.content_width());
     let wrappers = wrapper_ids(&flow, &laid.sources);
     galley.children = dissolve_wrappers(
         std::mem::take(&mut galley.children),
