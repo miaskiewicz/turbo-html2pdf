@@ -236,8 +236,6 @@ const PENDING: &[&str] = &[
     // (turbo-dom-layout, filed as miaskiewicz/turbo-dom#41), so the block
     // still fits.
     "exact-fill-child-margin",
-    // A split block's remaining height after an unforced break.
-    "split-block-explicit-height",
     // The flow under a relatively offset block.
     "relative-offset-flow",
 ];

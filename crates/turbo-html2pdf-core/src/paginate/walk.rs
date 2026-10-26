@@ -47,7 +47,9 @@ use crate::error::{Diagnostics, LintCode, Span};
 use crate::layout::fragment::{Fragment, FragmentContent, RepeatKind};
 use crate::layout::value::BreakRule;
 
-use super::boxes::{last_content, leading_margin, trailing, wrapper_tail, FlowBoxes};
+use super::boxes::{
+    last_content, leading_margin, remaining_height, trailing, wrapper_tail, FlowBoxes,
+};
 use super::Galley;
 
 /// Per-page footnote reservation: the area (px) the page at the given 0-based
@@ -359,6 +361,40 @@ impl<'a> Walker<'a> {
                 self.place_one(child, &active, after, diags);
             }
         }
+        if let Some(i) = last {
+            self.carry_remaining(f, &f.children[i], headers);
+        }
+    }
+
+    /// After the last content `last` of split block `f`: `f`'s remaining height (a
+    /// definite height taller than its content) and its bottom padding/border run on
+    /// below it; what does not fit this page continues on the next page(s), where the
+    /// next block follows it (miaskiewicz/turbo-html2pdf#33 — only margins are truncated
+    /// at a break). `last`'s bottom margin before it is truncated at the page end.
+    fn carry_remaining(&mut self, f: &Fragment, last: &Fragment, headers: &[Fragment]) {
+        let Some(rest) = remaining_height(self.boxes, f, last) else {
+            return;
+        };
+        let margin = f.bottom() - last.bottom() - rest;
+        let cap = self.page_capacity();
+        if self.cursor + margin + rest > cap {
+            let over = rest - (cap - self.cursor - margin).max(0.0);
+            self.continue_box(over, f.bottom(), headers);
+        }
+    }
+
+    /// Run `over` px of a box ending at galley `bottom` onto the following page(s).
+    fn continue_box(&mut self, mut over: f32, bottom: f32, headers: &[Fragment]) {
+        self.new_page(headers);
+        while over > self.page_capacity() {
+            over -= self.page_capacity();
+            self.new_page(headers);
+        }
+        self.cursor += over;
+        self.prev_bottom = Some(bottom);
+        self.fresh = false;
+        let span = self.spans.last_mut().expect("one span per page");
+        span.last = Some((bottom, self.cursor));
     }
 
     /// What must follow `child` of `parent` on its page: for the parent's last content,

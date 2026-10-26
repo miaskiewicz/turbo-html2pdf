@@ -308,6 +308,19 @@ fn last_content_that_never_fits_with_its_tail_stays() {
 }
 
 #[test]
+fn split_block_remaining_height_runs_onto_the_next_pages() {
+    // miaskiewicz/turbo-html2pdf#33: a 300px box holding one 60px child splits; its
+    // remaining 240px fill the rest of page 1 (60), all of page 2 (120) and 60px of
+    // page 3, where the next block follows.
+    let mut tall = boxf(0.0, 300.0);
+    tall.children = vec![boxf(0.0, 60.0)];
+    let (pages, _) = run(&root(vec![tall, boxf(300.0, 20.0)]), &cap120());
+    assert_eq!(pages.len(), 3);
+    assert!(pages[1].body.is_empty());
+    assert!(close(pages[2].body[0].y, 60.0));
+}
+
+#[test]
 fn ac_6_2_trailing_empty_page_trimmed() {
     let mut blocks = stack(&[40.0]);
     blocks[0].break_meta.break_after = BreakRule::Page;

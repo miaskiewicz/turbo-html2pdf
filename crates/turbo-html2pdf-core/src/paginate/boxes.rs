@@ -81,18 +81,33 @@ pub(super) fn last_content(boxes: &FlowBoxes, children: &[Fragment]) -> Option<u
 /// passes `after` through). A parent taller than its content (a definite height) ends
 /// in breakable remaining height: nothing has to follow `last`.
 pub(super) fn trailing(boxes: &FlowBoxes, parent: &Fragment, last: &Fragment, after: f32) -> f32 {
-    let padding = boxes.get(parent.node_id).map_or(0.0, |f| f.padding_bottom);
-    let frame = padding + bottom_border(parent);
-    let margin = boxes
-        .get(last.node_id)
-        .map_or(0.0, |f| f.margin_bottom.max(0.0));
-    if parent.bottom() - frame > last.bottom() + margin + 0.5 {
+    if remaining_height(boxes, parent, last).is_some() {
         return 0.0;
     }
-    if frame <= 0.0 {
+    if bottom_frame(boxes, parent) <= 0.0 {
         return after;
     }
     parent.bottom() - last.bottom() + after
+}
+
+/// The part of `parent` below its last content `last` (and `last`'s bottom margin) when
+/// `parent` is taller than its content — its remaining height plus its bottom padding
+/// and border, which break like content — or `None` when its content ends it.
+pub(super) fn remaining_height(
+    boxes: &FlowBoxes,
+    parent: &Fragment,
+    last: &Fragment,
+) -> Option<f32> {
+    let margin = boxes
+        .get(last.node_id)
+        .map_or(0.0, |f| f.margin_bottom.max(0.0));
+    let end = last.bottom() + margin;
+    (parent.bottom() - bottom_frame(boxes, parent) > end + 0.5).then(|| parent.bottom() - end)
+}
+
+/// `parent`'s bottom padding + border.
+fn bottom_frame(boxes: &FlowBoxes, parent: &Fragment) -> f32 {
+    boxes.get(parent.node_id).map_or(0.0, |f| f.padding_bottom) + bottom_border(parent)
 }
 
 /// What must follow the galley root's last content `last`: the [`trailing`] extents of
