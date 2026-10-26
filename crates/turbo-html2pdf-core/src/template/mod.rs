@@ -5,9 +5,12 @@
 
 mod filters;
 mod functions;
-pub(crate) mod markup;
 mod regions;
 mod switch;
+
+// Stage-1 markup -> node-tree parse (incl. `expand_self_closing` and the unknown-`t:`
+// error) lives in turbo-dom-layout, shared with the HTML drive (`layout_html`).
+pub(crate) use turbo_dom_layout::markup;
 
 use std::collections::HashMap;
 

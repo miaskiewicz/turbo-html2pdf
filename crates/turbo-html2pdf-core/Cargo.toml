@@ -24,12 +24,12 @@ rust-version.workspace = true
 # makes the build byte-for-byte the no-bundled build: no font bytes are embedded
 # and `FontRegistry` behaves exactly as a registry of only caller faces.
 default = ["bundled-fonts"]
-bundled-fonts = []
+bundled-fonts = ["turbo-dom-layout/bundled-fonts"]
 
 # Hot-path instrumentation (Phase 13, §13). Off by default so production builds
 # pay nothing; enable to read the counters in `perf` (e.g. `cargo test --features
 # perf`, `cargo bench --features perf`).
-perf = []
+perf = ["turbo-dom-layout/perf"]
 
 # --- Phase 15 capability gates -------------------------------------------------
 # Each is off by default: the default build is byte-for-byte unchanged and the
@@ -42,7 +42,7 @@ endnotes = []
 
 # Accept `cmyk(...)` colours and emit DeviceCMYK instead of DeviceRGB for print
 # workflows (AC-7.x print colour).
-print-color = []
+print-color = ["turbo-dom-layout/print-color"]
 
 # Append/merge external PDF pages after turbo's rendered pages. A pure post-emit
 # step that glues a foreign certified PDF (e.g. Mexican CFDI / Portuguese DSNE)
@@ -68,14 +68,14 @@ stamp = ["dep:lopdf", "encrypt"]
 # system fonts, no time, no threads). When on,
 # `image/svg+xml` bytes are rasterized into an RGBA buffer that feeds the
 # existing Phase 9b image XObject pipeline unchanged.
-svg = ["dep:resvg"]
+svg = ["turbo-dom-layout/svg"]
 
 # `<t:anchor name="x">` becomes a named GoTo destination and `<a href="#x">`
 # becomes an internal Link annotation that jumps to it (AC-3.25). Threads the
 # anchor name / link href from boxgen through the positioned fragment, then a
 # two-pass emit writes a `/Dests` name tree plus per-page Link `/Annots`. Off by
 # default: the default path carries `None` xref data at near-zero cost.
-xref = []
+xref = ["turbo-dom-layout/xref"]
 
 # PDF/A-2b archival ("keep-forever") conformance (AC-11.2): embeds a vendored
 # sRGB ICC profile as an OutputIntent, writes an XMP metadata packet declaring
@@ -89,7 +89,7 @@ pdf-a = []
 # marked-content (`BDC`/`EMC`) with per-page MCIDs, and builds a `StructTreeRoot`
 # + `ParentTree` in the catalog, with `/MarkInfo`, `/Lang`, an XMP packet and the
 # `DisplayDocTitle` viewer preference. Validated with veraPDF `--flavour ua1`.
-pdf-ua = []
+pdf-ua = ["turbo-dom-layout/pdf-ua"]
 
 # AES-256 password protection (PDF 2.0 Standard Security Handler, V=5/R=6,
 # AESV3). Off by default: the default build is byte-for-byte unchanged and pulls
@@ -106,31 +106,23 @@ serde = { workspace = true }
 serde_json = { workspace = true }
 chrono = { workspace = true }
 thiserror = { workspace = true }
-html5ever = "0.39.0"
-markup5ever_rcdom = "0.39.0"
+# The layout half of the engine (style cascade, layout, text/fonts, layout
+# snapshots, the HTML drive, images, errors), relocated to the turbo-dom workspace
+# and re-exported from this crate at its old paths. Features are forwarded
+# (bundled-fonts/perf/svg, and the temporary xref/pdf-ua/print-color gates whose
+# cfg'd fields live in the layout code).
+# LOCAL DEV path dependency for the consolidation's S1 step; the integration step
+# switches it to version + [patch].
+turbo-dom-layout = { path = "../../../turbo-dom-wt-layout/crates/turbo-dom-layout", default-features = false }
 rustybuzz = "0.20.1"
-self_cell = "1"
-unicode-linebreak = "0.1.5"
-taffy = "0.8"
 pdf-writer = "0.15.0"
 subsetter = "0.2.6"
-png = "0.18.1"
-jpeg-decoder = { version = "0.3.2", default-features = false }
 
 # `append` feature only (off by default). Read+write+merge for the post-emit PDF
 # glue step; `pdf-writer` is write-only and cannot parse a foreign PDF. Default
 # features (chrono/jiff/time/rayon) are off — the merge needs only parse+write,
 # which keeps the extra dependency surface small.
 lopdf = { version = "0.36.0", default-features = false, optional = true }
-
-# `svg` feature only (optional). Pinned EXACT for reproducible rendering output:
-# resvg 0.45.1 (0.46+ moves to edition 2024 and changes raster output). It builds
-# comfortably under the workspace's 1.88 floor. `default-features = false` drops
-# `system-fonts` (the only non-deterministic
-# input: a system font lookup) plus the `text`/raster-image decoders we don't need;
-# shape/gradient/clip rendering stays fully deterministic. resvg re-exports `usvg`
-# and `tiny-skia`, so they need no separate dependency line. See src/svg.rs.
-resvg = { version = "=0.45.1", default-features = false, optional = true }
 
 # --- `encrypt` feature crypto deps (optional; only compiled with `--features
 # encrypt`). Pinned to the RustCrypto 0.8/0.10-era + getrandom 0.2, which build
@@ -142,13 +134,11 @@ cbc = { version = "0.1", optional = true }
 sha2 = { version = "0.10", optional = true }
 getrandom = { version = "0.2", optional = true }
 
-encoding_rs = "0.8"
-
-[target.'cfg(target_os = "macos")'.dependencies]
-core-text = "20.1"
-core-foundation = "0.9"
-
 [dev-dependencies]
+# `test-support` exposes `FontFace::collection_fixture_faces` (emit/fonts.rs test).
+turbo-dom-layout = { path = "../../../turbo-dom-wt-layout/crates/turbo-dom-layout", default-features = false, features = ["test-support"] }
+# Tests build PNG fixtures (was a normal dependency before the layout half moved out).
+png = "0.18.1"
 sha2 = "0.10"
 serde_json = { workspace = true, features = ["float_roundtrip"] }
 criterion = "0.5"

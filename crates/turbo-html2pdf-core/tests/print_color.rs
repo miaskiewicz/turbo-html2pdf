@@ -1,11 +1,15 @@
 //! Phase 15 `print-color` feature tests (AC-7.x print colour). Only compiled with
 //! `--features print-color`. Asserts the emitter writes DeviceCMYK fills (`k`
 //! operator) instead of DeviceRGB (`rg`), and that `cmyk(...)` colours parse.
+//!
+//! Split at the S1 relocation: the layout-only cases moved to turbo-dom-layout's
+//! `tests/print_color.rs`; the ones here need TKind directives, templating or the PDF
+//! emitter.
 
 #![cfg(feature = "print-color")]
 
 use turbo_html2pdf_core::layout::fragment::{Fragment, FragmentContent, NodeId};
-use turbo_html2pdf_core::layout::value::{parse_color, BorderEdges, Rgba};
+use turbo_html2pdf_core::layout::value::{BorderEdges, Rgba};
 use turbo_html2pdf_core::paginate::{Page, PageGeometry};
 use turbo_html2pdf_core::{emit_pdf, EmitOptions, PageKind};
 
@@ -112,49 +116,4 @@ fn cmyk_false_is_byte_identical_device_rgb_under_print_color_build() {
     );
     // Pure red in DeviceRGB is `1 0 0 rg`.
     assert!(contains(&pdf, b"1 0 0 rg"), "red -> 1 0 0 DeviceRGB");
-}
-
-#[test]
-fn cmyk_function_parses_percentages_and_fractions() {
-    // Pure cyan ink: cmyk(100%,0,0,0) -> rgb(0,255,255).
-    assert_eq!(
-        parse_color("cmyk(100%, 0, 0, 0)"),
-        Some(Rgba::new(0, 255, 255, 255))
-    );
-    // Fractional form, key ink only.
-    assert_eq!(
-        parse_color("cmyk(0, 0, 0, 1)"),
-        Some(Rgba::new(0, 0, 0, 255))
-    );
-    // Slash-separated, magenta.
-    assert_eq!(
-        parse_color("cmyk(0 / 1 / 0 / 0)"),
-        Some(Rgba::new(255, 0, 255, 255))
-    );
-    // No ink at all -> white.
-    assert_eq!(
-        parse_color("cmyk(0,0,0,0)"),
-        Some(Rgba::new(255, 255, 255, 255))
-    );
-}
-
-#[test]
-fn cmyk_function_rejects_malformed_input() {
-    assert_eq!(parse_color("cmyk(1, 2, 3)"), None); // too few components
-    assert_eq!(parse_color("cmyk(1, 2, 3, x)"), None); // non-numeric
-    assert_eq!(parse_color("cmyk 1,0,0,0"), None); // no parens
-}
-
-#[test]
-fn cmyk_components_clamp_out_of_range() {
-    // Over-range components clamp to [0,1]: 200% -> 1.0 (full ink).
-    assert_eq!(
-        parse_color("cmyk(200%, 0, 0, 0)"),
-        Some(Rgba::new(0, 255, 255, 255))
-    );
-    // Negative key clamps to 0 (no key ink).
-    assert_eq!(
-        parse_color("cmyk(0, 0, 0, -1)"),
-        Some(Rgba::new(255, 255, 255, 255))
-    );
 }

@@ -1,10 +1,13 @@
 //! Style-system tests (§4): CSS parsing, selector matching + specificity,
 //! tokens, node-style injection, the 6-level cascade, and inheritance.
+//!
+//! Split at the S1 relocation: the layout-only cases moved to turbo-dom-layout's
+//! `tests/style.rs`; the ones here need TKind directives, templating or the PDF
+//! emitter.
 
 use serde_json::json;
 use turbo_html2pdf_core::style::{
-    build_cascade, parse_stylesheet, style_tree, Declaration, StyleToken, StyledElement,
-    StyledNode, TokenSet,
+    build_cascade, style_tree, Declaration, StyleToken, StyledElement, StyledNode, TokenSet,
 };
 use turbo_html2pdf_core::{compile, CompileOptions};
 
@@ -64,52 +67,6 @@ fn token(extends: &[&str], decls: &[(&str, &str)]) -> StyleToken {
         extends: extends.iter().map(|s| s.to_string()).collect(),
         declarations: decls.iter().map(|(p, v)| decl(p, v)).collect(),
     }
-}
-
-// --------------------------------------------------------------------------
-// parser
-// --------------------------------------------------------------------------
-
-#[test]
-fn parses_rules_comments_and_at_rules() {
-    let sheet = parse_stylesheet(
-        "/* c */ .a { color: red; font-weight: 700 !important } @page { size: A4 }",
-    );
-    assert_eq!(sheet.rules.len(), 1);
-    assert_eq!(sheet.rules[0].declarations.len(), 2);
-    assert!(sheet.rules[0].declarations[1].important);
-    assert_eq!(sheet.at_rules.len(), 1);
-    assert_eq!(sheet.at_rules[0].name, "page");
-    assert_eq!(sheet.at_rules[0].body, "size: A4");
-}
-
-#[test]
-fn malformed_declarations_are_skipped() {
-    let sheet = parse_stylesheet(".a { ; color: red; novalue: ; :bad ; width: 10px }");
-    assert_eq!(sheet.rules[0].declarations.len(), 2);
-    let empty = parse_stylesheet("{ color: red }");
-    assert!(empty.rules.is_empty());
-}
-
-#[test]
-fn unterminated_comment_consumes_rest() {
-    let sheet = parse_stylesheet(".a { color: red } /* dangling");
-    assert_eq!(sheet.rules.len(), 1);
-}
-
-#[test]
-fn nested_braces_in_at_rule_stay_intact() {
-    let sheet = parse_stylesheet("@media print { .a { color: red } }");
-    assert_eq!(sheet.rules.len(), 0);
-    assert_eq!(sheet.at_rules.len(), 1);
-    assert_eq!(sheet.at_rules[0].name, "media");
-    assert!(sheet.at_rules[0].body.contains(".a"));
-}
-
-#[test]
-fn empty_selector_list_produces_no_rule() {
-    let sheet = parse_stylesheet(", { color: red }");
-    assert!(sheet.rules.is_empty());
 }
 
 // --------------------------------------------------------------------------
@@ -895,25 +852,6 @@ fn of_type_pseudos_count_per_tag() {
         Some("bold"),
         "sole span of its type"
     );
-}
-
-#[test]
-fn root_pseudo_matches_html_element() {
-    // `:root` (cascade.rs Root → ctx.tag == Some("html")). The compiler strips the
-    // `<html>` wrapper before render, so build a tree with a top-level html element
-    // by hand and style it directly.
-    use turbo_html2pdf_core::{Attr, Element, Node, Tag};
-    let html = Node::Element(Element {
-        tag: Tag::Html("html".to_string()),
-        attrs: vec![Attr {
-            name: "id".to_string(),
-            value: "r".to_string(),
-        }],
-        children: vec![Node::Text("x".to_string())],
-    });
-    let cascade = build_cascade(":root { color: teal }", "", TokenSet::new());
-    let styled = style_tree(&[html], &cascade);
-    assert_eq!(prop(&styled, "r", "color").as_deref(), Some("teal"));
 }
 
 #[test]

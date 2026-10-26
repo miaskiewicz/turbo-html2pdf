@@ -14,25 +14,24 @@ pub mod append;
 pub mod emit;
 #[cfg(feature = "endnotes")]
 pub mod endnotes;
-pub mod error;
-pub mod html_layout;
-pub mod image;
-pub mod layout;
-pub mod layout_snapshot;
-pub mod node;
 pub mod options;
 pub mod paginate;
-pub mod perf;
 pub mod render;
 #[cfg(feature = "stamp")]
 pub mod stamp;
 #[cfg(feature = "stamp")]
 mod stamp_font;
-pub mod style;
-#[cfg(feature = "svg")]
-pub mod svg;
 mod template;
-pub mod text;
+
+// The layout half (style cascade, layout, text/fonts, layout snapshots, the HTML
+// drive, images, errors) lives in `turbo-dom-layout`; it is re-exported here at the
+// paths it had in this crate, so `turbo_html2pdf_core::style::…`, `::layout::…`,
+// `::Node`, `::Fragment`, … keep working unchanged.
+#[cfg(feature = "svg")]
+pub use turbo_dom_layout::svg;
+pub use turbo_dom_layout::{
+    error, hot, html_layout, image, layout, layout_snapshot, node, perf, style, text,
+};
 
 #[cfg(feature = "append")]
 pub use append::{append_pdfs, AppendError};
@@ -52,7 +51,7 @@ pub use layout::fragment::{
     NodeId, PositionedGlyph, RepeatKind, Transform2D,
 };
 pub use layout::value::{BreakRule, Rgba};
-pub use layout::{layout, layout_with_images, ImageCtx};
+pub use layout::{layout_with_images, ImageCtx}; // `layout` (fn + module) comes with the module re-export above
 pub use node::{Attr, Element, Node, TKind, Tag};
 pub use options::{CompileOptions, MissingPolicy, DEFAULT_INCLUDE_DEPTH};
 pub use paginate::{

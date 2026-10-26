@@ -2,31 +2,14 @@
 //! feature; run with `cargo test -p turbo-html2pdf-core --features perf`. They assert
 //! the `FontFace` caches actually collapse the hot paths (one parse per distinct
 //! char, one shape per distinct run) rather than per occurrence.
+//!
+//! Split at the S1 relocation: the layout-only cases moved to turbo-dom-layout's
+//! `tests/perf.rs`; the ones here need TKind directives, templating or the PDF emitter.
 #![cfg(feature = "perf")]
 
 mod common;
 
 use turbo_html2pdf_core::perf;
-
-#[test]
-fn a_face_parses_the_font_once() {
-    perf::reset();
-    let f = common::evolventa();
-    // The font is parsed once at construction; lookups reuse the cached face.
-    f.glyph_index('A');
-    f.glyph_index('B');
-    assert_eq!(perf::count("font.face.build"), 1);
-}
-
-#[test]
-fn shaping_runs_once_per_distinct_run() {
-    let f = common::evolventa();
-    perf::reset();
-    f.shape("Hello");
-    f.measure("Hello", 16.0, 0.0); // re-uses the cached shaping
-    f.shape("World");
-    assert_eq!(perf::count("font.shape"), 2); // not 3
-}
 
 #[test]
 fn report_hot_path_breakdown() {
@@ -98,13 +81,4 @@ fn invoice_stage_timing() {
     eprintln!(
         "STAGES(us): registry={t_reg:.1} render_nodes={t_render:.1} cascade={t_cascade:.1} style={t_style:.1} layout={t_layout:.1}"
     );
-}
-
-#[test]
-fn snapshot_exposes_named_counters() {
-    let f = common::evolventa();
-    perf::reset();
-    f.shape("x");
-    let snap = perf::snapshot();
-    assert_eq!(snap.get("font.shape").copied(), Some(1));
 }

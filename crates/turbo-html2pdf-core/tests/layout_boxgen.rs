@@ -1,8 +1,11 @@
 //! Box generation (§5.1): styled tree -> box tree, anonymous-block wrapping of
 //! inline runs (AC-5.1), `display:none` dropping, and `t:` directive markers.
+//!
+//! Split at the S1 relocation: the layout-only cases moved to turbo-dom-layout's
+//! `tests/layout_boxgen.rs`; the ones here need TKind directives, templating or the PDF
+//! emitter.
 
 use turbo_html2pdf_core::layout::boxgen::*;
-use turbo_html2pdf_core::layout::value::Display;
 use turbo_html2pdf_core::node::{TKind, Tag};
 use turbo_html2pdf_core::{ComputedStyle, StyledElement, StyledNode};
 
@@ -47,79 +50,6 @@ fn as_lines(kind: &BoxKind) -> Vec<InlineItem> {
 }
 
 #[test]
-fn text_only_flow_is_inline_context() {
-    let root = build_box_tree(&[txt("hello world")]);
-    assert_eq!(root.node_id.0, 0);
-    assert_eq!(root.display, Display::Block);
-    assert_eq!(as_lines(&root.kind).len(), 1);
-}
-
-#[test]
-fn empty_flow_is_empty_lines() {
-    let root = build_box_tree(&[]);
-    assert!(as_lines(&root.kind).is_empty());
-}
-
-#[test]
-fn mixed_block_inline_wraps_anonymous_block() {
-    // "before" <span>mid</span> <p>para</p>  -> [anon Lines(before,mid), block p]
-    let nodes = vec![
-        txt("before"),
-        el("span", &[("display", "inline")], vec![txt("mid")]),
-        el("p", &[], vec![txt("para")]),
-    ];
-    let root = build_box_tree(&nodes);
-    let boxes = as_block(&root.kind);
-    assert_eq!(boxes.len(), 2);
-    assert_eq!(as_lines(&boxes[0].kind).len(), 2); // before + mid in one anon block
-    assert_eq!(boxes[1].display, Display::Block);
-    assert_eq!(as_lines(&boxes[1].kind).len(), 1); // the <p>'s text
-}
-
-#[test]
-fn display_none_is_dropped() {
-    let nodes = vec![
-        el("p", &[("display", "none")], vec![txt("hidden")]),
-        el("p", &[], vec![txt("shown")]),
-    ];
-    let boxes = as_block(&build_box_tree(&nodes).kind);
-    assert_eq!(boxes.len(), 1);
-}
-
-#[test]
-fn inline_block_becomes_atomic() {
-    let nodes = vec![el("span", &[("display", "inline-block")], vec![txt("x")])];
-    let items = as_lines(&build_box_tree(&nodes).kind).to_vec();
-    assert!(matches!(items[0], InlineItem::Atomic(_)));
-}
-
-#[test]
-fn block_nested_in_inline_becomes_atomic() {
-    let nodes = vec![el(
-        "span",
-        &[("display", "inline")],
-        vec![el("div", &[], vec![txt("d")])],
-    )];
-    let items = as_lines(&build_box_tree(&nodes).kind).to_vec();
-    assert_eq!(items.len(), 1);
-    assert!(matches!(items[0], InlineItem::Atomic(_)));
-}
-
-#[test]
-fn inline_element_drops_hidden_child() {
-    let nodes = vec![el(
-        "span",
-        &[("display", "inline")],
-        vec![
-            el("em", &[("display", "none")], vec![txt("hidden")]),
-            txt("vis"),
-        ],
-    )];
-    let items = as_lines(&build_box_tree(&nodes).kind).to_vec();
-    assert_eq!(items.len(), 1); // only "vis"
-}
-
-#[test]
 fn inline_directive_is_inline_item() {
     let nodes = vec![txt("a"), dir(TKind::Footnote, vec![txt("note")]), txt("b")];
     let items = as_lines(&build_box_tree(&nodes).kind).to_vec();
@@ -147,24 +77,6 @@ fn block_directive_is_opaque_marker() {
 }
 
 #[test]
-fn flex_container_keeps_only_real_items() {
-    let nodes = vec![el(
-        "div",
-        &[("display", "flex")],
-        vec![
-            el("div", &[], vec![txt("a")]),
-            txt("   "),
-            el("div", &[("display", "none")], vec![]),
-        ],
-    )];
-    let boxes = as_block(&build_box_tree(&nodes).kind);
-    match &boxes[0].kind {
-        BoxKind::Flex(items) => assert_eq!(items.len(), 1),
-        _ => panic!("expected Flex"),
-    }
-}
-
-#[test]
 fn flex_keeps_directive_child() {
     let nodes = vec![el(
         "div",
@@ -176,168 +88,4 @@ fn flex_keeps_directive_child() {
         BoxKind::Flex(items) => assert!(matches!(items[0].kind, BoxKind::Directive(TKind::Anchor))),
         _ => panic!("expected Flex"),
     }
-}
-
-#[test]
-fn table_structure_preserved() {
-    let nodes = vec![el(
-        "table",
-        &[("display", "table")],
-        vec![el(
-            "tr",
-            &[("display", "table-row")],
-            vec![el("td", &[("display", "table-cell")], vec![txt("c")])],
-        )],
-    )];
-    let boxes = as_block(&build_box_tree(&nodes).kind);
-    let rows = match &boxes[0].kind {
-        BoxKind::Table(rows) => rows,
-        _ => panic!("expected Table"),
-    };
-    assert_eq!(rows[0].display, Display::TableRow);
-    let cells = as_block(&rows[0].kind);
-    assert_eq!(cells[0].display, Display::TableCell);
-}
-
-#[test]
-fn whitespace_between_blocks_makes_no_anonymous_box() {
-    let nodes = vec![
-        el("p", &[], vec![txt("a")]),
-        txt("   "),
-        el("p", &[], vec![txt("b")]),
-    ];
-    let boxes = as_block(&build_box_tree(&nodes).kind);
-    assert_eq!(boxes.len(), 2); // blank run dropped
-}
-
-#[test]
-fn nonblank_inline_run_between_blocks_makes_anonymous_box() {
-    let nodes = vec![
-        el("p", &[], vec![txt("a")]),
-        txt("x"),
-        el("p", &[], vec![txt("b")]),
-    ];
-    let boxes = as_block(&build_box_tree(&nodes).kind);
-    assert_eq!(boxes.len(), 3);
-    assert_eq!(as_lines(&boxes[1].kind).len(), 1); // anon block holding "x"
-}
-
-#[test]
-fn node_ids_are_preorder() {
-    let root = build_box_tree(&[txt("a")]);
-    assert_eq!(root.node_id.0, 0);
-    match &as_lines(&root.kind)[0] {
-        InlineItem::Text { node_id, .. } => assert_eq!(node_id.0, 1),
-        _ => panic!("expected text"),
-    }
-}
-
-#[test]
-fn background_shorthand_url_becomes_image_source() {
-    // No `background-image` longhand: the url is scanned out of the `background`
-    // shorthand's tokens (a non-replaced image source painted behind the box).
-    let root = build_box_tree(&[el(
-        "div",
-        &[("background", "url(bg.png) no-repeat")],
-        vec![],
-    )]);
-    let div = &as_block(&root.kind)[0];
-    let img = div.image.as_ref().expect("background image source");
-    assert_eq!(img.name, "bg.png");
-    assert!(!img.replaced, "background image is not replaced content");
-}
-
-#[test]
-fn mask_shorthand_url_is_extracted_via_token_scan() {
-    // A `mask` shorthand whose value is not a bare `url(...)` (it has trailing
-    // keywords) falls to the token-scan path to pull the url out.
-    let root = build_box_tree(&[el(
-        "div",
-        &[("mask", "url(icon.svg) no-repeat center")],
-        vec![],
-    )]);
-    let div = &as_block(&root.kind)[0];
-    assert_eq!(div.mask.as_deref(), Some("icon.svg"));
-}
-
-#[test]
-fn img_lazy_data_url_and_srcset_become_replaced_source() {
-    use turbo_html2pdf_core::node::Attr;
-    let img = |attrs: &[(&str, &str)]| {
-        StyledNode::Element(StyledElement {
-            tag: Tag::Html("img".into()),
-            attrs: attrs
-                .iter()
-                .map(|(n, v)| Attr {
-                    name: n.to_string(),
-                    value: v.to_string(),
-                })
-                .collect(),
-            style: cs(&[("display", "block")]),
-            children: vec![],
-        })
-    };
-    let src_of = |node: StyledNode| {
-        let root = build_box_tree(&[node]);
-        let b = as_block(&root.kind)[0].clone();
-        let s = b.image.as_ref().expect("img -> replaced source");
-        assert!(s.replaced, "an <img> source is replaced content");
-        s.name.clone()
-    };
-    // No `src`: fall back to the lazy `data-landscape-url` (nike's hero pattern).
-    assert_eq!(
-        src_of(img(&[("data-landscape-url", "hero.jpg")])),
-        "hero.jpg"
-    );
-    // No `src`/data-*: take the first `srcset` candidate's url.
-    assert_eq!(src_of(img(&[("srcset", "a.jpg 1x, b.jpg 2x")])), "a.jpg");
-    // An empty `src` is skipped in favor of the lazy attribute.
-    assert_eq!(
-        src_of(img(&[("src", "  "), ("data-src", "lazy.jpg")])),
-        "lazy.jpg"
-    );
-    // A real `src` still wins over any lazy attribute.
-    assert_eq!(
-        src_of(img(&[("src", "real.jpg"), ("data-src", "lazy.jpg")])),
-        "real.jpg"
-    );
-}
-
-#[test]
-fn input_button_value_renders_as_text() {
-    use turbo_html2pdf_core::node::Attr;
-    let input = |ty: &str| {
-        StyledNode::Element(StyledElement {
-            tag: Tag::Html("input".into()),
-            attrs: vec![
-                Attr {
-                    name: "type".into(),
-                    value: ty.into(),
-                },
-                Attr {
-                    name: "value".into(),
-                    value: "Go".into(),
-                },
-            ],
-            style: cs(&[]),
-            children: vec![],
-        })
-    };
-    // submit/button/reset → the value becomes the box's text.
-    for ty in ["submit", "button", "reset"] {
-        let root = build_box_tree(&[input(ty)]);
-        let inner = as_block(&root.kind);
-        let lines = as_lines(&inner[0].kind);
-        let has_go = lines
-            .iter()
-            .any(|it| matches!(it, InlineItem::Text { text, .. } if text.contains("Go")));
-        assert!(has_go, "{ty} input value should render as text");
-    }
-    // a text input's value is NOT drawn as content (it's an editable field).
-    let root = build_box_tree(&[input("text")]);
-    let lines = as_lines(&as_block(&root.kind)[0].kind);
-    assert!(
-        lines.is_empty(),
-        "text input value is not flowed as content"
-    );
 }
