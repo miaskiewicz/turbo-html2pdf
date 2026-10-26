@@ -41,6 +41,7 @@ fn page_with(body: Vec<Fragment>) -> Page {
         header: Vec::new(),
         footer: Vec::new(),
         footnotes: Vec::new(),
+        semantics: Default::default(),
     }
 }
 

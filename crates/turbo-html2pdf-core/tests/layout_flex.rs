@@ -10,7 +10,8 @@ mod common;
 use turbo_html2pdf_core::layout::block::layout_tree;
 use turbo_html2pdf_core::layout::boxgen::build_box_tree;
 use turbo_html2pdf_core::layout::fragment::Fragment;
-use turbo_html2pdf_core::node::{TKind, Tag};
+use turbo_html2pdf_core::node::Tag;
+use turbo_html2pdf_core::TKind;
 use turbo_html2pdf_core::{ComputedStyle, Diagnostics, StyledElement, StyledNode};
 
 fn cs(pairs: &[(&str, &str)]) -> ComputedStyle {
@@ -23,6 +24,7 @@ fn el(tag: &str, pairs: &[(&str, &str)], children: Vec<StyledNode>) -> StyledNod
         attrs: vec![],
         style: cs(pairs),
         children,
+        source: None,
     })
 }
 
@@ -42,10 +44,11 @@ fn items_of(root: &Fragment) -> Vec<Fragment> {
 #[test]
 fn directive_item_has_zero_natural_width() {
     let d = StyledNode::Element(StyledElement {
-        tag: Tag::Directive(TKind::Anchor),
+        tag: Tag::Marker(TKind::Anchor.marker()),
         attrs: vec![],
         style: cs(&[]),
         children: vec![],
+        source: None,
     });
     let root = flex(&[], vec![d], 500.0);
     assert_eq!(items_of(&root).len(), 1);

@@ -1,6 +1,6 @@
 //! Phase 15b `xref` feature tests (§3, AC-3.25). Only compiled with `--features
 //! xref`. Drives `<t:anchor name>` + `<a href="#name">` through the whole
-//! pipeline (compile → render → cascade → layout → paginate → emit) and asserts
+//! pipeline (compile → render_pages → emit) and asserts
 //! the emitted PDF carries a named GoTo destination and a Link annotation
 //! targeting it. When `qpdf` is on PATH the output is also structurally checked.
 
@@ -11,24 +11,29 @@ mod common;
 use std::process::Command;
 
 use turbo_html2pdf_core::layout::fragment::Fragment;
-use turbo_html2pdf_core::paginate::{paginate, Page};
+use turbo_html2pdf_core::paginate::Page;
 use turbo_html2pdf_core::style::TokenSet;
 use turbo_html2pdf_core::{
-    build_cascade, compile, emit_pdf, layout, style_tree, CompileOptions, Diagnostics, EmitOptions,
-    StyledNode,
+    build_cascade, compile, emit_pdf, render_pages, CompileOptions, Diagnostics, EmitOptions,
+    RenderInputs, Semantics,
 };
 
-/// Run a bare HTML template (no data) through to paginated pages.
+/// Run a bare HTML template (no data) through to paginated pages (the full
+/// `render_pages` pipeline, which derives the link/anchor semantics).
 fn pages(template: &str) -> Vec<Page> {
     let (program, _) = compile(template, &CompileOptions::default()).expect("compile");
-    let (nodes, _) = program
-        .render_nodes(&serde_json::json!({}), Some(0))
-        .expect("render");
     let cascade = build_cascade("", "", TokenSet::default());
-    let styled: Vec<StyledNode> = style_tree(&nodes, &cascade);
-    let mut diags = Diagnostics::default();
-    let galley = layout(&styled, 540.0, &common::registry(), &mut diags);
-    paginate(&galley, &[], &mut diags).expect("paginate")
+    let fonts = common::registry();
+    let inputs = RenderInputs {
+        program: &program,
+        data: &serde_json::json!({}),
+        cascade: &cascade,
+        at_rules: &[],
+        fonts: &fonts,
+        images: &turbo_html2pdf_core::NoImages,
+        now: Some(0),
+    };
+    render_pages(&inputs, &mut Diagnostics::default()).expect("render pages")
 }
 
 /// Locate `needle` in a byte slice.
@@ -39,22 +44,22 @@ fn contains(haystack: &[u8], needle: &[u8]) -> bool {
 }
 
 /// Concatenate every `link_href` found across a page's fragments.
-fn collect_link_hrefs(frag: &Fragment, out: &mut Vec<String>) {
-    if let Some(href) = &frag.xref.link_href {
-        out.push(href.clone());
+fn collect_link_hrefs(sem: &Semantics, frag: &Fragment, out: &mut Vec<String>) {
+    if let Some(href) = sem.link_href(frag) {
+        out.push(href.to_string());
     }
     for child in &frag.children {
-        collect_link_hrefs(child, out);
+        collect_link_hrefs(sem, child, out);
     }
 }
 
 /// Concatenate every `anchor` name found across a page's fragments.
-fn collect_anchors(frag: &Fragment, out: &mut Vec<String>) {
-    if let Some(name) = &frag.xref.anchor {
-        out.push(name.clone());
+fn collect_anchors(sem: &Semantics, frag: &Fragment, out: &mut Vec<String>) {
+    if let Some(name) = sem.anchor(frag) {
+        out.push(name.to_string());
     }
     for child in &frag.children {
-        collect_anchors(child, out);
+        collect_anchors(sem, child, out);
     }
 }
 
@@ -62,7 +67,7 @@ fn all_hrefs(pages: &[Page]) -> Vec<String> {
     let mut out = Vec::new();
     for page in pages {
         for frag in &page.body {
-            collect_link_hrefs(frag, &mut out);
+            collect_link_hrefs(&page.semantics, frag, &mut out);
         }
     }
     out
@@ -72,7 +77,7 @@ fn all_anchors(pages: &[Page]) -> Vec<String> {
     let mut out = Vec::new();
     for page in pages {
         for frag in &page.body {
-            collect_anchors(frag, &mut out);
+            collect_anchors(&page.semantics, frag, &mut out);
         }
     }
     out

@@ -1,20 +1,22 @@
 //! Phase 15 `endnotes` feature tests (§3). Only compiled with `--features
-//! endnotes`. Exercises the node→node `expand` rewrite directly (markers,
-//! numbering, list placement, edge cases) and one end-to-end render to prove the
-//! collected notes flow into the body where `<t:endnotes/>` stood.
+//! endnotes`. Exercises the in-document `expand` rewrite directly (markers,
+//! numbering, list placement, edge cases — on flows copied from `Node` literals and
+//! read back as `Node`s) and one end-to-end render to prove the collected notes
+//! flow into the body where `<t:endnotes/>` stood.
 
 #![cfg(feature = "endnotes")]
 
 mod common;
 
-use turbo_html2pdf_core::endnotes::expand;
+use turbo_html2pdf_core::endnotes;
 use turbo_html2pdf_core::layout::fragment::{Fragment, FragmentContent};
-use turbo_html2pdf_core::node::{Attr, Element, Node, TKind, Tag};
+use turbo_html2pdf_core::node::{Attr, Element, Node, Tag};
 use turbo_html2pdf_core::style::TokenSet;
 use turbo_html2pdf_core::{
     build_cascade, compile, render_pages, style::AtRule, CompileOptions, Diagnostics, Page,
     RenderInputs,
 };
+use turbo_html2pdf_core::{Flow, TKind};
 
 // -- node helpers --------------------------------------------------------------
 
@@ -24,7 +26,7 @@ fn text(s: &str) -> Node {
 
 fn endnote(body: &str) -> Node {
     Node::Element(Element {
-        tag: Tag::Directive(TKind::Endnote),
+        tag: Tag::Marker(TKind::Endnote.marker()),
         attrs: Vec::new(),
         children: vec![text(body)],
     })
@@ -32,7 +34,7 @@ fn endnote(body: &str) -> Node {
 
 fn endnotes_slot() -> Node {
     Node::Element(Element {
-        tag: Tag::Directive(TKind::Endnotes),
+        tag: Tag::Marker(TKind::Endnotes.marker()),
         attrs: Vec::new(),
         children: Vec::new(),
     })
@@ -71,6 +73,14 @@ fn text_of(node: &Node) -> String {
         Node::Text(t) => t.clone(),
         Node::Element(el) => el.children.iter().map(text_of).collect(),
     }
+}
+
+/// Run the rewrite over a flow holding a copy of `nodes`; read it back as nodes.
+fn expand(nodes: Vec<Node>) -> Vec<Node> {
+    let copy = turbo_dom_layout::tree_from_nodes(&nodes, &common::marker_name);
+    let mut flow = Flow::from_document(copy.tree);
+    endnotes::expand(&mut flow);
+    flow.to_nodes()
 }
 
 // -- transform tests -----------------------------------------------------------
@@ -132,6 +142,36 @@ fn second_slot_is_dropped() {
         .filter(|n| n.as_element().is_some_and(|e| has_class(e, "endnotes")))
         .count();
     assert_eq!(lists, 1, "the list is emitted exactly once");
+}
+
+#[test]
+fn slots_met_after_the_list_are_dropped_only_at_walked_levels() {
+    // After the list is placed, later slots at a level still being walked are
+    // dropped, but elements after it are not searched (their slots stay).
+    let out = expand(vec![
+        endnote("x"),
+        div(vec![endnotes_slot(), endnotes_slot()]),
+        div(vec![endnotes_slot()]),
+        endnotes_slot(),
+    ]);
+    let slots = |nodes: &[Node]| {
+        nodes
+            .iter()
+            .filter(|n| {
+                n.as_element()
+                    .is_some_and(|e| e.tag == endnotes_slot().as_element().unwrap().tag)
+            })
+            .count()
+    };
+    assert_eq!(slots(&out), 0, "top-level slot after the list is dropped");
+    let first = out[1].as_element().unwrap();
+    assert_eq!(first.children.len(), 1, "the list replaced the first slot");
+    assert!(has_class(
+        first.children[0].as_element().unwrap(),
+        "endnotes"
+    ));
+    let second = out[2].as_element().unwrap();
+    assert_eq!(slots(&second.children), 1, "not searched after emission");
 }
 
 #[test]

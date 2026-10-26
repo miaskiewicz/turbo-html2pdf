@@ -19,8 +19,8 @@ use std::io::Cursor;
 use turbo_html2pdf_core::paginate::{paginate, Page, PageGeometry};
 use turbo_html2pdf_core::style::TokenSet;
 use turbo_html2pdf_core::{
-    build_cascade, emit_pdf, emit_pdf_with_images, layout_with_images, style_tree, ComputedStyle,
-    Diagnostics, EmitOptions, ImageResolver, Node, StyledElement, StyledNode, Tag,
+    build_cascade, emit_pdf, emit_pdf_with_images, layout_with_images, ComputedStyle, Diagnostics,
+    EmitOptions, ImageResolver, Node, StyledElement, StyledNode, Tag,
 };
 use turbo_html2pdf_core::{Attr, FragmentContent, ImageCtx};
 
@@ -150,7 +150,7 @@ fn img_node(src: &str) -> Vec<Node> {
 
 fn styled_img(src: &str) -> Vec<StyledNode> {
     let cascade = build_cascade("", "", TokenSet::default());
-    style_tree(&img_node(src), &cascade)
+    common::style_nodes(&img_node(src), &cascade)
 }
 
 fn page_with(body: Vec<turbo_html2pdf_core::Fragment>) -> Page {
@@ -162,6 +162,7 @@ fn page_with(body: Vec<turbo_html2pdf_core::Fragment>) -> Page {
         header: Vec::new(),
         footer: Vec::new(),
         footnotes: Vec::new(),
+        semantics: Default::default(),
     }
 }
 
@@ -346,6 +347,7 @@ fn background_image_emits_xobject_behind_box() {
         attrs: Vec::new(),
         style,
         children: vec![StyledNode::Text("hi".into())],
+        source: None,
     };
     let styled = vec![StyledNode::Element(el)];
     let resolver = MapResolver::new(vec![("bg.png", png_rgb_2x2())]);

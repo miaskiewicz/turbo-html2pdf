@@ -92,13 +92,13 @@ fn preserved_whitespace_and_inline_directives_keep_real_source_provenance() {
     let Node::Element(marker) = &mut parent.children[1] else {
         unreachable!()
     };
-    marker.tag = turbo_html2pdf_core::Tag::Directive(turbo_html2pdf_core::TKind::Page);
+    marker.tag = turbo_html2pdf_core::Tag::Marker(turbo_html2pdf_core::TKind::Page.marker());
     let (snapshot, names) = snapshot_nodes(nodes);
     let source = snapshot.source(names["marker"]).unwrap();
     assert!(!source.excluded_from_layout);
     assert_eq!(source.fragment_indices.len(), 1);
     let fragment = &snapshot.fragments()[source.fragment_indices[0]];
-    assert_eq!(fragment.kind, GeometryKind::Directive);
+    assert_eq!(fragment.kind, GeometryKind::Marker);
     assert_eq!([fragment.rect.width, fragment.rect.height], [0.0, 0.0]);
     assert_eq!(snapshot.text_sources().len(), 2);
     assert!(snapshot.text_sources().iter().all(|text| !snapshot

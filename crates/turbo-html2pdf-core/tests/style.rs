@@ -5,13 +5,15 @@
 //! `tests/style.rs`; the ones here need TKind directives, templating or the PDF
 //! emitter.
 
+mod common;
+
 use serde_json::json;
 use turbo_html2pdf_core::style::{
-    build_cascade, style_tree, Declaration, StyleToken, StyledElement, StyledNode, TokenSet,
+    build_cascade, Declaration, StyleToken, StyledElement, StyledNode, TokenSet,
 };
 use turbo_html2pdf_core::{compile, CompileOptions};
 
-fn render_nodes(tpl: &str) -> Vec<turbo_html2pdf_core::Node> {
+fn render_nodes(tpl: &str) -> turbo_html2pdf_core::Flow {
     let (program, _) = compile(tpl, &CompileOptions::default()).expect("compile");
     program.render_nodes(&json!({}), None).expect("render").0
 }
@@ -19,7 +21,7 @@ fn render_nodes(tpl: &str) -> Vec<turbo_html2pdf_core::Node> {
 fn styled_with(tpl: &str, css: &str, node_css: &str, tokens: TokenSet) -> Vec<StyledNode> {
     let nodes = render_nodes(tpl);
     let cascade = build_cascade(css, node_css, tokens);
-    style_tree(&nodes, &cascade)
+    common::style_flow(&nodes, &cascade)
 }
 
 fn styled(tpl: &str, css: &str) -> Vec<StyledNode> {
@@ -405,7 +407,7 @@ fn styled_at_width(tpl: &str, css: &str, width: f32) -> Vec<StyledNode> {
     use turbo_html2pdf_core::build_cascade_with_width;
     let nodes = render_nodes(tpl);
     let cascade = build_cascade_with_width(css, "", TokenSet::new(), width);
-    style_tree(&nodes, &cascade)
+    common::style_flow(&nodes, &cascade)
 }
 
 #[test]
@@ -440,7 +442,7 @@ fn media_height_gates_rules() {
         set_media_viewport_height(vh);
         let cascade = build_cascade_with_width(css, "", TokenSet::new(), 1280.0);
         let nodes = render_nodes("<div>x</div>");
-        style_tree(&nodes, &cascade)
+        common::style_flow(&nodes, &cascade)
     };
     // Short viewport: the `max-height:575px` rule applies → hidden.
     let short = styled(500.0);

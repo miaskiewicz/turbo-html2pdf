@@ -6,7 +6,8 @@
 //! emitter.
 
 use turbo_html2pdf_core::layout::boxgen::*;
-use turbo_html2pdf_core::node::{TKind, Tag};
+use turbo_html2pdf_core::node::Tag;
+use turbo_html2pdf_core::TKind;
 use turbo_html2pdf_core::{ComputedStyle, StyledElement, StyledNode};
 
 fn cs(pairs: &[(&str, &str)]) -> ComputedStyle {
@@ -19,20 +20,22 @@ fn el(tag: &str, pairs: &[(&str, &str)], children: Vec<StyledNode>) -> StyledNod
         attrs: vec![],
         style: cs(pairs),
         children,
+        source: None,
     })
 }
 
 fn dir(kind: TKind, children: Vec<StyledNode>) -> StyledNode {
     StyledNode::Element(StyledElement {
-        tag: Tag::Directive(kind),
+        tag: Tag::Marker(kind.marker()),
         attrs: vec![],
         style: cs(&[]),
         children,
+        source: None,
     })
 }
 
 fn txt(s: &str) -> StyledNode {
-    StyledNode::Text(s.to_string())
+    StyledNode::Text(s.into())
 }
 
 fn as_block(kind: &BoxKind) -> Vec<LayoutBox> {
@@ -56,10 +59,7 @@ fn inline_directive_is_inline_item() {
     assert_eq!(items.len(), 3);
     assert!(matches!(
         items[1],
-        InlineItem::Directive {
-            kind: TKind::Footnote,
-            ..
-        }
+        InlineItem::Marker { kind, .. } if TKind::from_marker(kind) == Some(TKind::Footnote)
     ));
 }
 
@@ -72,7 +72,7 @@ fn block_directive_is_opaque_marker() {
     let boxes = as_block(&build_box_tree(&nodes).kind);
     assert!(matches!(
         boxes[0].kind,
-        BoxKind::Directive(TKind::RunningHeader)
+        BoxKind::Marker(k) if TKind::from_marker(k) == Some(TKind::RunningHeader)
     ));
 }
 
@@ -85,7 +85,9 @@ fn flex_keeps_directive_child() {
     )];
     let boxes = as_block(&build_box_tree(&nodes).kind);
     match &boxes[0].kind {
-        BoxKind::Flex(items) => assert!(matches!(items[0].kind, BoxKind::Directive(TKind::Anchor))),
+        BoxKind::Flex(items) => assert!(
+            matches!(items[0].kind, BoxKind::Marker(k) if TKind::from_marker(k) == Some(TKind::Anchor))
+        ),
         _ => panic!("expected Flex"),
     }
 }
