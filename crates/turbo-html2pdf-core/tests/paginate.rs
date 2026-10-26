@@ -264,6 +264,19 @@ fn break_after_and_break_before_at_one_point_break_once() {
 }
 
 #[test]
+fn split_block_starting_a_page_keeps_its_top_padding() {
+    // miaskiewicz/turbo-html2pdf#32 item 4: the container (10px above its first child:
+    // its top border + padding) splits; its first child moves to page 2 and keeps the
+    // 10px there (only margins are truncated at an unforced break).
+    let mut wrap = boxf(100.0, 140.0);
+    wrap.children = vec![boxf(110.0, 60.0), boxf(170.0, 60.0)];
+    let (pages, _) = run(&root(vec![boxf(0.0, 100.0), wrap]), &cap120());
+    assert_eq!(pages.len(), 3);
+    assert!(close(pages[1].body[0].y, 10.0));
+    assert!(close(pages[2].body[0].y, 0.0)); // later breaks inside it truncate
+}
+
+#[test]
 fn ac_6_2_trailing_empty_page_trimmed() {
     let mut blocks = stack(&[40.0]);
     blocks[0].break_meta.break_after = BreakRule::Page;

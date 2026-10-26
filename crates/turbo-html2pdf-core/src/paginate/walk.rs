@@ -23,7 +23,9 @@
 //! `y = 0`); after a forced break only the next block's own top margin (collapsed with its
 //! first child's, [`super::boxes::leading_margin`]) is kept, not the larger bottom margin of
 //! the block before the break (miaskiewicz/turbo-html2pdf#32 item 5; a box whose margins are
-//! unknown — no [`FlowBoxes`] entry — keeps the galley gap).
+//! unknown — no [`FlowBoxes`] entry — keeps the galley gap). Only margins are truncated: a
+//! block split across pages whose first content starts a page keeps its top border and
+//! padding (and the margins inside them) above that content (item 4, `pending`).
 //!
 //! Forced breaks (miaskiewicz/turbo-html2pdf#32): a forced break on a page with no flow
 //! content yet — before the first content, or a `break-before` right after a
@@ -102,6 +104,11 @@ struct Walker<'a> {
     fresh: bool,
     /// How the current page started (read while `prev_bottom` is `None`).
     start: PageStart,
+    /// The outermost block being split that has placed nothing yet: its galley top and
+    /// collapsed top margin. A break before its first content is a break before the
+    /// block, so a page it starts keeps the block's top border and padding (and the
+    /// margins inside them) above that content (miaskiewicz/turbo-html2pdf#32 item 4).
+    pending: Option<(f32, Option<f32>)>,
 }
 
 impl<'a> Walker<'a> {
@@ -120,6 +127,7 @@ impl<'a> Walker<'a> {
             }],
             fresh: true,
             start: PageStart::Unforced,
+            pending: None,
         }
     }
 
@@ -143,17 +151,23 @@ impl<'a> Walker<'a> {
         }
     }
 
-    /// The gap above the first fragment of a page: none after an unforced break; after
-    /// a forced break, `f`'s own collapsed top margin (or, unknown, the galley gap from
-    /// the content before the break).
+    /// The gap above the first fragment of a page. The page starts at the outermost
+    /// block that `f` opens and that placed nothing yet (else at `f`): its top border
+    /// and padding above `f` are kept, its top margin is truncated after an unforced
+    /// break and kept after a forced one (or, unknown, the galley gap from the content
+    /// before the break is kept).
     fn page_start_gap(&self, f: &Fragment) -> f32 {
+        let (top, margin) = self
+            .pending
+            .unwrap_or_else(|| (f.y, leading_margin(self.boxes, f)));
+        let inside = (f.y - top).max(0.0);
         let PageStart::Forced(before) = self.start else {
-            return 0.0;
+            return inside;
         };
-        let galley_gap = || before.map_or(0.0, |b| f.y - b);
-        leading_margin(self.boxes, f)
-            .unwrap_or_else(galley_gap)
-            .max(0.0)
+        match margin {
+            Some(m) => inside + m.max(0.0),
+            None => before.map_or(inside, |b| (f.y - b).max(0.0)),
+        }
     }
 
     /// Start a fresh page, re-emitting `headers` at its top.
@@ -195,6 +209,7 @@ impl<'a> Walker<'a> {
         self.cursor = top + f.height;
         self.prev_bottom = Some(f.bottom());
         self.fresh = false;
+        self.pending = None;
         let span = self.spans.last_mut().expect("one span per page");
         span.last = Some((f.bottom(), self.cursor));
     }
@@ -238,11 +253,19 @@ impl<'a> Walker<'a> {
     /// overflow an atomic leaf with a lint.
     fn split(&mut self, f: &Fragment, headers: &[Fragment], diags: &mut Diagnostics) {
         if f.children.is_empty() {
-            self.overflow_leaf(f, headers, diags);
-        } else if is_paragraph(f) {
+            return self.overflow_leaf(f, headers, diags);
+        }
+        let opened = self.pending.is_none();
+        if opened {
+            self.pending = Some((f.y, leading_margin(self.boxes, f)));
+        }
+        if is_paragraph(f) {
             self.split_paragraph(f, headers, diags);
         } else {
             self.split_block(f, headers, diags);
+        }
+        if opened {
+            self.pending = None;
         }
     }
 

@@ -231,9 +231,6 @@ const PENDING: &[&str] = &[
     "absolute-in-split-relative",
     "absolute-in-split-relative-page-1",
     "absolute-in-moved-static",
-    // #32 item 4: split block at a page start.
-    "split-block-page-start",
-    "split-block-page-start-nested",
     // #32 item 6: exact fill followed by bottom padding/border.
     "exact-fill-parent-padding",
     "exact-fill-parent-border",
