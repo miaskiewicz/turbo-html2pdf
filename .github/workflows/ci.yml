@@ -57,6 +57,13 @@ jobs:
       - run: pnpm lint
       - run: pnpm format:check
       - run: node scripts/package-notices.mjs --check
+      # The release's pack-time step: writes the untracked Go-Regular.ttf and the
+      # npm package must list it (release.yml publish-napi / publish-svg).
+      - name: npm pack contents (pack-time font)
+        run: |
+          node scripts/package-notices.mjs --pack
+          (cd crates/turbo-pdf-napi && npm pack --dry-run --ignore-scripts 2>&1) | tee /tmp/pack.txt
+          grep -q 'assets/fonts/Go-Regular.ttf' /tmp/pack.txt
 
   conformance:
     name: Binding conformance (napi + wasm)
