@@ -6,6 +6,19 @@ PyPI, and crates.io packages release in lockstep from a `v*` tag (PyPI on `pyv*`
 
 ## [Unreleased] — turbo-dom consolidation
 
+- turbo-dom-layout's legacy owned-`Node` input is gone, so are the re-exports built on it:
+  `node`, `Node`, `Element`, `style_tree`, `collect_style_css` (the Tree versions are
+  `style_input` and `html_layout::collect_style_css_tree`; `Attr` / `MarkerKind` / `Tag`
+  stay, from turbo-dom-layout's `tag`), `Flow::to_nodes`; `parse_html` now returns the
+  parsed `Flow` (`t:` directives as markers). The S2 legacy-vs-Tree equivalence test is
+  retired. Output is byte-identical.
+- No vendored fonts: `crates/turbo-html2pdf-core/assets/fonts` (a copy of
+  turbo-dom-layout's) is deleted; Rust tests and benches read the fixtures through
+  turbo-dom-layout's `test-support` API, JS scripts, the napi tests and the benches
+  through `scripts/layout-crate-dir.mjs` (`cargo metadata`). `package-notices.mjs`
+  builds the shipped notices from turbo-dom-layout's font tree and now also writes and
+  checks the npm package's `Go-Regular.ttf`.
+
 - The layout half of `turbo-html2pdf-core` (style cascade, layout, text/fonts incl.
   the bundled faces, layout snapshots, `layout_html`, images, SVG, perf counters,
   errors, the `t:` markup parse) moved verbatim to the `turbo-dom-layout` crate in

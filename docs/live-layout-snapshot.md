@@ -7,7 +7,7 @@ provenance API alongside the existing PDF entry points.
 > [`turbo-dom-layout`](https://github.com/miaskiewicz/turbo-dom/tree/main/crates/turbo-dom-layout)
 > crate (re-exported as `turbo_html2pdf_core::layout_snapshot`). Relative `tests/…`
 > and `src/…` paths below are relative to that crate. It takes the caller's
-actual borrowed `Node` forest (or an already styled `StyledNode` forest), builds
+actual borrowed turbo-dom `Tree` (a `StyleInput`, or an already styled `StyledNode` forest), builds
 one box tree, and retains every native galley fragment. There is no HTML
 serialization/reparse, lazy-image rewrite, subtree removal, or injected identity
 attribute.
@@ -25,12 +25,16 @@ tree; addresses never escape as source IDs.
 use turbo_html2pdf_core::layout_snapshot::{
     snapshot_live_tree, SnapshotInputs, SourceId, SourceIdentity,
 };
+use turbo_html2pdf_core::style::{Roots, StyleInput, TreeView};
 use turbo_html2pdf_core::{
-    build_cascade_with_width, parse_html, set_media_viewport_height,
+    build_cascade_with_width, html_layout::parse_html_tree, set_media_viewport_height,
     Diagnostics, FontRegistry, ImageCtx, NoImages,
 };
 
-let nodes = parse_html("<div style='height:40px'>hello</div>");
+let tree = parse_html_tree("<div style='height:40px'>hello</div>");
+let view = TreeView::new(&tree);
+let roots = view.children(view.find_element("body").unwrap());
+let input = StyleInput { view, roots: Roots::Detached(&roots) };
 let identities = [
     SourceIdentity { id: SourceId(42), path: vec![0] },
     SourceIdentity { id: SourceId(43), path: vec![0, 0] },
@@ -40,13 +44,14 @@ let images = ImageCtx { resolver: &NoImages, body_height: None };
 set_media_viewport_height(600.0);
 let cascade = build_cascade_with_width("", "", Default::default(), 800.0);
 let inputs = SnapshotInputs { width: 800.0, height: 600.0, fonts: &fonts, images: &images };
-let snapshot = snapshot_live_tree(&nodes, &identities, &cascade, &inputs,
+let snapshot = snapshot_live_tree(&input, &identities, &cascade, &inputs,
     &mut Diagnostics::default()).unwrap();
 assert!(!snapshot.source(SourceId(42)).unwrap().fragment_indices.is_empty());
 ```
 
-For a live DOM integration, construct `Node` directly through its public fields;
-include the real root elements and existing child order. The HTML parser example
+For a live DOM integration, style the live turbo-dom `Tree` itself (a `StyleInput`
+over its `TreeView`, or turbo-dom-layout's `live` input for an embedder-composed
+document); include the real root elements and existing child order. The HTML parser example
 above is only a standalone convenience. Supply live styles (including UA rules,
 CSSOM changes, presentational state, form state and pseudo-class state) through
 the cascade or already styled entry point. Resolve media conditions using the

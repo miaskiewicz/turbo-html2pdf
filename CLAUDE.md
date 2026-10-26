@@ -6,16 +6,20 @@ N-API / WebAssembly / PyO3 bindings.
 The layout half (style cascade, layout, text/fonts, layout snapshots, `layout_html`,
 images, errors) lives in the **turbo-dom-layout** crate of the turbo-dom workspace;
 `turbo-html2pdf-core` depends on it (and on `turbo-dom`) and re-exports it at its old
-paths (`turbo_html2pdf_core::style::…`, `::layout::…`, `::Node`, …). Rendered markup is
+paths (`turbo_html2pdf_core::style::…`, `::layout::…`, `::Tag`, …). Rendered markup is
 parsed into a turbo-dom document (`Flow`, `src/flow.rs`; `<t:…/>` expansion and the
 unknown-`t:` error in `src/template/markup.rs`) and styled through turbo-dom-layout's
 Tree input with the `t:` directives as layout markers (`src/markers.rs`). Footnote and
 endnote paragraphs are built by mutating that document. PDF/UA roles and xref
 links/anchors are derived after layout from the recorded box sources
 (`src/semantics.rs`, `src/semantics_derive.rs`) and ride on each `Page`. Layout tests
-and their Chrome fixtures live in turbo-dom-layout; the tests here are templating /
-`t:`-directive / paged / PDF ones, plus `src/equivalence_tests.rs` (the consolidation
-S2 gate: Tree input == legacy `Node` input; `TURBO_HTML2PDF_EQUIV_DIRS` adds corpora).
+and their Chrome fixtures live in turbo-dom-layout (as do the fonts: this repo keeps no
+copy of `assets/fonts` — tests and benches read them through turbo-dom-layout's
+`test-support` fixtures, JS scripts / napi tests / benches through
+`scripts/layout-crate-dir.mjs`, i.e. `cargo metadata`); the tests here are templating /
+`t:`-directive / paged / PDF ones (tree-literal inputs come from turbo-dom-layout's
+`test_support::literal`; the S2 legacy-vs-Tree equivalence gate was retired at S5 with
+the legacy input).
 Pre-publish, `turbo-dom-layout` and `turbo-dom` resolve through the root
 `[patch.crates-io]` (git revs of the turbo-dom consolidation branch; a local path while
 iterating).
