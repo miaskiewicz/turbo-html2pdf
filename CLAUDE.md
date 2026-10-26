@@ -40,7 +40,7 @@ Required GitHub repo secrets: **`NPM_TOKEN`** (npm token with public-package pub
 package, uploads nothing).
 
 The `turbo-html2pdf-mcp` crate depends on `turbo-html2pdf-core` with an explicit
-`version = "0.3"` (^0.3) alongside its `path` — crates.io requires a version on
+`version = "0.6"` (^0.6) alongside its `path` — crates.io requires a version on
 the dep. It only needs bumping on a **minor** (0.x) change, not every patch;
 keep it in sync with the workspace major.minor when you cross a minor boundary.
 
