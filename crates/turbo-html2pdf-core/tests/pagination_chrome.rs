@@ -223,8 +223,6 @@ const PENDING: &[&str] = &[
     "split-decorated",
     "split-decorated-nested",
     "split-decorated-after-content",
-    // #37 item 2: percentages against the containing block.
-    "percent-margin-nested",
     // #32 item 6 with the last block's own bottom margin inside the padding: the
     // fragmenter counts it, but the paged layout drops a last child's bottom margin
     // (turbo-dom-layout, filed as miaskiewicz/turbo-dom#41), so the block

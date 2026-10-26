@@ -333,7 +333,8 @@ fn lay_out_body<T: Serialize>(
         &image_ctx,
     );
     let mut galley = laid.galley;
-    document.boxes = crate::flow_boxes::flow_boxes(&styled, &laid.sources, geo.content_width());
+    document.boxes =
+        crate::flow_boxes::flow_boxes(&styled, &laid.sources, &galley, geo.content_width());
     let wrappers = wrapper_ids(&flow, &laid.sources);
     galley.children = dissolve_wrappers(
         std::mem::take(&mut galley.children),
