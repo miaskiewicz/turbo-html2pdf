@@ -243,6 +243,27 @@ fn ac_6_2_forced_break_after() {
 }
 
 #[test]
+fn forced_break_before_the_first_content_makes_no_blank_page() {
+    // miaskiewicz/turbo-html2pdf#32 item 3 (Chrome 156: the break is ignored).
+    let mut blocks = stack(&[40.0, 40.0]);
+    blocks[0].break_meta.break_before = BreakRule::Page;
+    let (pages, _) = run(&root(blocks), &cap120());
+    assert_eq!(pages.len(), 1);
+    assert_eq!(pages[0].body.len(), 2);
+}
+
+#[test]
+fn break_after_and_break_before_at_one_point_break_once() {
+    // miaskiewicz/turbo-html2pdf#32 item 3: no blank page between the two blocks.
+    let mut blocks = stack(&[40.0, 40.0]);
+    blocks[0].break_meta.break_after = BreakRule::Page;
+    blocks[1].break_meta.break_before = BreakRule::Page;
+    let (pages, _) = run(&root(blocks), &cap120());
+    assert_eq!(pages.len(), 2);
+    assert_eq!((pages[0].body.len(), pages[1].body.len()), (1, 1));
+}
+
+#[test]
 fn ac_6_2_trailing_empty_page_trimmed() {
     let mut blocks = stack(&[40.0]);
     blocks[0].break_meta.break_after = BreakRule::Page;

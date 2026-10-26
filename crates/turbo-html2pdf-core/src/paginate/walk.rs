@@ -24,6 +24,10 @@
 //! gap is the galley's (collapsed) gap, so after a forced break a larger bottom margin of the
 //! block before the break counts as well (Chrome keeps only the next block's top margin).
 //!
+//! Forced breaks (miaskiewicz/turbo-html2pdf#32): a forced break on a page with no flow
+//! content yet — before the first content, or a `break-before` right after a
+//! `break-after` — starts no new page (Chrome 156 makes no blank page for either).
+//!
 //! **Deferred (documented):** when a block is split across pages its box
 //! wrapper (background/border) is not re-emitted around each part — children are
 //! emitted directly (the dissolved `<html>`/`<body>` boxes are: [`super::decorate`]
@@ -73,6 +77,12 @@ struct Walker<'a> {
     prev_bottom: Option<f32>,
     /// One span per page in `pages`.
     spans: Vec<PageSpan>,
+    /// No flow content placed on the current page yet (repeated headers aside): a
+    /// forced break here is the break the page already started with (or, on the
+    /// first page, a break before the first content), so it makes no new page —
+    /// Chrome 156 ignores a forced break before the first content and treats
+    /// `break-after` + `break-before` at one break point as one break.
+    fresh: bool,
 }
 
 impl<'a> Walker<'a> {
@@ -87,6 +97,7 @@ impl<'a> Walker<'a> {
                 capacity: capacity - reserve(0),
                 last: None,
             }],
+            fresh: true,
         }
     }
 
@@ -118,12 +129,16 @@ impl<'a> Walker<'a> {
         for h in headers {
             self.emit(h);
         }
+        self.fresh = true;
     }
 
     /// Start a fresh page at a forced break: margins after a forced break are kept
     /// (§5.2), so the next fragment keeps its galley gap — unless repeated headers
-    /// open the page.
+    /// open the page. A page with no flow content yet is already that page.
     fn forced_page(&mut self, headers: &[Fragment]) {
+        if self.fresh {
+            return;
+        }
         let before = self.prev_bottom;
         self.new_page(headers);
         if headers.is_empty() {
@@ -140,6 +155,7 @@ impl<'a> Walker<'a> {
         self.current().push(clone);
         self.cursor = top + f.height;
         self.prev_bottom = Some(f.bottom());
+        self.fresh = false;
         let span = self.spans.last_mut().expect("one span per page");
         span.last = Some((f.bottom(), self.cursor));
     }

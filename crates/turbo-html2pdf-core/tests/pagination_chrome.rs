@@ -231,9 +231,6 @@ const PENDING: &[&str] = &[
     "absolute-in-split-relative",
     "absolute-in-split-relative-page-1",
     "absolute-in-moved-static",
-    // #32 item 3: forced break before the first content / at one break point.
-    "break-before-first",
-    "forced-break-after-and-before",
     // #32 item 4: split block at a page start.
     "split-block-page-start",
     "split-block-page-start-nested",
