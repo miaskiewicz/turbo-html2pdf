@@ -61,6 +61,10 @@ authorization. Merging an ordinary PR does not publish a version.
    changed native layout/font behavior. Commit through the normal pre-commit
    hook; do not bypass its gates.
 4. Inspect `cargo package -p turbo-html2pdf-core --list` and package verification.
+   While the turbo-dom crates are not yet on crates.io (patch present), only a
+   content check is possible: `cargo package -p turbo-html2pdf-core --no-verify
+   --exclude-lockfile` (no fonts, no layout sources; `turbo-dom-layout` / `turbo-dom`
+   are plain registry requirements in the packaged `Cargo.toml`).
    The crates release workflow runs `cargo package` before uploading core. MCP
    can resolve its registry core dependency only after core is published. Review
    npm package contents; native binaries and WASM outputs are assembled by the
