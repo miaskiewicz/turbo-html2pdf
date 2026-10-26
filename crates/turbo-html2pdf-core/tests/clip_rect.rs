@@ -56,43 +56,53 @@ fn a_partially_clipped_box_paints_inside_its_clip_region() {
     );
 }
 
-/// The emitted page rasterized at 96 dpi by `pdftoppm` (`None` when it is not on `PATH`).
-fn raster(pdf: &[u8]) -> Option<(usize, Vec<u8>)> {
+/// Whether `pdftoppm` (poppler) is on `PATH`.
+fn have_pdftoppm() -> bool {
+    Command::new("pdftoppm").arg("-v").output().is_ok()
+}
+
+/// The emitted page rasterized at 96 dpi by `pdftoppm`: its width and RGB bytes.
+fn raster(pdf: &[u8]) -> (usize, Vec<u8>) {
     let dir = std::env::temp_dir().join(format!("turbo_clip_rect_{}", std::process::id()));
-    std::fs::create_dir_all(&dir).ok()?;
+    std::fs::create_dir_all(&dir).expect("temp dir");
     let input = dir.join("clip.pdf");
-    std::fs::write(&input, pdf).ok()?;
+    std::fs::write(&input, pdf).expect("write pdf");
     let out = Command::new("pdftoppm")
         .args(["-r", "96", "-singlefile"])
         .arg(&input)
         .arg(dir.join("page"))
         .output()
-        .ok()?;
+        .expect("run pdftoppm");
     assert!(
         out.status.success(),
         "{}",
         String::from_utf8_lossy(&out.stderr)
     );
-    let ppm = std::fs::read(dir.join("page.ppm")).ok()?;
+    let ppm = std::fs::read(dir.join("page.ppm")).expect("read ppm");
     std::fs::remove_dir_all(&dir).ok();
-    // P6 header: "P6\n<w> <h>\n255\n".
-    let mut fields = ppm.splitn(4, u8::is_ascii_whitespace);
-    let (_, w, _) = (fields.next()?, fields.next()?, fields.next()?);
-    let width: usize = std::str::from_utf8(w).ok()?.parse().ok()?;
-    let header = ppm.len() - fields.next()?.len();
-    let rest = &ppm[header..];
-    let body = &rest[rest.iter().position(|&b| b == b'\n')? + 1..];
-    Some((width, body.to_vec()))
+    parse_ppm(&ppm)
+}
+
+/// A binary PPM (`P6\n<w> <h>\n255\n<rgb>`): its width and RGB bytes.
+fn parse_ppm(ppm: &[u8]) -> (usize, Vec<u8>) {
+    let text = String::from_utf8_lossy(&ppm[..ppm.len().min(64)]);
+    let fields: Vec<&str> = text.split_ascii_whitespace().take(4).collect();
+    let width: usize = fields[1].parse().expect("ppm width");
+    // The header is the first three lines ("P6", "<w> <h>", "255").
+    let mut newlines = ppm.iter().enumerate().filter(|(_, &b)| b == b'\n');
+    let start = newlines.nth(2).expect("ppm header").0 + 1;
+    (width, ppm[start..].to_vec())
 }
 
 #[test]
 fn a_partially_clipped_box_rasterizes_like_chrome_156() {
     let pages = pages(CLIPPED);
     let pdf = emit_pdf(&pages, &EmitOptions::default());
-    let Some((width, rgb)) = raster(&pdf) else {
+    if !have_pdftoppm() {
         eprintln!("pdftoppm not on PATH; skipping the raster probe");
         return;
-    };
+    }
+    let (width, rgb) = raster(&pdf);
     // The containing block (the relative `<div>`), in page coordinates.
     let cb = &pages[0].body[0];
     let red = |x: f32, y: f32| {
