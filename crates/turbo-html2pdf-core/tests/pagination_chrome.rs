@@ -234,10 +234,6 @@ const PENDING: &[&str] = &[
     // #32 item 4: split block at a page start.
     "split-block-page-start",
     "split-block-page-start-nested",
-    // #32 item 5: gap after a forced break.
-    "forced-break-prev-margin",
-    "forced-break-after-margin",
-    "forced-break-child-margin",
     // #32 item 6: exact fill followed by bottom padding/border.
     "exact-fill-parent-padding",
     "exact-fill-parent-border",

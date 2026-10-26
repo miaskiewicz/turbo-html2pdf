@@ -11,6 +11,7 @@
 //! which also resolves the footnote *content*; the `header`/`footer`/`footnotes`
 //! page bands it paints into are exposed here. Page masters remain TODO(phase7b).
 
+mod boxes;
 mod decorate;
 mod footnotes;
 mod geometry;
@@ -20,6 +21,7 @@ use crate::error::{Diagnostics, RenderError};
 use crate::layout::fragment::Fragment;
 use crate::style::AtRule;
 
+pub use boxes::{BoxFacts, FlowBoxes};
 pub use footnotes::{FootnoteBand, Note};
 pub use geometry::{resolve_geometry, PageGeometry};
 
@@ -121,22 +123,39 @@ pub fn paginate_with_footnotes(
     notes: &[Note],
     diags: &mut Diagnostics,
 ) -> Vec<Page> {
-    paginate_document(root, geometry, notes, &[], diags)
+    let galley = Galley {
+        root,
+        wrappers: &[],
+        boxes: &FlowBoxes::default(),
+    };
+    paginate_document(galley, geometry, notes, diags)
 }
 
-/// [`paginate_with_footnotes`] for a document whose `<html>`/`<body>` boxes were
-/// dissolved into `root` before pagination: `wrappers` are those boxes (outermost
-/// first, in galley coordinates; their children are ignored), and each one that paints
-/// a background or border is sliced onto every page (miaskiewicz/turbo-html2pdf#31,
-/// `box-decoration-break: slice`).
+/// A laid-out body flow as the fragmenter walks it.
+#[derive(Debug, Clone, Copy)]
+pub struct Galley<'a> {
+    /// The galley root; its children are the page flow.
+    pub root: &'a Fragment,
+    /// The document's `<html>`/`<body>` boxes when they were dissolved into `root`
+    /// before pagination (outermost first, in galley coordinates; their children are
+    /// ignored): each one that paints a background or border is sliced onto every page
+    /// (miaskiewicz/turbo-html2pdf#31, `box-decoration-break: slice`).
+    pub wrappers: &'a [Fragment],
+    /// The used box values of the flow's boxes (miaskiewicz/turbo-html2pdf#32): margins,
+    /// paddings, `position`, insets. Empty = every box in flow, margins unknown.
+    pub boxes: &'a FlowBoxes,
+}
+
+/// [`paginate_with_footnotes`] for a whole document: its [`Galley`] with the dissolved
+/// `<html>`/`<body>` boxes and the boxes' used values.
 pub fn paginate_document(
-    root: &Fragment,
+    galley: Galley,
     geometry: PageGeometry,
     notes: &[Note],
-    wrappers: &[Fragment],
     diags: &mut Diagnostics,
 ) -> Vec<Page> {
-    let resolved = footnotes::resolve(root, geometry, notes, diags);
+    let (root, wrappers) = (galley.root, galley.wrappers);
+    let resolved = footnotes::resolve(galley, geometry, notes, diags);
     let footnotes::Resolved {
         mut pages,
         bands,

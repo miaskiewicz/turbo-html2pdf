@@ -26,6 +26,7 @@ use crate::layout::value::Rgba;
 
 use super::geometry::PageGeometry;
 use super::walk::{walk_reserved, PageSpan, Walked};
+use super::Galley;
 
 /// Hard cap on fixpoint passes (§6.4, K=4). Beyond this we accept the current
 /// placement and lint rather than loop forever.
@@ -101,21 +102,21 @@ pub struct Resolved {
 /// with each page's footnote band. With no notes this degenerates to a single
 /// zero-reservation walk.
 pub fn resolve(
-    root: &Fragment,
+    galley: Galley,
     geometry: PageGeometry,
     notes: &[Note],
     diags: &mut Diagnostics,
 ) -> Resolved {
     let base = geometry.body_height();
     let mut reservation: Vec<f32> = Vec::new();
-    let mut walked = walk_pass(root, base, &reservation, diags);
+    let mut walked = walk_pass(galley, base, &reservation, diags);
     for _ in 0..MAX_ITERS {
         let next = measure_reservation(&walked.pages, notes, base);
         if next == reservation {
             return assemble(walked, base, notes);
         }
         reservation = next;
-        walked = walk_pass(root, base, &reservation, diags);
+        walked = walk_pass(galley, base, &reservation, diags);
     }
     let next = measure_reservation(&walked.pages, notes, base);
     if next != reservation {
@@ -129,9 +130,9 @@ pub fn resolve(
 }
 
 /// One pagination pass against a per-page reservation lookup.
-fn walk_pass(root: &Fragment, base: f32, reservation: &[f32], diags: &mut Diagnostics) -> Walked {
+fn walk_pass(galley: Galley, base: f32, reservation: &[f32], diags: &mut Diagnostics) -> Walked {
     let reserve = |page: usize| reservation.get(page).copied().unwrap_or(0.0);
-    walk_reserved(root, base, &reserve, diags)
+    walk_reserved(galley, base, &reserve, diags)
 }
 
 /// The footnote indices a page references, in document order, read off the

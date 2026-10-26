@@ -19,10 +19,11 @@
 //! Margins at page starts (CSS Fragmentation §5.2, Chrome 156; miaskiewicz/turbo-html2pdf#31):
 //! the first page starts at the galley top, so the leading gap of its first fragment — the
 //! top margins (and the dissolved `<html>`/`<body>` margins, borders and padding) above it —
-//! is kept; after a forced break the gap before the next fragment is kept too; after an
-//! unforced break it is truncated (a fresh page's first fragment sits at `y = 0`). The kept
-//! gap is the galley's (collapsed) gap, so after a forced break a larger bottom margin of the
-//! block before the break counts as well (Chrome keeps only the next block's top margin).
+//! is kept; after an unforced break it is truncated (a fresh page's first fragment sits at
+//! `y = 0`); after a forced break only the next block's own top margin (collapsed with its
+//! first child's, [`super::boxes::leading_margin`]) is kept, not the larger bottom margin of
+//! the block before the break (miaskiewicz/turbo-html2pdf#32 item 5; a box whose margins are
+//! unknown — no [`FlowBoxes`] entry — keeps the galley gap).
 //!
 //! Forced breaks (miaskiewicz/turbo-html2pdf#32): a forced break on a page with no flow
 //! content yet — before the first content, or a `break-before` right after a
@@ -38,6 +39,9 @@
 use crate::error::{Diagnostics, LintCode, Span};
 use crate::layout::fragment::{Fragment, FragmentContent, RepeatKind};
 use crate::layout::value::BreakRule;
+
+use super::boxes::{leading_margin, FlowBoxes};
+use super::Galley;
 
 /// Per-page footnote reservation: the area (px) the page at the given 0-based
 /// index must keep clear for its footnotes, subtracted from the base capacity
@@ -60,8 +64,21 @@ pub struct Walked {
     pub spans: Vec<PageSpan>,
 }
 
+/// How the current page started, for the gap kept above its first fragment.
+#[derive(Debug, Clone, Copy, PartialEq)]
+enum PageStart {
+    /// After an unforced break: the margins adjoining it are truncated.
+    Unforced,
+    /// After a forced break: the next block's own (collapsed) top margin is kept
+    /// (miaskiewicz/turbo-html2pdf#32 item 5). Carries the galley bottom of the content
+    /// before the break, whose gap is kept instead when that margin is unknown.
+    Forced(Option<f32>),
+}
+
 /// Accumulates pages while walking the galley.
 struct Walker<'a> {
+    /// The flow's used box values (margins after a forced break).
+    boxes: &'a FlowBoxes,
     /// Base body height per page (net of header/footer bands); the footnote band
     /// is subtracted per page via `reserve`.
     capacity: f32,
@@ -83,11 +100,15 @@ struct Walker<'a> {
     /// Chrome 156 ignores a forced break before the first content and treats
     /// `break-after` + `break-before` at one break point as one break.
     fresh: bool,
+    /// How the current page started (read while `prev_bottom` is `None`).
+    start: PageStart,
 }
 
 impl<'a> Walker<'a> {
-    fn new(capacity: f32, reserve: &'a Reserve<'a>, top: f32) -> Walker<'a> {
+    fn new(capacity: f32, reserve: &'a Reserve<'a>, galley: Galley<'a>) -> Walker<'a> {
+        let top = galley.root.y;
         Walker {
+            boxes: galley.boxes,
             capacity,
             reserve,
             pages: vec![Vec::new()],
@@ -98,6 +119,7 @@ impl<'a> Walker<'a> {
                 last: None,
             }],
             fresh: true,
+            start: PageStart::Unforced,
         }
     }
 
@@ -112,9 +134,26 @@ impl<'a> Walker<'a> {
         self.capacity - (self.reserve)(self.pages.len() - 1)
     }
 
-    /// The galley gap to honor before `f` (0 at a page top or for overlap).
+    /// The galley gap to honor before `f` (0 for overlap), or at a page top the gap
+    /// the page's start keeps.
     fn gap_before(&self, f: &Fragment) -> f32 {
-        self.prev_bottom.map_or(0.0, |b| (f.y - b).max(0.0))
+        match self.prev_bottom {
+            Some(b) => (f.y - b).max(0.0),
+            None => self.page_start_gap(f),
+        }
+    }
+
+    /// The gap above the first fragment of a page: none after an unforced break; after
+    /// a forced break, `f`'s own collapsed top margin (or, unknown, the galley gap from
+    /// the content before the break).
+    fn page_start_gap(&self, f: &Fragment) -> f32 {
+        let PageStart::Forced(before) = self.start else {
+            return 0.0;
+        };
+        let galley_gap = || before.map_or(0.0, |b| f.y - b);
+        leading_margin(self.boxes, f)
+            .unwrap_or_else(galley_gap)
+            .max(0.0)
     }
 
     /// Start a fresh page, re-emitting `headers` at its top.
@@ -126,6 +165,7 @@ impl<'a> Walker<'a> {
         });
         self.cursor = 0.0;
         self.prev_bottom = None;
+        self.start = PageStart::Unforced;
         for h in headers {
             self.emit(h);
         }
@@ -133,16 +173,15 @@ impl<'a> Walker<'a> {
     }
 
     /// Start a fresh page at a forced break: margins after a forced break are kept
-    /// (§5.2), so the next fragment keeps its galley gap — unless repeated headers
+    /// (§5.2), so the next fragment keeps its own top margin — unless repeated headers
     /// open the page. A page with no flow content yet is already that page.
     fn forced_page(&mut self, headers: &[Fragment]) {
-        if self.fresh {
-            return;
-        }
-        let before = self.prev_bottom;
-        self.new_page(headers);
-        if headers.is_empty() {
-            self.prev_bottom = before;
+        if !self.fresh {
+            let before = self.prev_bottom;
+            self.new_page(headers);
+            self.start = PageStart::Forced(before);
+        } else if self.prev_bottom.is_none() && self.start == PageStart::Unforced {
+            self.start = PageStart::Forced(None);
         }
     }
 
@@ -400,13 +439,13 @@ fn headers_height(headers: &[Fragment]) -> f32 {
 /// reservation it learns from the previous pass. The first page starts at the top
 /// of `root`.
 pub fn walk_reserved(
-    root: &Fragment,
+    galley: Galley,
     capacity: f32,
     reserve: &Reserve,
     diags: &mut Diagnostics,
 ) -> Walked {
-    let mut w = Walker::new(capacity, reserve, root.y);
-    for child in &root.children {
+    let mut w = Walker::new(capacity, reserve, galley);
+    for child in &galley.root.children {
         w.place_one(child, &[], diags);
     }
     Walked {
