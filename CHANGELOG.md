@@ -6,6 +6,14 @@ PyPI, and crates.io packages release in lockstep from a `v*` tag (PyPI on `pyv*`
 
 ## [Unreleased]
 
+- **Fixed (turbo-dom#51)**: a table `<caption>` is laid out (by turbo-dom-layout) as
+  Chrome does — in the table wrapper box above or below the grid, with its own box,
+  widening the table to its min-content; before, its content became grid rows and its
+  text was dropped. Under PDF/UA it is tagged as the `Caption` child of its `Table`
+  (`UaRole::Caption`), and the anonymous grid box of a captioned table
+  (`NodeSources::table_grids`) is no structure element, so the rows stay the table's `TR`
+  children (it was an unsourced box tagged `P`). Control: turbo-dom's `caption-*` Chrome
+  156 cases; `tests/pdf_ua.rs` (`Table > Caption, TR`, veraPDF ua1).
 - **Fixed (#31)**: paginated PDFs place blocks at page starts as Chrome 156 prints them
   (CSS Fragmentation §5.2): the first page keeps the leading top margins (and the
   `<html>`/`<body>` margin, border and padding), a forced break keeps the next block's

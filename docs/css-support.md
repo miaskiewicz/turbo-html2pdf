@@ -118,7 +118,7 @@ ignored.
 
 | Property | Accepted values |
 |---|---|
-| `display` | `block`, `inline`, `inline-block`, `flex`, `none`, `table`, `table-row`, `table-cell`, `table-header-group`, `table-footer-group`, `list-item` (anything else → `block`) |
+| `display` | `block`, `inline`, `inline-block`, `flex`, `none`, `table`, `table-row`, `table-cell`, `table-header-group`, `table-footer-group`, `table-caption`, `list-item` (anything else → `block`) |
 | `position` | only `relative` is meaningful (offsets a relatively-positioned box); other values are not positioned |
 | `margin`, `margin-top/right/bottom/left` | 1–4 length shorthand; longhands override; `auto` supported |
 | `padding`, `padding-*` | 1–4 length shorthand + longhands |
@@ -169,8 +169,11 @@ styled defaults:
 `time`.
 
 **Table elements:** `table` → `table`, `thead` → `table-header-group`, `tfoot` →
-`table-footer-group`, `tr` → `table-row`, `td`/`th` → `table-cell`. `li` →
-`list-item`.
+`table-footer-group`, `tr` → `table-row`, `td`/`th` → `table-cell`, `caption` →
+`table-caption` (centred text). `li` → `list-item`. A table with a caption lays out as
+Chrome's table wrapper box: the captions above (`caption-side: top`, the default,
+inherited) or below (`bottom`) the grid, the table's border and background around the
+grid only; under PDF/UA the caption is the table's `Caption` structure element.
 
 **Typographic defaults:**
 

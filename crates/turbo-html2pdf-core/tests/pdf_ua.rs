@@ -307,7 +307,6 @@ fn struct_elems(pdf: &[u8]) -> std::collections::BTreeMap<u32, (String, u32)> {
 }
 
 #[test]
-#[ignore = "miaskiewicz/turbo-dom#51: fails until the fix"]
 fn tags_a_table_caption_as_the_tables_caption() {
     // PDF/UA: a <caption> is the `Caption` child of its `Table`, and the rows stay the
     // table's children (the anonymous grid box of a captioned table is no structure).
@@ -339,7 +338,6 @@ fn tags_a_table_caption_as_the_tables_caption() {
 }
 
 #[test]
-#[ignore = "miaskiewicz/turbo-dom#51: fails until the fix"]
 fn a_captioned_table_passes_verapdf_ua1() {
     if !have("verapdf") {
         eprintln!("verapdf not on PATH; skipping PDF/UA-1 validation");
