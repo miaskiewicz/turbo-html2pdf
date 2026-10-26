@@ -231,13 +231,52 @@ taller than a page overflows onto a fresh page with a `RegionOverflow` lint
 
 ### Margins at page starts
 
-As Chrome prints (CSS Fragmentation §5.2; turbo-html2pdf#31): the first page starts at
-the top of the document, so the first block keeps its top margin (and `<html>`/`<body>`
-margins, borders and padding above it); after a **forced** break the next block keeps
-its gap; after an **unforced** break (content moved because it did not fit) the margin
-is truncated and the block starts at the top of the page area. The kept gap after a
-forced break is the laid-out (collapsed) gap, so a larger bottom margin of the block
-before the break counts too (Chrome keeps only the next block's own margin).
+As Chrome prints (CSS Fragmentation §5.2; turbo-html2pdf#31, #32): only margins are
+truncated at a break, never padding, borders or a box's remaining height.
+
+- The first page starts at the top of the document, so the first block keeps its top
+  margin (and `<html>`/`<body>` margins, borders and padding above it).
+- After an **unforced** break (content moved because it did not fit) the margin is
+  truncated and the block starts at the top of the page area. If the content that moved
+  is the first content of a block being split, the break is before that block: its top
+  border and padding (and any margin inside them) stay above the content on the new
+  page, and only the block's own margin is truncated.
+- After a **forced** break the next block keeps **its own** top margin (collapsed with its
+  first child's when no padding or border separates them). It does not keep a larger
+  bottom margin of the block before the break.
+- A forced break on a page that has no content yet starts no new page, so Chrome's
+  behaviour applies: `break-before: page` on the first content makes no blank first page,
+  and `break-after` on one block plus `break-before` on the next break only once.
+- No break can separate a box's last content from the bottom padding and border that end
+  the box (or its ancestors', `<body>`'s included). A block that would exactly fill the
+  page is followed by such padding, so it moves to the next page with it. A trailing
+  margin on its own does not move it.
+- A box taller than its content (a definite `height`) ends in remaining height that
+  breaks like content: what doesn't fit continues at the top of the next page, before
+  the next block (#33).
+- A `position: relative` box is painted shifted, but the flow continues from its
+  unshifted position (#34).
+
+### Positioned boxes in print
+
+As Chrome prints them (#32):
+
+- A **`position: fixed`** box repeats on **every page**. It sits at its insets from the
+  page area (the print viewport), or at its static position if it has none. With only
+  `bottom` set, it is anchored to the page area's bottom.
+- A **`position: absolute`** box with `top` or `bottom` set sits at that offset from its
+  containing block, which is the nearest positioned ancestor, or else the first page
+  area. The offset is measured from where that block starts and runs on through the
+  following pages, so `top: 900px` on a 320px-tall page area lands on page 3, adding
+  pages after the content if needed. A box placed inside a static block that moves to a
+  later page stays relative to the first page.
+- An `absolute` box with neither `top` nor `bottom` stays at its static position in the
+  flow and takes no space.
+- Fragments paint in stacking order: a `z-index` below 0, then the flow, then positioned
+  boxes, then a positive `z-index` (#35).
+
+The page area is the page minus its `@page` margins. The root (or propagated `<body>`)
+background fills only that area, as in Chrome.
 
 ### `<html>` / `<body>` boxes across pages
 
@@ -284,8 +323,13 @@ From `paginate/walk.rs`:
 
 - When a block is split across pages, its box wrapper (background/border) is **not
   re-emitted** around each part — children are emitted directly (except `<html>` and
-  `<body>`, sliced onto every page; see above). At a page start the whole leading gap is
-  truncated, including a split block's top padding/border.
+  `<body>`, sliced onto every page; see above).
+- An absolutely positioned box taller than the page remainder is placed whole (Chrome
+  fragments it); a fixed box's containing block is the page body area (between any
+  running header and footer bands).
+- A last child's bottom margin is dropped by the paged layout (turbo-dom#41), so a block
+  whose own bottom margin would push it past the page end with its parent's padding
+  stays.
 - Orphans/widows are enforced at each single break, but a paragraph tail spanning
   more than two pages is greedy.
 
