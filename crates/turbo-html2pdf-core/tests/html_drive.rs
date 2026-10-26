@@ -62,18 +62,19 @@ fn unknown_t_elements_are_rejected_everywhere() {
 }
 
 #[test]
-fn parse_html_returns_the_legacy_node_copy() {
-    let nodes = parse_html("<p>x<t:footnote>n</t:footnote></p>").expect("parse");
-    let p = nodes[0].as_element().unwrap();
-    assert_eq!(p.tag, Tag::Html("p".into()));
+fn parse_html_returns_the_flow_with_directives_as_markers() {
+    let flow = parse_html("<p>x<t:footnote>n</t:footnote></p>").expect("parse");
+    let view = flow.view();
+    let p = flow.roots()[0];
+    assert_eq!(view.tag(p), Tag::Html("p".into()));
     assert_eq!(
-        p.children[1].as_element().unwrap().tag,
+        view.tag(view.children(p)[1]),
         Tag::Marker(TKind::Footnote.marker())
     );
 }
 
 #[test]
-fn flow_debug_shows_the_node_copy() {
+fn flow_debug_shows_the_markup() {
     let (program, _) =
         turbo_html2pdf_core::compile("<p>dbg</p>", &Default::default()).expect("compile");
     let (flow, _) = program

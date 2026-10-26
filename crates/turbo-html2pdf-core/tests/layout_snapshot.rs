@@ -4,12 +4,12 @@
 
 mod common;
 
+use turbo_dom_layout::test_support::literal::{Element, Node};
 use turbo_html2pdf_core::layout_snapshot::{
     snapshot_live_tree, GeometryKind, LayoutSnapshot, SnapshotInputs, SourceId, SourceIdentity,
 };
 use turbo_html2pdf_core::{
-    build_cascade, layout_with_images, Attr, Diagnostics, Element, FontRegistry, ImageCtx,
-    NoImages, Node, Tag,
+    build_cascade, layout_with_images, Attr, Diagnostics, FontRegistry, ImageCtx, NoImages, Tag,
 };
 
 fn element(tag: &str, css: &str, children: Vec<Node>) -> Node {
@@ -43,7 +43,7 @@ fn capture(nodes: &[Node], ids: &[SourceIdentity]) -> LayoutSnapshot {
         images: &images,
     };
     snapshot_live_tree(
-        nodes,
+        &turbo_dom_layout::test_support::literal::tree(nodes).input(),
         ids,
         &build_cascade("", "", Default::default()),
         &inputs,

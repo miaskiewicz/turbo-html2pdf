@@ -17,10 +17,11 @@
 mod common;
 
 use std::collections::HashMap;
+use turbo_dom_layout::test_support::literal::{Element, Node};
 use turbo_html2pdf_core::paginate::{paginate, Page};
 use turbo_html2pdf_core::{
-    build_cascade, emit_pdf_with_images, layout_with_images, Attr, Diagnostics, Element,
-    EmitOptions, ImageCtx, ImageResolver, Node, Tag,
+    build_cascade, emit_pdf_with_images, layout_with_images, Attr, Diagnostics, EmitOptions,
+    ImageCtx, ImageResolver, Tag,
 };
 use turbo_html2pdf_core::{style::TokenSet, StyledNode};
 

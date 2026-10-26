@@ -4,8 +4,7 @@
 
 use turbo_dom::{Handle, Tree};
 use turbo_dom_layout::{
-    style_input, Cascade, LayoutOptions, Node, Roots, StyleInput, StyleOptions, StyledNode,
-    TreeView,
+    style_input, Cascade, LayoutOptions, Roots, StyleInput, StyleOptions, StyledNode, TreeView,
 };
 
 /// The style-time switches of this build: `cmyk(...)` colours with `print-color`.
@@ -32,11 +31,16 @@ pub struct Flow {
 }
 
 impl std::fmt::Debug for Flow {
-    /// The flow's content, as its legacy `Node` copy.
+    /// The flow's roots and their serialized markup.
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let markup: String = self
+            .roots
+            .iter()
+            .map(|&h| turbo_dom::rtdom::serialize::serialize_outer(&self.tree, h))
+            .collect();
         f.debug_struct("Flow")
             .field("roots", &self.roots)
-            .field("nodes", &self.to_nodes())
+            .field("markup", &markup)
             .finish()
     }
 }
@@ -91,10 +95,5 @@ impl Flow {
             roots: Roots::Detached(roots),
         };
         style_input(&input, cascade, &style_options())
-    }
-
-    /// The legacy owned-[`Node`] copy of the flow (directives as markers).
-    pub fn to_nodes(&self) -> Vec<Node> {
-        self.view().to_nodes(&self.roots)
     }
 }

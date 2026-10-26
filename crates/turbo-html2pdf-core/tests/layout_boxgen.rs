@@ -6,7 +6,7 @@
 //! emitter.
 
 use turbo_html2pdf_core::layout::boxgen::*;
-use turbo_html2pdf_core::node::Tag;
+use turbo_html2pdf_core::tag::Tag;
 use turbo_html2pdf_core::TKind;
 use turbo_html2pdf_core::{ComputedStyle, StyledElement, StyledNode};
 
