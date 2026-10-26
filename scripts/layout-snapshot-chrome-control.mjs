@@ -27,9 +27,7 @@ const fixturePath = resolve(
 const fixtureBytes = readFileSync(fixturePath);
 const fixture = JSON.parse(fixtureBytes);
 const fontBytes =
-  fixture.font === "Go"
-    ? readFileSync(join(layoutFontsDir(), "Go-Regular.ttf"))
-    : null;
+  fixture.font === "Go" ? readFileSync(join(layoutFontsDir(), "Go-Regular.ttf")) : null;
 const temporary = mkdtempSync(join(tmpdir(), "turbo-layout-oracle-"));
 const server = createServer((request, response) => {
   response.setHeader("Content-Type", request.url === "/font.ttf" ? "font/ttf" : "text/html");

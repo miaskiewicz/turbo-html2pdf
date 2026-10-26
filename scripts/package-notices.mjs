@@ -48,7 +48,10 @@ const files = new Map([
 // Generated at pack time and gitignored (no vendored font copy in this repo): the npm
 // package ships the Go face (`files: assets/fonts/*.ttf`) from turbo-dom-layout's font.
 const generated = new Map([
-  ["crates/turbo-pdf-napi/assets/fonts/Go-Regular.ttf", readFileSync(join(fonts, "Go-Regular.ttf"))],
+  [
+    "crates/turbo-pdf-napi/assets/fonts/Go-Regular.ttf",
+    readFileSync(join(fonts, "Go-Regular.ttf")),
+  ],
 ]);
 const license = readFileSync(join(root, "LICENSE"), "utf8");
 for (const path of [
