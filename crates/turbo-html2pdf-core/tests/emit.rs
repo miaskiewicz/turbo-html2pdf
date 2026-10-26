@@ -462,7 +462,6 @@ fn layer(c: Rgba, z: Option<Option<i32>>) -> Fragment {
 }
 
 #[test]
-#[ignore = "turbo-html2pdf#35: fails until the fix"]
 fn fragments_paint_in_stacking_order() {
     // miaskiewicz/turbo-html2pdf#35: within a page's body and within a parent, a
     // positioned box paints over the in-flow boxes after it, a negative z-index under
