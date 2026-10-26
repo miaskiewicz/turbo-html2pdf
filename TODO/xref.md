@@ -15,7 +15,7 @@ an anchor landed, nor which rectangle a link should cover.
 ## Where to start
 - Source hook: `crates/turbo-html2pdf-core/src/emit/document.rs` (top-of-file
   `TODO(phase15b, feature "xref", AC-3.25)`).
-- `crates/turbo-html2pdf-core/src/node.rs` — `TKind::Anchor` already exists.
+- turbo-dom-layout's `src/node.rs` (turbo-dom repo) — `TKind::Anchor` already exists.
 
 ## What's needed
 1. Thread an optional `anchor: Option<String>` (from `<t:anchor name>`) and

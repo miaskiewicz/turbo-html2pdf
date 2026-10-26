@@ -1,5 +1,5 @@
 // Run authored layout controls in the independent installed-Chrome CDP oracle.
-import { spawn } from "node:child_process";
+import { execFileSync, spawn } from "node:child_process";
 import { createHash } from "node:crypto";
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { createServer } from "node:http";
@@ -19,9 +19,16 @@ const { values } = parseArgs({
 });
 if (!values.runner || !values.out)
   throw new Error("Pass --runner /absolute/chrome-cdp-trace.mjs and --out /absolute/oracle.json");
+// The layout-snapshot fixtures moved with the layout tests to the turbo-dom-layout
+// crate (turbo-dom repo); find its checkout through cargo when --fixture is omitted.
+const layoutCrate = () =>
+  dirname(
+    JSON.parse(
+      execFileSync("cargo", ["metadata", "--format-version", "1"], { cwd: root, encoding: "utf8" }),
+    ).packages.find((pkg) => pkg.name === "turbo-dom-layout").manifest_path,
+  );
 const fixturePath = resolve(
-  values.fixture ??
-    join(root, "crates/turbo-html2pdf-core/tests/fixtures/layout-snapshot/cases.json"),
+  values.fixture ?? join(layoutCrate(), "tests/fixtures/layout-snapshot/cases.json"),
 );
 const fixtureBytes = readFileSync(fixturePath);
 const fixture = JSON.parse(fixtureBytes);

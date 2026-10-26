@@ -1,7 +1,12 @@
 # Live-tree layout snapshots
 
 `turbo-html2pdf-core::layout_snapshot` adds an immutable native layout and source
-provenance API alongside the existing PDF entry points. It takes the caller's
+provenance API alongside the existing PDF entry points.
+
+> The layout engine, this API and its tests/Chrome control fixtures live in the
+> [`turbo-dom-layout`](https://github.com/miaskiewicz/turbo-dom/tree/main/crates/turbo-dom-layout)
+> crate (re-exported as `turbo_html2pdf_core::layout_snapshot`). Relative `tests/…`
+> and `src/…` paths below are relative to that crate. It takes the caller's
 actual borrowed `Node` forest (or an already styled `StyledNode` forest), builds
 one box tree, and retains every native galley fragment. There is no HTML
 serialization/reparse, lazy-image rewrite, subtree removal, or injected identity
@@ -140,15 +145,16 @@ values are returned to fill these gaps.
 
 ## Repeating the independent Chrome control
 
-The fixture is `crates/turbo-html2pdf-core/tests/fixtures/layout-snapshot/cases.json`.
+The fixture is turbo-dom's `crates/turbo-dom-layout/tests/fixtures/layout-snapshot/cases.json`
+(the control script finds the turbo-dom-layout checkout through `cargo metadata`).
 It supplies explicit external IDs and authored tree/style definitions; the Chrome
 collector retains actual node references rather than injecting ID attributes.
 
 ```sh
 node scripts/layout-snapshot-chrome-control.mjs \
   --runner /absolute/turbo-surf/harness/detection/chrome-cdp-trace.mjs \
-  --out /absolute/turbo-html2pdf/crates/turbo-html2pdf-core/tests/fixtures/layout-snapshot/chrome155.json
-cargo test -p turbo-html2pdf-core --test layout_snapshot
+  --out /absolute/turbo-dom/crates/turbo-dom-layout/tests/fixtures/layout-snapshot/chrome155.json
+cargo test -p turbo-dom-layout --test layout_snapshot   # in the turbo-dom workspace
 ```
 
 Chrome is independent development tooling, never a production dependency. The

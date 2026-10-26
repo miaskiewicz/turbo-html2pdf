@@ -10,6 +10,11 @@ The workflows are the executable procedure:
 | `vX.Y.Z` | `.github/workflows/release-crates.yml` | crates.io `turbo-html2pdf-core`, then `turbo-html2pdf-mcp` |
 | `pyvX.Y.Z` | `.github/workflows/release-py.yml` | PyPI `turbo-html2pdf`: four platform wheels and an sdist |
 
+`turbo-html2pdf-core` depends on `turbo-dom-layout` (turbo-dom workspace), so that
+crate's matching release must be on crates.io before `release-crates.yml` publishes
+core (during the consolidation the dependency is a local path; the integration step
+turns it into a version + `[patch]`).
+
 Both annotated tags must identify the same actual release **merge commit**.
 Pushing them publishes immutable registry versions; do this only with release
 authorization. Merging an ordinary PR does not publish a version.

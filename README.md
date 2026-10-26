@@ -41,7 +41,7 @@ One engine, shipped to every ecosystem. Pick the one for your runtime:
 | **`turbo-html2pdf-react`** | npm | Author templates as **React** components → template string (at authoring time). | `npm i turbo-html2pdf-react` |
 | **`turbo-html2pdf-template`** | npm | Author templates with **plain functions** (no React). | `npm i turbo-html2pdf-template` |
 | **`turbo-html2pdf`** | PyPI | **Python** binding (PyO3 / maturin) — `compile`/`render` → `bytes`. Bundles the default fonts. | `pip install turbo-html2pdf` |
-| **`turbo-html2pdf-core`** | crates.io | The **pure-Rust** HTML/CSS + Jinja → PDF engine, for in-process Rust consumers. Also exposes a Jinja-free `layout_html` drive (raw HTML → positioned `Fragment` galley) for consumers that only want the layout + font engine. | `cargo add turbo-html2pdf-core` |
+| **`turbo-html2pdf-core`** | crates.io | The **pure-Rust** HTML/CSS + Jinja → PDF engine, for in-process Rust consumers. Re-exports the Jinja-free `layout_html` drive (raw HTML → positioned `Fragment` galley) of its layout engine, [`turbo-dom-layout`](https://github.com/miaskiewicz/turbo-dom/tree/main/crates/turbo-dom-layout), for consumers that only want the layout + font engine. | `cargo add turbo-html2pdf-core` |
 | **`turbo-html2pdf-mcp`** | crates.io | Native **MCP server** (stdio JSON-RPC 2.0) exposing `render` / `append_pdf` / `check_template` to agents. Installable binary, or prebuilt archives on each GitHub Release. | `cargo install turbo-html2pdf-mcp` |
 
 The two authoring packages (`-react`, `-template`) only *produce the template

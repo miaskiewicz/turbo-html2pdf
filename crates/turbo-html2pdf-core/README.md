@@ -38,12 +38,27 @@ let pages = render_pages(
 let pdf: Vec<u8> = emit_pdf(&pages, &EmitOptions::default());
 ```
 
+## Layout engine: turbo-dom-layout
+
+The HTML/CSS layout half — style cascade, block/inline/flex/grid/table layout,
+text and fonts (incl. the bundled faces), image sizing, `layout_snapshot` and the
+Jinja-free `layout_html` drive — lives in the
+[`turbo-dom-layout`](https://github.com/miaskiewicz/turbo-dom/tree/main/crates/turbo-dom-layout)
+crate. This crate depends on it and re-exports it at the same paths
+(`turbo_html2pdf_core::style::…`, `::layout::…`, `::text::…`, `::layout_snapshot::…`,
+`::Node`, `::Fragment`, …), so existing code compiles unchanged. Templating,
+`t:` directives, pagination/footnotes/endnotes and PDF emit stay here. The
+layout tests and their Chrome control fixtures (referenced below as
+`tests/fixtures/…`) live in turbo-dom-layout.
+
 ## Features
 
 Default = `bundled-fonts` (embeds Inter/Roboto, Liberation Serif/PT Serif,
 Fira Code/IBM Plex Mono so documents render with no caller fonts). Opt-in:
 `endnotes`, `xref`, `print-color`, `pdf-a`, `pdf-ua`, `append`, `encrypt`,
-`svg`. See the repo for the full specification.
+`svg`. `bundled-fonts`, `svg` and `perf` forward to turbo-dom-layout, as do
+`xref`, `pdf-ua` and `print-color` (temporarily: their cfg'd fragment fields live
+in the layout code). See the repo for the full specification.
 
 ## License
 
@@ -74,7 +89,7 @@ Native HTML source items admit their aggregate advance to the physical
 LayoutUnit grid before line breaking and placement, while glyph positions and
 partial selections retain their real signed 16.16 advances. Aggregation crosses
 words and collapsed spaces within one text source; adjacent text nodes remain
-separate items. The pinned-font controls in `tests/fixtures/native-font-runs`
+separate items. The pinned-font controls in turbo-dom-layout's `tests/fixtures/native-font-runs`
 record normal headed Chrome155 with real IBM Plex Mono and Fira Code bytes.
 Headless automation with forced font-rendering flags is a separate profile and
 is not substituted for that control. Generic and PDF paths retain raw advances.
@@ -82,7 +97,7 @@ is not substituted for that control. Generic and PDF paths retain raw advances.
 Leading spaces after inline atoms remain inside their real text/inline owner.
 The first rendered space retains its raw advance; extra collapsed source cells
 follow that advance, and wrapping relocates a collapsed opening prefix to the
-text's new line. The nineteen `tests/fixtures/native-leading-spaces` observations
+text's new line. The nineteen turbo-dom-layout's `tests/fixtures/native-leading-spaces` observations
 cover direct text, nested/decorated spans, paragraph starts, forced breaks and
 ordinary bare-text separators. At soft wraps, a separator-only Range retains
 both real line affinities; positive selections keep their nonempty fragments.
@@ -98,7 +113,7 @@ Rust struct literals must initialize the new flag (false for ordinary glyphs).
 Native text Range and block/replaced Element quads preserve each flat transform
 boundary and subsequent float ancestor offsets. Ordinary inline Element quads
 retain their accumulated global matrix, as in Chrome. The sibling
-`tests/fixtures/native-range-transforms` controls retain the distinct margin,
+turbo-dom-layout's `tests/fixtures/native-range-transforms` controls retain the distinct margin,
 padding, viewport-positioned and nested-transform observations. A fixed child
 under a transformed containing block remains an explicit unsupported snapshot;
 its Chrome observation stays in the fixture rather than being claimed as parity.
@@ -119,7 +134,7 @@ The snapshot input does not yet carry HTML document compatibility mode. Its line
 layout follows the standards policy: an independently measured zero-viewport
 standards document with fixed and inline-iframe descendants has a 34px body;
 Chrome's BackCompat sibling suppresses the inline-only line strut and has a 30px
-body. Both raw Chrome controls are retained in `tests/fixtures/native-iframe`.
+body. Both raw Chrome controls are retained in turbo-dom-layout's `tests/fixtures/native-iframe`.
 Quirks-mode line-strut/aggregate-height parity requires a real document-mode input
 and remains outside this API's current contract; fixed descendant boxes match in
 both measurements. No rectangle is clipped or normalized to conceal this gap.

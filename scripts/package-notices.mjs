@@ -1,8 +1,17 @@
 // Reproduce the license files shipped with bindings that embed the core fonts.
+import { execFileSync } from "node:child_process";
 import { readFileSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+// The layout half (and its Blink-derived policy notices) lives in the
+// turbo-dom-layout crate; locate it through cargo so a path, git or registry
+// dependency all resolve.
+const layout = dirname(
+  JSON.parse(
+    execFileSync("cargo", ["metadata", "--format-version", "1"], { cwd: root, encoding: "utf8" }),
+  ).packages.find((pkg) => pkg.name === "turbo-dom-layout").manifest_path,
+);
 const families = [
   "inter/LICENSE.txt",
   "roboto/OFL.txt",
@@ -15,15 +24,9 @@ const fonts = join(root, "crates/turbo-html2pdf-core/assets/fonts");
 const notices =
   "# Third-party notices\n\n" +
   "## Blink HTML font metric policy\n\n" +
-  readFileSync(
-    join(root, "crates/turbo-html2pdf-core/src/text/Blink-font-metrics.LICENSE"),
-    "utf8",
-  ) +
+  readFileSync(join(layout, "src/text/Blink-font-metrics.LICENSE"), "utf8") +
   "\n## Blink SVG viewport layout-unit policy\n\n" +
-  readFileSync(
-    join(root, "crates/turbo-html2pdf-core/src/layout/Blink-layout-unit.LICENSE"),
-    "utf8",
-  ) +
+  readFileSync(join(layout, "src/layout/Blink-layout-unit.LICENSE"), "utf8") +
   "\n## Embedded fonts\n\n" +
   readFileSync(join(fonts, "NOTICE.md"), "utf8") +
   "\n" +

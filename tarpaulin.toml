@@ -29,10 +29,10 @@ exclude-files = [
     "crates/turbo-html2pdf-mcp/*",
     # Opt-in `endnotes` feature (Phase 15); off in normal builds — not compiled
     # under default features, so it is not in the default coverage surface (the
-    # same way perf.rs is). Covered by the `--features endnotes` tests in
+    # same way turbo-dom-layout's perf.rs is). Covered by the `--features endnotes` tests in
     # tests/endnotes.rs. Listed here defensively so a stray tarpaulin cfg quirk
     # cannot flag the gated-out module. (The other Phase 15 gated code —
-    # `print-color` in emit/color.rs and layout/value.rs — lives in files that
+    # `print-color` in emit/color.rs (and turbo-dom-layout's layout/value.rs) — lives in files that
     # carry real default coverage, so it cannot be file-excluded; its gated lines
     # simply are not compiled by default and so never enter the report.)
     "crates/turbo-html2pdf-core/src/endnotes.rs",
@@ -45,17 +45,17 @@ exclude-files = [
     # Opt-in `xref` feature (Phase 15b, AC-3.25): internal links & cross-refs.
     # `emit/xref.rs` is wholly behind `#[cfg(feature = "xref")]` and the module is
     # only declared under that gate, so it is not compiled in the default build —
-    # exactly like perf.rs / endnotes.rs. A tarpaulin source-mapping quirk still
+    # exactly like endnotes.rs. A tarpaulin source-mapping quirk still
     # flags its (uncompiled) lines, so it is excluded here; covered functionally
     # by the `--features xref` tests in tests/xref.rs. The other `xref` gated
-    # code (in fragment.rs, boxgen.rs, block.rs, emit/document.rs) lives in files
+    # code (in emit/document.rs, and turbo-dom-layout's fragment.rs, boxgen.rs, block.rs) lives in files
     # with real default coverage, so it cannot be file-excluded; its gated lines
     # simply are not compiled by default and never enter the report.
     "crates/turbo-html2pdf-core/src/emit/xref.rs",
     # Opt-in `pdf-a` feature (Phase 15b, AC-11.2: PDF/A-2b archival conformance);
     # off in normal builds — the whole module is behind `#[cfg(feature =
     # "pdf-a")]`, so it is not compiled under default features and never enters
-    # the default coverage surface (same as endnotes.rs / perf.rs). Covered by
+    # the default coverage surface (same as endnotes.rs). Covered by
     # the `--features pdf-a` tests in tests/pdf_a.rs, which validate the output
     # with veraPDF `--flavour 2b`. Listed here defensively. (The small gated
     # branches the feature adds in emit/document.rs, emit/meta.rs and
@@ -67,15 +67,15 @@ exclude-files = [
     # is a gated-only file, not compiled under default
     # features (like endnotes.rs). Covered by the `--features pdf-ua` tests in
     # tests/pdf_ua.rs (which include a veraPDF `--flavour ua1` compliance check).
-    # Listed defensively. (The cross-cutting gated lines elsewhere — fragment.rs,
-    # boxgen.rs, block.rs, table.rs, value.rs, text/font.rs and emit/{document,
-    # page,fonts}.rs — live in files with real default coverage, so they cannot be
+    # Listed defensively. (The cross-cutting gated lines elsewhere — emit/{document,
+    # page,fonts}.rs here, and fragment.rs, boxgen.rs, block.rs, table.rs, value.rs,
+    # text/font.rs in turbo-dom-layout — live in files with real default coverage, so they cannot be
     # file-excluded; they are simply not compiled by default and never enter the
     # report.)
     "crates/turbo-html2pdf-core/src/emit/ua.rs",
     # Opt-in `encrypt` feature (Phase 15b): AES-256 PDF password protection. Off
     # in normal builds — the module and its crypto deps are not compiled under
-    # default features (same as perf.rs / endnotes.rs), so it is not in the
+    # default features (same as endnotes.rs), so it is not in the
     # default coverage surface. Covered by the `--features encrypt` tests in
     # tests/encrypt.rs (a real qpdf round-trip when qpdf is on PATH). Listed
     # defensively so a stray tarpaulin cfg quirk cannot flag the gated-out module.

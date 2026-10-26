@@ -3,6 +3,15 @@
 Native HTML/CSS + Jinja → PDF engine (Rust core) shipped to npm and PyPI via
 N-API / WebAssembly / PyO3 bindings.
 
+The layout half (style cascade, layout, text/fonts, layout snapshots, `layout_html`,
+images, errors, the `t:` markup parse) lives in the **turbo-dom-layout** crate of the
+turbo-dom workspace; `turbo-html2pdf-core` depends on it and re-exports it at its old
+paths (`turbo_html2pdf_core::style::…`, `::layout::…`, `::Node`, …). Layout tests and
+their Chrome fixtures live there too; the tests here are templating / `t:`-directive /
+paged / PDF ones. During the consolidation the dependency is a local path
+(`../turbo-dom-wt-layout/crates/turbo-dom-layout`) — the integration step switches it
+to a version + `[patch]`.
+
 ## Release runbook
 
 Releases are **tag-driven**. Two independent tag prefixes:
@@ -94,11 +103,14 @@ Default build = `["bundled-fonts"]` only. Everything else is opt-in and kept out
 of the default-coverage surface (gated-only modules are listed in
 `tarpaulin.toml` `exclude-files`; gated branches in shared files are relocated
 into gated-only sibling modules so the tarpaulin cfg-mapping quirk can't flag
-them — see `layout/boxgen_ua.rs`, `layout/boxgen_xref.rs`).
+them — see turbo-dom-layout's `layout/boxgen_ua.rs`, `layout/boxgen_xref.rs`, whose
+tarpaulin excludes moved with them).
 
 - `bundled-fonts` (default): embeds Inter/Roboto, Liberation Serif/PT Serif,
   Fira Code/IBM Plex Mono so docs render with no caller fonts (~6 MB).
 - `endnotes`, `xref`, `print-color`, `pdf-a`, `pdf-ua`, `append`, `encrypt`, `svg`.
+  `bundled-fonts`, `perf`, `svg` and (temporarily) `xref`/`pdf-ua`/`print-color`
+  forward to turbo-dom-layout's features of the same name.
 - `pdf-a`/`pdf-ua`/`cmyk` are also **per-render** runtime toggles on
   `EmitOptions` (default off → byte-identical plain RGB/untagged output).
 

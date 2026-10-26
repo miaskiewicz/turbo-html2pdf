@@ -4,6 +4,18 @@ All notable changes to turbo-html2pdf are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/); versions follow SemVer. The npm,
 PyPI, and crates.io packages release in lockstep from a `v*` tag (PyPI on `pyv*`).
 
+## [Unreleased] — turbo-dom consolidation
+
+- The layout half of `turbo-html2pdf-core` (style cascade, layout, text/fonts incl.
+  the bundled faces, layout snapshots, `layout_html`, images, SVG, perf counters,
+  errors, the `t:` markup parse) moved verbatim to the `turbo-dom-layout` crate in
+  the turbo-dom workspace. `turbo-html2pdf-core` depends on it and re-exports it at
+  the same paths, so `turbo_html2pdf_core::style::…`, `::layout::…`, `::Node`,
+  `::Fragment`, … are unchanged; output is byte-identical. Its `bundled-fonts`,
+  `perf`, `svg`, `xref`, `pdf-ua` and `print-color` features forward to the layout
+  crate. Layout tests and their Chrome fixtures, and the `font_startup` example,
+  moved with the code.
+
 ## [0.3.9] — 2026-10-25 — iterate computed style pairs
 
 - Add `ComputedStyle::iter` to iterate computed property name/value pairs, small
