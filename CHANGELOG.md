@@ -6,6 +6,17 @@ PyPI, and crates.io packages release in lockstep from a `v*` tag (PyPI on `pyv*`
 
 ## [Unreleased]
 
+- **Fixed (turbo-html2pdf#39, Chrome 156 print control)**: the page area is the print
+  initial containing block for layout too: the body flow is laid out with
+  `turbo_dom_layout::layout_recorded_in_viewport` at the page area's height, so a
+  `position: fixed` box (on every page) and an absolutely positioned box of the initial
+  containing block resolve `%` insets (`top: 50%`), `%` heights and `top` + `bottom`
+  stretching against it, as Chrome prints them (they collapsed to the page top / to no
+  height). Control: `icb-*` in `scripts/pagination-chrome-control.mjs`
+  (`tests/pagination_chrome.rs`). Pinned to turbo-dom `consol/p5b-w7` (e76da05), which also
+  brings P5b-W7's layout fixes (turbo-dom#79–#86, #88, #89: intrinsic widths with
+  margins, inline-block margins, floats shrink-to-fit and side by side, column flex,
+  flow-root, positioned stretch).
 - **Changed (turbo-dom-layout P5b-W5, Chrome 156 controls)**: through the turbo-dom pin,
   PDFs lay tables and alignment out as Chrome does — `<table>` is `box-sizing:
   border-box` (turbo-dom#62); `border-spacing` is inherited and 0 except on `<table>`

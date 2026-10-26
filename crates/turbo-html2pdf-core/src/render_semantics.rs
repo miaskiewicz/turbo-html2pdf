@@ -21,21 +21,25 @@ impl Run<'_> {
         fonts: &FontRegistry,
         images: &ImageCtx,
     ) -> Fragment {
-        self.lay_recorded(flow, styled, width, fonts, images).galley
+        self.lay_recorded(flow, styled, (width, 0.0), fonts, images)
+            .galley
     }
 
-    /// [`lay`](Self::lay) that also returns the boxes' sources.
+    /// [`lay`](Self::lay) that also returns the boxes' sources, in a `(width, height)`
+    /// viewport: the height is the initial containing block's (the page area for the
+    /// body flow, turbo-html2pdf#39; 0 = unknown).
     pub(super) fn lay_recorded(
         &mut self,
         flow: &Flow,
         styled: &[StyledNode],
-        width: f32,
+        viewport: (f32, f32),
         fonts: &FontRegistry,
         images: &ImageCtx,
     ) -> LaidOut {
         let options = crate::flow::layout_options(self.next_id);
-        let laid =
-            turbo_dom_layout::layout_recorded(styled, width, fonts, images, &options, self.diags);
+        let laid = turbo_dom_layout::layout_recorded_in_viewport(
+            styled, viewport, fonts, images, &options, self.diags,
+        );
         self.next_id = laid.sources.next.0;
         self.derived.record(&flow.view(), &laid.sources);
         laid

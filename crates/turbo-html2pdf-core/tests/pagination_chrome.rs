@@ -236,7 +236,6 @@ fn fixture() -> serde_json::Value {
 }
 
 #[test]
-#[ignore = "turbo-html2pdf#39: fails until the fix"]
 fn the_page_area_is_the_initial_containing_block_like_chrome_156() {
     let mut failures = Vec::new();
     let mut compared = 0;

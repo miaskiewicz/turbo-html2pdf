@@ -325,10 +325,13 @@ fn lay_out_body<T: Serialize>(
         resolver: inputs.images,
         body_height: Some(geo.body_height()),
     };
+    // The page area is the print initial containing block: fixed boxes and absolute
+    // boxes of the initial containing block resolve `%` / `bottom` insets and `%`
+    // heights against its height (turbo-html2pdf#39).
     let laid = run.lay_recorded(
         &flow,
         &styled,
-        geo.content_width(),
+        (geo.content_width(), geo.body_height()),
         inputs.fonts,
         &image_ctx,
     );
