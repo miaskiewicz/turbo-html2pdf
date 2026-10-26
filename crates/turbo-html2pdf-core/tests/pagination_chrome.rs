@@ -219,6 +219,8 @@ fn compare_case(case: &serde_json::Value, failures: &mut Vec<String>) {
 /// Cases that do not match Chrome yet (each must still differ, so a fixed case is
 /// removed from the list).
 const PENDING: &[&str] = &[
+    // #36: the rows after a repeated table header (fails until the fix).
+    "table-header-repeat",
     // #32 item 6 with the last block's own bottom margin inside the padding: the
     // fragmenter counts it, but the paged layout drops a last child's bottom margin
     // (turbo-dom-layout, filed as miaskiewicz/turbo-dom#41), so the block

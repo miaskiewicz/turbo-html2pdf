@@ -471,6 +471,22 @@ const CASES = [
     ),
     colors: ["yellow", "magenta", "orange", "green"],
   },
+  {
+    // A table split across pages repeats its header row; the next row follows it.
+    id: "table-header-repeat",
+    html: DOC(
+      "body{margin:0} table{border-collapse:collapse;border-spacing:0;width:100%} td{padding:0}",
+      `<table><thead><tr><td style="height:30px;background:${C.red[0]}"></td></tr></thead><tbody>` +
+        ["green", "blue", "yellow", "magenta"]
+          .map(
+            (n) =>
+              `<tr style="break-inside:avoid"><td style="height:100px;background:${C[n][0]}"></td></tr>`,
+          )
+          .join("") +
+        "</tbody></table>",
+    ),
+    colors: ["red", "green", "blue", "yellow", "magenta"],
+  },
 ];
 
 /** Parse a binary PPM (P6, maxval 255) into { width, height, px(x, y) -> [r,g,b] }. */

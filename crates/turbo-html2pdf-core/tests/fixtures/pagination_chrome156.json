@@ -2723,6 +2723,99 @@
      }
     }
    ]
+  },
+  {
+   "id": "table-header-repeat",
+   "html": "<!DOCTYPE html><html><head><style>@page{size:600px 400px;margin:40px}body{margin:0} table{border-collapse:collapse;border-spacing:0;width:100%} td{padding:0}</style></head><body><table><thead><tr><td style=\"height:30px;background:#ff0000\"></td></tr></thead><tbody><tr style=\"break-inside:avoid\"><td style=\"height:100px;background:#00ff00\"></td></tr><tr style=\"break-inside:avoid\"><td style=\"height:100px;background:#0000ff\"></td></tr><tr style=\"break-inside:avoid\"><td style=\"height:100px;background:#ffff00\"></td></tr><tr style=\"break-inside:avoid\"><td style=\"height:100px;background:#ff00ff\"></td></tr></tbody></table></body></html>",
+   "colors": {
+    "red": "#ff0000",
+    "green": "#00ff00",
+    "blue": "#0000ff",
+    "yellow": "#ffff00",
+    "magenta": "#ff00ff"
+   },
+   "pages": [
+    {
+     "size": [
+      600,
+      400
+     ],
+     "boxes": {
+      "red": {
+       "bbox": [
+        40,
+        40,
+        559,
+        69
+       ],
+       "top": true,
+       "bottom": true
+      },
+      "green": {
+       "bbox": [
+        40,
+        70,
+        559,
+        169
+       ],
+       "top": true,
+       "bottom": true
+      },
+      "blue": {
+       "bbox": [
+        40,
+        170,
+        559,
+        269
+       ],
+       "top": true,
+       "bottom": true
+      },
+      "yellow": null,
+      "magenta": null
+     }
+    },
+    {
+     "size": [
+      600,
+      400
+     ],
+     "boxes": {
+      "red": {
+       "bbox": [
+        40,
+        40,
+        559,
+        69
+       ],
+       "top": true,
+       "bottom": true
+      },
+      "green": null,
+      "blue": null,
+      "yellow": {
+       "bbox": [
+        40,
+        70,
+        559,
+        169
+       ],
+       "top": true,
+       "bottom": true
+      },
+      "magenta": {
+       "bbox": [
+        40,
+        170,
+        559,
+        269
+       ],
+       "top": true,
+       "bottom": true
+      }
+     }
+    }
+   ]
   }
  ]
 }

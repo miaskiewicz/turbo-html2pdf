@@ -321,6 +321,29 @@ fn split_block_remaining_height_runs_onto_the_next_pages() {
 }
 
 #[test]
+#[ignore = "turbo-html2pdf#36: fails until the fix"]
+fn rows_follow_the_repeated_header_on_a_continued_page() {
+    // miaskiewicz/turbo-html2pdf#36: on page 2 the repeated header sits at the top and
+    // the next row right below it (Chrome 156), not at its galley distance from the
+    // header's original position at the top of the table.
+    let mut header = boxf(0.0, 20.0);
+    header.break_meta.repeatable = Some(turbo_html2pdf_core::RepeatKind::Header);
+    let mut rows = vec![header];
+    rows.extend((0..4).map(|i| boxf(20.0 + 40.0 * i as f32, 40.0)));
+    let (pages, _) = run(&root(vec![container(0.0, rows)]), &cap120());
+    let ys: Vec<Vec<f32>> = pages
+        .iter()
+        .map(|p| p.body.iter().map(|f| f.y).collect())
+        .collect();
+    assert_eq!(pages.len(), 2, "page tops {ys:?}");
+    let ys = &ys[1];
+    assert!(
+        close(ys[0], 0.0) && close(ys[1], 20.0) && close(ys[2], 60.0),
+        "{ys:?}"
+    );
+}
+
+#[test]
 fn ac_6_2_trailing_empty_page_trimmed() {
     let mut blocks = stack(&[40.0]);
     blocks[0].break_meta.break_after = BreakRule::Page;
