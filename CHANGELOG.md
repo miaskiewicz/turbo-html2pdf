@@ -6,6 +6,37 @@ PyPI, and crates.io packages release in lockstep from a `v*` tag (PyPI on `pyv*`
 
 ## [Unreleased]
 
+- **Changed (turbo-dom-layout P5b-W5, Chrome 156 controls)**: through the turbo-dom pin,
+  PDFs lay tables and alignment out as Chrome does — `<table>` is `box-sizing:
+  border-box` (turbo-dom#62); `border-spacing` is inherited and 0 except on `<table>`
+  (turbo-dom#63); a table's extra height goes to its rows (turbo-dom#64) and its extra
+  width to its auto columns, so empty cells of a `width:100%` table get their share
+  (turbo-dom#55); `box-sizing: border-box` widths are not counted twice in intrinsic and
+  column widths (turbo-dom#65); only the legacy `-webkit-*` alignment (`<center>`,
+  `align` attributes) moves block children, `text-align: center` aligns inline content
+  only (turbo-dom#69); `<th>` is bold and centred (turbo-dom#70). The corpus outputs each
+  changes are listed in turbo-dom's `tools/parity/expected/p5b-w5-turbo-dom-*.json`.
+- **Fixed (turbo-dom#41)**: paged layouts keep a last child's bottom margin inside a
+  padded / bordered parent (and collapse it through an auto-height one) as Chrome does —
+  turbo-dom-layout's generic policy used to drop it. The pagination control's
+  `exact-fill-child-margin` case (#32 item 6) now matches Chrome 156 (no longer pending).
+  Changes the galley of every document whose blocks end with a margined child.
+- **Fixed (turbo-dom#52)**: a partially clipped box (`position: absolute` with
+  `clip: rect(…)`, e.g. a CSS sprite) no longer vanishes from the PDF: turbo-dom-layout
+  keeps it and records its region in `Fragment::clip`, and the emitter paints the box and
+  its subtree inside a saved graphics state with that rectangle as the clipping path
+  (`q … re W n … Q`). A box whose clip keeps nothing (the sr-only pattern) is still left
+  out of layout, so its text stays out of the PDF and its tags; `clip` on a box that is
+  not absolutely positioned is ignored, as in Chrome. Control: turbo-dom's `clip-*`
+  Chrome 156 cases; `tests/clip_rect.rs` (clip operators, `pdftoppm` probes).
+- **Fixed (turbo-dom#51)**: a table `<caption>` is laid out (by turbo-dom-layout) as
+  Chrome does — in the table wrapper box above or below the grid, with its own box,
+  widening the table to its min-content; before, its content became grid rows and its
+  text was dropped. Under PDF/UA it is tagged as the `Caption` child of its `Table`
+  (`UaRole::Caption`), and the anonymous grid box of a captioned table
+  (`NodeSources::table_grids`) is no structure element, so the rows stay the table's `TR`
+  children (it was an unsourced box tagged `P`). Control: turbo-dom's `caption-*` Chrome
+  156 cases; `tests/pdf_ua.rs` (`Table > Caption, TR`, veraPDF ua1).
 - **Fixed (#32)**: pagination matches Chrome 156 `page.pdf()` for positioned boxes and
   breaks. `position: fixed` boxes repeat on every page at their page-area position.
   `position: absolute` boxes with `top`/`bottom` sit at their offset from their

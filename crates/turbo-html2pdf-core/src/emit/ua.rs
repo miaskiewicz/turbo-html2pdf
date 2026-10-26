@@ -399,6 +399,7 @@ fn map_role(role: UaRole) -> StructRole {
         UaRole::ListItem => StructRole::LI,
         UaRole::ListBody => StructRole::LBody,
         UaRole::Table => StructRole::Table,
+        UaRole::Caption => StructRole::Caption,
         UaRole::TableRow => StructRole::TR,
         UaRole::TableHeader => StructRole::TH,
         UaRole::TableData => StructRole::TD,

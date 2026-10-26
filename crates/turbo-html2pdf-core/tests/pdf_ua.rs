@@ -302,3 +302,102 @@ fn marked_content_follows_paint_order_and_the_tree_reading_order() {
         assert!(String::from_utf8_lossy(&out.stdout).contains("isCompliant=\"true\""));
     }
 }
+
+/// A captioned table (miaskiewicz/turbo-dom#51), tagged: the template and the PDF.
+fn caption_pdf() -> Vec<u8> {
+    const CAPTIONED: &str = "<table><caption>Quarterly revenue</caption>\
+        <tr><th>Quarter</th><th>Revenue</th></tr><tr><td>Q1</td><td>100</td></tr></table>";
+    let (program, _) = compile(CAPTIONED, &CompileOptions::default()).expect("compile");
+    let cascade = build_cascade(CSS, "", TokenSet::default());
+    let fonts = common::registry();
+    let inputs = RenderInputs {
+        program: &program,
+        data: &serde_json::json!({}),
+        cascade: &cascade,
+        at_rules: &[],
+        fonts: &fonts,
+        images: &turbo_html2pdf_core::NoImages,
+        now: Some(0),
+    };
+    let mut diags = Diagnostics::default();
+    emit_pdf(&render_pages(&inputs, &mut diags).expect("render"), &opts())
+}
+
+/// The structure elements of an (uncompressed-object) PDF: object number -> (`/S` role,
+/// `/P` parent object number).
+fn struct_elems(pdf: &[u8]) -> std::collections::BTreeMap<u32, (String, u32)> {
+    let text = String::from_utf8_lossy(pdf);
+    let mut out = std::collections::BTreeMap::new();
+    for (at, _) in text.match_indices(" 0 obj") {
+        let num: u32 = text[..at]
+            .rsplit(|c: char| !c.is_ascii_digit())
+            .next()
+            .and_then(|n| n.parse().ok())
+            .unwrap_or(0);
+        let body = &text[at..at + text[at..].find("endobj").unwrap_or(0)];
+        if !body.contains("/Type /StructElem") {
+            continue;
+        }
+        let word = |key: &str| {
+            body.split(key)
+                .nth(1)
+                .and_then(|rest| rest.split_whitespace().next())
+                .map(str::to_string)
+        };
+        let role = word("/S /").unwrap_or_default();
+        let parent = word("/P ").and_then(|n| n.parse().ok()).unwrap_or(0);
+        out.insert(num, (role, parent));
+    }
+    out
+}
+
+#[test]
+fn tags_a_table_caption_as_the_tables_caption() {
+    // PDF/UA: a <caption> is the `Caption` child of its `Table`, and the rows stay the
+    // table's children (the anonymous grid box of a captioned table is no structure).
+    let pdf = caption_pdf();
+    let elems = struct_elems(&pdf);
+    let of = |role: &str| -> Vec<u32> {
+        elems
+            .iter()
+            .filter(|(_, (r, _))| r == role)
+            .map(|(&n, _)| n)
+            .collect()
+    };
+    let tables = of("Table");
+    assert_eq!(tables.len(), 1, "one Table: {elems:?}");
+    let captions = of("Caption");
+    assert_eq!(captions.len(), 1, "one Caption: {elems:?}");
+    assert_eq!(
+        elems[&captions[0]].1, tables[0],
+        "the Caption's parent is the Table"
+    );
+    let rows = of("TR");
+    assert_eq!(rows.len(), 2, "{elems:?}");
+    for row in rows {
+        assert_eq!(
+            elems[&row].1, tables[0],
+            "a TR's parent is the Table: {elems:?}"
+        );
+    }
+}
+
+#[test]
+fn a_captioned_table_passes_verapdf_ua1() {
+    if !have("verapdf") {
+        eprintln!("verapdf not on PATH; skipping PDF/UA-1 validation");
+        return;
+    }
+    let path = write_temp(&caption_pdf(), "turbo_pdf_ua_caption_verapdf.pdf");
+    let out = Command::new("verapdf")
+        .args(["--flavour", "ua1"])
+        .arg(&path)
+        .output()
+        .expect("run verapdf");
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    assert!(
+        out.status.success() && stdout.contains("isCompliant=\"true\""),
+        "verapdf --flavour ua1 did not report compliance:\n{stdout}\n{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+}

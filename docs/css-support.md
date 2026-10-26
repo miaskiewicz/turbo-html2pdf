@@ -118,7 +118,7 @@ ignored.
 
 | Property | Accepted values |
 |---|---|
-| `display` | `block`, `inline`, `inline-block`, `flex`, `none`, `table`, `table-row`, `table-cell`, `table-header-group`, `table-footer-group`, `list-item` (anything else → `block`) |
+| `display` | `block`, `inline`, `inline-block`, `flex`, `none`, `table`, `table-row`, `table-cell`, `table-header-group`, `table-footer-group`, `table-caption`, `list-item` (anything else → `block`) |
 | `position` | only `relative` is meaningful (offsets a relatively-positioned box); other values are not positioned |
 | `margin`, `margin-top/right/bottom/left` | 1–4 length shorthand; longhands override; `auto` supported |
 | `padding`, `padding-*` | 1–4 length shorthand + longhands |
@@ -127,6 +127,7 @@ ignored.
 | `min-width`, `min-height` | length (default `0`) |
 | `max-width`, `max-height` | length / `%` / `auto` |
 | `box-sizing` | `border-box` or `content-box` (default) |
+| `clip` | `rect(top, right, bottom, left)` (lengths or `auto`, commas optional) on an absolutely positioned box: the box and its descendants paint only inside it; a rect that keeps nothing (the sr-only pattern) drops the box; ignored on other boxes |
 | `background-color` | any color (the `background` shorthand is **not** parsed) |
 
 ### Text
@@ -139,7 +140,7 @@ ignored.
 | `font-style` | `italic` or `oblique` → italic; else normal |
 | `color` | any color |
 | `line-height` | `normal`, a unitless multiplier, or a length |
-| `text-align` | `left` (default), `right`, `center`, `justify` |
+| `text-align` | `left` (default), `right`, `center`, `justify` (inline content); the legacy `-webkit-left` / `-webkit-center` / `-webkit-right` (UA `<center>`, `<caption>`, the `align` attribute of `div`/`p`/`h1`–`h6`/`td`/`th`/`tr`) also align block children |
 | `white-space` | `normal` (default), `pre`, `nowrap` |
 | `letter-spacing` | a length (default `0`) |
 | `vertical-align` | `baseline` (default), `sub`, `super`, `middle`, `top`, `bottom` |
@@ -169,8 +170,14 @@ styled defaults:
 `time`.
 
 **Table elements:** `table` → `table`, `thead` → `table-header-group`, `tfoot` →
-`table-footer-group`, `tr` → `table-row`, `td`/`th` → `table-cell`. `li` →
-`list-item`.
+`table-footer-group`, `tr` → `table-row`, `td`/`th` → `table-cell`, `caption` →
+`table-caption` (centred), `th` bold and centred. `li` → `list-item`. `<table>` is
+`box-sizing: border-box` with `border-spacing: 2px` (an inherited property, initially 0
+for other `display: table` boxes); a table's `height` beyond its rows is shared by them,
+and its extra width goes to its auto columns (empty ones share it equally). A table with a caption lays out as
+Chrome's table wrapper box: the captions above (`caption-side: top`, the default,
+inherited) or below (`bottom`) the grid, the table's border and background around the
+grid only; under PDF/UA the caption is the table's `Caption` structure element.
 
 **Typographic defaults:**
 

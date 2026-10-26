@@ -218,7 +218,10 @@ fn bands(page: &Page) -> [&[Fragment]; 4] {
 }
 
 /// Paint one fragment (its own content first, then its children atop it, in paint
-/// order).
+/// order), inside its `clip: rect()` region when it has one (miaskiewicz/turbo-dom#52): a
+/// saved graphics state with a rectangular clipping path. An empty region still paints
+/// (nothing shows), so tagged renders number their marked content the same as the
+/// structure walk.
 fn paint_fragment(
     content: &mut Content,
     frag: &Fragment,
@@ -226,6 +229,10 @@ fn paint_fragment(
     #[cfg(feature = "pdf-ua")] mut marker: Option<&mut super::ua::Marker>,
     #[cfg(feature = "pdf-ua")] artifact_band: bool,
 ) {
+    if let Some(clip) = frag.clip {
+        content.save_state();
+        clip_to(content, frag, clip, ctx.page_height_pt);
+    }
     paint_one(
         content,
         frag,
@@ -246,6 +253,26 @@ fn paint_fragment(
             artifact_band,
         );
     }
+    if frag.clip.is_some() {
+        content.restore_state();
+    }
+}
+
+/// Intersect the clipping path with `frag`'s clip region (px from its border-box corner).
+fn clip_to(
+    content: &mut Content,
+    frag: &Fragment,
+    clip: crate::layout::fragment::ClipRect,
+    page_height_pt: f32,
+) {
+    content.rect(
+        px_to_pt(frag.x + clip.x),
+        super::unit::flip_y(frag.y + clip.y + clip.height, page_height_pt),
+        px_to_pt(clip.width),
+        px_to_pt(clip.height),
+    );
+    content.clip_nonzero();
+    content.end_path();
 }
 
 /// Paint a single fragment's own content (no marked content).

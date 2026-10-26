@@ -11,6 +11,7 @@
 //! | box of the flow root | `Group` | — | — | — |
 //! | box of an anonymous (unsourced) block | `Paragraph` | — | — | — |
 //! | box of an element (incl. a table row) | by tag | — | `href="#…"` (not for rows) | — |
+//! | the anonymous grid box of a captioned table | — | — | — | — |
 //! | block marker box | — | — | `href="#…"` | — |
 //! | inline marker | — | — | — | `<t:anchor name>` |
 //! | replaced `<img>` image | by tag (`Figure`) | `alt` (or "") | — | — |
@@ -46,6 +47,8 @@ pub enum UaRole {
     ListBody,
     /// A table (`<table>`).
     Table,
+    /// A table caption (`<caption>`), a child of its `Table`.
+    Caption,
     /// A table row (`<tr>`).
     TableRow,
     /// A table header cell (`<th>`).
@@ -87,6 +90,9 @@ pub(crate) struct Derived {
     roots: HashSet<NodeId>,
     /// Boxes laid out as table rows.
     rows: HashSet<NodeId>,
+    /// The anonymous grid boxes of captioned tables: no structure of their own, so the
+    /// rows they hold are the table's children (miaskiewicz/turbo-dom#51).
+    grids: HashSet<NodeId>,
     nodes: HashMap<NodeId, NodeInfo>,
 }
 
@@ -96,6 +102,7 @@ impl Derived {
         self.ranges.push((sources.root.0, sources.next.0));
         self.roots.insert(sources.root);
         self.rows.extend(sources.table_rows.iter().copied());
+        self.grids.extend(sources.table_grids.iter().copied());
         for (&id, &h) in &sources.elements {
             self.nodes.insert(id, node_info(view, h));
         }
@@ -166,6 +173,7 @@ fn role_for_tag(name: &str) -> Option<UaRole> {
         "ul" | "ol" => UaRole::List,
         "li" => UaRole::ListItem,
         "table" => UaRole::Table,
+        "caption" => UaRole::Caption,
         "tr" => UaRole::TableRow,
         "th" => UaRole::TableHeader,
         "td" => UaRole::TableData,
@@ -199,6 +207,7 @@ impl super::Semantics {
         let d = &self.derived;
         match &frag.content {
             FragmentContent::Box { .. } if d.roots.contains(&frag.node_id) => Some(UaRole::Group),
+            FragmentContent::Box { .. } if d.grids.contains(&frag.node_id) => None,
             FragmentContent::Box { .. } => match d.nodes.get(&frag.node_id) {
                 Some(info) => info.role,
                 None => d.in_range(frag.node_id).then_some(UaRole::Paragraph),
