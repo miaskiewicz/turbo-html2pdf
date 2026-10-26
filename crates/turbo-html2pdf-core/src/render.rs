@@ -191,9 +191,9 @@ pub fn render_pages<T: Serialize>(
     relabel_page_reset(inputs, notes, reset, &geometry, &body, &mut pages, &mut run);
     fill_regions(inputs, &mut pages, &mut run)?;
     run.finish(&mut pages);
-    for page in &mut pages {
-        page.canvas = document.canvas;
-    }
+    pages
+        .iter_mut()
+        .for_each(|page| page.canvas = document.canvas);
     Ok(pages)
 }
 
