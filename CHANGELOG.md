@@ -6,6 +6,16 @@ PyPI, and crates.io packages release in lockstep from a `v*` tag (PyPI on `pyv*`
 
 ## [Unreleased]
 
+- **Changed (turbo-dom-layout P5b-W5, Chrome 156 controls)**: through the turbo-dom pin,
+  PDFs lay tables and alignment out as Chrome does — `<table>` is `box-sizing:
+  border-box` (turbo-dom#62); `border-spacing` is inherited and 0 except on `<table>`
+  (turbo-dom#63); a table's extra height goes to its rows (turbo-dom#64) and its extra
+  width to its auto columns, so empty cells of a `width:100%` table get their share
+  (turbo-dom#55); `box-sizing: border-box` widths are not counted twice in intrinsic and
+  column widths (turbo-dom#65); only the legacy `-webkit-*` alignment (`<center>`,
+  `align` attributes) moves block children, `text-align: center` aligns inline content
+  only (turbo-dom#69); `<th>` is bold and centred (turbo-dom#70). The corpus outputs each
+  changes are listed in turbo-dom's `tools/parity/expected/p5b-w5-turbo-dom-*.json`.
 - **Fixed (turbo-dom#41)**: paged layouts keep a last child's bottom margin inside a
   padded / bordered parent (and collapse it through an auto-height one) as Chrome does —
   turbo-dom-layout's generic policy used to drop it. The pagination control's

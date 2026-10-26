@@ -140,7 +140,7 @@ ignored.
 | `font-style` | `italic` or `oblique` → italic; else normal |
 | `color` | any color |
 | `line-height` | `normal`, a unitless multiplier, or a length |
-| `text-align` | `left` (default), `right`, `center`, `justify` |
+| `text-align` | `left` (default), `right`, `center`, `justify` (inline content); the legacy `-webkit-left` / `-webkit-center` / `-webkit-right` (UA `<center>`, `<caption>`, the `align` attribute of `div`/`p`/`h1`–`h6`/`td`/`th`/`tr`) also align block children |
 | `white-space` | `normal` (default), `pre`, `nowrap` |
 | `letter-spacing` | a length (default `0`) |
 | `vertical-align` | `baseline` (default), `sub`, `super`, `middle`, `top`, `bottom` |
@@ -171,7 +171,10 @@ styled defaults:
 
 **Table elements:** `table` → `table`, `thead` → `table-header-group`, `tfoot` →
 `table-footer-group`, `tr` → `table-row`, `td`/`th` → `table-cell`, `caption` →
-`table-caption` (centred text). `li` → `list-item`. A table with a caption lays out as
+`table-caption` (centred), `th` bold and centred. `li` → `list-item`. `<table>` is
+`box-sizing: border-box` with `border-spacing: 2px` (an inherited property, initially 0
+for other `display: table` boxes); a table's `height` beyond its rows is shared by them,
+and its extra width goes to its auto columns (empty ones share it equally). A table with a caption lays out as
 Chrome's table wrapper box: the captions above (`caption-side: top`, the default,
 inherited) or below (`bottom`) the grid, the table's border and background around the
 grid only; under PDF/UA the caption is the table's `Caption` structure element.
