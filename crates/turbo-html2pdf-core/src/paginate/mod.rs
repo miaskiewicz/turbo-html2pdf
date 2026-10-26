@@ -11,6 +11,7 @@
 //! which also resolves the footnote *content*; the `header`/`footer`/`footnotes`
 //! page bands it paints into are exposed here. Page masters remain TODO(phase7b).
 
+mod decorate;
 mod footnotes;
 mod geometry;
 mod walk;
@@ -120,13 +121,37 @@ pub fn paginate_with_footnotes(
     notes: &[Note],
     diags: &mut Diagnostics,
 ) -> Vec<Page> {
+    paginate_document(root, geometry, notes, &[], diags)
+}
+
+/// [`paginate_with_footnotes`] for a document whose `<html>`/`<body>` boxes were
+/// dissolved into `root` before pagination: `wrappers` are those boxes (outermost
+/// first, in galley coordinates; their children are ignored), and each one that paints
+/// a background or border is sliced onto every page (miaskiewicz/turbo-html2pdf#31,
+/// `box-decoration-break: slice`).
+pub fn paginate_document(
+    root: &Fragment,
+    geometry: PageGeometry,
+    notes: &[Note],
+    wrappers: &[Fragment],
+    diags: &mut Diagnostics,
+) -> Vec<Page> {
     let resolved = footnotes::resolve(root, geometry, notes, diags);
-    let footnotes::Resolved { mut pages, bands } = resolved;
-    let trimmed = trim_trailing_pages(&mut pages, bands);
+    let footnotes::Resolved {
+        mut pages,
+        bands,
+        spans,
+    } = resolved;
+    let mut trimmed = trim_trailing_pages(&mut pages, bands);
+    let mut bodies: Vec<Vec<Fragment>> =
+        trimmed.iter_mut().map(|(b, _)| std::mem::take(b)).collect();
+    let kept = bodies.len();
+    decorate::decorate(&mut bodies, &spans[..kept], wrappers, root.y);
     trimmed
         .into_iter()
+        .zip(bodies)
         .enumerate()
-        .map(|(i, (body, band))| assemble_page(geometry, i as u32 + 1, body, band))
+        .map(|(i, ((_, band), body))| assemble_page(geometry, i as u32 + 1, body, band))
         .collect()
 }
 

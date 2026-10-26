@@ -65,7 +65,7 @@ use crate::image::ImageResolver;
 use crate::layout::fragment::{Fragment, NodeId};
 use crate::layout::ImageCtx;
 use crate::markers::{directive_of, TKind};
-use crate::paginate::{paginate_with_footnotes, resolve_geometry, Note, Page, PageGeometry};
+use crate::paginate::{paginate_document, resolve_geometry, Note, Page, PageGeometry};
 use crate::style::{AtRule, Cascade};
 use crate::template::{Program, FOOTER, HEADER};
 use crate::text::FontRegistry;
@@ -182,13 +182,19 @@ pub fn render_pages<T: Serialize>(
     let marks = continuous_marks(&sources);
     let notes = flow_notes(inputs, &mut flow, &bodies, &marks, &geometry, &mut run);
     tag_markers(&mut body, notes.len());
-    let mut pages = paginate_with_footnotes(&body, geometry, &notes, run.diags);
+    let paged = PagedBody {
+        root: &body,
+        wrappers: &document.wrappers,
+    };
+    let mut pages = paged.paginate(geometry, &notes, run.diags);
     let notes = NoteFlow {
         flow: &mut flow,
         bodies: &bodies,
         sources: &sources,
     };
-    relabel_page_reset(inputs, notes, reset, &geometry, &body, &mut pages, &mut run);
+    relabel_page_reset(
+        inputs, notes, reset, &geometry, &paged, &mut pages, &mut run,
+    );
     fill_regions(inputs, &mut pages, &mut run)?;
     run.finish(&mut pages);
     pages
@@ -206,6 +212,26 @@ struct DocumentStyle {
     at_rules: Vec<AtRule>,
     root_font_px: f32,
     canvas: Option<crate::layout::value::Rgba>,
+    /// The dissolved `<html>`/`<body>` boxes (outermost first, children removed).
+    wrappers: Vec<Fragment>,
+}
+
+/// The body galley the fragmenter walks, with the `<html>`/`<body>` boxes dissolved
+/// out of it (their paint is sliced onto every page).
+struct PagedBody<'a> {
+    root: &'a Fragment,
+    wrappers: &'a [Fragment],
+}
+
+impl PagedBody<'_> {
+    fn paginate(
+        &self,
+        geometry: PageGeometry,
+        notes: &[Note],
+        diags: &mut Diagnostics,
+    ) -> Vec<Page> {
+        paginate_document(self.root, geometry, notes, self.wrappers, diags)
+    }
 }
 
 impl DocumentStyle {
@@ -219,6 +245,7 @@ impl DocumentStyle {
             at_rules,
             root_font_px: 16.0,
             canvas: None,
+            wrappers: Vec::new(),
         }
     }
 }
@@ -226,14 +253,21 @@ impl DocumentStyle {
 /// Dissolve the `<html>`/`<body>` boxes of a laid-out document into their content:
 /// every fragment whose box came from one of `wrappers` is replaced by its children
 /// (already in absolute galley coordinates), so the fragmenter walks the body content
-/// as the page flow, exactly as it walks a detached flow. Their own paint goes with
-/// them (the canvas colour is painted per page; borders/backgrounds of a split box are
-/// not re-emitted around page parts, as for any split block).
-fn dissolve_wrappers(children: Vec<Fragment>, wrappers: &[NodeId]) -> Vec<Fragment> {
+/// as the page flow, exactly as it walks a detached flow. Their own paint is kept in
+/// `boxes` (outermost first, children removed): the canvas colour is painted per page
+/// and the fragmenter slices their backgrounds/borders onto every page
+/// (miaskiewicz/turbo-html2pdf#31).
+fn dissolve_wrappers(
+    children: Vec<Fragment>,
+    wrappers: &[NodeId],
+    boxes: &mut Vec<Fragment>,
+) -> Vec<Fragment> {
     let mut out = Vec::with_capacity(children.len());
-    for frag in children {
+    for mut frag in children {
         if wrappers.contains(&frag.node_id) {
-            out.extend(dissolve_wrappers(frag.children, wrappers));
+            let children = std::mem::take(&mut frag.children);
+            boxes.push(frag);
+            out.extend(dissolve_wrappers(children, wrappers, boxes));
         } else {
             out.push(frag);
         }
@@ -288,7 +322,11 @@ fn lay_out_body<T: Serialize>(
     );
     let mut galley = laid.galley;
     let wrappers = wrapper_ids(&flow, &laid.sources);
-    galley.children = dissolve_wrappers(std::mem::take(&mut galley.children), &wrappers);
+    galley.children = dissolve_wrappers(
+        std::mem::take(&mut galley.children),
+        &wrappers,
+        &mut document.wrappers,
+    );
     Ok((galley, flow, sources, reset, document))
 }
 
@@ -480,7 +518,7 @@ fn relabel_page_reset<T: Serialize>(
     notes: NoteFlow,
     reset: ResetMode,
     geometry: &PageGeometry,
-    body: &Fragment,
+    body: &PagedBody,
     pages: &mut Vec<Page>,
     run: &mut Run,
 ) {
@@ -489,7 +527,7 @@ fn relabel_page_reset<T: Serialize>(
     }
     let marks = page_reset_marks(notes.sources, pages);
     let flowed = flow_notes(inputs, notes.flow, notes.bodies, &marks, geometry, run);
-    *pages = paginate_with_footnotes(body, *geometry, &flowed, run.diags);
+    *pages = body.paginate(*geometry, &flowed, run.diags);
 }
 
 /// Per-page marks: each page restarts auto-numbering at 1 in note-index order;

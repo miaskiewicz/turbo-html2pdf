@@ -64,8 +64,8 @@ pub use layout::{layout_with_images, ImageCtx}; // `layout` (fn + module) comes 
 pub use markers::TKind;
 pub use options::{CompileOptions, MissingPolicy, DEFAULT_INCLUDE_DEPTH};
 pub use paginate::{
-    paginate, paginate_with_footnotes, paginate_with_geometry, resolve_geometry, FootnoteBand,
-    Note, Page, PageGeometry, PageKind,
+    paginate, paginate_document, paginate_with_footnotes, paginate_with_geometry, resolve_geometry,
+    FootnoteBand, Note, Page, PageGeometry, PageKind,
 };
 pub use render::{render_pages, PageContext, RenderInputs};
 pub use semantics::Semantics;

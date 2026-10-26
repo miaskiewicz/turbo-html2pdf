@@ -1,0 +1,208 @@
+//! miaskiewicz/turbo-html2pdf#31: paginated box geometry against Chrome 156 `page.pdf()`.
+//!
+//! The control is `tests/fixtures/pagination_chrome156.json` (`scripts/pagination-chrome-
+//! control.mjs`): text-free documents of solid-colour blocks on `600px x 400px` pages with
+//! 40px margins, printed by Chrome for Testing 156 and rasterized at 96 dpi; per page and
+//! colour, the inclusive device-pixel bounding box of that colour and whether its first /
+//! last row is a full edge. Here the same documents run through `render_pages`, and the
+//! same per-page boxes are measured on the page fragments painted into a 1 px/CSS px
+//! buffer (backgrounds and border sides of `Box` fragments, in page coordinates).
+//!
+//! What it pins: a block's top margin is kept on page 1 and after a forced break and
+//! truncated after an unforced one (CSS Fragmentation §5.2), and `<html>`/`<body>` borders
+//! and backgrounds paint on every page fragment, sliced (`box-decoration-break: slice`:
+//! the top edge on the first page, the bottom edge on the last, the box running to the
+//! page area's end in between).
+//!
+//! Not compared: `cyan` in `body-background-not-propagated` is the propagated canvas
+//! (`html` background), which Chrome paints over the page area inside the `@page` margins
+//! and `Page::canvas` paints over the whole sheet (a separate difference).
+
+mod common;
+
+use std::collections::BTreeMap;
+
+use turbo_html2pdf_core::layout::fragment::{Fragment, FragmentContent};
+use turbo_html2pdf_core::layout::value::Rgba;
+use turbo_html2pdf_core::style::TokenSet;
+use turbo_html2pdf_core::{
+    build_cascade, compile, render_pages, CompileOptions, Diagnostics, Page, RenderInputs,
+};
+
+fn pages(html: &str) -> Vec<Page> {
+    let (program, _) = compile(html, &CompileOptions::default()).expect("compile");
+    let cascade = build_cascade("", "", TokenSet::default());
+    let fonts = common::registry();
+    let data = serde_json::Value::Null;
+    let inputs = RenderInputs {
+        program: &program,
+        data: &data,
+        cascade: &cascade,
+        at_rules: &[],
+        fonts: &fonts,
+        images: &turbo_html2pdf_core::NoImages,
+        now: Some(0),
+    };
+    render_pages(&inputs, &mut Diagnostics::default()).expect("render_pages")
+}
+
+/// Paint the page's `Box` fragments (background, then the four border sides; parents
+/// before children, in list order — the paint order of these flat test documents) into a
+/// `width x height` RGB buffer at 1 px per CSS px, white paper.
+fn rasterize(page: &Page) -> (usize, usize, Vec<[u8; 3]>) {
+    let (w, h) = (page.geometry.width as usize, page.geometry.height as usize);
+    let mut buf = vec![[255u8; 3]; w * h];
+    fn fill(buf: &mut [[u8; 3]], w: usize, (x, y, rw, rh): (f32, f32, f32, f32), c: Rgba) {
+        let h = buf.len() / w;
+        let span = |a: f32, len: f32, max: usize| {
+            (
+                (a.round().max(0.0) as usize).min(max),
+                ((a + len).round().max(0.0) as usize).min(max),
+            )
+        };
+        let ((x0, x1), (y0, y1)) = (span(x, rw, w), span(y, rh, h));
+        for row in buf.chunks_mut(w).take(y1).skip(y0) {
+            for px in &mut row[x0..x1] {
+                *px = [c.r, c.g, c.b];
+            }
+        }
+    }
+    fn walk(buf: &mut [[u8; 3]], w: usize, frags: &[Fragment]) {
+        for f in frags {
+            for (rect, c) in box_paint(f) {
+                fill(buf, w, rect, c);
+            }
+            walk(buf, w, &f.children);
+        }
+    }
+    walk(&mut buf, w, &page.body);
+    (w, h, buf)
+}
+
+type Rect = (f32, f32, f32, f32);
+
+/// The opaque rectangles a `Box` fragment paints: its background, then its border sides.
+fn box_paint(f: &Fragment) -> Vec<(Rect, Rgba)> {
+    let FragmentContent::Box {
+        background, border, ..
+    } = &f.content
+    else {
+        return Vec::new();
+    };
+    let (x, y, fw, fh) = (f.x, f.y, f.width, f.height);
+    let (t, b) = (f32::from(border.top.width), f32::from(border.bottom.width));
+    let (l, r) = (f32::from(border.left.width), f32::from(border.right.width));
+    let sides = [
+        (border.top, (x, y, fw, t)),
+        (border.bottom, (x, y + fh - b, fw, b)),
+        (border.left, (x, y, l, fh)),
+        (border.right, (x + fw - r, y, r, fh)),
+    ];
+    let fill = background.map(|c| ((x, y, fw, fh), c));
+    let edges = sides
+        .into_iter()
+        .filter(|(side, _)| side.width > 0)
+        .filter_map(|(side, rect)| side.color.map(|c| (rect, c)));
+    fill.into_iter()
+        .chain(edges)
+        .filter(|(_, c)| c.a == 255)
+        .collect()
+}
+
+fn rgb(css: &str) -> [u8; 3] {
+    let v = |i: usize| u8::from_str_radix(&css[i..i + 2], 16).unwrap();
+    [v(1), v(3), v(5)]
+}
+
+/// The control's measurement of one colour: `[x0, y0, x1, y1]` (inclusive px) and whether
+/// the first / last row is that colour across >= 90% of the box's width.
+fn measure(
+    (w, h, buf): &(usize, usize, Vec<[u8; 3]>),
+    color: [u8; 3],
+) -> Option<(Vec<i64>, bool, bool)> {
+    let is = |x: usize, y: usize| buf[y * w + x] == color;
+    let (mut x0, mut y0, mut x1, mut y1) = (usize::MAX, usize::MAX, 0, 0);
+    let mut any = false;
+    for y in 0..*h {
+        for x in 0..*w {
+            if is(x, y) {
+                any = true;
+                (x0, y0, x1, y1) = (x0.min(x), y0.min(y), x1.max(x), y1.max(y));
+            }
+        }
+    }
+    if !any {
+        return None;
+    }
+    let row = |y: usize| (x0..=x1).filter(|&x| is(x, y)).count() * 10 >= (x1 - x0 + 1) * 9;
+    let bbox = [x0, y0, x1, y1].map(|v| v as i64).to_vec();
+    Some((bbox, row(y0), row(y1)))
+}
+
+type Measured = Option<(Vec<i64>, bool, bool)>;
+
+/// The control's record for one colour on one page (`null` = the colour is absent).
+fn chrome_box(want: &serde_json::Value) -> Measured {
+    (!want.is_null()).then(|| {
+        let bbox = want["bbox"].as_array().unwrap();
+        (
+            bbox.iter().map(|v| v.as_i64().unwrap()).collect(),
+            want["top"].as_bool().unwrap(),
+            want["bottom"].as_bool().unwrap(),
+        )
+    })
+}
+
+/// Every colour of a case compared on one page; mismatches are pushed to `failures`.
+fn compare_page(
+    id: &str,
+    n: usize,
+    (page, want): (&Page, &serde_json::Value),
+    colors: &BTreeMap<String, String>,
+    failures: &mut Vec<String>,
+) {
+    let raster = rasterize(page);
+    // `cyan` in `body-background-not-propagated` is the canvas (see the module docs).
+    let compared = colors
+        .iter()
+        .filter(|(name, _)| !(id == "body-background-not-propagated" && *name == "cyan"));
+    for (name, css) in compared {
+        let (got, want) = (measure(&raster, rgb(css)), chrome_box(&want["boxes"][name]));
+        if got != want {
+            failures.push(format!("{id} page {n} {name}: {got:?}, Chrome {want:?}"));
+        }
+    }
+}
+
+fn compare_case(case: &serde_json::Value, failures: &mut Vec<String>) {
+    let id = case["id"].as_str().unwrap();
+    let ours = pages(case["html"].as_str().unwrap());
+    let chrome = case["pages"].as_array().unwrap();
+    if ours.len() != chrome.len() {
+        failures.push(format!(
+            "{id}: {} pages, Chrome {}",
+            ours.len(),
+            chrome.len()
+        ));
+        return;
+    }
+    let colors: BTreeMap<String, String> = serde_json::from_value(case["colors"].clone()).unwrap();
+    for (n, pair) in ours.iter().zip(chrome).enumerate() {
+        compare_page(id, n + 1, pair, &colors, failures);
+    }
+}
+
+#[test]
+fn paginated_boxes_match_chrome_156() {
+    let path = concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/tests/fixtures/pagination_chrome156.json"
+    );
+    let fixture: serde_json::Value =
+        serde_json::from_str(&std::fs::read_to_string(path).expect("fixture")).unwrap();
+    let mut failures = Vec::new();
+    for case in fixture["cases"].as_array().unwrap() {
+        compare_case(case, &mut failures);
+    }
+    assert!(failures.is_empty(), "{}", failures.join("\n"));
+}

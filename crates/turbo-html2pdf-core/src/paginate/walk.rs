@@ -16,11 +16,20 @@
 //! `(margin.left, …)`; this walk emits relative to body-top `y = 0`, and page
 //! assembly offsets by the body origin).
 //!
+//! Margins at page starts (CSS Fragmentation §5.2, Chrome 156; miaskiewicz/turbo-html2pdf#31):
+//! the first page starts at the galley top, so the leading gap of its first fragment — the
+//! top margins (and the dissolved `<html>`/`<body>` margins, borders and padding) above it —
+//! is kept; after a forced break the gap before the next fragment is kept too; after an
+//! unforced break it is truncated (a fresh page's first fragment sits at `y = 0`). The kept
+//! gap is the galley's (collapsed) gap, so after a forced break a larger bottom margin of the
+//! block before the break counts as well (Chrome keeps only the next block's top margin).
+//!
 //! **Deferred (documented):** when a block is split across pages its box
 //! wrapper (background/border) is not re-emitted around each part — children are
-//! emitted directly; orphans/widows are enforced at each single break but the
-//! multi-page paragraph tail is greedy. Both are refined alongside the Phase 9
-//! emitter.
+//! emitted directly (the dissolved `<html>`/`<body>` boxes are: [`super::decorate`]
+//! paints their slices from the per-page [`PageSpan`]s this walk records); orphans/widows
+//! are enforced at each single break but the multi-page paragraph tail is greedy. Both are
+//! refined alongside the Phase 9 emitter.
 
 use crate::error::{Diagnostics, LintCode, Span};
 use crate::layout::fragment::{Fragment, FragmentContent, RepeatKind};
@@ -31,6 +40,21 @@ use crate::layout::value::BreakRule;
 /// (§6.4). The default — used by the footnote-free entry points — reserves zero
 /// on every page.
 pub type Reserve<'a> = dyn Fn(usize) -> f32 + 'a;
+
+/// What one walked page holds, for slicing box decorations onto it: its usable body
+/// height (the fragmentainer's extent) and, once anything is placed, the galley bottom of
+/// the last fragment placed on it with that fragment's page-local bottom.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct PageSpan {
+    pub capacity: f32,
+    pub last: Option<(f32, f32)>,
+}
+
+/// The walk's result: each page's body fragments (page-local) and its [`PageSpan`].
+pub struct Walked {
+    pub pages: Vec<Vec<Fragment>>,
+    pub spans: Vec<PageSpan>,
+}
 
 /// Accumulates pages while walking the galley.
 struct Walker<'a> {
@@ -44,18 +68,25 @@ struct Walker<'a> {
     /// Next free page-local `y` on the current page.
     cursor: f32,
     /// Galley bottom of the last fragment placed on the current page, or `None`
-    /// at the top of a page (so the leading inter-block gap is dropped).
+    /// at the top of a page after an unforced break (so the leading inter-block gap
+    /// is dropped). The first page starts at the galley top.
     prev_bottom: Option<f32>,
+    /// One span per page in `pages`.
+    spans: Vec<PageSpan>,
 }
 
 impl<'a> Walker<'a> {
-    fn new(capacity: f32, reserve: &'a Reserve<'a>) -> Walker<'a> {
+    fn new(capacity: f32, reserve: &'a Reserve<'a>, top: f32) -> Walker<'a> {
         Walker {
             capacity,
             reserve,
             pages: vec![Vec::new()],
             cursor: 0.0,
-            prev_bottom: None,
+            prev_bottom: Some(top),
+            spans: vec![PageSpan {
+                capacity: capacity - reserve(0),
+                last: None,
+            }],
         }
     }
 
@@ -78,10 +109,25 @@ impl<'a> Walker<'a> {
     /// Start a fresh page, re-emitting `headers` at its top.
     fn new_page(&mut self, headers: &[Fragment]) {
         self.pages.push(Vec::new());
+        self.spans.push(PageSpan {
+            capacity: self.page_capacity(),
+            last: None,
+        });
         self.cursor = 0.0;
         self.prev_bottom = None;
         for h in headers {
             self.emit(h);
+        }
+    }
+
+    /// Start a fresh page at a forced break: margins after a forced break are kept
+    /// (§5.2), so the next fragment keeps its galley gap — unless repeated headers
+    /// open the page.
+    fn forced_page(&mut self, headers: &[Fragment]) {
+        let before = self.prev_bottom;
+        self.new_page(headers);
+        if headers.is_empty() {
+            self.prev_bottom = before;
         }
     }
 
@@ -94,6 +140,8 @@ impl<'a> Walker<'a> {
         self.current().push(clone);
         self.cursor = top + f.height;
         self.prev_bottom = Some(f.bottom());
+        let span = self.spans.last_mut().expect("one span per page");
+        span.last = Some((f.bottom(), self.cursor));
     }
 
     /// True if `f` fits in the remaining capacity of the current page.
@@ -111,11 +159,11 @@ impl<'a> Walker<'a> {
     /// Place one fragment, honoring forced breaks around it.
     fn place_one(&mut self, f: &Fragment, headers: &[Fragment], diags: &mut Diagnostics) {
         if f.break_meta.break_before == BreakRule::Page {
-            self.new_page(headers);
+            self.forced_page(headers);
         }
         self.place_fitting(f, headers, diags);
         if f.break_meta.break_after == BreakRule::Page {
-            self.new_page(headers);
+            self.forced_page(headers);
         }
     }
 
@@ -333,16 +381,20 @@ fn headers_height(headers: &[Fragment]) -> f32 {
 /// per-page footnote `reserve` that shrinks each page's body capacity (§6.4).
 /// `capacity` is the base usable body height per page; the footnote-free walk
 /// passes a reserve that returns 0 everywhere. The fixpoint re-runs this with the
-/// reservation it learns from the previous pass.
+/// reservation it learns from the previous pass. The first page starts at the top
+/// of `root`.
 pub fn walk_reserved(
     root: &Fragment,
     capacity: f32,
     reserve: &Reserve,
     diags: &mut Diagnostics,
-) -> Vec<Vec<Fragment>> {
-    let mut w = Walker::new(capacity, reserve);
+) -> Walked {
+    let mut w = Walker::new(capacity, reserve, root.y);
     for child in &root.children {
         w.place_one(child, &[], diags);
     }
-    w.pages
+    Walked {
+        pages: w.pages,
+        spans: w.spans,
+    }
 }
