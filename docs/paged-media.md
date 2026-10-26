@@ -20,8 +20,10 @@ per-page context, footnotes, and the pagination rules. See
 ## 1. The `t:` directives
 
 `t:`-prefixed elements are recognized as typed directives
-(`TKind` in turbo-dom-layout's `src/node.rs`, re-exported as
-`turbo_html2pdf_core::node`; the `t:` parse is turbo-dom-layout's `src/markup.rs`). The parser knows the following
+(`TKind` in `crates/turbo-html2pdf-core/src/markers.rs`, re-exported as
+`turbo_html2pdf_core::TKind`; the template parse, `<t:…/>` expansion and the
+unknown-`t:` error are in `src/template/markup.rs`, and layout sees each directive as
+an opaque turbo-dom-layout marker). The parser knows the following
 local names. Their implementation status (verified against the handling code and
 `TODO(phase…)` markers) is:
 
