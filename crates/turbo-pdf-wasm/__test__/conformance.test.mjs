@@ -19,17 +19,15 @@ import { dirname, join } from "node:path";
 import { test } from "node:test";
 import { fileURLToPath } from "node:url";
 import { createRequire } from "node:module";
+import { layoutFontsDir } from "../../../scripts/layout-crate-dir.mjs";
 
 const require = createRequire(import.meta.url);
 const here = dirname(fileURLToPath(import.meta.url));
 const root = join(here, "..");
-const repoRoot = join(root, "..", "..");
 const PKG = join(root, "pkg-node", "turbo_pdf_wasm.js");
 
 const wasm = existsSync(PKG) ? require(PKG) : null;
-const FONT = readFileSync(
-  join(repoRoot, "crates", "turbo-html2pdf-core", "assets", "fonts", "Go-Regular.ttf"),
-);
+const FONT = readFileSync(join(layoutFontsDir(), "Go-Regular.ttf"));
 const CSS = "@page { size: 200px 200px; margin: 10px } p { font-size: 12px }";
 
 function render(extra) {
