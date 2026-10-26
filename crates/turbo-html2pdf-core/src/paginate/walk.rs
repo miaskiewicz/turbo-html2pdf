@@ -27,6 +27,11 @@
 //! block split across pages whose first content starts a page keeps its top border and
 //! padding (and the margins inside them) above that content (item 4, `pending`).
 //!
+//! Box ends (item 6): no break separates a box's last content from the bottom padding and
+//! border that end the box (and its ancestors', `<body>`'s included), so the last content
+//! fits a page only together with them ([`super::boxes::trailing`]); a block that fits only
+//! without them is split so just its last content moves on.
+//!
 //! Forced breaks (miaskiewicz/turbo-html2pdf#32): a forced break on a page with no flow
 //! content yet — before the first content, or a `break-before` right after a
 //! `break-after` — starts no new page (Chrome 156 makes no blank page for either).
@@ -42,7 +47,7 @@ use crate::error::{Diagnostics, LintCode, Span};
 use crate::layout::fragment::{Fragment, FragmentContent, RepeatKind};
 use crate::layout::value::BreakRule;
 
-use super::boxes::{leading_margin, FlowBoxes};
+use super::boxes::{last_content, leading_margin, trailing, wrapper_tail, FlowBoxes};
 use super::Galley;
 
 /// Per-page footnote reservation: the area (px) the page at the given 0-based
@@ -214,44 +219,90 @@ impl<'a> Walker<'a> {
         span.last = Some((f.bottom(), self.cursor));
     }
 
-    /// True if `f` fits in the remaining capacity of the current page.
-    fn fits_now(&self, f: &Fragment) -> bool {
-        self.cursor + self.gap_before(f) + f.height <= self.page_capacity()
+    /// True if `f`, followed by `tail` px that must stay on its page, fits in the
+    /// remaining capacity of the current page.
+    fn fits_now(&self, f: &Fragment, tail: f32) -> bool {
+        self.cursor + self.gap_before(f) + f.height + tail <= self.page_capacity()
     }
 
-    /// True if `f` would fit on an otherwise-empty page below `headers`. The
-    /// next page's reservation (one past the current index) bounds it.
-    fn fits_on_empty(&self, f: &Fragment, headers: &[Fragment]) -> bool {
+    /// True if `f` (followed by `tail`) would fit on an otherwise-empty page below
+    /// `headers`. The next page's reservation (one past the current index) bounds it.
+    fn fits_on_empty(&self, f: &Fragment, headers: &[Fragment], tail: f32) -> bool {
         let next = self.capacity - (self.reserve)(self.pages.len());
-        headers_height(headers) + f.height <= next
+        headers_height(headers) + f.height + tail <= next
     }
 
-    /// Place one fragment, honoring forced breaks around it.
-    fn place_one(&mut self, f: &Fragment, headers: &[Fragment], diags: &mut Diagnostics) {
+    /// Place one fragment, honoring forced breaks around it. `tail` is what must
+    /// follow it on its page (see [`Self::placement`]).
+    fn place_one(
+        &mut self,
+        f: &Fragment,
+        headers: &[Fragment],
+        tail: f32,
+        diags: &mut Diagnostics,
+    ) {
         if f.break_meta.break_before == BreakRule::Page {
             self.forced_page(headers);
         }
-        self.place_fitting(f, headers, diags);
+        self.place_fitting(f, headers, tail, diags);
         if f.break_meta.break_after == BreakRule::Page {
             self.forced_page(headers);
         }
     }
 
     /// Place `f` where it fits, breaking or splitting as needed.
-    fn place_fitting(&mut self, f: &Fragment, headers: &[Fragment], diags: &mut Diagnostics) {
-        if self.fits_now(f) {
-            self.emit(f);
-        } else if self.fits_on_empty(f, headers) {
-            self.new_page(headers);
-            self.emit(f);
+    fn place_fitting(
+        &mut self,
+        f: &Fragment,
+        headers: &[Fragment],
+        tail: f32,
+        diags: &mut Diagnostics,
+    ) {
+        match self.placement(f, headers, tail) {
+            Placement::Here => self.emit(f),
+            Placement::NextPage => {
+                self.new_page(headers);
+                self.emit(f);
+            }
+            Placement::Split => self.split(f, headers, tail, diags),
+        }
+    }
+
+    /// Where `f` goes: here if it fits; else on the next page if it fits on an empty
+    /// one; else split. `tail` is the bottom padding/border (and the margins inside
+    /// them) of the ancestors `f` is the last content of: it cannot be separated from
+    /// `f` by a break, so `f` fits only with it (miaskiewicz/turbo-html2pdf#32 item 6;
+    /// Chrome 156 moves a block that exactly fills the page to the next one with that
+    /// padding). A block that fits here only without its tail is split, so just its
+    /// last content moves on; a leaf moves on if it fits on an empty page with its
+    /// tail, and otherwise stays.
+    fn placement(&self, f: &Fragment, headers: &[Fragment], tail: f32) -> Placement {
+        if self.fits_now(f, tail) {
+            return Placement::Here;
+        }
+        if self.fits_now(f, 0.0) {
+            return self.placement_without_tail(f, headers, tail);
+        }
+        if self.fits_on_empty(f, headers, 0.0) {
+            return Placement::NextPage;
+        }
+        Placement::Split
+    }
+
+    /// [`Self::placement`] of an `f` that fits here only without its `tail`.
+    fn placement_without_tail(&self, f: &Fragment, headers: &[Fragment], tail: f32) -> Placement {
+        if !f.children.is_empty() && !f.break_meta.break_inside_avoid {
+            Placement::Split
+        } else if self.fits_on_empty(f, headers, tail) {
+            Placement::NextPage
         } else {
-            self.split(f, headers, diags);
+            Placement::Here
         }
     }
 
     /// Split a block that cannot fit on any page: recurse into its children, or
-    /// overflow an atomic leaf with a lint.
-    fn split(&mut self, f: &Fragment, headers: &[Fragment], diags: &mut Diagnostics) {
+    /// overflow an atomic leaf with a lint. `tail` follows its last content.
+    fn split(&mut self, f: &Fragment, headers: &[Fragment], tail: f32, diags: &mut Diagnostics) {
         if f.children.is_empty() {
             return self.overflow_leaf(f, headers, diags);
         }
@@ -260,9 +311,9 @@ impl<'a> Walker<'a> {
             self.pending = Some((f.y, leading_margin(self.boxes, f)));
         }
         if is_paragraph(f) {
-            self.split_paragraph(f, headers, diags);
+            self.split_paragraph(f, headers, tail, diags);
         } else {
-            self.split_block(f, headers, diags);
+            self.split_block(f, headers, tail, diags);
         }
         if opened {
             self.pending = None;
@@ -285,7 +336,13 @@ impl<'a> Walker<'a> {
 
     /// Split a generic block: emit its repeatable headers, then its other
     /// children, re-emitting the headers atop each continued page.
-    fn split_block(&mut self, f: &Fragment, headers: &[Fragment], diags: &mut Diagnostics) {
+    fn split_block(
+        &mut self,
+        f: &Fragment,
+        headers: &[Fragment],
+        tail: f32,
+        diags: &mut Diagnostics,
+    ) {
         let own_headers = collect_headers(&f.children);
         let active = if own_headers.is_empty() {
             headers.to_vec()
@@ -295,21 +352,45 @@ impl<'a> Walker<'a> {
         for h in &own_headers {
             self.emit(h);
         }
-        for child in &f.children {
+        let last = last_content(self.boxes, &f.children);
+        for (i, child) in f.children.iter().enumerate() {
             if !is_repeat_header(child) {
-                self.place_one(child, &active, diags);
+                let after = self.tail_of(f, child, tail, Some(i) == last);
+                self.place_one(child, &active, after, diags);
             }
         }
     }
 
+    /// What must follow `child` of `parent` on its page: for the parent's last content,
+    /// the parent's [`trailing`] extent (else nothing).
+    fn tail_of(&self, parent: &Fragment, child: &Fragment, tail: f32, last: bool) -> f32 {
+        if last {
+            trailing(self.boxes, parent, child, tail)
+        } else {
+            0.0
+        }
+    }
+
     /// Split a paragraph line by line, honoring orphans and widows.
-    fn split_paragraph(&mut self, f: &Fragment, headers: &[Fragment], diags: &mut Diagnostics) {
+    fn split_paragraph(
+        &mut self,
+        f: &Fragment,
+        headers: &[Fragment],
+        tail: f32,
+        diags: &mut Diagnostics,
+    ) {
         let lines = &f.children;
-        let orphans = f.break_meta.orphans as usize;
-        let widows = f.break_meta.widows as usize;
+        let run = LineRun {
+            lines,
+            orphans: f.break_meta.orphans as usize,
+            widows: f.break_meta.widows as usize,
+            tail: lines
+                .last()
+                .map_or(0.0, |l| trailing(self.boxes, f, l, tail)),
+        };
         let mut start = 0;
         while start < lines.len() {
-            start = self.place_line_run(lines, start, orphans, widows, headers, diags);
+            start = self.place_line_run(&run, start, headers, diags);
         }
     }
 
@@ -317,16 +398,15 @@ impl<'a> Walker<'a> {
     /// index to place (and breaks to a new page if lines remain).
     fn place_line_run(
         &mut self,
-        lines: &[Fragment],
+        run: &LineRun,
         start: usize,
-        orphans: usize,
-        widows: usize,
         headers: &[Fragment],
         diags: &mut Diagnostics,
     ) -> usize {
+        let lines = run.lines;
         let empty = self.current().is_empty();
-        let fit = self.lines_that_fit(&lines[start..], empty, diags);
-        let take = resolve_take(start, fit, lines.len(), orphans, widows, empty);
+        let fit = self.lines_that_fit(&lines[start..], run.tail, empty, diags);
+        let take = resolve_take(start, fit, lines.len(), run.orphans, run.widows, empty);
         if take == 0 {
             self.new_page(headers);
             return start;
@@ -341,16 +421,24 @@ impl<'a> Walker<'a> {
         next
     }
 
-    /// How many leading lines fit on the current page; at least 1 on an empty
-    /// page (forcing progress) with an overflow lint.
-    fn lines_that_fit(&self, lines: &[Fragment], empty: bool, diags: &mut Diagnostics) -> usize {
+    /// How many leading lines fit on the current page (the last of `lines` with the
+    /// paragraph's `tail` after it); at least 1 on an empty page (forcing progress)
+    /// with an overflow lint.
+    fn lines_that_fit(
+        &self,
+        lines: &[Fragment],
+        tail: f32,
+        empty: bool,
+        diags: &mut Diagnostics,
+    ) -> usize {
         let cap = self.page_capacity();
         let mut cursor = self.cursor;
         let mut prev = self.prev_bottom;
         let mut count = 0;
-        for line in lines {
-            let gap = prev.map_or(0.0, |b| (line.y - b).max(0.0));
-            if cursor + gap + line.height > cap {
+        for (i, line) in lines.iter().enumerate() {
+            let gap = prev.map_or_else(|| self.page_start_gap(line), |b| (line.y - b).max(0.0));
+            let after = if i + 1 == lines.len() { tail } else { 0.0 };
+            if cursor + gap + line.height + after > cap {
                 break;
             }
             cursor += gap + line.height;
@@ -359,6 +447,22 @@ impl<'a> Walker<'a> {
         }
         force_progress(count, empty, lines.is_empty(), diags)
     }
+}
+
+/// Where [`Walker::placement`] puts a fragment.
+enum Placement {
+    Here,
+    NextPage,
+    Split,
+}
+
+/// A paragraph's lines being split across pages, with its widows/orphans and the
+/// tail that follows its last line.
+struct LineRun<'l> {
+    lines: &'l [Fragment],
+    orphans: usize,
+    widows: usize,
+    tail: f32,
 }
 
 /// Guarantee at least one line is taken on an empty page so the walk terminates,
@@ -468,8 +572,15 @@ pub fn walk_reserved(
     diags: &mut Diagnostics,
 ) -> Walked {
     let mut w = Walker::new(capacity, reserve, galley);
-    for child in &galley.root.children {
-        w.place_one(child, &[], diags);
+    let children = &galley.root.children;
+    let last = last_content(galley.boxes, children);
+    for (i, child) in children.iter().enumerate() {
+        let tail = if Some(i) == last {
+            wrapper_tail(galley, child)
+        } else {
+            0.0
+        };
+        w.place_one(child, &[], tail, diags);
     }
     Walked {
         pages: w.pages,

@@ -276,6 +276,37 @@ fn split_block_starting_a_page_keeps_its_top_padding() {
     assert!(close(pages[2].body[0].y, 0.0)); // later breaks inside it truncate
 }
 
+/// A container whose children sit contiguously from its `y`, closed by a bottom border
+/// `bottom` px wide.
+fn bordered(y: f32, children: Vec<Fragment>, bottom: u16) -> Fragment {
+    let mut c = container(y, children);
+    c.height += f32::from(bottom);
+    if let FragmentContent::Box { border, .. } = &mut c.content {
+        border.bottom.width = bottom;
+    }
+    c
+}
+
+#[test]
+fn last_content_moves_on_with_the_bottom_border_that_ends_its_parent() {
+    // miaskiewicz/turbo-html2pdf#32 item 6: the second child exactly fills page 1, but
+    // its parent's 20px bottom border cannot be separated from it: it moves to page 2.
+    let wrap = bordered(0.0, vec![boxf(0.0, 60.0), boxf(60.0, 60.0)], 20);
+    let (pages, _) = run(&root(vec![wrap]), &cap120());
+    assert_eq!(pages.len(), 2);
+    assert_eq!((pages[0].body.len(), pages[1].body.len()), (1, 1));
+    assert!(close(pages[1].body[0].y, 0.0));
+}
+
+#[test]
+fn last_content_that_never_fits_with_its_tail_stays() {
+    // A 120px leaf + the 20px border never fit a 120px page: the leaf stays put.
+    let wrap = bordered(0.0, vec![boxf(0.0, 120.0)], 20);
+    let (pages, diags) = run(&root(vec![wrap]), &cap120());
+    assert_eq!(pages.len(), 1);
+    assert!(diags.lints.is_empty());
+}
+
 #[test]
 fn ac_6_2_trailing_empty_page_trimmed() {
     let mut blocks = stack(&[40.0]);

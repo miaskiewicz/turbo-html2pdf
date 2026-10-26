@@ -231,12 +231,11 @@ const PENDING: &[&str] = &[
     "absolute-in-split-relative",
     "absolute-in-split-relative-page-1",
     "absolute-in-moved-static",
-    // #32 item 6: exact fill followed by bottom padding/border.
-    "exact-fill-parent-padding",
-    "exact-fill-parent-border",
+    // #32 item 6 with the last block's own bottom margin inside the padding: the
+    // fragmenter counts it, but the paged layout drops a last child's bottom margin
+    // (turbo-dom-layout, filed as miaskiewicz/turbo-dom#41), so the block
+    // still fits.
     "exact-fill-child-margin",
-    "exact-fill-body-padding",
-    "exact-fill-grandparent-padding",
     // A split block's remaining height after an unforced break.
     "split-block-explicit-height",
     // The flow under a relatively offset block.

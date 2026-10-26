@@ -8,7 +8,7 @@
 
 use std::collections::HashMap;
 
-use crate::layout::fragment::{Fragment, FragmentContent, NodeId};
+use crate::layout::fragment::{Fragment, FragmentContent, NodeId, RepeatKind};
 use crate::layout::value::{LengthPct, Position};
 
 /// The used values of one box that the fragmenter reads (px).
@@ -61,6 +61,49 @@ pub(super) fn leading_margin(boxes: &FlowBoxes, f: &Fragment) -> Option<f32> {
     Some(collapse(facts.margin_top, inner.unwrap_or(0.0)))
 }
 
+/// The index of the last in-flow child of `children` (out-of-flow boxes and repeated
+/// table headers are not content of the flow).
+pub(super) fn last_content(boxes: &FlowBoxes, children: &[Fragment]) -> Option<usize> {
+    children.iter().rposition(|c| {
+        let out = boxes
+            .get(c.node_id)
+            .is_some_and(|f| f.position.is_out_of_flow());
+        !out && c.break_meta.repeatable != Some(RepeatKind::Header)
+    })
+}
+
+/// What must follow `last`, the last content of `parent`, on the same page: `parent`'s
+/// bottom border and padding with `last`'s bottom margin inside them, plus `after`, what
+/// must follow `parent` itself. No break can separate a box's last content from the
+/// bottom padding/border that ends the box (Chrome 156 moves the content on with them,
+/// miaskiewicz/turbo-html2pdf#32 item 6), while a trailing margin alone is truncated at
+/// a page end (so a parent without bottom padding/border adds nothing of its own and
+/// passes `after` through). A parent taller than its content (a definite height) ends
+/// in breakable remaining height: nothing has to follow `last`.
+pub(super) fn trailing(boxes: &FlowBoxes, parent: &Fragment, last: &Fragment, after: f32) -> f32 {
+    let padding = boxes.get(parent.node_id).map_or(0.0, |f| f.padding_bottom);
+    let frame = padding + bottom_border(parent);
+    let margin = boxes
+        .get(last.node_id)
+        .map_or(0.0, |f| f.margin_bottom.max(0.0));
+    if parent.bottom() - frame > last.bottom() + margin + 0.5 {
+        return 0.0;
+    }
+    if frame <= 0.0 {
+        return after;
+    }
+    parent.bottom() - last.bottom() + after
+}
+
+/// What must follow the galley root's last content `last`: the [`trailing`] extents of
+/// the dissolved `<html>`/`<body>` boxes around it (the galley root itself has none).
+pub(super) fn wrapper_tail(galley: super::Galley, last: &Fragment) -> f32 {
+    let chain: Vec<&Fragment> = galley.wrappers.iter().chain([last]).collect();
+    chain.windows(2).fold(0.0, |after, pair| {
+        trailing(galley.boxes, pair[0], pair[1], after)
+    })
+}
+
 /// Two adjoining margins collapsed: the largest positive plus the most negative.
 fn collapse(a: f32, b: f32) -> f32 {
     a.max(b).max(0.0) + a.min(b).min(0.0)
@@ -70,6 +113,14 @@ fn collapse(a: f32, b: f32) -> f32 {
 fn top_border(f: &Fragment) -> f32 {
     match &f.content {
         FragmentContent::Box { border, .. } => f32::from(border.top.width),
+        _ => 0.0,
+    }
+}
+
+/// The used bottom border width of a box fragment (0 for other content).
+fn bottom_border(f: &Fragment) -> f32 {
+    match &f.content {
+        FragmentContent::Box { border, .. } => f32::from(border.bottom.width),
         _ => 0.0,
     }
 }
@@ -156,7 +207,33 @@ mod tests {
     }
 
     #[test]
-    fn a_replaced_box_has_no_top_border_of_its_own() {
+    fn trailing_extent_of_the_last_content() {
+        let mut parent = boxed(1, 0.0, vec![boxed(2, 0.0, vec![])]);
+        parent.height = 70.0; // 50 child + 20 padding
+        let child = parent.children[0].clone();
+        let mut boxes = margins(&[(1, 0.0, 0.0)]);
+        boxes.insert(
+            NodeId(1),
+            BoxFacts {
+                padding_bottom: 20.0,
+                ..*boxes.get(NodeId(1)).unwrap()
+            },
+        );
+        assert_eq!(trailing(&boxes, &parent, &child, 5.0), 25.0);
+        // No padding/border of its own: what follows the parent passes through.
+        parent.height = 50.0;
+        assert_eq!(trailing(&margins(&[]), &parent, &child, 5.0), 5.0);
+        // A parent taller than its content ends in breakable remaining height.
+        parent.height = 90.0;
+        assert_eq!(trailing(&boxes, &parent, &child, 5.0), 0.0);
+        // A non-box parent has no border.
+        let mut image = image(3, 0.0);
+        image.height = 50.0;
+        image.children = vec![child.clone()];
+        assert_eq!(trailing(&margins(&[]), &image, &child, 0.0), 0.0);
+    }
+
+    fn image(id: u32, y: f32) -> Fragment {
         let image = ImagePlacement {
             name: "a.png".to_string(),
             intrinsic_w: 1,
@@ -165,14 +242,19 @@ mod tests {
             tint: None,
             orientation: Default::default(),
         };
-        let mut f = Fragment::new(
-            NodeId(1),
+        Fragment::new(
+            NodeId(id),
             0.0,
-            10.0,
+            y,
             10.0,
             10.0,
             FragmentContent::Image(image),
-        );
+        )
+    }
+
+    #[test]
+    fn a_replaced_box_has_no_top_border_of_its_own() {
+        let mut f = image(1, 10.0);
         f.children = vec![boxed(2, 10.0, vec![])];
         assert_eq!(
             leading_margin(&margins(&[(1, 10.0, 0.0), (2, 25.0, 0.0)]), &f),
