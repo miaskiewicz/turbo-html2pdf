@@ -460,6 +460,17 @@ const CASES = [
     ),
     colors: ["red", "green"],
   },
+  {
+    // The same for a relatively offset block split across pages: its content is painted
+    // shifted on every page, the page fill and the next block follow the flow.
+    id: "relative-offset-split",
+    html: DOC(
+      "body{margin:0}",
+      `<div style="position:relative;top:20px">${blocks(["yellow", "magenta", "orange"], 140)}</div>` +
+        block(C.green[0], 60),
+    ),
+    colors: ["yellow", "magenta", "orange", "green"],
+  },
 ];
 
 /** Parse a binary PPM (P6, maxval 255) into { width, height, px(x, y) -> [r,g,b] }. */

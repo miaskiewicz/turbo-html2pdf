@@ -236,8 +236,6 @@ const PENDING: &[&str] = &[
     // (turbo-dom-layout, filed as miaskiewicz/turbo-dom#41), so the block
     // still fits.
     "exact-fill-child-margin",
-    // The flow under a relatively offset block.
-    "relative-offset-flow",
 ];
 
 #[test]

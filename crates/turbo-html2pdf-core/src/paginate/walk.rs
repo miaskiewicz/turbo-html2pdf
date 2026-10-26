@@ -27,6 +27,11 @@
 //! block split across pages whose first content starts a page keeps its top border and
 //! padding (and the margins inside them) above that content (item 4, `pending`).
 //!
+//! Relative positioning (miaskiewicz/turbo-html2pdf#34): a `relative`/`sticky` box is
+//! painted shifted but the flow continues from its unshifted position, so gaps and fill
+//! are measured on flow positions; the children of a split positioned box paint at its
+//! level.
+//!
 //! Box ends (item 6): no break separates a box's last content from the bottom padding and
 //! border that end the box (and its ancestors', `<body>`'s included), so the last content
 //! fits a page only together with them ([`super::boxes::trailing`]); a block that fits only
@@ -116,6 +121,15 @@ struct Walker<'a> {
     /// block, so a page it starts keeps the block's top border and padding (and the
     /// margins inside them) above that content (miaskiewicz/turbo-html2pdf#32 item 4).
     pending: Option<(f32, Option<f32>)>,
+    /// The relative paint shift of the blocks being split around the current one: a
+    /// `relative` box is painted shifted (its subtree with it) but the flow continues
+    /// from its unshifted position, so gaps and fill are measured on flow positions
+    /// (miaskiewicz/turbo-html2pdf#34).
+    shift: f32,
+    /// The paint layer of the innermost positioned block being split: its children are
+    /// emitted as separate fragments, so each carries the block's positioned paint
+    /// level (`z-index`), or they would paint under the flow that follows the block.
+    layer: Option<Option<i32>>,
 }
 
 impl<'a> Walker<'a> {
@@ -135,6 +149,8 @@ impl<'a> Walker<'a> {
             fresh: true,
             start: PageStart::Unforced,
             pending: None,
+            shift: 0.0,
+            layer: None,
         }
     }
 
@@ -153,9 +169,19 @@ impl<'a> Walker<'a> {
     /// the page's start keeps.
     fn gap_before(&self, f: &Fragment) -> f32 {
         match self.prev_bottom {
-            Some(b) => (f.y - b).max(0.0),
+            Some(b) => (self.flow_top(f) - b).max(0.0),
             None => self.page_start_gap(f),
         }
+    }
+
+    /// `f`'s own relative paint shift.
+    fn own_shift(&self, f: &Fragment) -> f32 {
+        self.boxes.get(f.node_id).map_or(0.0, |b| b.shift)
+    }
+
+    /// `f`'s galley top at its flow position (without the relative shifts).
+    fn flow_top(&self, f: &Fragment) -> f32 {
+        f.y - self.shift - self.own_shift(f)
     }
 
     /// The gap above the first fragment of a page. The page starts at the outermost
@@ -164,16 +190,17 @@ impl<'a> Walker<'a> {
     /// break and kept after a forced one (or, unknown, the galley gap from the content
     /// before the break is kept).
     fn page_start_gap(&self, f: &Fragment) -> f32 {
+        let flow_top = self.flow_top(f);
         let (top, margin) = self
             .pending
-            .unwrap_or_else(|| (f.y, leading_margin(self.boxes, f)));
-        let inside = (f.y - top).max(0.0);
+            .unwrap_or_else(|| (flow_top, leading_margin(self.boxes, f)));
+        let inside = (flow_top - top).max(0.0);
         let PageStart::Forced(before) = self.start else {
             return inside;
         };
         match margin {
             Some(m) => inside + m.max(0.0),
-            None => before.map_or(inside, |b| (f.y - b).max(0.0)),
+            None => before.map_or(inside, |b| (flow_top - b).max(0.0)),
         }
     }
 
@@ -207,18 +234,22 @@ impl<'a> Walker<'a> {
     }
 
     /// Place `f` at the cursor (honoring its leading gap), translated into page
-    /// coordinates, and advance the cursor.
+    /// coordinates (painted with its relative shifts), and advance the cursor.
     fn emit(&mut self, f: &Fragment) {
         let top = self.cursor + self.gap_before(f);
+        let flow_top = self.flow_top(f);
         let mut clone = f.clone();
-        clone.translate(0.0, top - f.y);
+        clone.translate(0.0, top - flow_top);
+        if let Some(z) = self.layer {
+            lift(&mut clone, z);
+        }
         self.current().push(clone);
         self.cursor = top + f.height;
-        self.prev_bottom = Some(f.bottom());
+        self.prev_bottom = Some(flow_top + f.height);
         self.fresh = false;
         self.pending = None;
         let span = self.spans.last_mut().expect("one span per page");
-        span.last = Some((f.bottom(), self.cursor));
+        span.last = Some((flow_top + f.height, self.cursor));
     }
 
     /// True if `f`, followed by `tail` px that must stay on its page, fits in the
@@ -310,13 +341,19 @@ impl<'a> Walker<'a> {
         }
         let opened = self.pending.is_none();
         if opened {
-            self.pending = Some((f.y, leading_margin(self.boxes, f)));
+            self.pending = Some((self.flow_top(f), leading_margin(self.boxes, f)));
         }
+        let shift = self.own_shift(f);
+        self.shift += shift;
+        let layer = self.layer;
+        self.layer = layer_of(f, layer);
         if is_paragraph(f) {
             self.split_paragraph(f, headers, tail, diags);
         } else {
             self.split_block(f, headers, tail, diags);
         }
+        self.layer = layer;
+        self.shift -= shift;
         if opened {
             self.pending = None;
         }
@@ -379,7 +416,7 @@ impl<'a> Walker<'a> {
         let cap = self.page_capacity();
         if self.cursor + margin + rest > cap {
             let over = rest - (cap - self.cursor - margin).max(0.0);
-            self.continue_box(over, f.bottom(), headers);
+            self.continue_box(over, f.bottom() - self.shift, headers);
         }
     }
 
@@ -472,16 +509,39 @@ impl<'a> Walker<'a> {
         let mut prev = self.prev_bottom;
         let mut count = 0;
         for (i, line) in lines.iter().enumerate() {
-            let gap = prev.map_or_else(|| self.page_start_gap(line), |b| (line.y - b).max(0.0));
+            let gap = prev.map_or_else(
+                || self.page_start_gap(line),
+                |b| (self.flow_top(line) - b).max(0.0),
+            );
             let after = if i + 1 == lines.len() { tail } else { 0.0 };
             if cursor + gap + line.height + after > cap {
                 break;
             }
             cursor += gap + line.height;
-            prev = Some(line.bottom());
+            prev = Some(self.flow_top(line) + line.height);
             count += 1;
         }
         force_progress(count, empty, lines.is_empty(), diags)
+    }
+}
+
+/// The paint layer for the children of split block `f`: its own when it is positioned,
+/// else the enclosing one.
+fn layer_of(f: &Fragment, enclosing: Option<Option<i32>>) -> Option<Option<i32>> {
+    if f.is_positioned {
+        Some(f.z_index)
+    } else {
+        enclosing
+    }
+}
+
+/// Paint `f` (a child emitted on its own) at its split positioned ancestor's level: a
+/// `z-index` ancestor (a stacking context) puts it at that level; a `z-index: auto` one
+/// makes an in-flow child paint as positioned.
+fn lift(f: &mut Fragment, z: Option<i32>) {
+    if z.is_some() || !f.is_positioned {
+        f.z_index = z.or(f.z_index);
+        f.is_positioned = true;
     }
 }
 
@@ -621,5 +681,43 @@ pub fn walk_reserved(
     Walked {
         pages: w.pages,
         spans: w.spans,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::layout::fragment::{FragmentContent, NodeId};
+    use crate::layout::value::BorderEdges;
+
+    fn boxf(positioned: bool, z: Option<i32>) -> Fragment {
+        let content = FragmentContent::Box {
+            background: None,
+            border: BorderEdges::default(),
+            border_radius: 0.0,
+            shadow: None,
+            gradient: None,
+            transform: None,
+        };
+        let mut f = Fragment::new(NodeId(1), 0.0, 0.0, 10.0, 10.0, content);
+        (f.is_positioned, f.z_index) = (positioned, z);
+        f
+    }
+
+    #[test]
+    fn split_children_paint_at_their_positioned_ancestors_level() {
+        assert_eq!(layer_of(&boxf(true, Some(3)), None), Some(Some(3)));
+        assert_eq!(layer_of(&boxf(false, None), Some(None)), Some(None));
+        // A stacking-context ancestor sets the level of every child.
+        let mut child = boxf(true, Some(-1));
+        lift(&mut child, Some(2));
+        assert_eq!((child.is_positioned, child.z_index), (true, Some(2)));
+        // A `z-index: auto` ancestor lifts in-flow children, keeps positioned ones.
+        let mut flow = boxf(false, None);
+        lift(&mut flow, None);
+        assert_eq!((flow.is_positioned, flow.z_index), (true, None));
+        let mut own = boxf(true, Some(-1));
+        lift(&mut own, None);
+        assert_eq!((own.is_positioned, own.z_index), (true, Some(-1)));
     }
 }

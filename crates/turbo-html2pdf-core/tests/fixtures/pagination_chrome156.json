@@ -2651,6 +2651,78 @@
      }
     }
    ]
+  },
+  {
+   "id": "relative-offset-split",
+   "html": "<!DOCTYPE html><html><head><style>@page{size:600px 400px;margin:40px}body{margin:0}</style></head><body><div style=\"position:relative;top:20px\"><div style=\"height:140px;background:#ffff00;break-inside:avoid;\"></div><div style=\"height:140px;background:#ff00ff;break-inside:avoid;\"></div><div style=\"height:140px;background:#ff8000;break-inside:avoid;\"></div></div><div style=\"height:60px;background:#00ff00;break-inside:avoid;\"></div></body></html>",
+   "colors": {
+    "yellow": "#ffff00",
+    "magenta": "#ff00ff",
+    "orange": "#ff8000",
+    "green": "#00ff00"
+   },
+   "pages": [
+    {
+     "size": [
+      600,
+      400
+     ],
+     "boxes": {
+      "yellow": {
+       "bbox": [
+        40,
+        60,
+        559,
+        199
+       ],
+       "top": true,
+       "bottom": true
+      },
+      "magenta": {
+       "bbox": [
+        40,
+        200,
+        559,
+        339
+       ],
+       "top": true,
+       "bottom": true
+      },
+      "orange": null,
+      "green": null
+     }
+    },
+    {
+     "size": [
+      600,
+      400
+     ],
+     "boxes": {
+      "yellow": null,
+      "magenta": null,
+      "orange": {
+       "bbox": [
+        40,
+        60,
+        559,
+        199
+       ],
+       "top": true,
+       "bottom": true
+      },
+      "green": {
+       "bbox": [
+        40,
+        200,
+        559,
+        239
+       ],
+       "top": true,
+       "bottom": true
+      }
+     }
+    }
+   ]
   }
  ]
 }
