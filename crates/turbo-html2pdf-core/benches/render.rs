@@ -9,7 +9,7 @@
 //!    style cascade, style the flow, and lay it out into the galley `Fragment`.
 //!
 //! Determinism is pinned with `now = Some(0)` on every `render_nodes` call and
-//! the fonts are loaded from the in-repo `assets/fonts/` (never a system path),
+//! the fonts are loaded from turbo-dom-layout's `assets/fonts/` (never a system path),
 //! so a run never depends on the wall clock, randomness, or the host.
 //!
 //! The galley `Fragment` is the end of the pipeline that exists at the time of

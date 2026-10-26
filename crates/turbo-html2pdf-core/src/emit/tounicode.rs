@@ -78,7 +78,7 @@ mod tests {
 
     #[test]
     fn reverse_mapping_uses_original_font_and_handles_stripped_cmap() {
-        let bytes = include_bytes!("../../assets/fonts/Go-Regular.ttf");
+        let bytes = &turbo_dom_layout::test_support::font_bytes("Go-Regular.ttf")[..];
         let face = Face::parse(bytes, 0).unwrap();
         let gid = face.glyph_index('é').unwrap().0;
         assert_eq!(reverse_cmap(&face).get(&gid), Some(&0xE9));

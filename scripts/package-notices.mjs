@@ -1,17 +1,13 @@
 // Reproduce the license files shipped with bindings that embed the core fonts.
-import { execFileSync } from "node:child_process";
 import { readFileSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { layoutCrateDir, layoutFontsDir } from "./layout-crate-dir.mjs";
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
-// The layout half (and its Blink-derived policy notices) lives in the
-// turbo-dom-layout crate; locate it through cargo so a path, git or registry
-// dependency all resolve.
-const layout = dirname(
-  JSON.parse(
-    execFileSync("cargo", ["metadata", "--format-version", "1"], { cwd: root, encoding: "utf8" }),
-  ).packages.find((pkg) => pkg.name === "turbo-dom-layout").manifest_path,
-);
+// The layout half (its Blink-derived policy notices and the embedded fonts with their
+// licenses) lives in the turbo-dom-layout crate; it is located through cargo so a
+// path, git or registry dependency all resolve.
+const layout = layoutCrateDir();
 const families = [
   "inter/LICENSE.txt",
   "roboto/OFL.txt",
@@ -20,7 +16,7 @@ const families = [
   "fira-code/OFL.txt",
   "ibm-plex-mono/OFL.txt",
 ];
-const fonts = join(root, "crates/turbo-html2pdf-core/assets/fonts");
+const fonts = layoutFontsDir();
 const notices =
   "# Third-party notices\n\n" +
   "## Blink HTML font metric policy\n\n" +
@@ -40,6 +36,9 @@ const files = new Map([
     "crates/turbo-pdf-napi/assets/fonts/Go-Font-LICENSE",
     readFileSync(join(fonts, "Go-Font-LICENSE"), "utf8"),
   ],
+  // The npm package ships the Go face for its examples/tests: written from (and checked
+  // against) turbo-dom-layout's font, never edited by hand.
+  ["crates/turbo-pdf-napi/assets/fonts/Go-Regular.ttf", readFileSync(join(fonts, "Go-Regular.ttf"))],
 ]);
 const license = readFileSync(join(root, "LICENSE"), "utf8");
 for (const path of [
@@ -51,7 +50,7 @@ for (const path of [
   files.set(path, license);
 for (const [path, content] of files) {
   if (process.argv.includes("--check")) {
-    if (readFileSync(join(root, path), "utf8") !== content)
-      throw new Error(`Stale package notice: ${path}`);
+    const current = readFileSync(join(root, path));
+    if (!current.equals(Buffer.from(content))) throw new Error(`Stale package notice: ${path}`);
   } else writeFileSync(join(root, path), content);
 }
