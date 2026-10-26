@@ -10,11 +10,17 @@
 //! (`{{ page.number }}`, `<t:page/>`) are layered on by the `render` orchestrator,
 //! which also resolves the footnote *content*; the `header`/`footer`/`footnotes`
 //! page bands it paints into are exposed here. Page masters remain TODO(phase7b).
+//!
+//! [`paginate_document`] walks a whole document's [`Galley`]: with the used box values
+//! of its boxes ([`FlowBoxes`]) it keeps margins, paddings and borders at breaks as
+//! Chrome 156 prints them and places out-of-flow boxes (fixed boxes on every page,
+//! absolute boxes from their containing block) — miaskiewicz/turbo-html2pdf#32.
 
 mod boxes;
 mod decorate;
 mod footnotes;
 mod geometry;
+mod out_of_flow;
 mod walk;
 
 use crate::error::{Diagnostics, RenderError};
@@ -154,23 +160,40 @@ pub fn paginate_document(
     notes: &[Note],
     diags: &mut Diagnostics,
 ) -> Vec<Page> {
-    let (root, wrappers) = (galley.root, galley.wrappers);
-    let resolved = footnotes::resolve(galley, geometry, notes, diags);
+    let capacity = geometry.body_height();
+    let extracted = out_of_flow::extract(galley.root, galley.boxes, capacity);
+    let flow = Galley {
+        root: extracted.as_ref().map_or(galley.root, |e| &e.root),
+        ..galley
+    };
+    let needed = extracted
+        .as_ref()
+        .map(out_of_flow::Extracted::needed)
+        .unwrap_or_default();
     let footnotes::Resolved {
         mut pages,
         bands,
-        spans,
-    } = resolved;
-    let mut trimmed = trim_trailing_pages(&mut pages, bands);
-    let mut bodies: Vec<Vec<Fragment>> =
-        trimmed.iter_mut().map(|(b, _)| std::mem::take(b)).collect();
-    let kept = bodies.len();
-    decorate::decorate(&mut bodies, &spans[..kept], wrappers, root.y);
-    trimmed
+        mut spans,
+        anchors,
+    } = footnotes::resolve(flow, &needed, geometry, notes, diags);
+    let (mut bodies, mut bands): (Vec<_>, Vec<_>) =
+        trim_trailing_pages(&mut pages, bands).into_iter().unzip();
+    spans.truncate(bodies.len());
+    if let Some(extracted) = &extracted {
+        let pages = out_of_flow::Paged {
+            bodies: &mut bodies,
+            spans: &mut spans,
+            bands: &mut bands,
+            capacity,
+        };
+        out_of_flow::place(extracted, &anchors, pages);
+    }
+    decorate::decorate(&mut bodies, &spans, galley.wrappers, flow.root.y);
+    bodies
         .into_iter()
-        .zip(bodies)
+        .zip(bands)
         .enumerate()
-        .map(|(i, ((_, band), body))| assemble_page(geometry, i as u32 + 1, body, band))
+        .map(|(i, (body, band))| assemble_page(geometry, i as u32 + 1, body, band))
         .collect()
 }
 

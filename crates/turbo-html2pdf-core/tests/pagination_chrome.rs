@@ -219,18 +219,6 @@ fn compare_case(case: &serde_json::Value, failures: &mut Vec<String>) {
 /// Cases that do not match Chrome yet (each must still differ, so a fixed case is
 /// removed from the list).
 const PENDING: &[&str] = &[
-    // #32 item 1: out-of-flow boxes.
-    "fixed-repeats",
-    "fixed-bottom-right",
-    "fixed-static-position",
-    "fixed-negative-z-index",
-    "absolute-root-offset",
-    "absolute-root-bottom",
-    "absolute-root-past-content",
-    "absolute-static-position",
-    "absolute-in-split-relative",
-    "absolute-in-split-relative-page-1",
-    "absolute-in-moved-static",
     // #32 item 6 with the last block's own bottom margin inside the padding: the
     // fragmenter counts it, but the paged layout drops a last child's bottom margin
     // (turbo-dom-layout, filed as miaskiewicz/turbo-dom#41), so the block
