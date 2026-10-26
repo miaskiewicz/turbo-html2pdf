@@ -42,7 +42,7 @@ endnotes = []
 
 # Accept `cmyk(...)` colours and emit DeviceCMYK instead of DeviceRGB for print
 # workflows (AC-7.x print colour).
-print-color = ["turbo-dom-layout/print-color"]
+print-color = []
 
 # Append/merge external PDF pages after turbo's rendered pages. A pure post-emit
 # step that glues a foreign certified PDF (e.g. Mexican CFDI / Portuguese DSNE)
@@ -75,7 +75,7 @@ svg = ["turbo-dom-layout/svg"]
 # anchor name / link href from boxgen through the positioned fragment, then a
 # two-pass emit writes a `/Dests` name tree plus per-page Link `/Annots`. Off by
 # default: the default path carries `None` xref data at near-zero cost.
-xref = ["turbo-dom-layout/xref"]
+xref = []
 
 # PDF/A-2b archival ("keep-forever") conformance (AC-11.2): embeds a vendored
 # sRGB ICC profile as an OutputIntent, writes an XMP metadata packet declaring
@@ -89,7 +89,7 @@ pdf-a = []
 # marked-content (`BDC`/`EMC`) with per-page MCIDs, and builds a `StructTreeRoot`
 # + `ParentTree` in the catalog, with `/MarkInfo`, `/Lang`, an XMP packet and the
 # `DisplayDocTitle` viewer preference. Validated with veraPDF `--flavour ua1`.
-pdf-ua = ["turbo-dom-layout/pdf-ua"]
+pdf-ua = []
 
 # AES-256 password protection (PDF 2.0 Standard Security Handler, V=5/R=6,
 # AESV3). Off by default: the default build is byte-for-byte unchanged and pulls
@@ -108,12 +108,13 @@ chrono = { workspace = true }
 thiserror = { workspace = true }
 # The layout half of the engine (style cascade, layout, text/fonts, layout
 # snapshots, the HTML drive, images, errors), relocated to the turbo-dom workspace
-# and re-exported from this crate at its old paths. Features are forwarded
-# (bundled-fonts/perf/svg, and the temporary xref/pdf-ua/print-color gates whose
-# cfg'd fields live in the layout code).
-# LOCAL DEV path dependency for the consolidation's S1 step; the integration step
-# switches it to version + [patch].
+# and re-exported from this crate at its old paths. bundled-fonts/perf/svg are
+# forwarded; xref/pdf-ua/print-color are this crate's own (runtime layout options +
+# post-layout semantics). Pre-publish both resolve through the workspace
+# `[patch.crates-io]` (see the root Cargo.toml).
 turbo-dom-layout = { version = "0.6.0", default-features = false }
+# The DOM templates are parsed into and styled from (`Flow`).
+turbo-dom = "0.5.8"
 rustybuzz = "0.20.1"
 pdf-writer = "0.15.0"
 subsetter = "0.2.6"

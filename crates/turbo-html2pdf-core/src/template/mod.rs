@@ -1,16 +1,14 @@
 //! The templating layer (§2): a MiniJinja-backed engine that parses + caches a
 //! template at compile time and renders it against data, emitting intermediate
 //! markup that never escapes to the caller (the §1 hard rule). Later phases
-//! parse this markup into the node tree; for now it is the unit of test.
+//! parse this markup into a turbo-dom document flow ([`markup`]); the markup
+//! string itself is the unit of test.
 
 mod filters;
 mod functions;
+pub(crate) mod markup;
 mod regions;
 mod switch;
-
-// Stage-1 markup -> node-tree parse (incl. `expand_self_closing` and the unknown-`t:`
-// error) lives in turbo-dom-layout, shared with the HTML drive (`layout_html`).
-pub(crate) use turbo_dom_layout::markup;
 
 use std::collections::HashMap;
 
@@ -19,7 +17,7 @@ use minijinja::{AutoEscape, Environment};
 use serde::Serialize;
 
 use crate::error::{CompileError, Diagnostics, ErrorCode, RenderError, Span};
-use crate::node::Node;
+use crate::flow::Flow;
 use crate::options::CompileOptions;
 
 pub use functions::set_now;
@@ -179,7 +177,7 @@ impl Program {
     /// for determinism (§3.3); pass `None` to leave it unset.
     ///
     /// This is the templating layer's output; subsequent phases parse the markup
-    /// into the node tree without it ever crossing the public boundary.
+    /// into the document flow without it ever crossing the public boundary.
     pub fn render_markup<T: Serialize>(
         &self,
         data: &T,
@@ -198,17 +196,18 @@ impl Program {
         template.render(Value::from_serialize(data))
     }
 
-    /// Render the template and parse the result into the resolved node tree
-    /// (§1 Stage 1): Jinja render → html5ever parse → typed `t:` nodes. The
-    /// intermediate markup never crosses the public boundary (the §1 hard rule).
+    /// Render the template and parse the result into its [`Flow`] (§1 Stage 1):
+    /// Jinja render → turbo-dom parse → `t:` directives checked and classified.
+    /// The intermediate markup never crosses the public boundary (the §1 hard
+    /// rule).
     pub fn render_nodes<T: Serialize>(
         &self,
         data: &T,
         now: Option<i64>,
-    ) -> Result<(Vec<Node>, Diagnostics), RenderError> {
+    ) -> Result<(Flow, Diagnostics), RenderError> {
         let (markup, diags) = self.render_markup(data, now)?;
-        let nodes = markup::parse(&markup)?;
-        Ok((nodes, diags))
+        let flow = markup::parse(&markup)?;
+        Ok((flow, diags))
     }
 
     /// Whether a `<t:running-header>` was extracted from the template source.
@@ -222,7 +221,7 @@ impl Program {
     }
 
     /// Render an extracted region (`HEADER`/`FOOTER`) against a per-page context
-    /// and parse it into nodes (§6.6). `ctx` carries `page.*` and the original
+    /// and parse it into its [`Flow`] (§6.6). `ctx` carries `page.*` and the original
     /// `data`; `now` pins the clock as for body rendering. Returns `None` when
     /// the named region was not present in the source.
     pub fn render_region<T: Serialize>(
@@ -230,7 +229,7 @@ impl Program {
         name: &str,
         ctx: &T,
         now: Option<i64>,
-    ) -> Option<Result<(Vec<Node>, Diagnostics), RenderError>> {
+    ) -> Option<Result<(Flow, Diagnostics), RenderError>> {
         let present = match name {
             HEADER => self.has_header,
             _ => self.has_footer,
@@ -246,7 +245,7 @@ impl Program {
         name: &str,
         ctx: &T,
         now: Option<i64>,
-    ) -> Result<(Vec<Node>, Diagnostics), RenderError> {
+    ) -> Result<(Flow, Diagnostics), RenderError> {
         functions::set_now(now);
         let markup = self
             .env
@@ -255,7 +254,7 @@ impl Program {
             .render(Value::from_serialize(ctx));
         functions::set_now(None);
         let markup = markup.map_err(map_render_err)?;
-        let nodes = markup::parse(&markup)?;
-        Ok((nodes, Diagnostics::default()))
+        let flow = markup::parse(&markup)?;
+        Ok((flow, Diagnostics::default()))
     }
 }

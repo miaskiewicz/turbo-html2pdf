@@ -45,6 +45,10 @@ pub struct Page {
     pub header: Vec<Fragment>,
     pub footer: Vec<Fragment>,
     pub footnotes: Vec<Fragment>,
+    /// The render's fragment semantics (PDF/UA roles, internal links, anchors —
+    /// see [`crate::semantics`]); empty unless built by [`crate::render_pages`]
+    /// with the `pdf-ua`/`xref` features.
+    pub semantics: crate::semantics::Semantics,
 }
 
 /// Derive a page's kind from its 1-based number: page 1 is the first page, then
@@ -74,6 +78,7 @@ fn assemble(geometry: PageGeometry, number: u32, mut body: Vec<Fragment>) -> Pag
         header: Vec::new(),
         footer: Vec::new(),
         footnotes: Vec::new(),
+        semantics: Default::default(),
     }
 }
 
