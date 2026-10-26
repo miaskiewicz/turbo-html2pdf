@@ -219,10 +219,6 @@ fn compare_case(case: &serde_json::Value, failures: &mut Vec<String>) {
 /// Cases that do not match Chrome yet (each must still differ, so a fixed case is
 /// removed from the list).
 const PENDING: &[&str] = &[
-    // #37 item 1: split blocks paint a slice of their box on every page.
-    "split-decorated",
-    "split-decorated-nested",
-    "split-decorated-after-content",
     // #32 item 6 with the last block's own bottom margin inside the padding: the
     // fragmenter counts it, but the paged layout drops a last child's bottom margin
     // (turbo-dom-layout, filed as miaskiewicz/turbo-dom#41), so the block

@@ -257,6 +257,15 @@ truncated at a break, never padding, borders or a box's remaining height.
 - A `position: relative` box is painted shifted, but the flow continues from its
   unshifted position (#34).
 
+### Split boxes
+
+A block split across pages paints a slice of its box (background, border, shadow) on
+every page it spans, like `<html>`/`<body>` above: Chrome's default
+`box-decoration-break: slice` (#37). The top edge is on the first page and the bottom edge
+on the last, the box running to the page area's end in between. A forced break anywhere
+inside a block breaks the page there (#38). Percentage margins and paddings resolve
+against each box's containing block.
+
 ### Positioned boxes in print
 
 As Chrome prints them (#32):
@@ -321,9 +330,8 @@ pages the header is **re-emitted atop every continued page** (`layout/table.rs`,
 
 From `paginate/walk.rs`:
 
-- When a block is split across pages, its box wrapper (background/border) is **not
-  re-emitted** around each part — children are emitted directly (except `<html>` and
-  `<body>`, sliced onto every page; see above).
+- A block that does not fit the rest of the page but fits on an empty one moves to the
+  next page whole (AC-6.2), where Chrome would split it at the page end.
 - An absolutely positioned box taller than the page remainder is placed whole (Chrome
   fragments it); a fixed box's containing block is the page body area (between any
   running header and footer bands).

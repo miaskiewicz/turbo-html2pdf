@@ -3173,7 +3173,7 @@
   },
   {
    "id": "split-decorated-after-content",
-   "html": "<!DOCTYPE html><html><head><style>@page{size:600px 400px;margin:40px}body{margin:0}</style></head><body><div style=\"height:100px;background:#ff0000;break-inside:avoid;\"></div><div style=\"border-top:5px solid #0000ff;border-bottom:5px solid #0000ff;background:#ff8000\"><div style=\"height:150px;background:#00ff00;break-inside:avoid;\"></div><div style=\"height:150px;background:#ffff00;break-inside:avoid;\"></div></div></body></html>",
+   "html": "<!DOCTYPE html><html><head><style>@page{size:600px 400px;margin:40px}body{margin:0}</style></head><body><div style=\"height:100px;background:#ff0000;break-inside:avoid;\"></div><div style=\"border-top:5px solid #0000ff;border-bottom:5px solid #0000ff;background:#ff8000\"><div style=\"height:150px;background:#00ff00;break-inside:avoid;\"></div><div style=\"height:200px;background:#ffff00;break-inside:avoid;\"></div></div></body></html>",
    "colors": {
     "red": "#ff0000",
     "blue": "#0000ff",
@@ -3241,9 +3241,9 @@
       "blue": {
        "bbox": [
         40,
-        190,
+        240,
         559,
-        194
+        244
        ],
        "top": true,
        "bottom": true
@@ -3255,7 +3255,7 @@
         40,
         40,
         559,
-        189
+        239
        ],
        "top": true,
        "bottom": true

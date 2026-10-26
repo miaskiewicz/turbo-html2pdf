@@ -530,12 +530,13 @@ const CASES = [
     colors: ["blue", "orange", "red", "cyan", "green", "yellow", "magenta"],
   },
   {
-    // Item 1: a decorated block that starts on page 1 below other content and splits.
+    // Item 1: a decorated block that starts on page 1 below other content and splits (too
+    // tall for one page: the engine moves a block that fits on an empty page whole).
     id: "split-decorated-after-content",
     html: DOC(
       "body{margin:0}",
       block(C.red[0], 100) +
-        `<div style="border-top:5px solid ${C.blue[0]};border-bottom:5px solid ${C.blue[0]};background:${C.orange[0]}">${blocks(["green", "yellow"], 150)}</div>`,
+        `<div style="border-top:5px solid ${C.blue[0]};border-bottom:5px solid ${C.blue[0]};background:${C.orange[0]}">${block(C.green[0], 150)}${block(C.yellow[0], 200)}</div>`,
     ),
     colors: ["red", "blue", "orange", "green", "yellow"],
   },
