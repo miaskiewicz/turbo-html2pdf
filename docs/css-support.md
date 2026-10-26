@@ -12,32 +12,43 @@ The internal unit is **CSS pixels at 96 dpi**. The default font size is `16px`.
 
 ## 1. Selectors
 
-Supported simple selectors (`style/selector.rs`):
+Selectors are parsed and matched by turbo-dom's selector engine — the same engine
+behind turbo-dom's `matches` / `querySelector*` — through its stylesheet entry points
+(`turbo_dom::rtdom::query::parse_for_cascade` / `match_for_cascade`), and follow
+Chrome 156 (checked against turbo-dom's Chrome control,
+`crates/turbo-dom/tests/fixtures/cascade_selectors_chrome156.json`, and end to end
+through the HTML path by turbo-dom-layout's `tests/cascade_selectors_chrome.rs`):
 
-| Form | Example |
-|---|---|
-| Type / tag | `div` |
-| Universal | `*` |
-| Class | `.total` |
-| ID | `#footer` |
-| Attribute | `[data-x]`, `[type="text"]` |
-| Pseudo-class | `:first-child`, `:last-child`, `:nth-child(…)`, `:nth-of-type(…)` |
+- simple selectors: type, universal, `*|` / `|` namespace prefixes, `.class`, `#id`,
+  attribute selectors with every operator (`[a]`, `=`, `~=`, `|=`, `^=`, `$=`, `*=`,
+  quoted or not, the `i`/`s` flags), CSS escapes and non-ASCII identifiers;
+- all four combinators (descendant, `>`, `+`, `~`);
+- pseudo-classes: the structural ones (`:first-child`, `:last-child`, `:only-child`,
+  `:*-of-type`, `:nth-child()`, `:nth-last-child()` with `An+B of S`,
+  `:nth-of-type()`, `:nth-last-of-type()`, `:root`, `:empty`), `:is()`, `:where()`,
+  `:not()`, `:has()`, form state (`:checked`, `:disabled`, `:enabled`, `:required`,
+  `:optional`, `:read-only`, `:read-write`), `:link` / `:any-link`, `:lang()`,
+  `:defined`, `:scope` (= `:root`); pseudo-class names are ASCII case-insensitive;
+- user-action and other dynamic pseudo-classes (`:hover`, `:focus`, `:visited`,
+  `:target`, `:default`, `:placeholder-shown`, …) are valid and never match: a PDF is
+  the resting state;
+- pseudo-elements (`::before`, `::marker`, legacy `:before`, `::-webkit-*`, …) are
+  valid and never match an element (no generated content).
 
-Attribute operators: `[a]` (exists), `[a=v]`, `[a~=v]` (word), `[a|=v]`
-(dash-match), `[a^=v]` (prefix), `[a$=v]` (suffix), `[a*=v]` (substring). Values
-may be quoted.
+A selector list is all-or-nothing, as in a browser: an unknown pseudo-class or
+pseudo-element, an empty list item or a dangling combinator drops the whole rule
+(`:is()` / `:where()` arguments are forgiving).
 
-`:nth-child` / `:nth-of-type` accept `even`, `odd`, an integer, or `An+B`
-(`2n+1`, `n`, `-n`, `3n`, …).
+**Specificity** follows Selectors 4: `(ids, classes + attributes + pseudo-classes,
+types + pseudo-elements)`, with `:where()` = 0 and `:is()` / `:not()` / `:has()` =
+their most specific argument. The cascade layers UA styles below author CSS below
+inline node styles.
 
-**Combinators:** descendant (whitespace, `div p`) and child (`>`, `div > p`).
-**Sibling combinators (`+`, `~`) are not supported.**
-
-**Not supported:** pseudo-elements (`::before`), and any pseudo-class other than
-the four above (`:hover`, `:not()`, `:checked`, … are silently dropped).
-
-**Specificity** is the standard `(ids, classes+attrs+pseudo-classes, types)`
-tuple. The cascade layers UA styles below author CSS below inline node styles.
+In templates, the content of a flow (template body, footnotes, regions) matches as
+its own scope: no ancestors above it, `:root` never matches, and `t:` directives are
+never matched by type selectors. On the HTML path the `<html>`/`<body>` shells take
+part in matching (classes, attributes) but sit at the root position: they are not
+`:first-child`, have no preceding sibling and match `:empty`.
 
 ---
 
@@ -52,7 +63,7 @@ tuple. The cascade layers UA styles below author CSS below inline node styles.
 - At-rules `@name prelude { body }` are sliced out and kept verbatim for later
   phases (e.g. `@page`); the parser itself does not interpret them.
 
-**Not supported:** `@import`, custom properties / `var()`, CSS nesting, escapes.
+**Not supported:** `@import`, CSS nesting.
 
 ---
 

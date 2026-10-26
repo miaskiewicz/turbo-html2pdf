@@ -168,13 +168,15 @@ fn universal_selector_matches_all() {
 
 #[test]
 fn unknown_pseudo_class_is_ignored() {
-    // A genuinely unknown pseudo-class is dropped, and the rest of the compound
-    // still matches (lenient parsing).
+    // changed@S3b: a genuinely unknown pseudo-class makes the whole rule invalid, as in
+    // Chrome (it used to be dropped from the compound, so `a` matched). Chrome-156
+    // control: turbo-dom crates/turbo-dom/tests/fixtures/cascade_selectors_chrome156.json,
+    // cascade case "unknown-pseudo-class".
     let tree = styled(
         r#"<a id="e">x</a><p id="p">y</p>"#,
-        "a:totallyunknown { color: red }",
+        "a:totallyunknown { color: red } a:totallyunknown, p { color: blue }",
     );
-    assert_eq!(prop(&tree, "e", "color").as_deref(), Some("red"));
+    assert_eq!(prop(&tree, "e", "color").as_deref(), Some("#0000ee"));
     assert_eq!(prop(&tree, "p", "color"), None);
 }
 
