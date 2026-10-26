@@ -8,7 +8,7 @@
 mod common;
 
 use turbo_html2pdf_core::layout::fragment::*;
-use turbo_html2pdf_core::node::TKind;
+use turbo_html2pdf_core::TKind;
 
 #[test]
 fn directive_content_roundtrips() {
@@ -18,10 +18,10 @@ fn directive_content_roundtrips() {
         0.0,
         0.0,
         0.0,
-        FragmentContent::Directive(TKind::Footnote),
+        FragmentContent::Marker(TKind::Footnote.marker()),
     );
     match f.content {
-        FragmentContent::Directive(k) => assert_eq!(k, TKind::Footnote),
+        FragmentContent::Marker(k) => assert_eq!(TKind::from_marker(k), Some(TKind::Footnote)),
         _ => panic!("expected directive"),
     }
 }

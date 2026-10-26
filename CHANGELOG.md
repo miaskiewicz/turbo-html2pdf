@@ -15,6 +15,17 @@ PyPI, and crates.io packages release in lockstep from a `v*` tag (PyPI on `pyv*`
   `perf`, `svg`, `xref`, `pdf-ua` and `print-color` features forward to the layout
   crate. Layout tests and their Chrome fixtures, and the `font_startup` example,
   moved with the code.
+- html2pdf no longer keeps its own DOM: rendered markup is parsed into a turbo-dom
+  document and styled through turbo-dom-layout's Tree input (output byte-identical).
+  `Program::render_nodes` / `render_region` return a `Flow` (`Flow::style`,
+  `Flow::to_nodes` for the legacy `Node` copy); `TKind` lives in the new `markers`
+  module and directives are `Tag::Marker` / `FragmentContent::Marker` in the layout
+  types. PDF/UA roles/alt text and xref links/anchors are derived after layout into
+  `Page::semantics` (`Semantics::role` / `alt` / `link_href` / `anchor`) instead of
+  `Fragment` fields; `UaRole` moved to `semantics`. The `xref`, `pdf-ua` and
+  `print-color` features no longer forward to turbo-dom-layout (they set its
+  runtime options). The root `layout_html` / `layout_boxes` / `parse_html` stay
+  html2pdf-mode; `html_layout::*` is turbo-dom-layout's directive-free drive.
 
 ## [0.3.9] — 2026-10-25 — iterate computed style pairs
 

@@ -21,6 +21,7 @@ fn empty_pages(n: u32) -> Vec<Page> {
             header: Vec::new(),
             footer: Vec::new(),
             footnotes: Vec::new(),
+            semantics: Default::default(),
         })
         .collect()
 }

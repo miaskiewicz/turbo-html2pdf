@@ -20,9 +20,10 @@
 use pdf_writer::types::StructRole;
 use pdf_writer::{Content, Finish, Name, Pdf, Ref, TextStr};
 
-use crate::layout::fragment::{Fragment, FragmentContent, UaRole};
+use crate::layout::fragment::{Fragment, FragmentContent};
 use crate::layout::value::BorderEdges;
 use crate::paginate::Page;
+use crate::semantics::{Semantics, UaRole};
 
 use super::EmitOptions;
 
@@ -58,7 +59,7 @@ fn content_band_kind(frag: &Fragment) -> WrapKind {
         FragmentContent::Box {
             background, border, ..
         } => box_wrap(*background, border),
-        FragmentContent::Directive(_) => WrapKind::None,
+        FragmentContent::Marker(_) => WrapKind::None,
     }
 }
 
@@ -89,7 +90,7 @@ fn paints(frag: &Fragment) -> bool {
         FragmentContent::Box {
             background, border, ..
         } => background.is_some() || border.any_visible(),
-        FragmentContent::Directive(_) => false,
+        FragmentContent::Marker(_) => false,
     }
 }
 
@@ -250,12 +251,15 @@ struct TreeBuilder {
     nodes: Vec<StructNode>,
     roots: Vec<usize>,
     mcid_counts: Vec<i32>,
+    /// The fragment semantics of the page being walked.
+    semantics: Semantics,
 }
 
 impl TreeBuilder {
     /// Walk every page's content bands, growing the tree.
     fn run(&mut self, pages: &[Page]) {
         for (page, frags) in pages.iter().enumerate() {
+            self.semantics = frags.semantics.clone();
             let mut mcid = 0i32;
             self.walk_band(&frags.body, page, None, &mut mcid);
             self.walk_band(&frags.footnotes, page, None, &mut mcid);
@@ -295,11 +299,12 @@ impl TreeBuilder {
         page: usize,
         parent: Option<usize>,
     ) -> Option<usize> {
-        let role = match frag.role {
+        let role = match self.semantics.role(frag) {
             Some(UaRole::Artifact) | None => return parent,
             Some(r) => r,
         };
-        let idx = self.push_node(map_role(role), frag.alt.clone(), page);
+        let alt = self.semantics.alt(frag).map(str::to_string);
+        let idx = self.push_node(map_role(role), alt, page);
         match parent {
             Some(p) => self.nodes[p].children.push(idx),
             None => self.roots.push(idx),

@@ -46,8 +46,14 @@ Jinja-free `layout_html` drive — lives in the
 [`turbo-dom-layout`](https://github.com/miaskiewicz/turbo-dom/tree/main/crates/turbo-dom-layout)
 crate. This crate depends on it and re-exports it at the same paths
 (`turbo_html2pdf_core::style::…`, `::layout::…`, `::text::…`, `::layout_snapshot::…`,
-`::Node`, `::Fragment`, …), so existing code compiles unchanged. Templating,
-`t:` directives, pagination/footnotes/endnotes and PDF emit stay here. The
+`::Node`, `::Fragment`, …). Templating, `t:` directives, pagination/footnotes/endnotes
+and PDF emit stay here. A rendered template is a turbo-dom document (`Flow`:
+`Program::render_nodes` returns it; `Flow::style` styles it, `Flow::to_nodes` gives the
+legacy `Node` copy); the `t:` directives are turbo-dom-layout markers (`markers`), and
+PDF/UA roles + internal links are derived after layout (`Semantics`, on each `Page`).
+The root `layout_html` / `layout_boxes` / `parse_html` are the html2pdf-mode HTML
+drive (directives classified, unknown `t:` rejected); `html_layout::*` is
+turbo-dom-layout's directive-free one. The
 layout tests and their Chrome control fixtures (referenced below as
 `tests/fixtures/…`) live in turbo-dom-layout.
 
@@ -56,9 +62,9 @@ layout tests and their Chrome control fixtures (referenced below as
 Default = `bundled-fonts` (embeds Inter/Roboto, Liberation Serif/PT Serif,
 Fira Code/IBM Plex Mono so documents render with no caller fonts). Opt-in:
 `endnotes`, `xref`, `print-color`, `pdf-a`, `pdf-ua`, `append`, `encrypt`,
-`svg`. `bundled-fonts`, `svg` and `perf` forward to turbo-dom-layout, as do
-`xref`, `pdf-ua` and `print-color` (temporarily: their cfg'd fragment fields live
-in the layout code). See the repo for the full specification.
+`svg`. `bundled-fonts`, `svg` and `perf` forward to turbo-dom-layout; `xref` and
+`print-color` set turbo-dom-layout's runtime options, and `pdf-ua`/`xref` derive the
+fragment semantics after layout. See the repo for the full specification.
 
 ## License
 

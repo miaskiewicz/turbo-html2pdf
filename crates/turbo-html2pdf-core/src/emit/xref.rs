@@ -18,6 +18,7 @@ use pdf_writer::{Finish, Name, Pdf, Rect, Ref};
 
 use crate::layout::fragment::Fragment;
 use crate::paginate::Page;
+use crate::semantics::Semantics;
 
 use super::unit::{flip_y, px_to_pt};
 
@@ -59,7 +60,13 @@ impl Xref {
             let mut page_links = Vec::new();
             for band in bands(page) {
                 for frag in band {
-                    walk(frag, page_idx, h, &mut dests, &mut page_links);
+                    walk(
+                        frag,
+                        &page.semantics,
+                        (page_idx, h),
+                        &mut dests,
+                        &mut page_links,
+                    );
                 }
             }
             links.push(page_links);
@@ -119,22 +126,22 @@ fn bands(page: &Page) -> [&[Fragment]; 4] {
 /// Record a fragment's anchor and/or link, then recurse into its children.
 fn walk(
     frag: &Fragment,
-    page_idx: usize,
-    page_height_pt: f32,
+    semantics: &Semantics,
+    (page_idx, page_height_pt): (usize, f32),
     dests: &mut BTreeMap<String, Dest>,
     links: &mut Vec<Link>,
 ) {
-    if let Some(name) = &frag.xref.anchor {
-        dests.entry(name.clone()).or_insert(Dest {
+    if let Some(name) = semantics.anchor(frag) {
+        dests.entry(name.to_string()).or_insert(Dest {
             page: page_idx,
             x: frag.x,
             y: frag.y,
             page_height_pt,
         });
     }
-    if let Some(target) = &frag.xref.link_href {
+    if let Some(target) = semantics.link_href(frag) {
         links.push(Link {
-            target: target.clone(),
+            target: target.to_string(),
             x: frag.x,
             y: frag.y,
             width: frag.width,
@@ -143,7 +150,7 @@ fn walk(
         });
     }
     for child in &frag.children {
-        walk(child, page_idx, page_height_pt, dests, links);
+        walk(child, semantics, (page_idx, page_height_pt), dests, links);
     }
 }
 

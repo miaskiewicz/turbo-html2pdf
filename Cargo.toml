@@ -32,8 +32,9 @@ opt-level = 3
 lto = "thin"
 codegen-units = 1
 
-# Pre-publish only: turbo-dom-layout 0.6.0 comes from the turbo-dom consolidation branch
-# until it is on crates.io; remove this block and re-lock (`cargo update -p turbo-dom-layout`)
-# at release (see PUBLISHING.md).
+# Pre-publish only: turbo-dom-layout 0.6.0 and turbo-dom (with the S2 Tree API) come from
+# the turbo-dom consolidation branch until they are on crates.io; remove this block and
+# re-lock (`cargo update -p turbo-dom-layout -p turbo-dom`) at release (see PUBLISHING.md).
 [patch.crates-io]
-turbo-dom-layout = { git = "https://github.com/miaskiewicz/turbo-dom", rev = "7dfc1d9f5cf73a5feeeb02b28cd873df6be6c28e" }
+turbo-dom-layout = { git = "https://github.com/miaskiewicz/turbo-dom", rev = "4463654ffeb2b048cdd05a06a54b33897165ef0c" }
+turbo-dom = { git = "https://github.com/miaskiewicz/turbo-dom", rev = "4463654ffeb2b048cdd05a06a54b33897165ef0c" }

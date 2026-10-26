@@ -19,8 +19,8 @@ mod common;
 use std::collections::HashMap;
 use turbo_html2pdf_core::paginate::{paginate, Page};
 use turbo_html2pdf_core::{
-    build_cascade, emit_pdf_with_images, layout_with_images, style_tree, Attr, Diagnostics,
-    Element, EmitOptions, ImageCtx, ImageResolver, Node, Tag,
+    build_cascade, emit_pdf_with_images, layout_with_images, Attr, Diagnostics, Element,
+    EmitOptions, ImageCtx, ImageResolver, Node, Tag,
 };
 use turbo_html2pdf_core::{style::TokenSet, StyledNode};
 
@@ -79,7 +79,7 @@ fn img_node(src: &str) -> Vec<Node> {
 
 fn styled_img(src: &str) -> Vec<StyledNode> {
     let cascade = build_cascade("", "", TokenSet::default());
-    style_tree(&img_node(src), &cascade)
+    common::style_nodes(&img_node(src), &cascade)
 }
 
 fn paginate_img(src: &str, resolver: &dyn ImageResolver) -> Vec<Page> {

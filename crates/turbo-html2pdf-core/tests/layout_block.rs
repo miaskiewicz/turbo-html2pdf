@@ -11,7 +11,8 @@ mod common;
 use turbo_html2pdf_core::layout::block::layout_tree;
 use turbo_html2pdf_core::layout::boxgen::build_box_tree;
 use turbo_html2pdf_core::layout::fragment::{Fragment, FragmentContent};
-use turbo_html2pdf_core::node::{TKind, Tag};
+use turbo_html2pdf_core::node::Tag;
+use turbo_html2pdf_core::TKind;
 use turbo_html2pdf_core::{ComputedStyle, Diagnostics, StyledElement, StyledNode};
 
 fn cs(pairs: &[(&str, &str)]) -> ComputedStyle {
@@ -24,20 +25,22 @@ fn el(tag: &str, pairs: &[(&str, &str)], children: Vec<StyledNode>) -> StyledNod
         attrs: vec![],
         style: cs(pairs),
         children,
+        source: None,
     })
 }
 
 fn dir(kind: TKind, children: Vec<StyledNode>) -> StyledNode {
     StyledNode::Element(StyledElement {
-        tag: Tag::Directive(kind),
+        tag: Tag::Marker(kind.marker()),
         attrs: vec![],
         style: cs(&[]),
         children,
+        source: None,
     })
 }
 
 fn txt(s: &str) -> StyledNode {
-    StyledNode::Text(s.to_string())
+    StyledNode::Text(s.into())
 }
 
 fn lay(nodes: &[StyledNode], cb_width: f32) -> Fragment {
@@ -66,7 +69,7 @@ fn block_directive_is_zero_size_marker() {
     assert_eq!(d.height, 0.0);
     assert!(matches!(
         d.content,
-        FragmentContent::Directive(TKind::RunningHeader)
+        FragmentContent::Marker(k) if TKind::from_marker(k) == Some(TKind::RunningHeader)
     ));
 }
 
@@ -90,5 +93,5 @@ fn lines_handle_text_directive_and_atomic() {
         .any(|f| matches!(f.content, FragmentContent::TextLine { .. })));
     assert!(frags
         .iter()
-        .any(|f| matches!(f.content, FragmentContent::Directive(TKind::Footnote))));
+        .any(|f| matches!(f.content, FragmentContent::Marker(k) if TKind::from_marker(k) == Some(TKind::Footnote))));
 }

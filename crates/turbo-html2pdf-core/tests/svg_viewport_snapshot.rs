@@ -69,7 +69,7 @@ fn text_paths_directives_and_invalid_viewports_cannot_be_declared_svg_sources() 
         Err(SvgSnapshotError::InvalidViewportSource(SourceId(2)))
     ));
     let directives = [Node::Element(Element {
-        tag: Tag::Directive(TKind::Page),
+        tag: Tag::Marker(TKind::Page.marker()),
         attrs: vec![],
         children: vec![],
     })];

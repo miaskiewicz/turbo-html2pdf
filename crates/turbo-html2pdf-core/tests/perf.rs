@@ -14,9 +14,7 @@ use turbo_html2pdf_core::perf;
 #[test]
 fn report_hot_path_breakdown() {
     use turbo_html2pdf_core::style::TokenSet;
-    use turbo_html2pdf_core::{
-        build_cascade, compile, layout, style_tree, CompileOptions, Diagnostics,
-    };
+    use turbo_html2pdf_core::{build_cascade, compile, layout, CompileOptions, Diagnostics};
     let tmpl = "<table>{% for r in rows %}<tr><td>{{ r.a }}</td><td>{{ r.b }}</td>\
                 <td>{{ r.c }}</td></tr>{% endfor %}</table>";
     let rows: Vec<_> = (0..1000)
@@ -24,9 +22,9 @@ fn report_hot_path_breakdown() {
         .collect();
     let data = serde_json::json!({ "rows": rows });
     let (program, _) = compile(tmpl, &CompileOptions::default()).unwrap();
-    let (nodes, _) = program.render_nodes(&data, Some(0)).unwrap();
+    let (flow, _) = program.render_nodes(&data, Some(0)).unwrap();
     let cascade = build_cascade("", "", TokenSet::default());
-    let styled = style_tree(&nodes, &cascade);
+    let styled = flow.style(&cascade);
     let reg = common::registry();
     perf::reset();
     let mut diags = Diagnostics::default();
@@ -40,9 +38,7 @@ fn report_hot_path_breakdown() {
 fn invoice_stage_timing() {
     use std::time::Instant;
     use turbo_html2pdf_core::style::TokenSet;
-    use turbo_html2pdf_core::{
-        build_cascade, compile, layout, style_tree, CompileOptions, Diagnostics,
-    };
+    use turbo_html2pdf_core::{build_cascade, compile, layout, CompileOptions, Diagnostics};
     let tmpl = "<style>.tot{font-weight:bold}</style><h1>Invoice {{ n }}</h1>\
         <table>{% for r in rows %}<tr><td>{{ r.d }}</td><td>{{ r.q }}</td>\
         <td>{{ r.p }}</td></tr>{% endfor %}</table><p class=tot>Total {{ t }}</p>";
@@ -67,12 +63,12 @@ fn invoice_stage_timing() {
     let t_cascade = time(2000, &mut || {
         std::hint::black_box(build_cascade("", "", TokenSet::default()));
     });
-    let (nodes, _) = program.render_nodes(&data, Some(0)).unwrap();
+    let (flow, _) = program.render_nodes(&data, Some(0)).unwrap();
     let cascade = build_cascade("", "", TokenSet::default());
     let t_style = time(2000, &mut || {
-        std::hint::black_box(style_tree(&nodes, &cascade));
+        std::hint::black_box(flow.style(&cascade));
     });
-    let styled = style_tree(&nodes, &cascade);
+    let styled = flow.style(&cascade);
     let reg = common::registry();
     let t_layout = time(2000, &mut || {
         let mut d = Diagnostics::default();

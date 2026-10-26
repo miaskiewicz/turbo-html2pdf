@@ -2,12 +2,14 @@
 //! `tests/layout_snapshot.rs`; the ones here need TKind directives, templating or the
 //! PDF emitter.
 
+mod common;
+
 use turbo_html2pdf_core::layout_snapshot::{
     snapshot_live_tree, GeometryKind, LayoutSnapshot, SnapshotInputs, SourceId, SourceIdentity,
 };
 use turbo_html2pdf_core::{
-    build_cascade, layout_with_images, style_tree, Attr, Diagnostics, Element, FontRegistry,
-    ImageCtx, NoImages, Node, Tag,
+    build_cascade, layout_with_images, Attr, Diagnostics, Element, FontRegistry, ImageCtx,
+    NoImages, Node, Tag,
 };
 
 fn element(tag: &str, css: &str, children: Vec<Node>) -> Node {
@@ -53,7 +55,7 @@ fn capture(nodes: &[Node], ids: &[SourceIdentity]) -> LayoutSnapshot {
 #[test]
 fn directive_fragments_keep_actual_source_identity_and_category() {
     let node = Node::Element(Element {
-        tag: Tag::Directive(turbo_html2pdf_core::TKind::Page),
+        tag: Tag::Marker(turbo_html2pdf_core::TKind::Page.marker()),
         attrs: Vec::new(),
         children: Vec::new(),
     });
@@ -61,7 +63,7 @@ fn directive_fragments_keep_actual_source_identity_and_category() {
     let source = snapshot.source(SourceId(51)).unwrap();
     assert_eq!(source.fragment_indices.len(), 1);
     let fragment = &snapshot.fragments()[source.fragment_indices[0]];
-    assert_eq!(fragment.kind, GeometryKind::Directive);
+    assert_eq!(fragment.kind, GeometryKind::Marker);
     assert!(fragment.used_box.is_none());
     assert_eq!(fragment.source_id, Some(SourceId(51)));
 }
@@ -69,7 +71,7 @@ fn directive_fragments_keep_actual_source_identity_and_category() {
 #[test]
 fn hidden_directives_and_their_descendants_have_no_live_geometry() {
     let node = Node::Element(Element {
-        tag: Tag::Directive(turbo_html2pdf_core::TKind::Page),
+        tag: Tag::Marker(turbo_html2pdf_core::TKind::Page.marker()),
         attrs: vec![Attr {
             name: "style".into(),
             value: "display:none".into(),
@@ -86,7 +88,7 @@ fn hidden_directives_and_their_descendants_have_no_live_geometry() {
         assert!(source.fragment_indices.is_empty());
         assert!(source.descendant_fragment_indices.is_empty());
     }
-    let styled = style_tree(&[node], &build_cascade("", "", Default::default()));
+    let styled = common::style_nodes(&[node], &build_cascade("", "", Default::default()));
     let galley = layout_with_images(
         &styled,
         200.0,

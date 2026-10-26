@@ -11,16 +11,16 @@ use turbo_html2pdf_core::layout::boxgen::build_box_tree;
 use turbo_html2pdf_core::layout::fragment::{Fragment, FragmentContent, NodeId};
 use turbo_html2pdf_core::style::TokenSet;
 use turbo_html2pdf_core::{
-    build_cascade, compile, layout, style_tree, CompileOptions, Diagnostics, StyledNode,
+    build_cascade, compile, layout, CompileOptions, Diagnostics, StyledNode,
 };
 
 fn render(template: &str) -> Vec<StyledNode> {
     let (program, _) = compile(template, &CompileOptions::default()).expect("compile");
-    let (nodes, _) = program
+    let (flow, _) = program
         .render_nodes(&serde_json::json!({"name": "World"}), None)
         .expect("render");
     let cascade = build_cascade("", "", TokenSet::default());
-    style_tree(&nodes, &cascade)
+    common::style_flow(&flow, &cascade)
 }
 
 fn galley(template: &str) -> Fragment {
@@ -154,7 +154,7 @@ fn collect_box_ids(b: &turbo_html2pdf_core::layout::boxgen::LayoutBox, out: &mut
                 collect_inline_ids(it, out);
             }
         }
-        BoxKind::Directive(_) => {}
+        BoxKind::Marker(_) => {}
     }
 }
 
@@ -165,7 +165,7 @@ fn collect_inline_ids(
     use turbo_html2pdf_core::layout::boxgen::InlineItem;
     match it {
         InlineItem::Text { node_id, .. }
-        | InlineItem::Directive { node_id, .. }
+        | InlineItem::Marker { node_id, .. }
         | InlineItem::SourceBreak { node_id, .. }
         | InlineItem::Boundary { node_id, .. } => {
             out.insert(*node_id);

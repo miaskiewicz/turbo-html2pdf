@@ -4,13 +4,21 @@ Native HTML/CSS + Jinja → PDF engine (Rust core) shipped to npm and PyPI via
 N-API / WebAssembly / PyO3 bindings.
 
 The layout half (style cascade, layout, text/fonts, layout snapshots, `layout_html`,
-images, errors, the `t:` markup parse) lives in the **turbo-dom-layout** crate of the
-turbo-dom workspace; `turbo-html2pdf-core` depends on it and re-exports it at its old
-paths (`turbo_html2pdf_core::style::…`, `::layout::…`, `::Node`, …). Layout tests and
-their Chrome fixtures live there too; the tests here are templating / `t:`-directive /
-paged / PDF ones. During the consolidation the dependency is a local path
-(`../turbo-dom-wt-layout/crates/turbo-dom-layout`) — the integration step switches it
-to a version + `[patch]`.
+images, errors) lives in the **turbo-dom-layout** crate of the turbo-dom workspace;
+`turbo-html2pdf-core` depends on it (and on `turbo-dom`) and re-exports it at its old
+paths (`turbo_html2pdf_core::style::…`, `::layout::…`, `::Node`, …). Rendered markup is
+parsed into a turbo-dom document (`Flow`, `src/flow.rs`; `<t:…/>` expansion and the
+unknown-`t:` error in `src/template/markup.rs`) and styled through turbo-dom-layout's
+Tree input with the `t:` directives as layout markers (`src/markers.rs`). Footnote and
+endnote paragraphs are built by mutating that document. PDF/UA roles and xref
+links/anchors are derived after layout from the recorded box sources
+(`src/semantics.rs`, `src/semantics_derive.rs`) and ride on each `Page`. Layout tests
+and their Chrome fixtures live in turbo-dom-layout; the tests here are templating /
+`t:`-directive / paged / PDF ones, plus `src/equivalence_tests.rs` (the consolidation
+S2 gate: Tree input == legacy `Node` input; `TURBO_HTML2PDF_EQUIV_DIRS` adds corpora).
+Pre-publish, `turbo-dom-layout` and `turbo-dom` resolve through the root
+`[patch.crates-io]` (git revs of the turbo-dom consolidation branch; a local path while
+iterating).
 
 ## Release runbook
 
@@ -103,14 +111,15 @@ Default build = `["bundled-fonts"]` only. Everything else is opt-in and kept out
 of the default-coverage surface (gated-only modules are listed in
 `tarpaulin.toml` `exclude-files`; gated branches in shared files are relocated
 into gated-only sibling modules so the tarpaulin cfg-mapping quirk can't flag
-them — see turbo-dom-layout's `layout/boxgen_ua.rs`, `layout/boxgen_xref.rs`, whose
-tarpaulin excludes moved with them).
+them — e.g. `src/semantics_derive.rs`).
 
 - `bundled-fonts` (default): embeds Inter/Roboto, Liberation Serif/PT Serif,
   Fira Code/IBM Plex Mono so docs render with no caller fonts (~6 MB).
 - `endnotes`, `xref`, `print-color`, `pdf-a`, `pdf-ua`, `append`, `encrypt`, `svg`.
-  `bundled-fonts`, `perf`, `svg` and (temporarily) `xref`/`pdf-ua`/`print-color`
-  forward to turbo-dom-layout's features of the same name.
+  `bundled-fonts`, `perf`, `svg` forward to turbo-dom-layout's features of the same
+  name; `xref` / `print-color` become turbo-dom-layout runtime options
+  (`atomic_internal_links`, `accept_cmyk`) and `pdf-ua`/`xref` turn on the post-layout
+  semantics derivation.
 - `pdf-a`/`pdf-ua`/`cmyk` are also **per-render** runtime toggles on
   `EmitOptions` (default off → byte-identical plain RGB/untagged output).
 

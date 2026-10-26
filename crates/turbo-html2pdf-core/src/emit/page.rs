@@ -239,6 +239,6 @@ fn paint_content(content: &mut Content, frag: &Fragment, ctx: &PaintCtx) {
         FragmentContent::Image(placement) => {
             paint_image(content, frag, placement, ctx.images, ctx.page_height_pt);
         }
-        FragmentContent::Directive(_) => {}
+        FragmentContent::Marker(_) => {}
     }
 }
