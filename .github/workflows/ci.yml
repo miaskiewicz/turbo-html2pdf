@@ -29,6 +29,22 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y poppler-utils
       - name: Test
         run: cargo test --workspace
+      # The core configurations `cargo test --workspace` never builds (workspace feature
+      # unification; turbo-html2pdf#28): svg (turbo-html2pdf-svg / MCP --features svg),
+      # every feature incl. perf (the hot-path budgets), and no default features (the
+      # font-less wasm build).
+      - name: Clippy + test core --features svg
+        run: |
+          cargo clippy -p turbo-html2pdf-core --all-targets --features svg -- -D warnings
+          cargo test -p turbo-html2pdf-core --features svg
+      - name: Clippy + test core --all-features (perf budgets)
+        run: |
+          cargo clippy -p turbo-html2pdf-core --all-targets --all-features -- -D warnings
+          cargo test -p turbo-html2pdf-core --all-features
+      - name: Clippy + test core --no-default-features (no bundled fonts, as turbo-pdf-wasm)
+        run: |
+          cargo clippy -p turbo-html2pdf-core --all-targets --no-default-features -- -D warnings
+          cargo test -p turbo-html2pdf-core --no-default-features
       - name: Complexity gate (cc < 6)
         run: cargo run --manifest-path tools/cc-check/Cargo.toml -- --max 5 crates
       - name: Coverage (100% gate)

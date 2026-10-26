@@ -11,14 +11,15 @@ mod common;
 
 use turbo_html2pdf_core::perf;
 
-#[test]
-fn report_hot_path_breakdown() {
+/// Lay out a 1000-row, 3-column table whose cells come from `cell(row, column)` and
+/// return the `font.shape` count (rustybuzz calls: shape-cache misses).
+fn table_shape_count(label: &str, cell: impl Fn(usize, usize) -> String) -> u64 {
     use turbo_html2pdf_core::style::TokenSet;
     use turbo_html2pdf_core::{build_cascade, compile, layout, CompileOptions, Diagnostics};
     let tmpl = "<table>{% for r in rows %}<tr><td>{{ r.a }}</td><td>{{ r.b }}</td>\
                 <td>{{ r.c }}</td></tr>{% endfor %}</table>";
     let rows: Vec<_> = (0..1000)
-        .map(|i| serde_json::json!({"a": format!("Item {i}"), "b": i, "c": format!("{}.50", i)}))
+        .map(|i| serde_json::json!({"a": cell(i, 0), "b": cell(i, 1), "c": cell(i, 2)}))
         .collect();
     let data = serde_json::json!({ "rows": rows });
     let (program, _) = compile(tmpl, &CompileOptions::default()).unwrap();
@@ -29,9 +30,31 @@ fn report_hot_path_breakdown() {
     perf::reset();
     let mut diags = Diagnostics::default();
     let _ = layout(&styled, 600.0, &reg, &mut diags);
-    eprintln!("HOTPATH report-1k layout: {:?}", perf::snapshot());
-    // Regression guard: shaping must stay deduped (far below the ~6k text cells).
-    assert!(perf::count("font.shape") < 5000);
+    eprintln!("HOTPATH {label} layout: {:?}", perf::snapshot());
+    perf::count("font.shape")
+}
+
+/// Distinct cells: every run is shaped at most twice — once for the table's width
+/// measurement, once for line layout. The shape cache is bounded (128 entries per face,
+/// turbo-dom-layout `text::font`), so with 3000 distinct runs the second pass misses;
+/// the old `< 5000` budget predates that bound and was never run in CI
+/// (miaskiewicz/turbo-html2pdf#28: 6096 on every platform).
+#[test]
+fn report_hot_path_breakdown() {
+    let distinct = table_shape_count("report-1k", |i, c| match c {
+        0 => format!("Item {i}"),
+        1 => i.to_string(),
+        _ => format!("{i}.50"),
+    });
+    assert!(distinct <= 2 * 3000 + 100, "font.shape {distinct}");
+}
+
+/// Repeated cells: the cache collapses them — one shape per distinct run (the regression
+/// the budget guards), not one per occurrence.
+#[test]
+fn repeated_runs_shape_once() {
+    let repeated = table_shape_count("repeat-1k", |_, c| ["Item", "42", "1.50"][c].to_string());
+    assert!(repeated <= 10, "font.shape {repeated}");
 }
 
 #[test]
