@@ -3371,6 +3371,289 @@
      }
     }
    ]
+  },
+  {
+   "id": "icb-fixed-percent-insets",
+   "html": "<!DOCTYPE html><html><head><style>@page{size:600px 400px;margin:40px}body{margin:0}</style></head><body><div style=\"position:fixed;top:50%;left:25%;width:50px;height:30px;background:#ff0000\"></div><div style=\"height:140px;background:#00ff00;break-inside:avoid;\"></div><div style=\"height:140px;background:#0000ff;break-inside:avoid;\"></div><div style=\"height:140px;background:#ffff00;break-inside:avoid;\"></div></body></html>",
+   "colors": {
+    "red": "#ff0000",
+    "green": "#00ff00",
+    "blue": "#0000ff",
+    "yellow": "#ffff00"
+   },
+   "pages": [
+    {
+     "size": [
+      600,
+      400
+     ],
+     "boxes": {
+      "red": {
+       "bbox": [
+        170,
+        200,
+        219,
+        229
+       ],
+       "top": true,
+       "bottom": true
+      },
+      "green": {
+       "bbox": [
+        40,
+        40,
+        559,
+        179
+       ],
+       "top": true,
+       "bottom": true
+      },
+      "blue": {
+       "bbox": [
+        40,
+        180,
+        559,
+        319
+       ],
+       "top": true,
+       "bottom": true
+      },
+      "yellow": null
+     }
+    },
+    {
+     "size": [
+      600,
+      400
+     ],
+     "boxes": {
+      "red": {
+       "bbox": [
+        170,
+        200,
+        219,
+        229
+       ],
+       "top": true,
+       "bottom": true
+      },
+      "green": null,
+      "blue": null,
+      "yellow": {
+       "bbox": [
+        40,
+        40,
+        559,
+        179
+       ],
+       "top": true,
+       "bottom": true
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "icb-fixed-percent-height",
+   "html": "<!DOCTYPE html><html><head><style>@page{size:600px 400px;margin:40px}body{margin:0}</style></head><body><div style=\"position:fixed;top:0;right:0;width:30px;height:50%;background:#ff0000\"></div><div style=\"height:140px;background:#00ff00;break-inside:avoid;width:100px\"></div><div style=\"height:140px;background:#0000ff;break-inside:avoid;width:100px\"></div><div style=\"height:140px;background:#ffff00;break-inside:avoid;width:100px\"></div></body></html>",
+   "colors": {
+    "red": "#ff0000",
+    "green": "#00ff00",
+    "blue": "#0000ff",
+    "yellow": "#ffff00"
+   },
+   "pages": [
+    {
+     "size": [
+      600,
+      400
+     ],
+     "boxes": {
+      "red": {
+       "bbox": [
+        530,
+        40,
+        559,
+        199
+       ],
+       "top": true,
+       "bottom": true
+      },
+      "green": {
+       "bbox": [
+        40,
+        40,
+        139,
+        179
+       ],
+       "top": true,
+       "bottom": true
+      },
+      "blue": {
+       "bbox": [
+        40,
+        180,
+        139,
+        319
+       ],
+       "top": true,
+       "bottom": true
+      },
+      "yellow": null
+     }
+    },
+    {
+     "size": [
+      600,
+      400
+     ],
+     "boxes": {
+      "red": {
+       "bbox": [
+        530,
+        40,
+        559,
+        199
+       ],
+       "top": true,
+       "bottom": true
+      },
+      "green": null,
+      "blue": null,
+      "yellow": {
+       "bbox": [
+        40,
+        40,
+        139,
+        179
+       ],
+       "top": true,
+       "bottom": true
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "icb-fixed-top-bottom-stretch",
+   "html": "<!DOCTYPE html><html><head><style>@page{size:600px 400px;margin:40px}body{margin:0}</style></head><body><div style=\"position:fixed;top:10px;bottom:20px;right:0;width:30px;background:#ff0000\"></div><div style=\"height:140px;background:#00ff00;break-inside:avoid;width:100px\"></div><div style=\"height:140px;background:#0000ff;break-inside:avoid;width:100px\"></div></body></html>",
+   "colors": {
+    "red": "#ff0000",
+    "green": "#00ff00",
+    "blue": "#0000ff"
+   },
+   "pages": [
+    {
+     "size": [
+      600,
+      400
+     ],
+     "boxes": {
+      "red": {
+       "bbox": [
+        530,
+        50,
+        559,
+        339
+       ],
+       "top": true,
+       "bottom": true
+      },
+      "green": {
+       "bbox": [
+        40,
+        40,
+        139,
+        179
+       ],
+       "top": true,
+       "bottom": true
+      },
+      "blue": {
+       "bbox": [
+        40,
+        180,
+        139,
+        319
+       ],
+       "top": true,
+       "bottom": true
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "icb-absolute-percent",
+   "html": "<!DOCTYPE html><html><head><style>@page{size:600px 400px;margin:40px}body{margin:0}</style></head><body><div style=\"position:absolute;top:50%;left:200px;width:50px;height:25%;background:#ff0000\"></div><div style=\"height:140px;background:#00ff00;break-inside:avoid;width:100px\"></div><div style=\"height:140px;background:#0000ff;break-inside:avoid;width:100px\"></div><div style=\"height:140px;background:#ffff00;break-inside:avoid;width:100px\"></div></body></html>",
+   "colors": {
+    "red": "#ff0000",
+    "green": "#00ff00",
+    "blue": "#0000ff",
+    "yellow": "#ffff00"
+   },
+   "pages": [
+    {
+     "size": [
+      600,
+      400
+     ],
+     "boxes": {
+      "red": {
+       "bbox": [
+        240,
+        200,
+        289,
+        279
+       ],
+       "top": true,
+       "bottom": true
+      },
+      "green": {
+       "bbox": [
+        40,
+        40,
+        139,
+        179
+       ],
+       "top": true,
+       "bottom": true
+      },
+      "blue": {
+       "bbox": [
+        40,
+        180,
+        139,
+        319
+       ],
+       "top": true,
+       "bottom": true
+      },
+      "yellow": null
+     }
+    },
+    {
+     "size": [
+      600,
+      400
+     ],
+     "boxes": {
+      "red": null,
+      "green": null,
+      "blue": null,
+      "yellow": {
+       "bbox": [
+        40,
+        40,
+        139,
+        179
+       ],
+       "top": true,
+       "bottom": true
+      }
+     }
+    }
+   ]
   }
  ]
 }

@@ -562,6 +562,50 @@ const CASES = [
     ),
     colors: ["blue", "red", "green"],
   },
+  // --- miaskiewicz/turbo-html2pdf#39 (P5b-W7): the print initial containing block is the
+  // page area (here 520x320): `%` insets and heights of fixed boxes, and of absolute
+  // boxes it contains, resolve against its height; `top` + `bottom` stretch an auto height.
+  {
+    // A fixed box at `top: 50%; left: 25%` repeats on every page 160px down the page area.
+    id: "icb-fixed-percent-insets",
+    html: DOC(
+      "body{margin:0}",
+      `<div style="position:fixed;top:50%;left:25%;width:50px;height:30px;background:${C.red[0]}"></div>` +
+        blocks(["green", "blue", "yellow"], 140),
+    ),
+    colors: ["red", "green", "blue", "yellow"],
+  },
+  {
+    // A fixed `height: 50%` is half the page area on every page.
+    id: "icb-fixed-percent-height",
+    html: DOC(
+      "body{margin:0}",
+      `<div style="position:fixed;top:0;right:0;width:30px;height:50%;background:${C.red[0]}"></div>` +
+        blocks(["green", "blue", "yellow"], 140, "width:100px"),
+    ),
+    colors: ["red", "green", "blue", "yellow"],
+  },
+  {
+    // A fixed box with `top` and `bottom` and an auto height spans the page area between them.
+    id: "icb-fixed-top-bottom-stretch",
+    html: DOC(
+      "body{margin:0}",
+      `<div style="position:fixed;top:10px;bottom:20px;right:0;width:30px;background:${C.red[0]}"></div>` +
+        blocks(["green", "blue"], 140, "width:100px"),
+    ),
+    colors: ["red", "green", "blue"],
+  },
+  {
+    // An absolute box of the initial containing block at `top: 50%`, with a `%` height,
+    // on the first page only.
+    id: "icb-absolute-percent",
+    html: DOC(
+      "body{margin:0}",
+      `<div style="position:absolute;top:50%;left:200px;width:50px;height:25%;background:${C.red[0]}"></div>` +
+        blocks(["green", "blue", "yellow"], 140, "width:100px"),
+    ),
+    colors: ["red", "green", "blue", "yellow"],
+  },
 ];
 
 /** Parse a binary PPM (P6, maxval 255) into { width, height, px(x, y) -> [r,g,b] }. */
