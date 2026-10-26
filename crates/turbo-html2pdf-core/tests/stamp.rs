@@ -81,6 +81,7 @@ fn page_with(body: Vec<Fragment>, number: u32) -> Page {
         footer: Vec::new(),
         footnotes: Vec::new(),
         semantics: Default::default(),
+        canvas: None,
     }
 }
 

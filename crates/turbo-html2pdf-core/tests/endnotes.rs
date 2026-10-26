@@ -1,17 +1,18 @@
 //! Phase 15 `endnotes` feature tests (§3). Only compiled with `--features
 //! endnotes`. Exercises the in-document `expand` rewrite directly (markers,
-//! numbering, list placement, edge cases — on flows copied from `Node` literals and
-//! read back as `Node`s) and one end-to-end render to prove the collected notes
+//! numbering, list placement, edge cases — on flows built from tree literals and
+//! read back as literals) and one end-to-end render to prove the collected notes
 //! flow into the body where `<t:endnotes/>` stood.
 
 #![cfg(feature = "endnotes")]
 
 mod common;
 
+use turbo_dom_layout::test_support::literal::{self, Element, Node};
 use turbo_html2pdf_core::endnotes;
 use turbo_html2pdf_core::layout::fragment::{Fragment, FragmentContent};
-use turbo_html2pdf_core::node::{Attr, Element, Node, Tag};
 use turbo_html2pdf_core::style::TokenSet;
+use turbo_html2pdf_core::tag::{Attr, Tag};
 use turbo_html2pdf_core::{
     build_cascade, compile, render_pages, style::AtRule, CompileOptions, Diagnostics, Page,
     RenderInputs,
@@ -77,10 +78,10 @@ fn text_of(node: &Node) -> String {
 
 /// Run the rewrite over a flow holding a copy of `nodes`; read it back as nodes.
 fn expand(nodes: Vec<Node>) -> Vec<Node> {
-    let copy = turbo_dom_layout::tree_from_nodes(&nodes, &common::marker_name);
+    let copy = literal::tree_from_nodes(&nodes, &common::marker_name);
     let mut flow = Flow::from_document(copy.tree);
     endnotes::expand(&mut flow);
-    flow.to_nodes()
+    common::flow_nodes(&flow)
 }
 
 // -- transform tests -----------------------------------------------------------

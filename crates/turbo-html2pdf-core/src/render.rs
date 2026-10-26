@@ -62,7 +62,7 @@ use turbo_dom_layout::TreeView;
 use crate::error::{Diagnostics, LintCode, RenderError, Span};
 use crate::flow::Flow;
 use crate::image::ImageResolver;
-use crate::layout::fragment::Fragment;
+use crate::layout::fragment::{Fragment, NodeId};
 use crate::layout::ImageCtx;
 use crate::markers::{directive_of, TKind};
 use crate::paginate::{paginate_with_footnotes, resolve_geometry, Note, Page, PageGeometry};
@@ -167,7 +167,15 @@ pub fn render_pages<T: Serialize>(
     diags: &mut Diagnostics,
 ) -> Result<Vec<Page>, RenderError> {
     let mut run = Run::new(diags);
-    let (mut body, mut flow, sources, reset) = lay_out_body(inputs, &mut run)?;
+    let (mut body, mut flow, sources, reset, document) = lay_out_body(inputs, &mut run)?;
+    // Everything after the body renders against the document's own sheets too (its
+    // `@page` rules, its `<style>` rules in notes and regions) and its root font size.
+    let inputs = &RenderInputs {
+        cascade: &document.cascade,
+        at_rules: &document.at_rules,
+        ..*inputs
+    };
+    let _root_font = turbo_dom_layout::root_font_scope(document.root_font_px);
     let base = resolve_geometry(inputs.at_rules, PageGeometry::a4())?;
     let geometry = reserve_bands(inputs, base, &mut run)?;
     let bodies = note_bodies(&mut flow, &sources);
@@ -183,7 +191,54 @@ pub fn render_pages<T: Serialize>(
     relabel_page_reset(inputs, notes, reset, &geometry, &body, &mut pages, &mut run);
     fill_regions(inputs, &mut pages, &mut run)?;
     run.finish(&mut pages);
+    pages
+        .iter_mut()
+        .for_each(|page| page.canvas = document.canvas);
     Ok(pages)
+}
+
+/// What the body document contributes to the rest of the render
+/// (miaskiewicz/turbo-html2pdf#29): the cascade and `@page` rules with the document's
+/// own `<style>` sheets (before the caller's CSS), the root element's font size `rem`
+/// resolves against, and the canvas colour propagated from `<html>`/`<body>`.
+struct DocumentStyle {
+    cascade: Cascade,
+    at_rules: Vec<AtRule>,
+    root_font_px: f32,
+    canvas: Option<crate::layout::value::Rgba>,
+}
+
+impl DocumentStyle {
+    fn of<T: Serialize>(inputs: &RenderInputs<T>, flow: &Flow) -> DocumentStyle {
+        let css = flow.document_css();
+        // The geometry reads the first `@page` rule: the caller's, else the document's.
+        let mut at_rules = inputs.at_rules.to_vec();
+        at_rules.extend(crate::style::parse_stylesheet(&css).at_rules);
+        DocumentStyle {
+            cascade: inputs.cascade.for_document(&css),
+            at_rules,
+            root_font_px: 16.0,
+            canvas: None,
+        }
+    }
+}
+
+/// Dissolve the `<html>`/`<body>` boxes of a laid-out document into their content:
+/// every fragment whose box came from one of `wrappers` is replaced by its children
+/// (already in absolute galley coordinates), so the fragmenter walks the body content
+/// as the page flow, exactly as it walks a detached flow. Their own paint goes with
+/// them (the canvas colour is painted per page; borders/backgrounds of a split box are
+/// not re-emitted around page parts, as for any split block).
+fn dissolve_wrappers(children: Vec<Fragment>, wrappers: &[NodeId]) -> Vec<Fragment> {
+    let mut out = Vec::with_capacity(children.len());
+    for frag in children {
+        if wrappers.contains(&frag.node_id) {
+            out.extend(dissolve_wrappers(frag.children, wrappers));
+        } else {
+            out.push(frag);
+        }
+    }
+    out
 }
 
 /// Expand `<t:endnote>`/`<t:endnotes/>` when the `endnotes` feature is on; an
@@ -205,29 +260,50 @@ fn expand_endnotes(flow: &mut Flow) {
 fn lay_out_body<T: Serialize>(
     inputs: &RenderInputs<T>,
     run: &mut Run,
-) -> Result<(Fragment, Flow, Vec<FootnoteSrc>, ResetMode), RenderError> {
+) -> Result<(Fragment, Flow, Vec<FootnoteSrc>, ResetMode, DocumentStyle), RenderError> {
     let (mut flow, rdiags) = inputs.program.render_nodes(inputs.data, inputs.now)?;
     run.diags.lints.extend(rdiags.lints);
     expand_endnotes(&mut flow);
     let sources = collect_footnotes(&flow);
     let reset = reset_mode(&flow);
-    let styled = flow.style(inputs.cascade);
+    let mut document = DocumentStyle::of(inputs, &flow);
+    let mut styled = flow.style_document(&document.cascade);
+    document.canvas = turbo_dom_layout::html_layout::propagate_canvas_background(&mut styled);
+    document.root_font_px = turbo_dom_layout::document_root_font_px(&styled);
+    let _root_font = turbo_dom_layout::root_font_scope(document.root_font_px);
     // Size images against the base geometry's body height (the 60% cap basis).
     // Bands reserved later only shrink it slightly, so the base height is a
     // stable approximation and keeps body layout single-pass.
-    let geo = resolve_geometry(inputs.at_rules, PageGeometry::a4())?;
+    let geo = resolve_geometry(&document.at_rules, PageGeometry::a4())?;
     let image_ctx = ImageCtx {
         resolver: inputs.images,
         body_height: Some(geo.body_height()),
     };
-    let galley = run.lay(
+    let laid = run.lay_recorded(
         &flow,
         &styled,
         geo.content_width(),
         inputs.fonts,
         &image_ctx,
     );
-    Ok((galley, flow, sources, reset))
+    let mut galley = laid.galley;
+    let wrappers = wrapper_ids(&flow, &laid.sources);
+    galley.children = dissolve_wrappers(std::mem::take(&mut galley.children), &wrappers);
+    Ok((galley, flow, sources, reset, document))
+}
+
+/// The box ids of the document's `<html>` and `<body>` elements.
+fn wrapper_ids(flow: &Flow, sources: &turbo_dom_layout::NodeSources) -> Vec<NodeId> {
+    let view = TreeView::new(flow.tree());
+    let elements = [view.find_element("html"), view.find_element("body")];
+    let mut ids: Vec<NodeId> = sources
+        .elements
+        .iter()
+        .filter(|(_, h)| elements.contains(&Some(**h)))
+        .map(|(&id, _)| id)
+        .collect();
+    ids.sort_by_key(|id| id.0);
+    ids
 }
 
 // --------------------------------------------------------------------------

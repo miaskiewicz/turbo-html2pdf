@@ -63,8 +63,9 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 # Bundled fonts — attribution & licenses
 
-These fonts are embedded into `turbo-html2pdf-core` when the default `bundled-fonts`
-feature is enabled (see turbo-dom-layout's `src/text/bundled.rs`). They back the CSS generic
+These fonts are embedded into `turbo-dom-layout` (and so into turbo-html2pdf and
+turbo-dom-raster) when the default `bundled-fonts` feature is enabled (see
+turbo-dom-layout's `src/text/bundled.rs`). They back the CSS generic
 families so a document renders with zero caller-supplied fonts. Every face below
 is redistributed under a permissive open license; the full upstream license text
 ships alongside each family.

@@ -16,11 +16,12 @@ mod common;
 
 use std::collections::HashMap;
 use std::io::Cursor;
+use turbo_dom_layout::test_support::literal::Node;
 use turbo_html2pdf_core::paginate::{paginate, Page, PageGeometry};
 use turbo_html2pdf_core::style::TokenSet;
 use turbo_html2pdf_core::{
     build_cascade, emit_pdf, emit_pdf_with_images, layout_with_images, ComputedStyle, Diagnostics,
-    EmitOptions, ImageResolver, Node, StyledElement, StyledNode, Tag,
+    EmitOptions, ImageResolver, StyledElement, StyledNode, Tag,
 };
 use turbo_html2pdf_core::{Attr, FragmentContent, ImageCtx};
 
@@ -137,20 +138,29 @@ fn contains(haystack: &[u8], needle: &[u8]) -> bool {
 // layout + emit pipeline tests
 // --------------------------------------------------------------------------
 
-fn img_node(src: &str) -> Vec<Node> {
-    vec![Node::Element(turbo_html2pdf_core::Element {
-        tag: Tag::Html("img".into()),
-        attrs: vec![Attr {
-            name: "src".into(),
-            value: src.into(),
-        }],
-        children: Vec::new(),
-    })]
+fn img_node(src: &str, style: &str) -> Vec<Node> {
+    let mut attrs = vec![Attr {
+        name: "src".into(),
+        value: src.into(),
+    }];
+    if !style.is_empty() {
+        attrs.push(Attr {
+            name: "style".into(),
+            value: style.into(),
+        });
+    }
+    vec![Node::Element(
+        turbo_dom_layout::test_support::literal::Element {
+            tag: Tag::Html("img".into()),
+            attrs,
+            children: Vec::new(),
+        },
+    )]
 }
 
-fn styled_img(src: &str) -> Vec<StyledNode> {
+fn styled_img(src: &str, style: &str) -> Vec<StyledNode> {
     let cascade = build_cascade("", "", TokenSet::default());
-    common::style_nodes(&img_node(src), &cascade)
+    common::style_nodes(&img_node(src, style), &cascade)
 }
 
 fn page_with(body: Vec<turbo_html2pdf_core::Fragment>) -> Page {
@@ -163,12 +173,18 @@ fn page_with(body: Vec<turbo_html2pdf_core::Fragment>) -> Page {
         footer: Vec::new(),
         footnotes: Vec::new(),
         semantics: Default::default(),
+        canvas: None,
     }
 }
 
 /// Lay out a single `<img>` and paginate it into pages, sizing against `images`.
 fn paginate_img(src: &str, resolver: &dyn ImageResolver) -> Vec<Page> {
-    let styled = styled_img(src);
+    paginate_styled_img(src, "", resolver)
+}
+
+/// [`paginate_img`] with an inline `style` on the `<img>`.
+fn paginate_styled_img(src: &str, style: &str, resolver: &dyn ImageResolver) -> Vec<Page> {
+    let styled = styled_img(src, style);
     let ctx = ImageCtx {
         resolver,
         body_height: Some(700.0),
@@ -211,6 +227,44 @@ fn jpeg_emits_dct_decode() {
     assert!(!contains(&pdf, b"/SMask"), "baseline jpeg has no smask");
 }
 
+/// [`JPEG_RGB_2X2`] with an EXIF APP1 (big-endian TIFF, Orientation=6) after its
+/// JFIF APP0 — the layout of a camera JPEG.
+fn jpeg_orientation_6() -> Vec<u8> {
+    let app1: &[u8] = &[
+        0xFF, 0xE1, 0x00, 0x22, b'E', b'x', b'i', b'f', 0, 0, b'M', b'M', 0x00, 0x2A, 0, 0, 0, 8,
+        0, 1, 0x01, 0x12, 0, 3, 0, 0, 0, 1, 0, 6, 0, 0, 0, 0, 0, 0,
+    ];
+    let mut out = JPEG_RGB_2X2[..20].to_vec();
+    out.extend_from_slice(app1);
+    out.extend_from_slice(&JPEG_RGB_2X2[20..]);
+    out
+}
+
+#[test]
+fn exif_orientation_rotates_the_jpeg_placement() {
+    // miaskiewicz/turbo-html2pdf#30: the image is embedded as stored (DCTDecode pass-
+    // through) and the `cm` matrix turns it a quarter clockwise into its 2x2 px (1.5 pt)
+    // box; `image-orientation: none` draws it as stored.
+    let resolver = MapResolver::new(vec![("p.jpg", jpeg_orientation_6())]);
+    let pdf = emit_pdf_with_images(
+        &paginate_img("p.jpg", &resolver),
+        &EmitOptions::default(),
+        &resolver,
+    );
+    assert!(
+        contains(&pdf, b"/DCTDecode"),
+        "the stored JPEG rides through"
+    );
+    assert!(contains(&pdf, b"0 -1.5 1.5 0 "), "rotated placement matrix");
+    let none = emit_pdf_with_images(
+        &paginate_styled_img("p.jpg", "image-orientation:none", &resolver),
+        &EmitOptions::default(),
+        &resolver,
+    );
+    assert!(!contains(&none, b"0 -1.5 1.5 0 "));
+    assert!(contains(&none, b"1.5 0 0 1.5 "), "stored placement matrix");
+}
+
 #[test]
 fn grayscale_png_emits_device_gray() {
     let resolver = MapResolver::new(vec![("g.png", png_gray_2x2())]);
@@ -240,6 +294,7 @@ fn no_image_default_path_skips_image_fragments() {
         intrinsic_h: 2,
         has_alpha: false,
         tint: None,
+        orientation: Default::default(),
     };
     let frag = turbo_html2pdf_core::Fragment::new(
         turbo_html2pdf_core::NodeId(1),
@@ -261,6 +316,7 @@ fn image_frag(name: &str) -> turbo_html2pdf_core::Fragment {
         intrinsic_h: 2,
         has_alpha: false,
         tint: None,
+        orientation: Default::default(),
     };
     let mut frag = turbo_html2pdf_core::Fragment::new(
         turbo_html2pdf_core::NodeId(1),

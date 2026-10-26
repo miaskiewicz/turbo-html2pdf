@@ -22,8 +22,6 @@ pub mod paginate;
 pub mod render;
 pub mod semantics;
 
-#[cfg(test)]
-mod equivalence_tests;
 #[cfg(feature = "stamp")]
 pub mod stamp;
 #[cfg(feature = "stamp")]
@@ -33,7 +31,7 @@ mod template;
 // The layout half (style cascade, layout, text/fonts, layout snapshots, the HTML
 // drive, images, errors) lives in `turbo-dom-layout`; it is re-exported here at the
 // paths it had in this crate, so `turbo_html2pdf_core::style::…`, `::layout::…`,
-// `::Node`, `::Fragment`, … keep working. Templates are parsed into a turbo-dom
+// `::Tag`, `::Fragment`, … keep working. Templates are parsed into a turbo-dom
 // document ([`Flow`]) and styled through turbo-dom-layout's Tree input with the
 // `t:` directives as markers ([`markers`]); the root-level `layout_html`,
 // `layout_boxes` and `parse_html` are the html2pdf-mode HTML drive ([`html`]), while
@@ -41,7 +39,7 @@ mod template;
 #[cfg(feature = "svg")]
 pub use turbo_dom_layout::svg;
 pub use turbo_dom_layout::{
-    error, hot, html_layout, image, layout, layout_snapshot, node, perf, style, text,
+    error, hot, html_layout, image, layout, layout_snapshot, perf, style, tag, text,
 };
 
 #[cfg(feature = "append")]
@@ -55,7 +53,7 @@ pub use emit::{Encryption, Permissions};
 pub use error::{CompileError, Diagnostics, ErrorCode, Lint, LintCode, RenderError, Span};
 pub use flow::Flow;
 pub use html::{layout_boxes, layout_html, layout_html_with_images, parse_html};
-pub use html_layout::{collect_style_css, CidBox};
+pub use html_layout::CidBox;
 pub use image::{ImageResolver, NoImages};
 pub use layout::fragment::{
     BoxShadow, BreakMeta, Fragment, FragmentContent, GradientStop, ImagePlacement, LinearGradient,
@@ -64,7 +62,6 @@ pub use layout::fragment::{
 pub use layout::value::{BreakRule, Rgba};
 pub use layout::{layout_with_images, ImageCtx}; // `layout` (fn + module) comes with the module re-export above
 pub use markers::TKind;
-pub use node::{Attr, Element, MarkerKind, Node, Tag};
 pub use options::{CompileOptions, MissingPolicy, DEFAULT_INCLUDE_DEPTH};
 pub use paginate::{
     paginate, paginate_with_footnotes, paginate_with_geometry, resolve_geometry, FootnoteBand,
@@ -75,9 +72,10 @@ pub use semantics::Semantics;
 #[cfg(feature = "stamp")]
 pub use stamp::{stamp, StampError, StampWatermark, WATERMARK_XOBJECT_NAME};
 pub use style::{
-    build_cascade, build_cascade_with_width, set_media_viewport_height, style_tree, Cascade,
+    build_cascade, build_cascade_with_width, set_media_viewport_height, style_input, Cascade,
     ComputedStyle, StyledElement, StyledNode,
 };
+pub use tag::{Attr, MarkerKind, Tag};
 pub use template::{compile, set_now, Program};
 pub use text::{layout_text, Align, FontFace, FontRegistry, LineBox, TextStyle, WhiteSpace};
 pub use turbo_dom;

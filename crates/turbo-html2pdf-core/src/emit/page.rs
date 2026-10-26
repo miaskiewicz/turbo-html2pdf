@@ -15,7 +15,7 @@ use crate::layout::fragment::{Fragment, FragmentContent};
 use crate::paginate::Page;
 
 use super::fonts::FontStore;
-use super::graphics::paint_box;
+use super::graphics::{fill_area, paint_box};
 use super::image::{paint_image, ImageStore};
 use super::text::paint_text;
 use super::unit::px_to_pt;
@@ -59,6 +59,13 @@ pub fn content_stream(
     let mut content = Content::new();
     #[cfg(feature = "pdf-ua")]
     let mut marker = tags.map(super::ua::Marker::new);
+    paint_canvas(
+        &mut content,
+        page,
+        &ctx,
+        #[cfg(feature = "pdf-ua")]
+        marker.is_some(),
+    );
     paint_watermark(
         &mut content,
         page,
@@ -78,6 +85,55 @@ pub fn content_stream(
         marker.as_mut(),
     );
     content.finish().to_vec()
+}
+
+/// Paint the canvas colour (the document's propagated root/`<body>` background,
+/// miaskiewicz/turbo-html2pdf#29) over the page area — inside the page margins, the
+/// area the document is laid out in — behind everything else, composited onto the
+/// white sheet. A tagged render marks it `/Artifact` (decoration).
+fn paint_canvas(
+    content: &mut Content,
+    page: &Page,
+    ctx: &PaintCtx,
+    #[cfg(feature = "pdf-ua")] tagged: bool,
+) {
+    let Some(canvas) = page.canvas else {
+        return;
+    };
+    let g = &page.geometry;
+    let area = (
+        g.margin.left,
+        g.margin.top,
+        g.width - g.margin.left - g.margin.right,
+        g.height - g.margin.top - g.margin.bottom,
+    );
+    #[cfg(feature = "pdf-ua")]
+    if tagged {
+        super::ua::begin_artifact(content);
+    }
+    fill_area(
+        content,
+        area,
+        over_white(canvas),
+        ctx.page_height_pt,
+        ctx.cmyk,
+    );
+    #[cfg(feature = "pdf-ua")]
+    if tagged {
+        content.end_marked_content();
+    }
+}
+
+/// `c` composited over the white sheet (source-over, straight alpha), opaque.
+fn over_white(c: crate::layout::value::Rgba) -> crate::layout::value::Rgba {
+    let a = u32::from(c.a);
+    let mix = |v: u8| ((u32::from(v) * a + 255 * (255 - a) + 127) / 255) as u8;
+    crate::layout::value::Rgba {
+        r: mix(c.r),
+        g: mix(c.g),
+        b: mix(c.b),
+        a: 255,
+    }
 }
 
 /// Paint the page watermark behind the body. When this render emits tagged PDF

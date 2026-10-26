@@ -5,9 +5,10 @@
 //! (`turbo_dom_layout::html_layout`, whose string entries know no directives) over
 //! the parsed document.
 
-use turbo_dom_layout::{CidBox, Fragment, HtmlOptions, Node};
+use turbo_dom_layout::{CidBox, Fragment, HtmlOptions};
 
 use crate::error::{Diagnostics, RenderError};
+use crate::flow::Flow;
 use crate::layout::ImageCtx;
 use crate::template::markup;
 use crate::text::FontRegistry;
@@ -18,18 +19,21 @@ fn options() -> HtmlOptions<'static> {
         markers: Some(&crate::markers::classify),
         atomic_internal_links: cfg!(feature = "xref"),
         accept_cmyk: cfg!(feature = "print-color"),
+        linked_css: "",
     }
 }
 
-/// Parse an HTML document/fragment string into the legacy owned node tree (the
-/// `<body>` children, `t:` directives as markers), skipping the Jinja pass.
-pub fn parse_html(html: &str) -> Result<Vec<Node>, RenderError> {
-    Ok(markup::parse(html)?.to_nodes())
+/// Parse an HTML document/fragment string into a [`Flow`] (the parsed turbo-dom
+/// document and its `<body>` content, `t:` directives classified as markers),
+/// skipping the Jinja pass.
+pub fn parse_html(html: &str) -> Result<Flow, RenderError> {
+    markup::parse(html)
 }
 
 /// Lay a raw HTML string out into a [`Fragment`] galley at content width
-/// `cb_width` px, Jinja-free (see [`turbo_dom_layout::layout_html`]: body
-/// `<style>` blocks are author CSS, `extra_css` is appended after them).
+/// `cb_width` px, Jinja-free (see [`turbo_dom_layout::layout_html`]: the whole
+/// document is styled — head and body `<style>` blocks are author CSS, `extra_css` is
+/// appended after them — with `<html>`/`<body>` as real boxes).
 pub fn layout_html(
     html: &str,
     extra_css: &str,

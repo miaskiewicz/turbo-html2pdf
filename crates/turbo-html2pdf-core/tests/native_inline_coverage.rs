@@ -3,13 +3,12 @@
 //! or the PDF emitter.
 
 use std::collections::HashMap;
+use turbo_dom_layout::test_support::literal::{parse_html, Node};
 use turbo_html2pdf_core::layout_snapshot::{
     snapshot_html_live_tree_with_native_text, GeometryKind, LayoutSnapshot, NativeTextOptions,
     SnapshotInputs, SourceId, SourceIdentity,
 };
-use turbo_html2pdf_core::{
-    build_cascade, parse_html, Diagnostics, FontRegistry, ImageCtx, NoImages, Node,
-};
+use turbo_html2pdf_core::{build_cascade, Diagnostics, FontRegistry, ImageCtx, NoImages};
 
 fn identities(
     nodes: &[Node],
@@ -54,7 +53,7 @@ fn snapshot_nodes(nodes: Vec<Node>) -> (LayoutSnapshot, HashMap<String, SourceId
         Default::default(),
     );
     let snapshot = snapshot_html_live_tree_with_native_text(
-        &nodes,
+        &turbo_dom_layout::test_support::literal::tree(&nodes).input(),
         &ids,
         &cascade,
         &NativeTextOptions {

@@ -12,15 +12,15 @@
 // registry registers the bundled faces under their real family name), and it
 // ignores the `@font-face` data URL (its registry is fixed, not fed from author
 // CSS) — so the same injected `<style>` pins Chromium and is a harmless no-op for
-// the engine. Styles live in `<body>` because the engine drops `<head>` styles.
+// the engine. The style is injected at the start of `<body>` (head and body styles
+// both apply since #29).
 
 import { readFileSync } from "node:fs";
-import { dirname, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
+import { join, resolve } from "node:path";
+import { layoutFontsDir } from "../../../scripts/layout-crate-dir.mjs";
 
-const HERE = dirname(fileURLToPath(import.meta.url));
-// benches/conformance/src -> repo root -> the engine's bundled Inter faces.
-const FONT_DIR = resolve(HERE, "../../../crates/turbo-html2pdf-core/assets/fonts/inter");
+// The engine's bundled Inter faces (turbo-dom-layout's assets/fonts, via cargo).
+const FONT_DIR = join(layoutFontsDir(), "inter");
 
 function dataUri(file: string): string {
   const bytes = readFileSync(resolve(FONT_DIR, file));

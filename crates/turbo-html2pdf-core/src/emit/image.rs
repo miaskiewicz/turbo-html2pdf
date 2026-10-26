@@ -12,7 +12,7 @@
 
 use pdf_writer::{Chunk, Filter, Finish, Name, Ref};
 
-use crate::image::{decode, ColorSpace, ImageResolver, Payload, RasterImage};
+use crate::image::{decode, ColorSpace, ImageResolver, Orientation, Payload, RasterImage};
 use crate::layout::fragment::{Fragment, FragmentContent, ImagePlacement};
 
 use super::fonts::RefAlloc;
@@ -235,7 +235,69 @@ pub fn paint_image(
     // bottom edge.
     let y = flip_y(frag.y + frag.height, page_height_pt);
     content.save_state();
-    content.transform([w, 0.0, 0.0, h, x, y]);
+    content.transform(placement_matrix(placement.orientation, x, y, w, h));
     content.x_object(Name(resource.as_bytes()));
     content.restore_state();
+}
+
+/// The `cm` matrix that draws the image XObject's unit square (stored pixels; row 0 at
+/// the top, `v = 1`) into the box `(x, y, w, h)` (PDF points, `y` = the box bottom) as
+/// DISPLAYED under its EXIF `orientation` (miaskiewicz/turbo-html2pdf#30;
+/// `image-orientation: from-image`): the identity orientation is the plain
+/// `[w 0 0 h x y]`, the others flip and/or quarter-turn the square so the stored
+/// image's displayed top-left lands at the box's top-left.
+fn placement_matrix(orientation: Orientation, x: f32, y: f32, w: f32, h: f32) -> [f32; 6] {
+    match orientation.exif() {
+        2 => [-w, 0.0, 0.0, h, x + w, y],
+        3 => [-w, 0.0, 0.0, -h, x + w, y + h],
+        4 => [w, 0.0, 0.0, -h, x, y + h],
+        5 => [0.0, -h, -w, 0.0, x + w, y + h],
+        6 => [0.0, -h, w, 0.0, x, y + h],
+        7 => [0.0, h, w, 0.0, x, y],
+        8 => [0.0, h, -w, 0.0, x + w, y],
+        _ => [w, 0.0, 0.0, h, x, y],
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::placement_matrix;
+    use crate::image::Orientation;
+
+    /// Map the stored image's unit-square corner `(u, v)` through `m`.
+    fn map(m: [f32; 6], (u, v): (f32, f32)) -> (f32, f32) {
+        (m[0] * u + m[2] * v + m[4], m[1] * u + m[3] * v + m[5])
+    }
+
+    #[test]
+    fn each_orientation_puts_the_displayed_corners_on_the_box() {
+        // Box (10, 20) 30 wide, 40 tall (PDF y-up: top edge at 60). The stored image's
+        // top-left corner is unit-square (0, 1); where it lands names the transform.
+        let (x, y, w, h) = (10.0, 20.0, 30.0, 40.0);
+        let (left, right, bottom, top) = (x, x + w, y, y + h);
+        let stored_top_left = (0.0, 1.0);
+        let stored_top_right = (1.0, 1.0);
+        for (o, tl, tr) in [
+            (1, (left, top), (right, top)),
+            (2, (right, top), (left, top)),
+            (3, (right, bottom), (left, bottom)),
+            (4, (left, bottom), (right, bottom)),
+            (5, (left, top), (left, bottom)),
+            (6, (right, top), (right, bottom)),
+            (7, (right, bottom), (right, top)),
+            (8, (left, bottom), (left, top)),
+        ] {
+            let m = placement_matrix(Orientation::from_exif(o), x, y, w, h);
+            assert_eq!(
+                map(m, stored_top_left),
+                tl,
+                "orientation {o}: stored top-left"
+            );
+            assert_eq!(
+                map(m, stored_top_right),
+                tr,
+                "orientation {o}: stored top-right"
+            );
+        }
+    }
 }

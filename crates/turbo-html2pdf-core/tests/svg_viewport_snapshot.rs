@@ -2,13 +2,12 @@
 //! `tests/svg_viewport_snapshot.rs`; the ones here need TKind directives, templating or
 //! the PDF emitter.
 
+use turbo_dom_layout::test_support::literal::{Element, Node};
 use turbo_html2pdf_core::layout_snapshot::{
     snapshot_html_live_tree_with_svg_viewports, LayoutSnapshot, SnapshotInputs, SourceId,
     SourceIdentity,
 };
-use turbo_html2pdf_core::{
-    build_cascade, Diagnostics, Element, FontRegistry, ImageCtx, NoImages, Node, Tag,
-};
+use turbo_html2pdf_core::{build_cascade, Diagnostics, FontRegistry, ImageCtx, NoImages, Tag};
 
 fn capture(
     nodes: &[Node],
@@ -30,7 +29,7 @@ fn capture_at_scale(
         body_height: None,
     };
     snapshot_html_live_tree_with_svg_viewports(
-        nodes,
+        &turbo_dom_layout::test_support::literal::tree(nodes).input(),
         identities,
         viewports,
         scale,
@@ -87,7 +86,7 @@ fn text_paths_directives_and_invalid_viewports_cannot_be_declared_svg_sources() 
         body_height: None,
     };
     let result = snapshot_html_live_tree_with_svg_viewports(
-        &text,
+        &turbo_dom_layout::test_support::literal::tree(&text).input(),
         &ids,
         &[],
         2.0,

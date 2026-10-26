@@ -49,6 +49,10 @@ pub struct Page {
     /// see [`crate::semantics`]); empty unless built by [`crate::render_pages`]
     /// with the `pdf-ua`/`xref` features.
     pub semantics: crate::semantics::Semantics,
+    /// The canvas colour (the document's root/`<body>` background, propagated as in
+    /// a browser; miaskiewicz/turbo-html2pdf#29), painted over the page area behind
+    /// everything else. `None` = no fill (white paper).
+    pub canvas: Option<crate::layout::value::Rgba>,
 }
 
 /// Derive a page's kind from its 1-based number: page 1 is the first page, then
@@ -79,6 +83,7 @@ fn assemble(geometry: PageGeometry, number: u32, mut body: Vec<Fragment>) -> Pag
         footer: Vec::new(),
         footnotes: Vec::new(),
         semantics: Default::default(),
+        canvas: None,
     }
 }
 
