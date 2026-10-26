@@ -32,10 +32,10 @@ opt-level = 3
 lto = "thin"
 codegen-units = 1
 
-# Pre-publish only: turbo-dom-layout 0.6.0 and turbo-dom (S2 Tree API, S3b selector engine, S5a image
-# layer + test-support fixtures) come from
-# the turbo-dom consolidation branch until they are on crates.io; remove this block and
-# re-lock (`cargo update -p turbo-dom-layout -p turbo-dom`) at release (see PUBLISHING.md).
+# Pre-publish only: turbo-dom-layout 0.6.0 and turbo-dom 0.6.0 come from the turbo-dom
+# consolidation branch until they are on crates.io. Remove this block and re-lock
+# (`cargo update -p turbo-dom-layout -p turbo-dom`) before tagging (see PUBLISHING.md);
+# the tag-only `release-guard` job in release-crates.yml fails while it is present.
 [patch.crates-io]
-turbo-dom-layout = { git = "https://github.com/miaskiewicz/turbo-dom", rev = "4c0ffe84eb71b85637442555306834b0e7d19e8b" }
-turbo-dom = { git = "https://github.com/miaskiewicz/turbo-dom", rev = "4c0ffe84eb71b85637442555306834b0e7d19e8b" }
+turbo-dom-layout = { git = "https://github.com/miaskiewicz/turbo-dom", rev = "74bcc5c5d69bc76b11ea9aa32bdc689f2759be2b" }
+turbo-dom = { git = "https://github.com/miaskiewicz/turbo-dom", rev = "74bcc5c5d69bc76b11ea9aa32bdc689f2759be2b" }
