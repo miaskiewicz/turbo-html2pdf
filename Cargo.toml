@@ -36,4 +36,5 @@ codegen-units = 1
 # until it is on crates.io; remove this block and re-lock (`cargo update -p turbo-dom-layout`)
 # at release (see PUBLISHING.md).
 [patch.crates-io]
-turbo-dom-layout = { git = "https://github.com/miaskiewicz/turbo-dom", rev = "2c3bcef50210c889b00139dba6c354c8539aadb2" }
+turbo-dom-layout = { path = "../turbo-dom-wt-s2/crates/turbo-dom-layout" }
+turbo-dom = { path = "../turbo-dom-wt-s2/crates/turbo-dom" }
