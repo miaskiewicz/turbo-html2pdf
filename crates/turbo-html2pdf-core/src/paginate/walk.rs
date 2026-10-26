@@ -241,12 +241,16 @@ impl<'a> Walker<'a> {
         for h in headers {
             self.emit(h);
         }
+        // The content after repeated headers starts right below them: the gap before it
+        // is the page start's, not its galley distance from the header's original place
+        // at the top of the table (miaskiewicz/turbo-html2pdf#36).
+        self.prev_bottom = None;
         self.fresh = true;
     }
 
     /// Start a fresh page at a forced break: margins after a forced break are kept
-    /// (§5.2), so the next fragment keeps its own top margin — unless repeated headers
-    /// open the page. A page with no flow content yet is already that page.
+    /// (§5.2), so the next fragment keeps its own top margin (below the repeated headers
+    /// opening the page, if any). A page with no flow content yet is already that page.
     fn forced_page(&mut self, headers: &[Fragment]) {
         if !self.fresh {
             let before = self.prev_bottom;

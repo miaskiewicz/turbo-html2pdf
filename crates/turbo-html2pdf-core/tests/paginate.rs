@@ -321,7 +321,6 @@ fn split_block_remaining_height_runs_onto_the_next_pages() {
 }
 
 #[test]
-#[ignore = "turbo-html2pdf#36: fails until the fix"]
 fn rows_follow_the_repeated_header_on_a_continued_page() {
     // miaskiewicz/turbo-html2pdf#36: on page 2 the repeated header sits at the top and
     // the next row right below it (Chrome 156), not at its galley distance from the

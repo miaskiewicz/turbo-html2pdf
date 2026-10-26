@@ -475,7 +475,7 @@ const CASES = [
     // A table split across pages repeats its header row; the next row follows it.
     id: "table-header-repeat",
     html: DOC(
-      "body{margin:0} table{border-collapse:collapse;border-spacing:0;width:100%} td{padding:0}",
+      "body{margin:0} table{border-collapse:collapse;border-spacing:0} td{padding:0;width:520px}",
       `<table><thead><tr><td style="height:30px;background:${C.red[0]}"></td></tr></thead><tbody>` +
         ["green", "blue", "yellow", "magenta"]
           .map(
