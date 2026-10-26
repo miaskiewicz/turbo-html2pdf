@@ -44,11 +44,14 @@ types + pseudo-elements)`, with `:where()` = 0 and `:is()` / `:not()` / `:has()`
 their most specific argument. The cascade layers UA styles below author CSS below
 inline node styles.
 
-In templates, the content of a flow (template body, footnotes, regions) matches as
-its own scope: no ancestors above it, `:root` never matches, and `t:` directives are
-never matched by type selectors. On the HTML path the `<html>`/`<body>` shells take
-part in matching (classes, attributes) but sit at the root position: they are not
-`:first-child`, have no preceding sibling and match `:empty`.
+The document (a template's rendered body, and the HTML path) is styled as a whole, as
+in Chrome (#29): `<html>`, `<head>` and `<body>` are real elements — `html:first-child`,
+`head + body`, `:root` match as in a browser, every `<style>` element (head or body, in
+document order) is author CSS ahead of the caller's `css`, `body` has the UA
+`margin: 8px`, and the root's (else `<body>`'s) background colour fills the page area.
+Footnote bodies and running header/footer regions match as their own scope: no
+ancestors above them and `:root` never matches. `t:` directives are never matched by
+type selectors.
 
 ---
 
@@ -81,7 +84,7 @@ part in matching (classes, attributes) but sit at the root position: they are no
 | `mm` | |
 | `%` | resolved against the relevant context basis |
 | `em` | relative to the element's font size |
-| `rem` | **treated the same as `em`** (resolves against the parent font size, not the root) |
+| `rem` | relative to the root (`<html>`) element's font size (16px when it sets none) |
 
 No `ex`, `ch`, `vh`, `vw`, `vmin`, `vmax`, `Q`, `fr`. Unknown units cause the
 value to be rejected.
