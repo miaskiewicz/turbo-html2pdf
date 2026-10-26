@@ -48,12 +48,17 @@
 //! content yet — before the first content, or a `break-before` right after a
 //! `break-after` — starts no new page (Chrome 156 makes no blank page for either).
 //!
-//! **Deferred (documented):** when a block is split across pages its box
-//! wrapper (background/border) is not re-emitted around each part — children are
-//! emitted directly (the dissolved `<html>`/`<body>` boxes are: [`super::decorate`]
-//! paints their slices from the per-page [`PageSpan`]s this walk records); orphans/widows
-//! are enforced at each single break but the multi-page paragraph tail is greedy. Both are
-//! refined alongside the Phase 9 emitter.
+//! Split boxes (miaskiewicz/turbo-html2pdf#37 item 1): a block split across pages emits
+//! its children directly; when its box paints (background, border, shadow) the walk
+//! records where it starts and ends and slices it onto every page it spans, under its
+//! content ([`super::decorate::slice_split_boxes`], `box-decoration-break: slice`, as the
+//! dissolved `<html>`/`<body>` boxes are sliced from the per-page [`PageSpan`]s). A block
+//! with no in-flow content is atomic. A block containing a forced break is split there
+//! (miaskiewicz/turbo-html2pdf#38).
+//!
+//! **Deferred (documented):** orphans/widows are enforced at each single break but the
+//! multi-page paragraph tail is greedy; a block that fits on an empty page moves there
+//! whole rather than being split at the page end (AC-6.2, where Chrome would split it).
 
 use crate::error::{Diagnostics, LintCode, Span};
 use crate::layout::fragment::{Fragment, FragmentContent, NodeId, RepeatKind};
@@ -62,6 +67,7 @@ use crate::layout::value::BreakRule;
 use super::boxes::{
     last_content, leading_margin, remaining_height, trailing, wrapper_tail, BoxFacts, FlowBoxes,
 };
+use super::decorate::{paints, slice_split_boxes, SplitBox};
 use super::out_of_flow::{Anchors, Taken};
 use super::Galley;
 
@@ -100,6 +106,9 @@ enum PageStart {
     /// before the break, whose gap is kept instead when that margin is unknown.
     Forced(Option<f32>),
 }
+
+/// Where a split painting block starts: page, index in its body, page-local top.
+type BoxStart = (usize, usize, f32);
 
 /// Accumulates pages while walking the galley.
 struct Walker<'a> {
@@ -150,6 +159,11 @@ struct Walker<'a> {
     anchors: Anchors,
     open: Vec<(NodeId, f32)>,
     deferred: Vec<Taken>,
+    /// The painting blocks being split (their own paint and, once their first fragment is
+    /// placed, where they start) and those done, sliced onto their pages after the walk
+    /// (miaskiewicz/turbo-html2pdf#37 item 1).
+    decorated: Vec<(Fragment, Option<BoxStart>)>,
+    split_boxes: Vec<SplitBox>,
 }
 
 impl<'a> Walker<'a> {
@@ -175,6 +189,8 @@ impl<'a> Walker<'a> {
             anchors: Anchors::new(),
             open: Vec::new(),
             deferred: Vec::new(),
+            decorated: Vec::new(),
+            split_boxes: Vec::new(),
         }
     }
 
@@ -287,6 +303,10 @@ impl<'a> Walker<'a> {
             self.anchors
                 .insert(id, (page, clone.y - (f.y - galley_top)));
         }
+        let index = self.current().len();
+        for (block, start) in self.decorated.iter_mut().filter(|(_, s)| s.is_none()) {
+            *start = Some((page, index, clone.y - (f.y - block.y)));
+        }
         self.current().push(clone);
     }
 
@@ -377,6 +397,11 @@ impl<'a> Walker<'a> {
     /// last content moves on; a leaf moves on if it fits on an empty page with its
     /// tail, and otherwise stays.
     fn placement(&self, f: &Fragment, headers: &[Fragment], tail: f32) -> Placement {
+        // A forced break inside `f` breaks the page there (miaskiewicz/turbo-html2pdf#38):
+        // the walker must visit its children.
+        if self.breaks_inside(f) {
+            return Placement::Split;
+        }
         if self.fits_now(f, tail) {
             return Placement::Here;
         }
@@ -387,6 +412,11 @@ impl<'a> Walker<'a> {
             return Placement::NextPage;
         }
         Placement::Split
+    }
+
+    /// Whether `f` has in-flow content and a forced break inside it.
+    fn breaks_inside(&self, f: &Fragment) -> bool {
+        last_content(self.boxes, &f.children).is_some() && f.children.iter().any(has_forced_break)
     }
 
     /// [`Self::placement`] of an `f` that fits here only without its `tail`.
@@ -403,7 +433,8 @@ impl<'a> Walker<'a> {
     /// Split a block that cannot fit on any page: recurse into its children, or
     /// overflow an atomic leaf with a lint. `tail` follows its last content.
     fn split(&mut self, f: &Fragment, headers: &[Fragment], tail: f32, diags: &mut Diagnostics) {
-        if f.children.is_empty() {
+        // A block without in-flow content (none, or only out-of-flow boxes) is atomic.
+        if last_content(self.boxes, &f.children).is_none() {
             return self.overflow_leaf(f, headers, diags);
         }
         let opened = self.open_block(f);
@@ -432,6 +463,11 @@ impl<'a> Walker<'a> {
             self.positioned.push((f.node_id, f.y));
             self.open.push((f.node_id, f.y));
         }
+        if paints(f) {
+            let mut own = f.clone();
+            own.children.clear();
+            self.decorated.push((own, None));
+        }
         let opened = self.pending.is_none();
         if opened {
             self.pending = Some((self.flow_top(f), leading_margin(self.boxes, f)));
@@ -447,6 +483,28 @@ impl<'a> Walker<'a> {
             self.positioned.pop();
             self.open.retain(|&(id, _)| id != f.node_id);
         }
+        if paints(f) {
+            self.close_decorated(f);
+        }
+    }
+
+    /// Done splitting painting block `f`: its box ends below its last content by its
+    /// trailing padding/border (at most the page area's end), on the current page.
+    fn close_decorated(&mut self, f: &Fragment) {
+        if let Some((frag, Some(start))) = self.decorated.pop() {
+            self.end_decorated(f, frag, start);
+        }
+    }
+
+    /// Record split painting block `f` (`frag`, started at `start`) as ending on the
+    /// current page.
+    fn end_decorated(&mut self, f: &Fragment, frag: Fragment, start: BoxStart) {
+        let flow_bottom = self.flow_top(f) + f.height;
+        let trailing = self.prev_bottom.map_or(0.0, |b| (flow_bottom - b).max(0.0));
+        let visual = self.shift + self.own_shift(f);
+        let bottom = (self.cursor + trailing + visual).min(self.page_capacity());
+        let end = (self.pages.len() - 1, bottom);
+        self.split_boxes.push(SplitBox { frag, start, end });
     }
 
     /// An atomic fragment taller than a whole page: place it on a fresh page and
@@ -647,6 +705,15 @@ fn lift(f: &mut Fragment, z: Option<i32>) {
     }
 }
 
+/// Whether `f` or a fragment inside it carries a forced break (`break-before` /
+/// `break-after: page`).
+fn has_forced_break(f: &Fragment) -> bool {
+    let forced = |rule: BreakRule| rule == BreakRule::Page;
+    forced(f.break_meta.break_before)
+        || forced(f.break_meta.break_after)
+        || f.children.iter().any(has_forced_break)
+}
+
 /// Where [`Walker::placement`] puts a fragment.
 enum Placement {
     Here,
@@ -780,8 +847,10 @@ pub fn walk_reserved(
         };
         w.place_one(child, &[], tail, diags);
     }
+    let mut pages = w.pages;
+    slice_split_boxes(&mut pages, &w.spans, &w.split_boxes);
     Walked {
-        pages: w.pages,
+        pages,
         spans: w.spans,
         anchors: w.anchors,
         deferred: w.deferred,

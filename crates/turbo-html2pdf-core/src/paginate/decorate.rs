@@ -16,7 +16,7 @@ use super::walk::PageSpan;
 
 /// Whether `f` paints anything of its own: a background colour or gradient, a shadow,
 /// or a border side with a width and a colour.
-fn paints(f: &Fragment) -> bool {
+pub(super) fn paints(f: &Fragment) -> bool {
     let side = |s: &crate::layout::value::BorderSide| s.width > 0 && s.color.is_some();
     matches!(
         &f.content,
@@ -50,6 +50,72 @@ pub fn decorate(pages: &mut [Vec<Fragment>], spans: &[PageSpan], wrappers: &[Fra
         let slices: Vec<Fragment> = slices.collect();
         page.splice(0..0, slices);
     }
+}
+
+/// A block split across pages whose box paints (miaskiewicz/turbo-html2pdf#37 item 1):
+/// its own paint (children removed), where it starts — page, the index in that page's
+/// body where its first fragment went, its page-local border-box top — and where it ends
+/// (page, page-local bottom).
+#[derive(Debug, Clone)]
+pub(super) struct SplitBox {
+    pub frag: Fragment,
+    pub start: (usize, usize, f32),
+    pub end: (usize, f32),
+}
+
+/// Slice every split box onto the pages it spans, as Chrome 156 prints them under the
+/// initial `box-decoration-break: slice` (the same slices as the `<html>`/`<body>` ones):
+/// from its top on its first page (else the page area's top) to its bottom on its last
+/// page (else the page area's end). Each slice goes under the box's own content on that
+/// page — on the first page at the index its first fragment took, after it at the top —
+/// and an enclosing box's slice under an inner one's (`boxes` are in closing order, inner
+/// boxes first).
+pub(super) fn slice_split_boxes(
+    pages: &mut [Vec<Fragment>],
+    spans: &[PageSpan],
+    boxes: &[SplitBox],
+) {
+    let mut inserts: Vec<Insert> = boxes
+        .iter()
+        .enumerate()
+        .flat_map(|(order, b)| box_slices(b, order, spans))
+        .collect();
+    // Back to front per page, so the recorded indices stay valid; at one index, the
+    // inner box first, then the enclosing one in front of it.
+    inserts.sort_by_key(|i| (i.page, std::cmp::Reverse(i.at), i.order));
+    for i in inserts {
+        let body = &mut pages[i.page];
+        body.insert(i.at.min(body.len()), i.piece);
+    }
+}
+
+/// One slice to insert: its page, its index in that page's body, its box's closing
+/// order, the slice.
+struct Insert {
+    page: usize,
+    at: usize,
+    order: usize,
+    piece: Fragment,
+}
+
+/// The slices of split box `b` (the `order`-th closed) on the pages it spans.
+fn box_slices(b: &SplitBox, order: usize, spans: &[PageSpan]) -> Vec<Insert> {
+    let ((first, index, top), (last, bottom)) = (b.start, b.end);
+    spans[first..=last]
+        .iter()
+        .zip(first..)
+        .map(|(span, page)| {
+            let (on_first, on_last) = (page == first, page == last);
+            let start = if on_first { top } else { 0.0 };
+            let end = if on_last { bottom } else { span.capacity };
+            Insert {
+                page,
+                at: if on_first { index } else { 0 },
+                order,
+                piece: slice(&b.frag, start, end, on_first, on_last),
+            }
+        })
+        .collect()
 }
 
 /// The page-local slice `[start, end)` of wrapper `w`: its own paint only (a synthetic
