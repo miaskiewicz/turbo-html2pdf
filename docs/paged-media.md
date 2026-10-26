@@ -229,6 +229,26 @@ A block that cannot fit even on an empty page is split internally; an atomic lea
 taller than a page overflows onto a fresh page with a `RegionOverflow` lint
 (content is never dropped).
 
+### Margins at page starts
+
+As Chrome prints (CSS Fragmentation §5.2; turbo-html2pdf#31): the first page starts at
+the top of the document, so the first block keeps its top margin (and `<html>`/`<body>`
+margins, borders and padding above it); after a **forced** break the next block keeps
+its gap; after an **unforced** break (content moved because it did not fit) the margin
+is truncated and the block starts at the top of the page area. The kept gap after a
+forced break is the laid-out (collapsed) gap, so a larger bottom margin of the block
+before the break counts too (Chrome keeps only the next block's own margin).
+
+### `<html>` / `<body>` boxes across pages
+
+`<html>` and `<body>` are dissolved into the page flow before pagination; their
+background (when not propagated to the canvas — e.g. `<body>`'s when `<html>` has one),
+border and shadow are painted on **every page** as Chrome's default
+`box-decoration-break: slice` does: from the box's top on the first page (top edge
+there only), through the page area's end on every page but the last, to the end of the
+content plus padding and border on the last page (bottom edge there only). A sliced box
+has square corners.
+
 ### Orphans and widows
 
 Paragraphs honor `orphans` (minimum lines before a break) and `widows` (minimum
@@ -263,7 +283,9 @@ pages the header is **re-emitted atop every continued page** (`layout/table.rs`,
 From `paginate/walk.rs`:
 
 - When a block is split across pages, its box wrapper (background/border) is **not
-  re-emitted** around each part — children are emitted directly.
+  re-emitted** around each part — children are emitted directly (except `<html>` and
+  `<body>`, sliced onto every page; see above). At a page start the whole leading gap is
+  truncated, including a split block's top padding/border.
 - Orphans/widows are enforced at each single break, but a paragraph tail spanning
   more than two pages is greedy.
 
