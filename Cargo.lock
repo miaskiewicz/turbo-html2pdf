@@ -1814,6 +1814,7 @@ dependencies = [
 [[package]]
 name = "turbo-dom-layout"
 version = "0.6.0"
+source = "git+https://github.com/miaskiewicz/turbo-dom?rev=2c3bcef50210c889b00139dba6c354c8539aadb2#2c3bcef50210c889b00139dba6c354c8539aadb2"
 dependencies = [
  "core-foundation",
  "core-text",

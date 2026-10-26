@@ -113,7 +113,7 @@ thiserror = { workspace = true }
 # cfg'd fields live in the layout code).
 # LOCAL DEV path dependency for the consolidation's S1 step; the integration step
 # switches it to version + [patch].
-turbo-dom-layout = { path = "../../../turbo-dom-wt-layout/crates/turbo-dom-layout", default-features = false }
+turbo-dom-layout = { version = "0.6.0", default-features = false }
 rustybuzz = "0.20.1"
 pdf-writer = "0.15.0"
 subsetter = "0.2.6"
@@ -136,7 +136,7 @@ getrandom = { version = "0.2", optional = true }
 
 [dev-dependencies]
 # `test-support` exposes `FontFace::collection_fixture_faces` (emit/fonts.rs test).
-turbo-dom-layout = { path = "../../../turbo-dom-wt-layout/crates/turbo-dom-layout", default-features = false, features = ["test-support"] }
+turbo-dom-layout = { version = "0.6.0", default-features = false, features = ["test-support"] }
 # Tests build PNG fixtures (was a normal dependency before the layout half moved out).
 png = "0.18.1"
 sha2 = "0.10"

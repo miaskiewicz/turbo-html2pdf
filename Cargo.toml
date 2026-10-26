@@ -31,3 +31,9 @@ wasm-bindgen = "0.2"
 opt-level = 3
 lto = "thin"
 codegen-units = 1
+
+# Pre-publish only: turbo-dom-layout 0.6.0 comes from the turbo-dom consolidation branch
+# until it is on crates.io; remove this block and re-lock (`cargo update -p turbo-dom-layout`)
+# at release (see PUBLISHING.md).
+[patch.crates-io]
+turbo-dom-layout = { git = "https://github.com/miaskiewicz/turbo-dom", rev = "2c3bcef50210c889b00139dba6c354c8539aadb2" }
