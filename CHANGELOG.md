@@ -47,15 +47,16 @@ turbo-test, turbo-html2pdf, turbo-surf) releases on one version line.
   the bundled faces, layout snapshots, `layout_html`, images, SVG, perf counters,
   errors, the `t:` markup parse) moved verbatim to the `turbo-dom-layout` crate in
   the turbo-dom workspace. `turbo-html2pdf-core` depends on it and re-exports it at
-  the same paths, so `turbo_html2pdf_core::style::…`, `::layout::…`, `::Node`,
-  `::Fragment`, … are unchanged; output is byte-identical. Its `bundled-fonts`,
+  the same paths, so `turbo_html2pdf_core::style::…`, `::layout::…`, `::Fragment`,
+  … are unchanged (the legacy `::Node` input went at S5, first bullet); output is
+  byte-identical. Its `bundled-fonts`,
   `perf`, `svg`, `xref`, `pdf-ua` and `print-color` features forward to the layout
   crate. Layout tests and their Chrome fixtures, and the `font_startup` example,
   moved with the code.
 - html2pdf no longer keeps its own DOM: rendered markup is parsed into a turbo-dom
   document and styled through turbo-dom-layout's Tree input (output byte-identical).
-  `Program::render_nodes` / `render_region` return a `Flow` (`Flow::style`,
-  `Flow::to_nodes` for the legacy `Node` copy); `TKind` lives in the new `markers`
+  `Program::render_nodes` / `render_region` return a `Flow` (`Flow::style`; the
+  interim `Flow::to_nodes` legacy copy is gone again, first bullet); `TKind` lives in the new `markers`
   module and directives are `Tag::Marker` / `FragmentContent::Marker` in the layout
   types. PDF/UA roles/alt text and xref links/anchors are derived after layout into
   `Page::semantics` (`Semantics::role` / `alt` / `link_href` / `anchor`) instead of
