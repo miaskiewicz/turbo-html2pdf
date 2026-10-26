@@ -27,6 +27,11 @@ turbo-test, turbo-html2pdf, turbo-surf) releases on one version line.
   pagination (their own borders are not painted, as for any block split across pages).
   Nearly every PDF/`layoutBoxes` output of the corpora changes (body margin); the
   conformance pages' boxes now match Chrome 156 for 172 of 209 tagged elements (was 1).
+- **Fixed (#30)**: EXIF orientation (JPEG APP1, PNG eXIf — as Chrome 156; WebP EXIF is
+  ignored there too) is honoured: images lay out at their displayed size (orientations
+  5-8 swap width/height) and the embedded image is drawn turned (the stored JPEG still
+  rides through as `DCTDecode`; the placement `cm` rotates/flips it). `image-orientation:
+  none` keeps the stored orientation.
 - Summary for users: same public paths (`turbo_html2pdf_core::style::…`, `::layout::…`,
   `::Tag`, `::Fragment`, …, re-exported from turbo-dom-layout); selectors match like
   Chrome (escapes, namespaces, `:has()`, `of S`, `:nth-last-*`, `:lang()`, `:defined`,
