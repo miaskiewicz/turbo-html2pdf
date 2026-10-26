@@ -37,9 +37,3 @@ pyo3 = { version = "0.23", default-features = false, features = [
 # Bridge a Python object (dict/list/scalar) <-> serde_json::Value with no
 # intermediate JSON-string round-trip.
 pythonize = "0.23"
-
-[features]
-# TEMPORARY consolidation gate (S3b, turbo-dom docs/selector-dual-gate.md): forwards the
-# selector-dual gate (old vs new selector engine on every cascade decision). Never enable
-# outside the gate; removed with the gate at the end of S3b.
-selector-dual = ["turbo-html2pdf-core/selector-dual"]
