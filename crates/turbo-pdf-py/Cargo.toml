@@ -26,7 +26,7 @@ turbo-html2pdf-core = { path = "../turbo-html2pdf-core", features = [
     "encrypt",
 ] }
 serde_json = { workspace = true }
-# PyO3 0.23 keeps a Rust MSRV the workspace.s 1.88 satisfies; `abi3-py38`
+# PyO3 0.23 keeps a Rust MSRV the workspace's 1.89 satisfies; `abi3-py38`
 # yields a single stable-ABI wheel that loads on CPython 3.8+. The
 # `extension-module` feature drops the libpython link so the wheel is portable.
 pyo3 = { version = "0.23", default-features = false, features = [

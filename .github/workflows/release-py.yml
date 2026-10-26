@@ -84,9 +84,19 @@ jobs:
   # ---------------------------------------------------------------------------
   # 2. Publish to PyPI — only on a real `pyv*` tag AND only if PYPI_TOKEN is set.
   # ---------------------------------------------------------------------------
+  # Tag-only: no pre-publish [patch.crates-io], no git sources in Cargo.lock,
+  # versions == tag (scripts/release-guard.sh; PUBLISHING.md pre-tag steps).
+  release-guard:
+    name: release guard (no [patch], no git sources, versions == tag)
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/pyv')
+    steps:
+      - uses: actions/checkout@v4
+      - run: sh scripts/release-guard.sh "$GITHUB_REF_NAME"
+
   publish:
     name: publish to PyPI
-    needs: [build, sdist]
+    needs: [build, sdist, release-guard]
     runs-on: ubuntu-latest
     if: startsWith(github.ref, 'refs/tags/pyv')
     steps:

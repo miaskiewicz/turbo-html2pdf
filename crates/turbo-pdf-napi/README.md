@@ -201,7 +201,7 @@ fs.writeFileSync('out.pdf', pdf)   // %PDF-1.7
 
 ## Status
 
-`v0.3.8` is the release version for npm, PyPI and crates.io; registry
+`v0.6.0` is the release version for npm, PyPI and crates.io; registry
 verification follows the root `PUBLISHING.md`. The core engine is heavily tested (the `turbo-html2pdf-core`
 crate holds 100% line coverage with a cyclomatic-complexity ≤ 5 gate). Bindings:
 Node (napi) and WebAssembly. See [`docs/`](https://github.com/miaskiewicz/turbo-html2pdf/blob/main/docs/) for the full guide and

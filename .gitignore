@@ -23,6 +23,8 @@ napi/
 # `napi build` codegen sinks — keep off the hand-maintained index.d.ts/index.js
 index.generated.d.ts
 index.generated.js
+# Written at pack time from turbo-dom-layout's fonts (scripts/package-notices.mjs --pack).
+crates/turbo-pdf-napi/assets/fonts/Go-Regular.ttf
 
 # ---- WASM ----
 pkg/

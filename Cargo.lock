@@ -1930,7 +1930,7 @@ dependencies = [
 
 [[package]]
 name = "turbo-html2pdf-core"
-version = "0.3.9"
+version = "0.6.0"
 dependencies = [
  "aes",
  "cbc",
@@ -1953,7 +1953,7 @@ dependencies = [
 
 [[package]]
 name = "turbo-html2pdf-mcp"
-version = "0.3.9"
+version = "0.6.0"
 dependencies = [
  "serde",
  "serde_json",
@@ -1962,7 +1962,7 @@ dependencies = [
 
 [[package]]
 name = "turbo-pdf-napi"
-version = "0.3.9"
+version = "0.6.0"
 dependencies = [
  "napi",
  "napi-build",
@@ -1974,7 +1974,7 @@ dependencies = [
 
 [[package]]
 name = "turbo-pdf-py"
-version = "0.3.9"
+version = "0.6.0"
 dependencies = [
  "pyo3",
  "pythonize",
@@ -1984,7 +1984,7 @@ dependencies = [
 
 [[package]]
 name = "turbo-pdf-wasm"
-version = "0.3.9"
+version = "0.6.0"
 dependencies = [
  "getrandom 0.2.17",
  "getrandom 0.3.4",

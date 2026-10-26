@@ -4,7 +4,31 @@ All notable changes to turbo-html2pdf are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/); versions follow SemVer. The npm,
 PyPI, and crates.io packages release in lockstep from a `v*` tag (PyPI on `pyv*`).
 
-## [Unreleased] — turbo-dom consolidation
+## [0.6.0] — 2026-10-26 — turbo-dom consolidation
+
+The engine is now built on the turbo-dom workspace crates instead of carrying its own
+copies: `turbo-html2pdf-core` depends on **turbo-dom-layout 0.6** (style cascade,
+layout, text/fonts incl. the bundled faces, images, SVG, layout snapshots) and
+**turbo-dom 0.6** (the DOM templates are parsed into and the one Chrome-correct selector
+engine). Every rendered PDF of the release corpora (templates, conformance pages, PDF/UA,
+CMYK, PDF/A, the image matrix, with and without `svg`) is byte-identical to 0.3.9; the
+only behaviour changes are the selector fixes below, each backed by a Chrome 156 control.
+The version jumps from 0.3.9 to 0.6.0 so every consolidated package (turbo-dom,
+turbo-test, turbo-html2pdf, turbo-surf) releases on one version line.
+
+- Summary for users: same public paths (`turbo_html2pdf_core::style::…`, `::layout::…`,
+  `::Tag`, `::Fragment`, …, re-exported from turbo-dom-layout); selectors match like
+  Chrome (escapes, namespaces, `:has()`, `of S`, `:nth-last-*`, `:lang()`, `:defined`,
+  `:read-only`/`:read-write`, `:required`/`:optional`, unknown pseudo-classes drop their
+  rule, Selectors 4 specificity); fonts come from turbo-dom-layout (no duplicated
+  `assets/fonts` in this repo); the legacy owned-`Node` API is removed (see below).
+- `turbo-html2pdf-mcp` depends on core `version = "0.6"`; workspace
+  `rust-version = "1.89"` (was 1.88; turbo-dom-layout's floor).
+- Release: `release-crates.yml` waits for turbo-dom-layout 0.6.0 / turbo-dom 0.6.0 on
+  the crates.io index before publishing core, and a tag-only `release-guard` job fails
+  while `[patch.crates-io]` or git dependency sources remain. The npm package's
+  `assets/fonts/Go-Regular.ttf` is no longer tracked: `package-notices.mjs` writes it
+  from turbo-dom-layout's font tree at pack time (the published file list is unchanged).
 
 - turbo-dom-layout's legacy owned-`Node` input is gone, so are the re-exports built on it:
   `node`, `Node`, `Element`, `style_tree`, `collect_style_css` (the Tree versions are
@@ -23,15 +47,16 @@ PyPI, and crates.io packages release in lockstep from a `v*` tag (PyPI on `pyv*`
   the bundled faces, layout snapshots, `layout_html`, images, SVG, perf counters,
   errors, the `t:` markup parse) moved verbatim to the `turbo-dom-layout` crate in
   the turbo-dom workspace. `turbo-html2pdf-core` depends on it and re-exports it at
-  the same paths, so `turbo_html2pdf_core::style::…`, `::layout::…`, `::Node`,
-  `::Fragment`, … are unchanged; output is byte-identical. Its `bundled-fonts`,
+  the same paths, so `turbo_html2pdf_core::style::…`, `::layout::…`, `::Fragment`,
+  … are unchanged (the legacy `::Node` input went at S5, first bullet); output is
+  byte-identical. Its `bundled-fonts`,
   `perf`, `svg`, `xref`, `pdf-ua` and `print-color` features forward to the layout
   crate. Layout tests and their Chrome fixtures, and the `font_startup` example,
   moved with the code.
 - html2pdf no longer keeps its own DOM: rendered markup is parsed into a turbo-dom
   document and styled through turbo-dom-layout's Tree input (output byte-identical).
-  `Program::render_nodes` / `render_region` return a `Flow` (`Flow::style`,
-  `Flow::to_nodes` for the legacy `Node` copy); `TKind` lives in the new `markers`
+  `Program::render_nodes` / `render_region` return a `Flow` (`Flow::style`; the
+  interim `Flow::to_nodes` legacy copy is gone again, first bullet); `TKind` lives in the new `markers`
   module and directives are `Tag::Marker` / `FragmentContent::Marker` in the layout
   types. PDF/UA roles/alt text and xref links/anchors are derived after layout into
   `Page::semantics` (`Semantics::role` / `alt` / `link_href` / `anchor`) instead of

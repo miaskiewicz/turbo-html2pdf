@@ -1,5 +1,13 @@
-// Reproduce the license files shipped with bindings that embed the core fonts.
-import { readFileSync, writeFileSync } from "node:fs";
+// Reproduce the license files shipped with bindings that embed the core fonts, and the
+// npm package's pack-time font.
+//
+//   node scripts/package-notices.mjs           write every file below
+//   node scripts/package-notices.mjs --check   fail if a tracked file is stale (a generated
+//                                              file is checked only when present)
+//   node scripts/package-notices.mjs --pack    check the tracked files, then write the
+//                                              generated ones (release.yml runs this before
+//                                              `npm publish`)
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { layoutCrateDir, layoutFontsDir } from "./layout-crate-dir.mjs";
@@ -36,9 +44,14 @@ const files = new Map([
     "crates/turbo-pdf-napi/assets/fonts/Go-Font-LICENSE",
     readFileSync(join(fonts, "Go-Font-LICENSE"), "utf8"),
   ],
-  // The npm package ships the Go face for its examples/tests: written from (and checked
-  // against) turbo-dom-layout's font, never edited by hand.
-  ["crates/turbo-pdf-napi/assets/fonts/Go-Regular.ttf", readFileSync(join(fonts, "Go-Regular.ttf"))],
+]);
+// Generated at pack time and gitignored (no vendored font copy in this repo): the npm
+// package ships the Go face (`files: assets/fonts/*.ttf`) from turbo-dom-layout's font.
+const generated = new Map([
+  [
+    "crates/turbo-pdf-napi/assets/fonts/Go-Regular.ttf",
+    readFileSync(join(fonts, "Go-Regular.ttf")),
+  ],
 ]);
 const license = readFileSync(join(root, "LICENSE"), "utf8");
 for (const path of [
@@ -48,9 +61,17 @@ for (const path of [
   "packages/template/LICENSE",
 ])
   files.set(path, license);
+const check = process.argv.includes("--check");
+const pack = process.argv.includes("--pack");
+function verify(path, content) {
+  const current = readFileSync(join(root, path));
+  if (!current.equals(Buffer.from(content))) throw new Error(`Stale package notice: ${path}`);
+}
 for (const [path, content] of files) {
-  if (process.argv.includes("--check")) {
-    const current = readFileSync(join(root, path));
-    if (!current.equals(Buffer.from(content))) throw new Error(`Stale package notice: ${path}`);
-  } else writeFileSync(join(root, path), content);
+  if (check || pack) verify(path, content);
+  else writeFileSync(join(root, path), content);
+}
+for (const [path, content] of generated) {
+  if (!check) writeFileSync(join(root, path), content);
+  else if (existsSync(join(root, path))) verify(path, content);
 }

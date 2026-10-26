@@ -40,7 +40,7 @@ Required GitHub repo secrets: **`NPM_TOKEN`** (npm token with public-package pub
 package, uploads nothing).
 
 The `turbo-html2pdf-mcp` crate depends on `turbo-html2pdf-core` with an explicit
-`version = "0.3"` (^0.3) alongside its `path` — crates.io requires a version on
+`version = "0.6"` (^0.6) alongside its `path` — crates.io requires a version on
 the dep. It only needs bumping on a **minor** (0.x) change, not every patch;
 keep it in sync with the workspace major.minor when you cross a minor boundary.
 
@@ -77,14 +77,28 @@ comments describe past releases — leave those.)
 
 ### 2. Pre-tag gate (all must pass locally; CI re-runs them)
 
+While the root `Cargo.toml` has the pre-publish `[patch.crates-io]`, first follow
+PUBLISHING.md "Pre-tag: drop the pre-publish patch" (turbo-dom crates on crates.io,
+delete the section, `cargo update -p turbo-dom-layout -p turbo-dom`, no git sources
+left). Every tag workflow's `release-guard` job (`scripts/release-guard.sh <tag>`) fails
+otherwise, or when a version above disagrees with the tag; run it locally for both tags.
+
 ```
+sh scripts/release-guard.sh vX.Y.Z && sh scripts/release-guard.sh pyvX.Y.Z
 RUSTFLAGS="-D warnings" cargo fmt --all -- --check
 RUSTFLAGS="-D warnings" cargo clippy --workspace --all-targets -- -D warnings
 cargo test --workspace
 cargo run --manifest-path tools/cc-check/Cargo.toml -- --max 5 crates   # cc < 6
 cargo tarpaulin                                                          # 100% gate
 node scripts/package-notices.mjs --check                                # packaged notices
+node scripts/package-notices.mjs --pack   # + writes the untracked npm Go-Regular.ttf
 ```
+
+The napi package's `assets/fonts/Go-Regular.ttf` is not tracked; `publish-napi` /
+`publish-svg` run `package-notices.mjs --pack` before `npm publish` and assert the
+packed list contains it. `release-crates.yml` waits for the locked turbo-dom-layout /
+turbo-dom versions on the crates.io index (`scripts/wait-crates-index.sh`) before
+packaging core.
 
 `release.yml`'s `gate` job runs only fmt/clippy/test — so a red `cc-check` or
 coverage gate does NOT block a publish. Verify them locally anyway; a tag is
