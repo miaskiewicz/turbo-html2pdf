@@ -249,4 +249,40 @@ mod tests {
         assert_eq!(extracted.fixed[0].dy, 40.0);
         assert!(extracted.absolute.is_empty());
     }
+
+    #[test]
+    fn an_inset_absolute_box_in_a_positioned_box_stays_in_the_galley() {
+        let mut boxes = FlowBoxes::default();
+        boxes.insert(NodeId(2), facts(Position::Fixed, LengthPct::Px(0.0)));
+        boxes.insert(NodeId(4), facts(Position::Absolute, LengthPct::Px(5.0)));
+        boxes.insert(NodeId(5), facts(Position::Absolute, LengthPct::Px(5.0)));
+        let mut relative = boxed(3, 60.0, vec![boxed(4, 65.0, vec![])]);
+        relative.is_positioned = true;
+        let root = boxed(
+            1,
+            0.0,
+            vec![boxed(2, 0.0, vec![]), relative, boxed(5, 120.0, vec![])],
+        );
+        let extracted = extract(&root, &boxes, 300.0).expect("boxes to take");
+        let kept: Vec<NodeId> = extracted.root.children.iter().map(|c| c.node_id).collect();
+        assert_eq!(kept, [NodeId(3)]);
+        assert_eq!(extracted.root.children[0].children[0].node_id, NodeId(4));
+        let taken: Vec<NodeId> = extracted.absolute.iter().map(|t| t.frag.node_id).collect();
+        assert_eq!(taken, [NodeId(5)], "only the initial containing block's");
+    }
+
+    #[test]
+    fn a_bottom_anchored_box_ends_its_margin_box_at_the_inset() {
+        let mut boxes = FlowBoxes::default();
+        let bottom = BoxFacts {
+            inset_bottom: LengthPct::Px(10.0),
+            margin_bottom: 5.0,
+            ..facts(Position::Fixed, LengthPct::Auto)
+        };
+        boxes.insert(NodeId(2), bottom);
+        let root = boxed(1, 0.0, vec![boxed(2, 0.0, vec![])]);
+        let extracted = extract(&root, &boxes, 300.0).expect("a fixed box to take");
+        // 300 area - 10 bottom - 5 margin - 50 height.
+        assert_eq!(extracted.fixed[0].dy, 235.0);
+    }
 }
