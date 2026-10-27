@@ -466,6 +466,32 @@ fn ac_6_2_widows_pull_lines_back() {
 }
 
 #[test]
+fn lines_exactly_filling_the_page_stay_on_it() {
+    // 5 lines × 30 = 150 > 120, orphans/widows 1: lines 1-4 fill page 1 exactly (no gap
+    // between contiguous lines), line 5 goes on.
+    let para = paragraph(0.0, 5, 30.0, 1, 1);
+    let (pages, _) = run(&root(vec![para]), &cap120());
+    assert_eq!(pages.len(), 2);
+    assert_eq!((pages[0].body.len(), pages[1].body.len()), (4, 1));
+    assert!(close(pages[1].body[0].y, 0.0));
+}
+
+#[test]
+fn a_paragraphs_last_line_moves_on_with_its_parents_bottom_border() {
+    // 4 lines × 30 = 120 plus a 10px bottom border: the last line fits page 1 only
+    // without the border that ends its paragraph, so it moves on with it; earlier lines
+    // carry no tail.
+    let mut para = paragraph(0.0, 4, 30.0, 1, 1);
+    para.height += 10.0;
+    if let FragmentContent::Box { border, .. } = &mut para.content {
+        border.bottom.width = 10;
+    }
+    let (pages, _) = run(&root(vec![para]), &cap120());
+    assert_eq!(pages.len(), 2);
+    assert_eq!((pages[0].body.len(), pages[1].body.len()), (3, 1));
+}
+
+#[test]
 fn ac_6_2_orphans_defer_run_to_next_page() {
     // A 20px block, then a paragraph that must split. On page 1 only 2 lines
     // fit, but orphans=3 -> defer the whole paragraph to a fresh page.
