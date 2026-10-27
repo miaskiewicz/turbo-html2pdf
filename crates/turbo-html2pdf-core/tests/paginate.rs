@@ -477,6 +477,21 @@ fn lines_exactly_filling_the_page_stay_on_it() {
 }
 
 #[test]
+fn spaced_lines_fill_the_page_with_their_gaps() {
+    // 4 lines of 30 at galley 0, 35, 70, 105 (5px apart) on a 130px page: three fit with
+    // their gaps (to 100); the fourth would end at 135 and goes on.
+    let mut para = paragraph(0.0, 4, 30.0, 1, 1);
+    for (i, l) in para.children.iter_mut().enumerate() {
+        l.y = 35.0 * i as f32;
+    }
+    para.height = 135.0;
+    let (pages, _) = run(&root(vec![para]), &page("size: 200px 130px; margin: 0"));
+    assert_eq!(pages.len(), 2);
+    assert_eq!((pages[0].body.len(), pages[1].body.len()), (3, 1));
+    assert!(close(pages[0].body[2].y, 70.0));
+}
+
+#[test]
 fn a_paragraphs_last_line_moves_on_with_its_parents_bottom_border() {
     // 4 lines × 30 = 120 plus a 10px bottom border: the last line fits page 1 only
     // without the border that ends its paragraph, so it moves on with it; earlier lines
