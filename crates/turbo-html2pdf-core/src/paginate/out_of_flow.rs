@@ -194,3 +194,59 @@ fn moved(f: &Fragment, y: f32) -> Fragment {
     clone.translate(0.0, y - f.y);
     clone
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::layout::fragment::FragmentContent;
+    use crate::layout::value::{BorderEdges, LengthPct};
+
+    fn boxed(id: u32, y: f32, children: Vec<Fragment>) -> Fragment {
+        let content = FragmentContent::Box {
+            background: None,
+            border: BorderEdges::default(),
+            border_radius: 0.0,
+            shadow: None,
+            gradient: None,
+            transform: None,
+        };
+        let mut f = Fragment::new(NodeId(id), 0.0, y, 100.0, 50.0, content);
+        f.children = children;
+        f
+    }
+
+    fn facts(position: Position, inset_top: LengthPct) -> BoxFacts {
+        BoxFacts {
+            position,
+            margin_top: 0.0,
+            margin_bottom: 0.0,
+            padding_top: 0.0,
+            padding_bottom: 0.0,
+            inset_top,
+            inset_bottom: LengthPct::Auto,
+            shift: 0.0,
+        }
+    }
+
+    #[test]
+    fn a_galley_without_taken_boxes_is_walked_as_is() {
+        let mut boxes = FlowBoxes::default();
+        // A static-position absolute box stays in the flow.
+        boxes.insert(NodeId(3), facts(Position::Absolute, LengthPct::Auto));
+        let root = boxed(1, 0.0, vec![boxed(2, 0.0, vec![boxed(3, 10.0, vec![])])]);
+        assert!(extract(&root, &boxes, 300.0).is_none());
+    }
+
+    #[test]
+    fn a_nested_fixed_box_is_taken_out_of_the_galley() {
+        let mut boxes = FlowBoxes::default();
+        boxes.insert(NodeId(3), facts(Position::Fixed, LengthPct::Px(5.0)));
+        let root = boxed(1, 0.0, vec![boxed(2, 0.0, vec![boxed(3, 40.0, vec![])])]);
+        let extracted = extract(&root, &boxes, 300.0).expect("a fixed box to take");
+        assert!(extracted.root.children[0].children.is_empty());
+        assert_eq!(extracted.fixed.len(), 1);
+        assert_eq!(extracted.fixed[0].frag.node_id, NodeId(3));
+        assert_eq!(extracted.fixed[0].dy, 40.0);
+        assert!(extracted.absolute.is_empty());
+    }
+}

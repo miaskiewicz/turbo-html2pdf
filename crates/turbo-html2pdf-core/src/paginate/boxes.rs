@@ -256,6 +256,57 @@ mod tests {
         assert_eq!(trailing(&margins(&[]), &image, &child, 0.0), 0.0);
     }
 
+    #[test]
+    fn a_child_adjoins_only_within_half_a_pixel_of_the_top() {
+        let pairs = [(1, 10.0, 0.0), (2, 25.0, 0.0)];
+        let near = boxed(1, 10.0, vec![boxed(2, 10.4, vec![])]);
+        assert_eq!(leading_margin(&margins(&pairs), &near), Some(25.0));
+        let off = boxed(1, 10.0, vec![boxed(2, 10.5, vec![])]);
+        assert_eq!(leading_margin(&margins(&pairs), &off), Some(10.0));
+    }
+
+    #[test]
+    fn the_last_content_skips_out_of_flow_boxes_and_repeated_headers() {
+        let mut boxes = margins(&[(1, 0.0, 0.0), (2, 0.0, 0.0), (3, 0.0, 0.0)]);
+        let absolute = BoxFacts {
+            position: Position::Absolute,
+            ..*boxes.get(NodeId(3)).unwrap()
+        };
+        boxes.insert(NodeId(3), absolute);
+        let mut header = boxed(4, 0.0, vec![]);
+        header.break_meta.repeatable = Some(RepeatKind::Header);
+        let flow = [boxed(1, 0.0, vec![]), boxed(2, 50.0, vec![])];
+        assert_eq!(last_content(&boxes, &flow), Some(1));
+        let with_absolute = [flow[0].clone(), flow[1].clone(), boxed(3, 0.0, vec![])];
+        assert_eq!(last_content(&boxes, &with_absolute), Some(1));
+        let with_header = [flow[0].clone(), header.clone()];
+        assert_eq!(last_content(&boxes, &with_header), Some(0));
+        assert_eq!(last_content(&boxes, &[header, boxed(3, 0.0, vec![])]), None);
+    }
+
+    #[test]
+    fn remaining_height_is_what_the_box_extends_past_its_content() {
+        let mut parent = boxed(1, 0.0, vec![boxed(2, 0.0, vec![])]);
+        let child = parent.children[0].clone();
+        let none = margins(&[]);
+        // Content (0..50) ends the box within half a pixel: no remaining height.
+        parent.height = 50.5;
+        assert_eq!(remaining_height(&none, &parent, &child), None);
+        parent.height = 90.0;
+        assert_eq!(remaining_height(&none, &parent, &child), Some(40.0));
+        // Bottom padding ends the box too: 50 content + 20 padding = 70.
+        let mut padded = margins(&[(1, 0.0, 0.0)]);
+        let facts = BoxFacts {
+            padding_bottom: 20.0,
+            ..*padded.get(NodeId(1)).unwrap()
+        };
+        padded.insert(NodeId(1), facts);
+        parent.height = 70.0;
+        assert_eq!(remaining_height(&padded, &parent, &child), None);
+        parent.height = 80.0;
+        assert_eq!(remaining_height(&padded, &parent, &child), Some(30.0));
+    }
+
     fn image(id: u32, y: f32) -> Fragment {
         let image = ImagePlacement {
             name: "a.png".to_string(),

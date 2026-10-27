@@ -139,3 +139,105 @@ fn slice(w: &Fragment, start: f32, end: f32, first: bool, last: bool) -> Fragmen
     }
     f
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::layout::value::{BorderEdges, BorderSide, Rgba};
+
+    /// A box fragment at `y` (100px wide, `height` tall) with the given border and radius.
+    fn wrapper(y: f32, height: f32, border: BorderEdges, radius: f32) -> Fragment {
+        let content = FragmentContent::Box {
+            background: None,
+            border,
+            border_radius: radius,
+            shadow: None,
+            gradient: None,
+            transform: None,
+        };
+        Fragment::new(NodeId(7), 0.0, y, 100.0, height, content)
+    }
+
+    fn all(side: BorderSide) -> BorderEdges {
+        BorderEdges {
+            top: side,
+            right: side,
+            bottom: side,
+            left: side,
+        }
+    }
+
+    fn radius(f: &Fragment) -> f32 {
+        match &f.content {
+            FragmentContent::Box { border_radius, .. } => *border_radius,
+            _ => unreachable!("a box"),
+        }
+    }
+
+    fn widths(f: &Fragment) -> (u16, u16) {
+        match &f.content {
+            FragmentContent::Box { border, .. } => (border.top.width, border.bottom.width),
+            _ => unreachable!("a box"),
+        }
+    }
+
+    #[test]
+    fn only_a_border_with_a_width_and_a_colour_paints() {
+        let black = Some(Rgba::BLACK);
+        let zero = BorderSide {
+            width: 0,
+            color: black,
+        };
+        assert!(!paints(&wrapper(0.0, 10.0, all(zero), 0.0)));
+        let colourless = BorderSide {
+            width: 2,
+            color: None,
+        };
+        assert!(!paints(&wrapper(0.0, 10.0, all(colourless), 0.0)));
+        let one = BorderSide {
+            width: 1,
+            color: black,
+        };
+        assert!(paints(&wrapper(0.0, 10.0, all(one), 0.0)));
+    }
+
+    #[test]
+    fn a_slice_keeps_its_edges_and_corners_only_where_the_box_does() {
+        let side = BorderSide {
+            width: 3,
+            color: Some(Rgba::BLACK),
+        };
+        let w = wrapper(0.0, 500.0, all(side), 8.0);
+        let whole = slice(&w, 5.0, 45.0, true, true);
+        assert_eq!(
+            (whole.y, whole.height, whole.node_id),
+            (5.0, 40.0, NodeId(0))
+        );
+        assert_eq!((widths(&whole), radius(&whole)), ((3, 3), 8.0));
+        let first = slice(&w, 5.0, 45.0, true, false);
+        assert_eq!((widths(&first), radius(&first)), ((3, 0), 0.0));
+        let middle = slice(&w, 0.0, 45.0, false, false);
+        assert_eq!((widths(&middle), radius(&middle)), ((0, 0), 0.0));
+        let last = slice(&w, 0.0, 45.0, false, true);
+        assert_eq!((widths(&last), radius(&last)), ((0, 3), 0.0));
+    }
+
+    #[test]
+    fn the_first_slice_starts_at_the_wrapper_below_the_first_page_top() {
+        let side = BorderSide {
+            width: 1,
+            color: Some(Rgba::BLACK),
+        };
+        // The first page starts at galley y 10; the wrapper's box starts at 30 and ends at
+        // 90, with its content ending at galley 80 (page-local 70).
+        let w = wrapper(30.0, 60.0, all(side), 0.0);
+        let spans = [PageSpan {
+            capacity: 300.0,
+            last: Some((80.0, 70.0)),
+        }];
+        let mut pages = vec![Vec::new()];
+        decorate(&mut pages, &spans, &[w], 10.0);
+        assert_eq!(pages[0].len(), 1);
+        assert_eq!((pages[0][0].y, pages[0][0].height), (20.0, 60.0));
+    }
+}
