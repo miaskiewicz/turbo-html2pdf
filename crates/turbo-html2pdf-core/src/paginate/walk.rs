@@ -476,12 +476,14 @@ impl<'a> Walker<'a> {
     }
 
     /// Done splitting `f`: a positioned block stops being the containing block of what the
-    /// walk meets (had it placed nothing, its start is unknown: its deferred boxes fall
-    /// back to the first page).
+    /// walk meets. Its start is always known by now: `split` only opens a block with
+    /// in-flow content (`last_content`), every in-flow child is placed through `put`
+    /// (`emit`, `split` recursing to it, `overflow_leaf`), and `put` anchors and drains
+    /// every open block — so nothing is left open when it closes.
     fn close_block(&mut self, f: &Fragment) {
         if f.is_positioned {
             self.positioned.pop();
-            self.open.retain(|&(id, _)| id != f.node_id);
+            debug_assert!(self.open.is_empty(), "a split block placed nothing");
         }
         if paints(f) {
             self.close_decorated(f);

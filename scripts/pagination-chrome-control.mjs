@@ -614,6 +614,16 @@ const CASES = [
     colors: ["red", "blue", "orange", "green", "yellow"],
   },
   {
+    // Item 1: a relatively offset decorated block split across pages: every slice is
+    // painted shifted with it, the last one ending 20px below its flow position.
+    id: "split-decorated-relative",
+    html: DOC(
+      "body{margin:0}",
+      `<div style="position:relative;top:20px;border-bottom:5px solid ${C.blue[0]};background:${C.orange[0]};padding-bottom:10px">${blocks(["green", "yellow", "magenta"], 140)}</div>`,
+    ),
+    colors: ["blue", "orange", "green", "yellow", "magenta"],
+  },
+  {
     // Item 2: a percentage top margin resolves against the containing block's width
     // (10% of 200px = 20px), here kept after a forced break.
     id: "percent-margin-nested",

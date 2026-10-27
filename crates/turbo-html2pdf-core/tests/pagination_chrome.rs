@@ -192,7 +192,12 @@ fn compare_page(
     let raster = rasterize(page);
     for (name, css) in colors {
         let (got, want) = (measure(&raster, rgb(css)), chrome_box(&want["boxes"][name]));
-        if got != want {
+        let known = KNOWN.contains(&(id, n, name.as_str()));
+        if known && got == want {
+            failures.push(format!(
+                "{id} page {n} {name}: matches Chrome, remove it from KNOWN"
+            ));
+        } else if !known && got != want {
             failures.push(format!("{id} page {n} {name}: {got:?}, Chrome {want:?}"));
         }
     }
@@ -216,17 +221,20 @@ fn compare_case(case: &serde_json::Value, failures: &mut Vec<String>) {
     }
 }
 
-/// Cases that do not match Chrome yet (each must still differ, so a fixed case is
-/// removed from the list).
+/// Measurements (case, page, colour) that do not match Chrome yet; each must still differ,
+/// so a fixed one is removed from the list. The rest of those cases is compared as usual.
 /// (`exact-fill-child-margin` matches since miaskiewicz/turbo-dom#41: the paged layout keeps
 /// a last child's bottom margin inside a padded parent.)
-const PENDING: &[&str] = &[
+const KNOWN: &[(&str, usize, &str)] = &[
     // miaskiewicz/turbo-html2pdf#41: a static-position absolute box in a split relative
     // block is placed after the block's later flow content.
-    "absolute-static-mid-split-relative",
-    // miaskiewicz/turbo-html2pdf#42: the part of a split relative block shifted above a
-    // page's area is not painted at the end of the previous page.
-    "relative-bottom-split",
+    ("absolute-static-mid-split-relative", 2, "red"),
+    // miaskiewicz/turbo-html2pdf#42: the part of a split relative block shifted across a
+    // page boundary is not painted on the page it crosses into (Chrome also bleeds the
+    // shifted continuation 1px above the page area).
+    ("relative-bottom-split", 1, "magenta"),
+    ("relative-bottom-split", 2, "magenta"),
+    ("split-decorated-relative", 2, "orange"),
 ];
 
 /// miaskiewicz/turbo-html2pdf#39: the print initial containing block (the page area).
@@ -258,24 +266,14 @@ fn the_page_area_is_the_initial_containing_block_like_chrome_156() {
 
 #[test]
 fn paginated_boxes_match_chrome_156() {
-    let fixture = fixture();
     let mut failures = Vec::new();
-    for case in fixture["cases"]
+    for case in fixture()["cases"]
         .as_array()
         .unwrap()
         .iter()
         .filter(|case| !icb_case(case["id"].as_str().unwrap()))
     {
-        let mut differences = Vec::new();
-        compare_case(case, &mut differences);
-        let id = case["id"].as_str().unwrap();
-        if PENDING.contains(&id) {
-            if differences.is_empty() {
-                failures.push(format!("{id}: matches Chrome, remove it from PENDING"));
-            }
-        } else {
-            failures.extend(differences);
-        }
+        compare_case(case, &mut failures);
     }
     assert!(failures.is_empty(), "{}", failures.join("\n"));
 }
