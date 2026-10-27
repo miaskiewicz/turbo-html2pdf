@@ -384,6 +384,39 @@ const CASES = [
     colors: ["blue", "red", "green"],
   },
   {
+    // The remaining height below a last child's bottom margin (30px, kept inside the box):
+    // the 350px box ends 30px down page 2, where the next block follows it.
+    id: "remaining-height-after-margin",
+    html: DOC(
+      "body{margin:0}",
+      `<div style="height:350px">${block(C.blue[0], 100)}${block(C.red[0], 140, "margin-bottom:30px")}</div>` +
+        block(C.green[0], 60),
+    ),
+    colors: ["blue", "red", "green"],
+  },
+  {
+    // Remaining height running past its page by exactly one page capacity: it fills
+    // page 2, and the next block starts page 3 with its top margin truncated.
+    id: "remaining-height-full-page",
+    html: DOC(
+      "body{margin:0}",
+      `<div style="height:640px">${block(C.blue[0], 100)}${block(C.red[0], 140)}</div>` +
+        block(C.green[0], 60, "margin-top:10px"),
+    ),
+    colors: ["blue", "red", "green"],
+  },
+  {
+    // A split box with remaining height inside a relatively offset block: the flow after
+    // it continues from its unshifted end (the next block keeps its 10px top margin).
+    id: "remaining-height-in-relative",
+    html: DOC(
+      "body{margin:0}",
+      `<div style="position:relative;top:20px"><div style="height:400px">${block(C.blue[0], 100)}${block(C.red[0], 140)}</div></div>` +
+        block(C.green[0], 60, "margin-top:10px"),
+    ),
+    colors: ["blue", "red", "green"],
+  },
+  {
     // Item 1: an absolute box far past the content creates the pages it lands on.
     id: "absolute-root-past-content",
     html: DOC(

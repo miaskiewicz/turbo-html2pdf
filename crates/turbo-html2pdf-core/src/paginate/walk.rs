@@ -924,4 +924,36 @@ mod tests {
         assert_eq!(ids(0), [NodeId(1), NodeId(3)]);
         assert_eq!(ids(1), [NodeId(4)]);
     }
+
+    #[test]
+    fn remaining_height_that_exactly_fills_a_page_ends_there() {
+        let at = |id: u32, y: f32, h: f32, children: Vec<Fragment>| {
+            let mut f = boxf(false, None);
+            (f.node_id, f.y, f.height, f.children) = (NodeId(id), y, h, children);
+            f
+        };
+        // 150px pages. The 250px box splits: its second child moves to page 2 (0..100)
+        // and its 50px of remaining height end exactly at that page's end; the next
+        // block, 10px below the box in the galley, starts page 3 at its top.
+        let split = at(
+            2,
+            0.0,
+            250.0,
+            vec![at(3, 0.0, 100.0, vec![]), at(4, 100.0, 100.0, vec![])],
+        );
+        let root = at(0, 0.0, 290.0, vec![split, at(5, 260.0, 30.0, vec![])]);
+        let boxes = FlowBoxes::default();
+        let galley = Galley {
+            root: &root,
+            wrappers: &[],
+            boxes: &boxes,
+        };
+        let walked = walk_reserved(galley, 150.0, &|_| 0.0, &mut Diagnostics::default());
+        let at_y = |p: usize| -> Vec<(NodeId, f32)> {
+            walked.pages[p].iter().map(|f| (f.node_id, f.y)).collect()
+        };
+        assert_eq!(walked.pages.len(), 3);
+        assert_eq!(at_y(1), [(NodeId(4), 0.0)]);
+        assert_eq!(at_y(2), [(NodeId(5), 0.0)]);
+    }
 }

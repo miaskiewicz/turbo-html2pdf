@@ -1413,6 +1413,131 @@
       ]
     },
     {
+      "id": "remaining-height-after-margin",
+      "html": "<!DOCTYPE html><html><head><style>@page{size:600px 400px;margin:40px}body{margin:0}</style></head><body><div style=\"height:350px\"><div style=\"height:100px;background:#0000ff;break-inside:avoid;\"></div><div style=\"height:140px;background:#ff0000;break-inside:avoid;margin-bottom:30px\"></div></div><div style=\"height:60px;background:#00ff00;break-inside:avoid;\"></div></body></html>",
+      "colors": {
+        "blue": "#0000ff",
+        "red": "#ff0000",
+        "green": "#00ff00"
+      },
+      "pages": [
+        {
+          "size": [600, 400],
+          "boxes": {
+            "blue": {
+              "bbox": [40, 40, 559, 139],
+              "top": true,
+              "bottom": true
+            },
+            "red": {
+              "bbox": [40, 140, 559, 279],
+              "top": true,
+              "bottom": true
+            },
+            "green": null
+          }
+        },
+        {
+          "size": [600, 400],
+          "boxes": {
+            "blue": null,
+            "red": null,
+            "green": {
+              "bbox": [40, 70, 559, 129],
+              "top": true,
+              "bottom": true
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "remaining-height-full-page",
+      "html": "<!DOCTYPE html><html><head><style>@page{size:600px 400px;margin:40px}body{margin:0}</style></head><body><div style=\"height:640px\"><div style=\"height:100px;background:#0000ff;break-inside:avoid;\"></div><div style=\"height:140px;background:#ff0000;break-inside:avoid;\"></div></div><div style=\"height:60px;background:#00ff00;break-inside:avoid;margin-top:10px\"></div></body></html>",
+      "colors": {
+        "blue": "#0000ff",
+        "red": "#ff0000",
+        "green": "#00ff00"
+      },
+      "pages": [
+        {
+          "size": [600, 400],
+          "boxes": {
+            "blue": {
+              "bbox": [40, 40, 559, 139],
+              "top": true,
+              "bottom": true
+            },
+            "red": {
+              "bbox": [40, 140, 559, 279],
+              "top": true,
+              "bottom": true
+            },
+            "green": null
+          }
+        },
+        {
+          "size": [600, 400],
+          "boxes": {
+            "blue": null,
+            "red": null,
+            "green": null
+          }
+        },
+        {
+          "size": [600, 400],
+          "boxes": {
+            "blue": null,
+            "red": null,
+            "green": {
+              "bbox": [40, 40, 559, 99],
+              "top": true,
+              "bottom": true
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "remaining-height-in-relative",
+      "html": "<!DOCTYPE html><html><head><style>@page{size:600px 400px;margin:40px}body{margin:0}</style></head><body><div style=\"position:relative;top:20px\"><div style=\"height:400px\"><div style=\"height:100px;background:#0000ff;break-inside:avoid;\"></div><div style=\"height:140px;background:#ff0000;break-inside:avoid;\"></div></div></div><div style=\"height:60px;background:#00ff00;break-inside:avoid;margin-top:10px\"></div></body></html>",
+      "colors": {
+        "blue": "#0000ff",
+        "red": "#ff0000",
+        "green": "#00ff00"
+      },
+      "pages": [
+        {
+          "size": [600, 400],
+          "boxes": {
+            "blue": {
+              "bbox": [40, 60, 559, 159],
+              "top": true,
+              "bottom": true
+            },
+            "red": {
+              "bbox": [40, 160, 559, 299],
+              "top": true,
+              "bottom": true
+            },
+            "green": null
+          }
+        },
+        {
+          "size": [600, 400],
+          "boxes": {
+            "blue": null,
+            "red": null,
+            "green": {
+              "bbox": [40, 130, 559, 189],
+              "top": true,
+              "bottom": true
+            }
+          }
+        }
+      ]
+    },
+    {
       "id": "absolute-root-past-content",
       "html": "<!DOCTYPE html><html><head><style>@page{size:600px 400px;margin:40px}body{margin:0}</style></head><body><div style=\"position:absolute;top:900px;left:20px;width:50px;height:30px;background:#ff0000\"></div><div style=\"height:100px;background:#00ff00;break-inside:avoid;\"></div></body></html>",
       "colors": {
