@@ -7,7 +7,7 @@ PyPI, and crates.io packages release in lockstep from a `v*` tag (PyPI on `pyv*`
 ## [Unreleased]
 
 - **Changed (turbo-dom pin)**: `turbo-dom-layout` + `turbo-dom` are pinned to the final
-  turbo-dom consolidation head (f50e6cb, was e888342). The only engine changes reaching
+  turbo-dom consolidation head (f860fea, was e888342). The only engine changes reaching
   html2pdf are turbo-dom#107 (turbo-dom-layout's AVIF size probe treats a truncated AVIF
   — primary item's `iloc` extents missing from the data — as broken, like Chrome 156)
   and the additive `rtdom::color` canvas serialization of turbo-dom#108; the rest
