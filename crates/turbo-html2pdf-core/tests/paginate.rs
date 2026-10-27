@@ -243,6 +243,17 @@ fn ac_6_2_forced_break_after() {
 }
 
 #[test]
+fn forced_break_keeps_the_galley_gap_of_a_box_with_unknown_margins() {
+    // No `FlowBoxes` facts (a bare galley): after a forced break the next block keeps its
+    // galley distance from the content before the break (here 60 - 40 = 20px).
+    let mut blocks = vec![boxf(0.0, 40.0), boxf(60.0, 40.0)];
+    blocks[1].break_meta.break_before = BreakRule::Page;
+    let (pages, _) = run(&root(blocks), &cap120());
+    assert_eq!(pages.len(), 2);
+    assert_eq!(pages[1].body[0].y, 20.0);
+}
+
+#[test]
 fn forced_break_before_the_first_content_makes_no_blank_page() {
     // miaskiewicz/turbo-html2pdf#32 item 3 (Chrome 156: the break is ignored).
     let mut blocks = stack(&[40.0, 40.0]);

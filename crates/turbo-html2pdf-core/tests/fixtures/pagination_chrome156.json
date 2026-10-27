@@ -681,6 +681,52 @@
       ]
     },
     {
+      "id": "absolute-static-margin",
+      "html": "<!DOCTYPE html><html><head><style>@page{size:600px 400px;margin:40px}body{margin:0}</style></head><body><div style=\"height:100px;background:#00ff00;break-inside:avoid;\"></div><div style=\"position:absolute;margin-top:30px;width:50px;height:30px;background:#ff0000\"></div><div style=\"height:140px;background:#0000ff;break-inside:avoid;\"></div><div style=\"height:140px;background:#ffff00;break-inside:avoid;\"></div></body></html>",
+      "colors": {
+        "red": "#ff0000",
+        "green": "#00ff00",
+        "blue": "#0000ff",
+        "yellow": "#ffff00"
+      },
+      "pages": [
+        {
+          "size": [600, 400],
+          "boxes": {
+            "red": {
+              "bbox": [40, 170, 89, 199],
+              "top": true,
+              "bottom": true
+            },
+            "green": {
+              "bbox": [40, 40, 559, 139],
+              "top": true,
+              "bottom": true
+            },
+            "blue": {
+              "bbox": [40, 140, 559, 279],
+              "top": true,
+              "bottom": true
+            },
+            "yellow": null
+          }
+        },
+        {
+          "size": [600, 400],
+          "boxes": {
+            "red": null,
+            "green": null,
+            "blue": null,
+            "yellow": {
+              "bbox": [40, 40, 559, 179],
+              "top": true,
+              "bottom": true
+            }
+          }
+        }
+      ]
+    },
+    {
       "id": "canvas-root-background",
       "html": "<!DOCTYPE html><html><head><style>@page{size:600px 400px;margin:40px}html{background:#00ffff}</style></head><body><div style=\"height:140px;background:#00ff00;break-inside:avoid;\"></div><div style=\"height:140px;background:#0000ff;break-inside:avoid;\"></div><div style=\"height:140px;background:#ffff00;break-inside:avoid;\"></div></body></html>",
       "colors": {
@@ -1586,6 +1632,59 @@
             },
             "yellow": {
               "bbox": [40, 140, 559, 279],
+              "top": true,
+              "bottom": true
+            },
+            "magenta": null,
+            "orange": null
+          }
+        },
+        {
+          "size": [600, 400],
+          "boxes": {
+            "red": {
+              "bbox": [60, 220, 109, 249],
+              "top": true,
+              "bottom": true
+            },
+            "green": null,
+            "yellow": null,
+            "magenta": {
+              "bbox": [40, 40, 559, 179],
+              "top": true,
+              "bottom": true
+            },
+            "orange": {
+              "bbox": [40, 180, 559, 319],
+              "top": true,
+              "bottom": true
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "absolute-in-split-padded-relative",
+      "html": "<!DOCTYPE html><html><head><style>@page{size:600px 400px;margin:40px}body{margin:0}</style></head><body><div style=\"height:100px;background:#00ff00;break-inside:avoid;\"></div><div style=\"position:relative;padding-top:20px\"><div style=\"height:140px;background:#ffff00;break-inside:avoid;\"></div><div style=\"height:140px;background:#ff00ff;break-inside:avoid;\"></div><div style=\"height:140px;background:#ff8000;break-inside:avoid;\"></div><div style=\"position:absolute;top:400px;left:20px;width:50px;height:30px;background:#ff0000\"></div></div></body></html>",
+      "colors": {
+        "red": "#ff0000",
+        "green": "#00ff00",
+        "yellow": "#ffff00",
+        "magenta": "#ff00ff",
+        "orange": "#ff8000"
+      },
+      "pages": [
+        {
+          "size": [600, 400],
+          "boxes": {
+            "red": null,
+            "green": {
+              "bbox": [40, 40, 559, 139],
+              "top": true,
+              "bottom": true
+            },
+            "yellow": {
+              "bbox": [40, 160, 559, 299],
               "top": true,
               "bottom": true
             },

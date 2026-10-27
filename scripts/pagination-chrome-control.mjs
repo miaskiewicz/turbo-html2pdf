@@ -206,6 +206,17 @@ const CASES = [
     colors: ["red", "green", "blue", "yellow"],
   },
   {
+    // The same with a top margin: the box sits that far below its static position.
+    id: "absolute-static-margin",
+    html: DOC(
+      "body{margin:0}",
+      block(C.green[0], 100) +
+        `<div style="position:absolute;margin-top:30px;width:50px;height:30px;background:${C.red[0]}"></div>` +
+        blocks(["blue", "yellow"], 140),
+    ),
+    colors: ["red", "green", "blue", "yellow"],
+  },
+  {
     // Item 2: the root background (canvas) paints the page area only, on every page.
     id: "canvas-root-background",
     html: DOC("html{background:#00ffff}", blocks(["green", "blue", "yellow"], 140)),
@@ -424,6 +435,18 @@ const CASES = [
       "body{margin:0}",
       block(C.green[0], 100) +
         `<div style="position:relative">${blocks(["yellow", "magenta", "orange"], 140)}` +
+        `<div style="position:absolute;top:400px;left:20px;width:50px;height:30px;background:${C.red[0]}"></div></div>`,
+    ),
+    colors: ["red", "green", "yellow", "magenta", "orange"],
+  },
+  {
+    // Item 1: the same container with a top padding: the offsets run from its border-box
+    // top, 20px above its first child.
+    id: "absolute-in-split-padded-relative",
+    html: DOC(
+      "body{margin:0}",
+      block(C.green[0], 100) +
+        `<div style="position:relative;padding-top:20px">${blocks(["yellow", "magenta", "orange"], 140)}` +
         `<div style="position:absolute;top:400px;left:20px;width:50px;height:30px;background:${C.red[0]}"></div></div>`,
     ),
     colors: ["red", "green", "yellow", "magenta", "orange"],
