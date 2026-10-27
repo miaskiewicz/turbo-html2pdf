@@ -429,6 +429,32 @@ const CASES = [
     colors: ["red", "green", "yellow", "magenta", "orange"],
   },
   {
+    // Item 1: an absolute box without vertical insets inside a relative container split
+    // across pages sits at its static position (after the last block, on page 2), not
+    // offset from the container's start through the page capacities.
+    id: "absolute-static-in-split-relative",
+    html: DOC(
+      "body{margin:0}",
+      block(C.green[0], 100) +
+        `<div style="position:relative">${blocks(["yellow", "magenta", "orange"], 140)}` +
+        `<div style="position:absolute;left:20px;width:50px;height:30px;background:${C.red[0]}"></div></div>`,
+    ),
+    colors: ["red", "green", "yellow", "magenta", "orange"],
+  },
+  {
+    // The same box between two blocks of the container: its static position is right
+    // after the block pushed to page 2, before the next one.
+    id: "absolute-static-mid-split-relative",
+    html: DOC(
+      "body{margin:0}",
+      block(C.green[0], 100) +
+        `<div style="position:relative">${blocks(["yellow", "magenta"], 140)}` +
+        `<div style="position:absolute;left:20px;width:50px;height:30px;background:${C.red[0]}"></div>` +
+        `${block(C.orange[0], 140)}</div>`,
+    ),
+    colors: ["red", "green", "yellow", "magenta", "orange"],
+  },
+  {
     // Item 1: an absolute box in a static block that moves to page 2 stays relative to
     // the initial containing block (page 1).
     id: "absolute-in-moved-static",
@@ -470,6 +496,30 @@ const CASES = [
         block(C.green[0], 60),
     ),
     colors: ["yellow", "magenta", "orange", "green"],
+  },
+  {
+    // A block offset by `bottom` is painted 20px above its flow position; the next block
+    // follows the flow.
+    id: "relative-bottom-flow",
+    html: DOC(
+      "body{margin:0}",
+      block(C.red[0], 60) +
+        block(C.yellow[0], 60, "position:relative;bottom:20px") +
+        block(C.green[0], 60),
+    ),
+    colors: ["red", "yellow", "green"],
+  },
+  {
+    // The same for a split block: the part of a page's content shifted above the page
+    // area is painted at the end of the previous page.
+    id: "relative-bottom-split",
+    html: DOC(
+      "body{margin:0}",
+      block(C.red[0], 60) +
+        `<div style="position:relative;bottom:20px">${blocks(["yellow", "magenta", "orange"], 140)}</div>` +
+        block(C.green[0], 60),
+    ),
+    colors: ["red", "yellow", "magenta", "orange", "green"],
   },
   {
     // A table split across pages repeats its header row; the next row follows it.
@@ -561,6 +611,18 @@ const CASES = [
         block(C.green[0], 60),
     ),
     colors: ["blue", "red", "green"],
+  },
+  {
+    // Item 2: the containing block of a percentage margin is its parent's content box:
+    // after the forced break the block keeps 10% of the 200px content width (not of the
+    // 320px border box) = 20px.
+    id: "percent-margin-in-padded-parent",
+    html: DOC(
+      "body{margin:0}",
+      block(C.red[0], 60, "margin-bottom:80px") +
+        `<div style="width:200px;padding:0 50px;border-left:20px solid #000">${block(C.green[0], 60, "break-before:page;margin-top:10%")}</div>`,
+    ),
+    colors: ["red", "green"],
   },
   // --- miaskiewicz/turbo-html2pdf#39 (P5b-W7): the print initial containing block is the
   // page area (here 520x320): `%` insets and heights of fixed boxes, and of absolute

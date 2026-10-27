@@ -220,7 +220,14 @@ fn compare_case(case: &serde_json::Value, failures: &mut Vec<String>) {
 /// removed from the list).
 /// (`exact-fill-child-margin` matches since miaskiewicz/turbo-dom#41: the paged layout keeps
 /// a last child's bottom margin inside a padded parent.)
-const PENDING: &[&str] = &[];
+const PENDING: &[&str] = &[
+    // miaskiewicz/turbo-html2pdf#41: a static-position absolute box in a split relative
+    // block is placed after the block's later flow content.
+    "absolute-static-mid-split-relative",
+    // miaskiewicz/turbo-html2pdf#42: the part of a split relative block shifted above a
+    // page's area is not painted at the end of the previous page.
+    "relative-bottom-split",
+];
 
 /// miaskiewicz/turbo-html2pdf#39: the print initial containing block (the page area).
 fn icb_case(id: &str) -> bool {

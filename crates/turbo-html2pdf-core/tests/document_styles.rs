@@ -151,12 +151,30 @@ fn contains(hay: &[u8], needle: &[u8]) -> bool {
 
 #[test]
 fn the_canvas_paints_the_page_area_composited_on_white() {
-    let mut page = pages(&doc("", "<p>x</p>"), "").remove(0);
+    let mut page = pages(&doc("", ""), "").remove(0);
+    // An 800x600px page with four different margins: the page area is
+    // x 20..770, y 10..550 (750x540 px), i.e. in PDF points (y up, 450pt tall page)
+    // the rectangle `15 37.5 562.5 405`.
+    page.geometry.width = 800.0;
+    page.geometry.height = 600.0;
+    page.geometry.margin = turbo_html2pdf_core::layout::value::Edges {
+        top: 10.0,
+        right: 30.0,
+        bottom: 50.0,
+        left: 20.0,
+    };
     let plain = emit_pdf(std::slice::from_ref(&page), &EmitOptions::default());
-    page.canvas = Some(Rgba::new(0, 0, 255, 128));
+    assert!(!contains(&plain, b" re\nf"), "no canvas, no fill");
+    // rgb(1 0 255 / 200) over white, rounded to nearest: (v*200 + 255*55 + 127) / 255
+    // = 56, 55, 255 -> `rg` operands 56/255, 55/255, 1.
+    page.canvas = Some(Rgba::new(1, 0, 255, 200));
     let painted = emit_pdf(std::slice::from_ref(&page), &EmitOptions::default());
-    assert_ne!(plain, painted);
-    assert!(painted.starts_with(b"%PDF-1.7") && contains(&painted, b"%%EOF"));
+    let fill = b"0.21960784 0.21568628 1 rg\n15 37.5 562.5 405 re\nf";
+    assert!(
+        contains(&painted, fill),
+        "canvas fill operators missing: {}",
+        String::from_utf8_lossy(&painted)
+    );
 }
 
 #[cfg(feature = "pdf-ua")]
@@ -173,4 +191,24 @@ fn a_tagged_render_paints_the_canvas_as_an_artifact() {
     let painted = emit_pdf(std::slice::from_ref(&page), &opts);
     assert_ne!(plain, painted);
     assert!(contains(&painted, b"/MarkInfo"));
+}
+
+#[test]
+fn the_documents_sheets_style_the_footnote_band() {
+    // Everything rendered after the body (footnote bodies here) cascades against the
+    // document's own `<style>` rules too, not only the caller's sheet.
+    let page = &pages(
+        &doc(
+            "<style>.n{color:#00c000}</style>",
+            "<p>See<t:footnote><span class=\"n\">note</span></t:footnote>.</p>",
+        ),
+        "",
+    )[0];
+    let mut band = Vec::new();
+    text_lines(&page.footnotes, &mut band);
+    assert!(!band.is_empty(), "the footnote band paints");
+    assert!(
+        band.iter().any(|l| l.2 == Rgba::new(0, 0xc0, 0, 255)),
+        "the head rule colours the note: {band:?}"
+    );
 }

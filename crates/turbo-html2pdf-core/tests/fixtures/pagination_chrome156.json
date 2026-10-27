@@ -1618,6 +1618,112 @@
       ]
     },
     {
+      "id": "absolute-static-in-split-relative",
+      "html": "<!DOCTYPE html><html><head><style>@page{size:600px 400px;margin:40px}body{margin:0}</style></head><body><div style=\"height:100px;background:#00ff00;break-inside:avoid;\"></div><div style=\"position:relative\"><div style=\"height:140px;background:#ffff00;break-inside:avoid;\"></div><div style=\"height:140px;background:#ff00ff;break-inside:avoid;\"></div><div style=\"height:140px;background:#ff8000;break-inside:avoid;\"></div><div style=\"position:absolute;left:20px;width:50px;height:30px;background:#ff0000\"></div></div></body></html>",
+      "colors": {
+        "red": "#ff0000",
+        "green": "#00ff00",
+        "yellow": "#ffff00",
+        "magenta": "#ff00ff",
+        "orange": "#ff8000"
+      },
+      "pages": [
+        {
+          "size": [600, 400],
+          "boxes": {
+            "red": null,
+            "green": {
+              "bbox": [40, 40, 559, 139],
+              "top": true,
+              "bottom": true
+            },
+            "yellow": {
+              "bbox": [40, 140, 559, 279],
+              "top": true,
+              "bottom": true
+            },
+            "magenta": null,
+            "orange": null
+          }
+        },
+        {
+          "size": [600, 400],
+          "boxes": {
+            "red": {
+              "bbox": [60, 320, 109, 349],
+              "top": true,
+              "bottom": true
+            },
+            "green": null,
+            "yellow": null,
+            "magenta": {
+              "bbox": [40, 40, 559, 179],
+              "top": true,
+              "bottom": true
+            },
+            "orange": {
+              "bbox": [40, 180, 559, 319],
+              "top": true,
+              "bottom": true
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "absolute-static-mid-split-relative",
+      "html": "<!DOCTYPE html><html><head><style>@page{size:600px 400px;margin:40px}body{margin:0}</style></head><body><div style=\"height:100px;background:#00ff00;break-inside:avoid;\"></div><div style=\"position:relative\"><div style=\"height:140px;background:#ffff00;break-inside:avoid;\"></div><div style=\"height:140px;background:#ff00ff;break-inside:avoid;\"></div><div style=\"position:absolute;left:20px;width:50px;height:30px;background:#ff0000\"></div><div style=\"height:140px;background:#ff8000;break-inside:avoid;\"></div></div></body></html>",
+      "colors": {
+        "red": "#ff0000",
+        "green": "#00ff00",
+        "yellow": "#ffff00",
+        "magenta": "#ff00ff",
+        "orange": "#ff8000"
+      },
+      "pages": [
+        {
+          "size": [600, 400],
+          "boxes": {
+            "red": null,
+            "green": {
+              "bbox": [40, 40, 559, 139],
+              "top": true,
+              "bottom": true
+            },
+            "yellow": {
+              "bbox": [40, 140, 559, 279],
+              "top": true,
+              "bottom": true
+            },
+            "magenta": null,
+            "orange": null
+          }
+        },
+        {
+          "size": [600, 400],
+          "boxes": {
+            "red": {
+              "bbox": [60, 180, 109, 209],
+              "top": true,
+              "bottom": true
+            },
+            "green": null,
+            "yellow": null,
+            "magenta": {
+              "bbox": [40, 40, 559, 179],
+              "top": true,
+              "bottom": true
+            },
+            "orange": {
+              "bbox": [40, 180, 559, 319],
+              "top": true,
+              "bottom": true
+            }
+          }
+        }
+      ]
+    },
+    {
       "id": "absolute-in-moved-static",
       "html": "<!DOCTYPE html><html><head><style>@page{size:600px 400px;margin:40px}body{margin:0}</style></head><body><div style=\"height:200px;background:#00ff00;break-inside:avoid;\"></div><div style=\"height:200px;background:#0000ff;break-inside:avoid\"><div style=\"position:absolute;top:10px;left:20px;width:50px;height:30px;background:#ff0000\"></div></div></body></html>",
       "colors": {
@@ -1741,6 +1847,104 @@
             },
             "green": {
               "bbox": [40, 200, 559, 239],
+              "top": true,
+              "bottom": true
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "relative-bottom-flow",
+      "html": "<!DOCTYPE html><html><head><style>@page{size:600px 400px;margin:40px}body{margin:0}</style></head><body><div style=\"height:60px;background:#ff0000;break-inside:avoid;\"></div><div style=\"height:60px;background:#ffff00;break-inside:avoid;position:relative;bottom:20px\"></div><div style=\"height:60px;background:#00ff00;break-inside:avoid;\"></div></body></html>",
+      "colors": {
+        "red": "#ff0000",
+        "yellow": "#ffff00",
+        "green": "#00ff00"
+      },
+      "pages": [
+        {
+          "size": [600, 400],
+          "boxes": {
+            "red": {
+              "bbox": [40, 40, 559, 79],
+              "top": true,
+              "bottom": true
+            },
+            "yellow": {
+              "bbox": [40, 80, 559, 139],
+              "top": true,
+              "bottom": true
+            },
+            "green": {
+              "bbox": [40, 160, 559, 219],
+              "top": true,
+              "bottom": true
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "relative-bottom-split",
+      "html": "<!DOCTYPE html><html><head><style>@page{size:600px 400px;margin:40px}body{margin:0}</style></head><body><div style=\"height:60px;background:#ff0000;break-inside:avoid;\"></div><div style=\"position:relative;bottom:20px\"><div style=\"height:140px;background:#ffff00;break-inside:avoid;\"></div><div style=\"height:140px;background:#ff00ff;break-inside:avoid;\"></div><div style=\"height:140px;background:#ff8000;break-inside:avoid;\"></div></div><div style=\"height:60px;background:#00ff00;break-inside:avoid;\"></div></body></html>",
+      "colors": {
+        "red": "#ff0000",
+        "yellow": "#ffff00",
+        "magenta": "#ff00ff",
+        "orange": "#ff8000",
+        "green": "#00ff00"
+      },
+      "pages": [
+        {
+          "size": [600, 400],
+          "boxes": {
+            "red": {
+              "bbox": [40, 40, 559, 79],
+              "top": true,
+              "bottom": true
+            },
+            "yellow": {
+              "bbox": [40, 80, 559, 219],
+              "top": true,
+              "bottom": true
+            },
+            "magenta": {
+              "bbox": [40, 340, 559, 359],
+              "top": true,
+              "bottom": true
+            },
+            "orange": null,
+            "green": null
+          }
+        },
+        {
+          "size": [600, 400],
+          "boxes": {
+            "red": null,
+            "yellow": null,
+            "magenta": {
+              "bbox": [40, 39, 559, 159],
+              "top": true,
+              "bottom": true
+            },
+            "orange": {
+              "bbox": [40, 160, 559, 299],
+              "top": true,
+              "bottom": true
+            },
+            "green": null
+          }
+        },
+        {
+          "size": [600, 400],
+          "boxes": {
+            "red": null,
+            "yellow": null,
+            "magenta": null,
+            "orange": null,
+            "green": {
+              "bbox": [40, 40, 559, 99],
               "top": true,
               "bottom": true
             }
@@ -2141,6 +2345,38 @@
             },
             "green": {
               "bbox": [40, 280, 559, 339],
+              "top": true,
+              "bottom": true
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "percent-margin-in-padded-parent",
+      "html": "<!DOCTYPE html><html><head><style>@page{size:600px 400px;margin:40px}body{margin:0}</style></head><body><div style=\"height:60px;background:#ff0000;break-inside:avoid;margin-bottom:80px\"></div><div style=\"width:200px;padding:0 50px;border-left:20px solid #000\"><div style=\"height:60px;background:#00ff00;break-inside:avoid;break-before:page;margin-top:10%\"></div></div></body></html>",
+      "colors": {
+        "red": "#ff0000",
+        "green": "#00ff00"
+      },
+      "pages": [
+        {
+          "size": [600, 400],
+          "boxes": {
+            "red": {
+              "bbox": [40, 40, 559, 99],
+              "top": true,
+              "bottom": true
+            },
+            "green": null
+          }
+        },
+        {
+          "size": [600, 400],
+          "boxes": {
+            "red": null,
+            "green": {
+              "bbox": [110, 60, 309, 119],
               "top": true,
               "bottom": true
             }
