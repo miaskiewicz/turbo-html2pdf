@@ -222,16 +222,43 @@ fn compare_case(case: &serde_json::Value, failures: &mut Vec<String>) {
 /// a last child's bottom margin inside a padded parent.)
 const PENDING: &[&str] = &[];
 
-#[test]
-fn paginated_boxes_match_chrome_156() {
+/// miaskiewicz/turbo-html2pdf#39: the print initial containing block (the page area).
+fn icb_case(id: &str) -> bool {
+    id.starts_with("icb-")
+}
+
+fn fixture() -> serde_json::Value {
     let path = concat!(
         env!("CARGO_MANIFEST_DIR"),
         "/tests/fixtures/pagination_chrome156.json"
     );
-    let fixture: serde_json::Value =
-        serde_json::from_str(&std::fs::read_to_string(path).expect("fixture")).unwrap();
+    serde_json::from_str(&std::fs::read_to_string(path).expect("fixture")).unwrap()
+}
+
+#[test]
+fn the_page_area_is_the_initial_containing_block_like_chrome_156() {
     let mut failures = Vec::new();
-    for case in fixture["cases"].as_array().unwrap() {
+    let mut compared = 0;
+    for case in fixture()["cases"].as_array().unwrap() {
+        if icb_case(case["id"].as_str().unwrap()) {
+            compared += 1;
+            compare_case(case, &mut failures);
+        }
+    }
+    assert_eq!(compared, 4);
+    assert!(failures.is_empty(), "{}", failures.join("\n"));
+}
+
+#[test]
+fn paginated_boxes_match_chrome_156() {
+    let fixture = fixture();
+    let mut failures = Vec::new();
+    for case in fixture["cases"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|case| !icb_case(case["id"].as_str().unwrap()))
+    {
         let mut differences = Vec::new();
         compare_case(case, &mut differences);
         let id = case["id"].as_str().unwrap();
