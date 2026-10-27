@@ -316,4 +316,14 @@ mod tests {
         // A page with no capacity cannot be run through: the box stays on it.
         assert_eq!(run(vec![span(0.0)], 10.0), (vec![(0, 10.0)], 1, 1));
     }
+
+    #[test]
+    fn a_deep_inset_absolute_box_of_a_positioned_box_takes_nothing_out() {
+        let mut boxes = FlowBoxes::default();
+        boxes.insert(NodeId(4), facts(Position::Absolute, LengthPct::Px(5.0)));
+        let mut relative = boxed(2, 0.0, vec![boxed(3, 0.0, vec![boxed(4, 5.0, vec![])])]);
+        relative.is_positioned = true;
+        let root = boxed(1, 0.0, vec![relative]);
+        assert!(extract(&root, &boxes, 300.0).is_none());
+    }
 }
