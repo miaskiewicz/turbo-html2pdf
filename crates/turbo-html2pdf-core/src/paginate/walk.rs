@@ -893,4 +893,33 @@ mod tests {
         lift(&mut own, None);
         assert_eq!((own.is_positioned, own.z_index), (true, Some(-1)));
     }
+
+    #[test]
+    fn a_block_moves_whole_only_if_it_fits_the_next_pages_reserved_capacity() {
+        let at = |id: u32, y: f32, h: f32, children: Vec<Fragment>| {
+            let mut f = boxf(false, None);
+            (f.node_id, f.y, f.height, f.children) = (NodeId(id), y, h, children);
+            f
+        };
+        let block = at(
+            2,
+            50.0,
+            120.0,
+            vec![at(3, 50.0, 60.0, vec![]), at(4, 110.0, 60.0, vec![])],
+        );
+        let root = at(0, 0.0, 170.0, vec![at(1, 0.0, 50.0, vec![]), block]);
+        let boxes = FlowBoxes::default();
+        let galley = Galley {
+            root: &root,
+            wrappers: &[],
+            boxes: &boxes,
+        };
+        // 150px pages; the second reserves 40px (a footnote band): the 120px block does
+        // not fit there whole (110px), so it is split at the end of the first page.
+        let reserve = |page: usize| if page == 1 { 40.0 } else { 0.0 };
+        let walked = walk_reserved(galley, 150.0, &reserve, &mut Diagnostics::default());
+        let ids = |p: usize| -> Vec<NodeId> { walked.pages[p].iter().map(|f| f.node_id).collect() };
+        assert_eq!(ids(0), [NodeId(1), NodeId(3)]);
+        assert_eq!(ids(1), [NodeId(4)]);
+    }
 }
