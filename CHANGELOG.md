@@ -6,6 +6,14 @@ PyPI, and crates.io packages release in lockstep from a `v*` tag (PyPI on `pyv*`
 
 ## [Unreleased]
 
+- **Changed (turbo-dom pin)**: `turbo-dom-layout` + `turbo-dom` are pinned to the final
+  turbo-dom consolidation head (f50e6cb, was e888342). The only engine changes reaching
+  html2pdf are turbo-dom#107 (turbo-dom-layout's AVIF size probe treats a truncated AVIF
+  — primary item's `iloc` extents missing from the data — as broken, like Chrome 156)
+  and the additive `rtdom::color` canvas serialization of turbo-dom#108; the rest
+  (turbo-dom#99, #109–#112, turbo-test#125/#127) is in turbo-dom-browser-env /
+  turbo-dom-raster, which html2pdf does not link. Render parity (html2pdf, html2pdf-svg,
+  html2pdf-extra): no output changes.
 - **Fixed (turbo-html2pdf#39, Chrome 156 print control)**: the page area is the print
   initial containing block for layout too: the body flow is laid out with
   `turbo_dom_layout::layout_recorded_in_viewport` at the page area's height, so a
