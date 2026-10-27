@@ -119,3 +119,49 @@ fn cmyk_false_is_byte_identical_device_rgb_under_print_color_build() {
     // Pure red in DeviceRGB is `1 0 0 rg`.
     assert!(contains(&pdf, b"1 0 0 rg"), "red -> 1 0 0 DeviceRGB");
 }
+
+mod common;
+
+/// The text-line colours and box backgrounds of the rendered pages' bodies.
+fn painted(frags: &[Fragment], out: &mut Vec<Rgba>) {
+    for f in frags {
+        match &f.content {
+            FragmentContent::TextLine { color, .. } => out.push(*color),
+            FragmentContent::Box {
+                background: Some(c),
+                ..
+            } => out.push(*c),
+            _ => {}
+        }
+        painted(&f.children, out);
+    }
+}
+
+#[test]
+fn a_rendered_document_accepts_cmyk_colours() {
+    use turbo_html2pdf_core::style::TokenSet;
+    use turbo_html2pdf_core::{
+        build_cascade, compile, render_pages, CompileOptions, Diagnostics, RenderInputs,
+    };
+    let template = r#"<!DOCTYPE html><html><head><style>.c{color:cmyk(0,1,1,0)}</style></head><body><p class="c">x</p><div style="height:10px;background:cmyk(1,0,1,0)"></div></body></html>"#;
+    let (program, _) = compile(template, &CompileOptions::default()).expect("compile");
+    let cascade = build_cascade("", "", TokenSet::default());
+    let fonts = common::registry();
+    let data = serde_json::Value::Null;
+    let inputs = RenderInputs {
+        program: &program,
+        data: &data,
+        cascade: &cascade,
+        at_rules: &[],
+        fonts: &fonts,
+        images: &turbo_html2pdf_core::NoImages,
+        now: Some(0),
+    };
+    let pages = render_pages(&inputs, &mut Diagnostics::default()).expect("render");
+    let mut colours = Vec::new();
+    painted(&pages[0].body, &mut colours);
+    assert_eq!(
+        colours,
+        [Rgba::new(255, 0, 0, 255), Rgba::new(0, 255, 0, 255)]
+    );
+}
