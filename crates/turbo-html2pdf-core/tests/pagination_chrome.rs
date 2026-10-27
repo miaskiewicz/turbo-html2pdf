@@ -193,13 +193,17 @@ fn compare_page(
     for (name, css) in colors {
         let (got, want) = (measure(&raster, rgb(css)), chrome_box(&want["boxes"][name]));
         let known = KNOWN.contains(&(id, n, name.as_str()));
-        if known && got == want {
-            failures.push(format!(
-                "{id} page {n} {name}: matches Chrome, remove it from KNOWN"
-            ));
-        } else if !known && got != want {
-            failures.push(format!("{id} page {n} {name}: {got:?}, Chrome {want:?}"));
-        }
+        failures.extend(verdict(known, &got, &want).map(|v| format!("{id} page {n} {name}: {v}")));
+    }
+}
+
+/// The failure for one measurement: a difference not listed in [`KNOWN`], or a listed
+/// one that now matches (stale).
+fn verdict(known: bool, got: &Measured, want: &Measured) -> Option<String> {
+    match (known, got == want) {
+        (true, true) => Some("matches Chrome, remove it from KNOWN".to_string()),
+        (false, false) => Some(format!("{got:?}, Chrome {want:?}")),
+        _ => None,
     }
 }
 
