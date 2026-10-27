@@ -285,4 +285,35 @@ mod tests {
         // 300 area - 10 bottom - 5 margin - 50 height.
         assert_eq!(extracted.fixed[0].dy, 235.0);
     }
+
+    #[test]
+    fn a_box_runs_on_through_page_capacities_but_stays_on_a_zero_capacity_page() {
+        let t = |dy: f32| Taken {
+            frag: boxed(9, 0.0, vec![]),
+            cb: None,
+            dy,
+        };
+        let run = |spans: Vec<PageSpan>, dy: f32| {
+            let mut bodies = vec![Vec::new(); spans.len()];
+            let mut bands = vec![FootnoteBand::default(); spans.len()];
+            let mut spans = spans;
+            put(&t(dy), (0, dy), &mut bodies, &mut spans, &mut bands, 300.0);
+            let at: Vec<(usize, f32)> = bodies
+                .iter()
+                .enumerate()
+                .flat_map(|(p, b)| b.iter().map(move |f| (p, f.y)))
+                .collect();
+            (at, spans.len(), bands.len())
+        };
+        let span = |capacity: f32| PageSpan {
+            capacity,
+            last: None,
+        };
+        // 250px past a 200px page: 50px down the next, an added page of base capacity.
+        assert_eq!(run(vec![span(200.0)], 250.0), (vec![(1, 50.0)], 2, 2));
+        // Exactly at a page's end: the top of the next.
+        assert_eq!(run(vec![span(200.0)], 200.0), (vec![(1, 0.0)], 2, 2));
+        // A page with no capacity cannot be run through: the box stays on it.
+        assert_eq!(run(vec![span(0.0)], 10.0), (vec![(0, 10.0)], 1, 1));
+    }
 }
