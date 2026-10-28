@@ -25,7 +25,9 @@ PyPI, and crates.io packages release in lockstep from a `v*` tag (PyPI on `pyv*`
   Chrome 156 prints it, so it ends (and the next block follows it) that far down the
   page it ends on, above an overflowing last child; a height used up a page early ends
   the block at that page's top. It used to carry its whole galley remaining height
-  below its last content (a page too late). Control: `remaining-height-pushed-child*`,
+  below its last content (a page too late). An auto-height box taller than its content
+  (`min-height`, a table's border spacing) keeps carrying its remaining height below its
+  content (`BoxFacts::definite_height` tells them apart). Control: `remaining-height-pushed-child*`,
   `remaining-height-used-up` in `scripts/pagination-chrome-control.mjs`.
 - **Changed (turbo-dom pin)**: `turbo-dom-layout` + `turbo-dom` are pinned to the final
   turbo-dom consolidation head (f860fea, was e888342). The only engine changes reaching

@@ -12,7 +12,7 @@ use std::collections::HashMap;
 use turbo_dom::Handle;
 use turbo_dom_layout::layout::fragment::Fragment;
 use turbo_dom_layout::layout::value::{
-    resolve_box_style, BoxStyle, Position, ResolveCtx, DEFAULT_FONT_SIZE,
+    resolve_box_style, BoxStyle, LengthPct, Position, ResolveCtx, DEFAULT_FONT_SIZE,
 };
 use turbo_dom_layout::style::ComputedStyle;
 use turbo_dom_layout::{NodeSources, StyledNode};
@@ -102,6 +102,7 @@ fn facts(style: &BoxStyle, width: f32) -> BoxFacts {
         inset_top: style.inset_top,
         inset_bottom: style.inset_bottom,
         shift: relative_shift(style, width),
+        definite_height: style.height != LengthPct::Auto,
     }
 }
 

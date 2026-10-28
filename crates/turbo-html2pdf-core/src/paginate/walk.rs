@@ -638,19 +638,32 @@ impl<'a> Walker<'a> {
             own_headers.clone()
         };
         let last = last_content(self.boxes, &f.children);
-        // `f`'s own shift is already in `self.shift` here.
-        let sized = last.is_some_and(|i| remaining_height(self.boxes, f, &f.children[i]).is_some());
+        let sized = self.boxes.get(f.node_id).is_some_and(|b| b.definite_height);
         if sized {
+            // `f`'s own shift is already in `self.shift` here.
             self.sized.push((f.y - self.shift, None));
         }
         for h in &own_headers {
             self.emit(h);
         }
         self.place_children(f, &active, (tail, last), diags);
+        self.end_block(f, (sized, last), headers);
+    }
+
+    /// End split block `f` after its content (`last`): a definite height (`sized`) is laid
+    /// out through its pages, an auto one carries its galley remaining height.
+    fn end_block(
+        &mut self,
+        f: &Fragment,
+        (sized, last): (bool, Option<usize>),
+        headers: &[Fragment],
+    ) {
         if sized {
             // Its in-flow content is placed through `put`, which records its start.
             let start = self.sized.pop().and_then(|(_, start)| start);
-            self.carry_remaining(f, start.expect("a split block places its content"), headers);
+            self.end_sized(f, start.expect("a split block places its content"), headers);
+        } else if let Some(i) = last {
+            self.carry_remaining(f, &f.children[i], headers);
         }
     }
 
@@ -671,7 +684,7 @@ impl<'a> Walker<'a> {
         }
     }
 
-    /// After the last content of split block `f`, taller than its content and started at
+    /// After the last content of split block `f`, with a definite height and started at
     /// `start` (page, page-local top): Chrome 156 counts the space `f` takes on each page
     /// it breaks on (to the page end, including a gap left when a child moves to the next
     /// page) toward its height, so `f` ends that far into the current page — above its
@@ -679,7 +692,7 @@ impl<'a> Walker<'a> {
     /// the next page(s), where the next block follows it (miaskiewicz/turbo-html2pdf#33,
     /// #43 — only margins are truncated at a break). A height used up before the current
     /// page ends `f` at its top, where the next block starts as after a break.
-    fn carry_remaining(&mut self, f: &Fragment, (first, top): (usize, f32), headers: &[Fragment]) {
+    fn end_sized(&mut self, f: &Fragment, (first, top): (usize, f32), headers: &[Fragment]) {
         let page = self.pages.len() - 1;
         let used: f32 = self.spans[first..page].iter().map(|s| s.capacity).sum();
         let end = top + f.height - used;
@@ -692,6 +705,23 @@ impl<'a> Walker<'a> {
             self.continue_box(over, bottom, headers);
         } else {
             self.end_box_at(end, bottom);
+        }
+    }
+
+    /// After the last content `last` of split block `f` with an auto height: a box taller
+    /// than its content (`min-height`, a table's spacing) runs that remaining height and
+    /// its bottom padding/border on below it; what does not fit this page continues on
+    /// the next page(s), where the next block follows it (miaskiewicz/turbo-html2pdf#33).
+    /// `last`'s bottom margin before it is truncated at the page end.
+    fn carry_remaining(&mut self, f: &Fragment, last: &Fragment, headers: &[Fragment]) {
+        let Some(rest) = remaining_height(self.boxes, f, last) else {
+            return;
+        };
+        let margin = f.bottom() - last.bottom() - rest;
+        let cap = self.page_capacity();
+        if self.cursor + margin + rest > cap {
+            let over = rest - (cap - self.cursor - margin).max(0.0);
+            self.continue_box(over, f.bottom() - self.shift, headers);
         }
     }
 
@@ -1050,17 +1080,16 @@ mod tests {
             (f.node_id, f.y, f.height, f.children) = (NodeId(id), y, h, children);
             f
         };
-        // 150px pages. The 300px box splits: its second child moves to page 2 (0..100),
-        // page 1 counts 150px of its height (the 50px gap included,
-        // miaskiewicz/turbo-html2pdf#43), so its other 150px end exactly at page 2's end;
-        // the next block, 10px below the box in the galley, starts page 3 at its top.
+        // 150px pages. The 250px box splits: its second child moves to page 2 (0..100)
+        // and its 50px of remaining height end exactly at that page's end; the next
+        // block, 10px below the box in the galley, starts page 3 at its top.
         let split = at(
             2,
             0.0,
-            300.0,
+            250.0,
             vec![at(3, 0.0, 100.0, vec![]), at(4, 100.0, 100.0, vec![])],
         );
-        let root = at(0, 0.0, 340.0, vec![split, at(5, 310.0, 30.0, vec![])]);
+        let root = at(0, 0.0, 290.0, vec![split, at(5, 260.0, 30.0, vec![])]);
         let boxes = FlowBoxes::default();
         let galley = Galley {
             root: &root,
@@ -1074,5 +1103,51 @@ mod tests {
         assert_eq!(walked.pages.len(), 3);
         assert_eq!(at_y(1), [(NodeId(4), 0.0)]);
         assert_eq!(at_y(2), [(NodeId(5), 0.0)]);
+    }
+
+    #[test]
+    fn a_definite_height_counts_each_page_it_breaks_on_to_the_page_end() {
+        let at = |id: u32, y: f32, h: f32, children: Vec<Fragment>| {
+            let mut f = boxf(false, None);
+            (f.node_id, f.y, f.height, f.children) = (NodeId(id), y, h, children);
+            f
+        };
+        // 150px pages. The 250px box (`height: 250px`) splits: its second child moves to
+        // page 2 (0..100); page 1 counts 150px of its height (the 50px gap included), so
+        // it ends 100px down page 2 and the next block, 10px below it, follows at 110
+        // (miaskiewicz/turbo-html2pdf#43; an auto height ends a page later, above).
+        let split = at(
+            2,
+            0.0,
+            250.0,
+            vec![at(3, 0.0, 100.0, vec![]), at(4, 100.0, 100.0, vec![])],
+        );
+        let root = at(0, 0.0, 290.0, vec![split, at(5, 260.0, 30.0, vec![])]);
+        let mut boxes = FlowBoxes::default();
+        boxes.insert(
+            NodeId(2),
+            BoxFacts {
+                position: crate::layout::value::Position::Static,
+                margin_top: 0.0,
+                margin_bottom: 0.0,
+                padding_top: 0.0,
+                padding_bottom: 0.0,
+                inset_top: crate::layout::value::LengthPct::Auto,
+                inset_bottom: crate::layout::value::LengthPct::Auto,
+                shift: 0.0,
+                definite_height: true,
+            },
+        );
+        let galley = Galley {
+            root: &root,
+            wrappers: &[],
+            boxes: &boxes,
+        };
+        let walked = walk_reserved(galley, 150.0, &|_| 0.0, &mut Diagnostics::default());
+        let at_y = |p: usize| -> Vec<(NodeId, f32)> {
+            walked.pages[p].iter().map(|f| (f.node_id, f.y)).collect()
+        };
+        assert_eq!(walked.pages.len(), 2);
+        assert_eq!(at_y(1), [(NodeId(4), 0.0), (NodeId(5), 110.0)]);
     }
 }

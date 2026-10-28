@@ -25,6 +25,9 @@ pub struct BoxFacts {
     /// The vertical paint shift of a `relative`/`sticky` box: it is painted that far
     /// below its flow position, with its subtree.
     pub shift: f32,
+    /// Whether `height` is not `auto`: a split box then lays that height out through the
+    /// pages it spans (miaskiewicz/turbo-html2pdf#43).
+    pub definite_height: bool,
 }
 
 impl BoxFacts {
@@ -180,6 +183,7 @@ mod tests {
                 inset_top: LengthPct::Auto,
                 inset_bottom: LengthPct::Auto,
                 shift: 0.0,
+                definite_height: false,
             };
             boxes.insert(NodeId(id), facts);
         }
