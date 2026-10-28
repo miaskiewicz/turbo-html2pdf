@@ -60,12 +60,15 @@
 //! records where it starts and ends and slices it onto every page it spans, under its
 //! content ([`super::decorate::slice_split_boxes`], `box-decoration-break: slice`, as the
 //! dissolved `<html>`/`<body>` boxes are sliced from the per-page [`PageSpan`]s). A block
-//! with no in-flow content is atomic. A block containing a forced break is split there
-//! (miaskiewicz/turbo-html2pdf#38).
+//! with no in-flow content is atomic, except that a content-free one (an empty block, a
+//! table row of empty cells) that does not fit is sliced at the page end, as Chrome 156
+//! slices it (miaskiewicz/turbo-html2pdf#47, [`sliceable`]). A block containing a forced
+//! break is split there (miaskiewicz/turbo-html2pdf#38).
 //!
 //! **Deferred (documented):** orphans/widows are enforced at each single break but the
-//! multi-page paragraph tail is greedy; a block that fits on an empty page moves there
-//! whole rather than being split at the page end (AC-6.2, where Chrome would split it).
+//! multi-page paragraph tail is greedy; a block with content that fits on an empty page
+//! moves there whole rather than being split at the page end (AC-6.2, where Chrome would
+//! split it).
 
 use crate::error::{Diagnostics, LintCode, Span};
 use crate::layout::fragment::{Fragment, FragmentContent, NodeId, RepeatKind};
@@ -76,7 +79,10 @@ use super::boxes::{
 };
 use super::decorate::{paints, slice_split_boxes, SplitBox};
 use super::out_of_flow::{Anchors, Taken};
-use super::shifted::pieces;
+use super::shifted::{carry, pieces, window};
+
+/// A row bound past any page end: the last part of a sliced block is not clipped below.
+const FAR_END: f32 = 1.0e4;
 use super::Galley;
 
 /// Per-page footnote reservation: the area (px) the page at the given 0-based
@@ -306,16 +312,60 @@ impl<'a> Walker<'a> {
     /// coordinates (painted with its relative shifts), and advance the cursor.
     fn emit(&mut self, f: &Fragment) {
         let top = self.cursor + self.gap_before(f);
-        let flow_top = self.flow_top(f);
         self.put(f, top);
-        self.cursor = top + f.height;
-        self.prev_bottom = Some(flow_top + f.height);
+        self.advance(f, top + f.height);
+    }
+
+    /// `f` placed, its flow bottom at page-local `bottom` on the current page: the cursor
+    /// moves below it.
+    fn advance(&mut self, f: &Fragment, bottom: f32) {
+        let flow_bottom = self.flow_top(f) + f.height;
+        self.cursor = bottom;
+        self.prev_bottom = Some(flow_bottom);
         self.fresh = false;
         self.pending = None;
         let page = self.pages.len() - 1;
-        self.placed.push((flow_top + f.height, page, self.cursor));
+        self.placed.push((flow_bottom, page, bottom));
         let span = self.spans.last_mut().expect("one span per page");
-        span.last = Some((flow_top + f.height, self.cursor));
+        span.last = Some((flow_bottom, bottom));
+    }
+
+    /// Slice content-free block `f` ([`sliceable`]) at the page end, as Chrome 156 slices
+    /// an empty block or table row that does not fit (miaskiewicz/turbo-html2pdf#47): it
+    /// starts at the cursor and runs on through the following pages (below their repeated
+    /// headers), each page showing the next part of it — the whole box drawn there,
+    /// clipped to the rows it covers on that page (`box-decoration-break: slice`). Its
+    /// continuations are [`super::CARRIED`] copies: its own page carries its semantics.
+    fn slice(&mut self, f: &Fragment, headers: &[Fragment]) {
+        let mut top = self.cursor + self.gap_before(f);
+        let (mut shown, mut first) = (0.0, true);
+        while top - shown + f.height > self.page_capacity() {
+            let rows = (top, self.page_capacity());
+            self.put_rows(f, top - shown, rows, first);
+            shown += rows.1 - top;
+            first = false;
+            self.new_page(headers);
+            top = self.cursor;
+        }
+        self.put_rows(f, top - shown, (top, FAR_END), first);
+        self.advance(f, top - shown + f.height);
+    }
+
+    /// Put `f` with its flow top at page-local `at`, clipped to the page-local rows
+    /// `lo..hi`: through [`Self::put`] when it is `first` placed, else as a [`super::CARRIED`]
+    /// copy.
+    fn put_rows(&mut self, f: &Fragment, at: f32, (lo, hi): (f32, f32), first: bool) {
+        if first {
+            self.put(f, at);
+        } else {
+            let mut copy = f.clone();
+            copy.translate(0.0, at - self.flow_top(f));
+            carry(&mut copy);
+            self.current().push(copy);
+        }
+        let piece = self.current().last_mut().expect("just pushed");
+        let shift = piece.y - at;
+        piece.clip = Some(window(piece, lo + shift, hi + shift));
     }
 
     /// Push a copy of `f` with its flow top at page-local `top` (painted with its
@@ -455,6 +505,7 @@ impl<'a> Walker<'a> {
                 self.emit(f);
             }
             Placement::Split => self.split(f, headers, tail, diags),
+            Placement::Slice => self.slice(f, headers),
         }
     }
 
@@ -475,6 +526,16 @@ impl<'a> Walker<'a> {
         if self.fits_now(f, tail) {
             return Placement::Here;
         }
+        if sliceable(self.boxes, f) {
+            return Placement::Slice;
+        }
+        self.placement_breaking(f, headers, tail)
+    }
+
+    /// [`Self::placement`] of an `f` that does not fit here with its `tail` and is not
+    /// sliced: split if it fits here without its tail, else moved to the next page if it
+    /// fits on an empty one, else split.
+    fn placement_breaking(&self, f: &Fragment, headers: &[Fragment], tail: f32) -> Placement {
         if self.fits_now(f, 0.0) {
             return self.placement_without_tail(f, headers, tail);
         }
@@ -869,6 +930,25 @@ enum Placement {
     Here,
     NextPage,
     Split,
+    Slice,
+}
+
+/// Whether `f` is a content-free block Chrome 156 slices across a page break
+/// (miaskiewicz/turbo-html2pdf#47): a box with nothing but such boxes inside (an empty
+/// `<div>`, a table row of empty cells), none of them `break-inside: avoid`, positioned,
+/// out of flow or a repeated table header (a table repeats it rather than slicing).
+fn sliceable(boxes: &FlowBoxes, f: &Fragment) -> bool {
+    let plain = matches!(f.content, FragmentContent::Box { .. }) && !f.is_positioned;
+    plain && breakable(boxes, f) && f.children.iter().all(|c| sliceable(boxes, c))
+}
+
+/// Whether nothing keeps `f` whole: no `break-inside: avoid` (in its break hints or its
+/// used values), not out of flow, not a repeated table header.
+fn breakable(boxes: &FlowBoxes, f: &Fragment) -> bool {
+    let facts = boxes.get(f.node_id);
+    let avoid = f.break_meta.break_inside_avoid || facts.is_some_and(|b| b.avoid_break_inside);
+    let out = facts.is_some_and(|b| b.position.is_out_of_flow());
+    !avoid && !out && !is_repeat_header(f)
 }
 
 /// A paragraph's lines being split across pages, with its widows/orphans and the
@@ -1049,6 +1129,9 @@ mod tests {
         let at = |id: u32, y: f32, h: f32, children: Vec<Fragment>| {
             let mut f = boxf(false, None);
             (f.node_id, f.y, f.height, f.children) = (NodeId(id), y, h, children);
+            // Leaves stand for content (`break-inside: avoid`), not empty boxes, which
+            // would be sliced at a page end (miaskiewicz/turbo-html2pdf#47).
+            f.break_meta.break_inside_avoid = f.children.is_empty();
             f
         };
         let block = at(
@@ -1078,6 +1161,9 @@ mod tests {
         let at = |id: u32, y: f32, h: f32, children: Vec<Fragment>| {
             let mut f = boxf(false, None);
             (f.node_id, f.y, f.height, f.children) = (NodeId(id), y, h, children);
+            // Leaves stand for content (`break-inside: avoid`), not empty boxes, which
+            // would be sliced at a page end (miaskiewicz/turbo-html2pdf#47).
+            f.break_meta.break_inside_avoid = f.children.is_empty();
             f
         };
         // 150px pages. The 250px box splits: its second child moves to page 2 (0..100)
@@ -1110,6 +1196,9 @@ mod tests {
         let at = |id: u32, y: f32, h: f32, children: Vec<Fragment>| {
             let mut f = boxf(false, None);
             (f.node_id, f.y, f.height, f.children) = (NodeId(id), y, h, children);
+            // Leaves stand for content (`break-inside: avoid`), not empty boxes, which
+            // would be sliced at a page end (miaskiewicz/turbo-html2pdf#47).
+            f.break_meta.break_inside_avoid = f.children.is_empty();
             f
         };
         // 150px pages. The 250px box (`height: 250px`) splits: its second child moves to
@@ -1136,6 +1225,7 @@ mod tests {
                 inset_bottom: crate::layout::value::LengthPct::Auto,
                 shift: 0.0,
                 definite_height: true,
+                avoid_break_inside: false,
             },
         );
         let galley = Galley {

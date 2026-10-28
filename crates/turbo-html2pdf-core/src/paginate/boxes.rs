@@ -28,6 +28,8 @@ pub struct BoxFacts {
     /// Whether `height` is not `auto`: a split box then lays that height out through the
     /// pages it spans (miaskiewicz/turbo-html2pdf#43).
     pub definite_height: bool,
+    /// `break-inside: avoid` (a table row's is not in its fragment's break hints).
+    pub avoid_break_inside: bool,
 }
 
 impl BoxFacts {
@@ -184,6 +186,7 @@ mod tests {
                 inset_bottom: LengthPct::Auto,
                 shift: 0.0,
                 definite_height: false,
+                avoid_break_inside: false,
             };
             boxes.insert(NodeId(id), facts);
         }

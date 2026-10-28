@@ -36,7 +36,7 @@ pub(super) fn pieces(
             let piece = piece_on(f, strip_offset(spans, page, q), rows, q == page);
             piece.map(|mut p| {
                 if q != page {
-                    carried(&mut p);
+                    carry(&mut p);
                 }
                 (q, p)
             })
@@ -69,9 +69,9 @@ fn piece_on(f: &Fragment, dy: f32, (lo, hi): (f32, f32), keep: bool) -> Option<F
 }
 
 /// Mark `f` and its subtree as [`CARRIED`].
-fn carried(f: &mut Fragment) {
+pub(super) fn carry(f: &mut Fragment) {
     f.node_id = CARRIED;
-    f.children.iter_mut().for_each(carried);
+    f.children.iter_mut().for_each(carry);
 }
 
 /// How far a position on page `from` moves when shown on page `to` of the strip: the
@@ -87,7 +87,7 @@ fn strip_offset(spans: &[PageSpan], from: usize, to: usize) -> f32 {
 
 /// `piece`'s clip region (px from its border-box corner) limited to the page-local rows
 /// `lo..hi`, within the clip it already has.
-fn window(piece: &Fragment, lo: f32, hi: f32) -> ClipRect {
+pub(super) fn window(piece: &Fragment, lo: f32, hi: f32) -> ClipRect {
     let rows = ClipRect {
         x: -FAR,
         y: lo - piece.y,

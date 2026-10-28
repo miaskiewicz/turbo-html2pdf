@@ -52,9 +52,9 @@ const playwrightVersion = require(join(playwrightCore, "package.json")).version;
 const PAGE = "@page{size:600px 400px;margin:40px}";
 const DOC = (css, body) =>
   `<!DOCTYPE html><html><head><style>${PAGE}${css}</style></head><body>${body}</body></html>`;
-// `break-inside: avoid` keeps each block whole (Chrome would otherwise slice a tall empty
-// block across pages; the engine keeps childless blocks whole): a block that does not fit
-// moves to the next page, which is what the margin cases measure.
+// `break-inside: avoid` keeps each block whole (Chrome, and the engine since
+// miaskiewicz/turbo-html2pdf#47, would otherwise slice an empty block at the page end): a
+// block that does not fit moves to the next page, which is what the margin cases measure.
 const block = (color, height, style = "") =>
   `<div style="height:${height}px;background:${color};break-inside:avoid;${style}"></div>`;
 // Distinct pure colours: [css, rgb].

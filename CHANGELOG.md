@@ -6,6 +6,15 @@ PyPI, and crates.io packages release in lockstep from a `v*` tag (PyPI on `pyv*`
 
 ## [Unreleased]
 
+- **Fixed (turbo-html2pdf#47, Chrome 156 print control)**: a content-free block (an empty
+  `<div>`, a table row of empty cells; nothing inside it `break-inside: avoid`,
+  positioned or a repeated header) that does not fit is sliced at the page end as Chrome
+  156 slices it: the box is drawn on each page it spans, clipped to the rows it covers
+  there (top border/padding on the first page, bottom ones on the last), its
+  continuations as `CARRIED` copies, below the next page's repeated headers. It used to
+  move to the next page whole (or overflow one taller than a page). A table row's
+  `break-inside: avoid` is read from its used values (`BoxFacts::avoid_break_inside`; its
+  fragment's break hints do not carry it). Controls: `slice-empty-*`.
 - **Checked (turbo-html2pdf#46)**: the `svg` feature has no separate output backend — it
   rasterizes `image/svg+xml` into an image XObject painted by the same PDF painter, so a
   vector image cut at a page boundary by a split relative block (#42) is clipped there

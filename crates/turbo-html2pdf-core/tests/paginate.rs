@@ -27,7 +27,11 @@ fn box_content() -> FragmentContent {
 
 /// A box fragment at galley `y` with height `h`, width 200.
 fn boxf(y: f32, h: f32) -> Fragment {
-    Fragment::new(NodeId(0), 0.0, y, 200.0, h, box_content())
+    // An unbreakable leaf (`break-inside: avoid`), standing for content: an empty box
+    // would be sliced at a page end (miaskiewicz/turbo-html2pdf#47).
+    let mut f = Fragment::new(NodeId(0), 0.0, y, 200.0, h, box_content());
+    f.break_meta.break_inside_avoid = true;
+    f
 }
 
 /// A text-line fragment at galley `y` with height `h`.
