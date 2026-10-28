@@ -26,7 +26,7 @@ use pdf_writer::{Content, Finish, Name, Pdf, Ref, TextStr};
 
 use crate::layout::fragment::{Fragment, FragmentContent};
 use crate::layout::value::BorderEdges;
-use crate::paginate::Page;
+use crate::paginate::{Page, CARRIED};
 use crate::semantics::{Semantics, UaRole};
 
 use super::EmitOptions;
@@ -56,8 +56,13 @@ pub(super) fn wrap_kind(frag: &Fragment, artifact_band: bool) -> WrapKind {
 }
 
 /// The wrap for a fragment in a content band: real text/images are tagged
-/// content; a painting box is decoration; everything else is unbracketed.
+/// content; a painting box is decoration; everything else is unbracketed. A copy carried
+/// onto a neighbouring page ([`CARRIED`]) is an artifact: its own page tags the content
+/// (miaskiewicz/turbo-html2pdf#44).
 fn content_band_kind(frag: &Fragment) -> WrapKind {
+    if frag.node_id == CARRIED {
+        return artifact_or_none(frag);
+    }
     match &frag.content {
         FragmentContent::TextLine { .. } | FragmentContent::Image(_) => WrapKind::Content,
         FragmentContent::Box {
@@ -383,10 +388,11 @@ fn number_in_paint_order(frags: &[&Fragment], order: &mut HashMap<*const Fragmen
 /// Whether a fragment contributes a content MCID in a content band (matches the
 /// painter's [`wrap_kind`] `Content` arm).
 fn is_content(frag: &Fragment) -> bool {
-    matches!(
+    let real = matches!(
         frag.content,
         FragmentContent::TextLine { .. } | FragmentContent::Image(_)
-    )
+    );
+    real && frag.node_id != CARRIED
 }
 
 /// Map a layout [`UaRole`] to a `pdf_writer` structure role.

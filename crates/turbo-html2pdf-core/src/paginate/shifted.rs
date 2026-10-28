@@ -8,9 +8,14 @@
 //! area (Chrome bleeds that row), its first page has no top edge and its last page no
 //! bottom edge (the shift paints into the page margins there, as before).
 
-use crate::layout::fragment::{ClipRect, Fragment};
+use crate::layout::fragment::{ClipRect, Fragment, NodeId};
 
 use super::walk::PageSpan;
+
+/// The id of a piece of paint carried onto a neighbouring page, and of every fragment in
+/// it: a copy of content its own page already carries, so the emitter paints it as an
+/// artifact — not tagged, not extracted as text (miaskiewicz/turbo-html2pdf#44).
+pub const CARRIED: NodeId = NodeId(u32::MAX);
 
 /// Far enough past any page edge to stand for an unbounded clip side (px).
 const FAR: f32 = 1.0e4;
@@ -28,7 +33,13 @@ pub(super) fn pieces(
     (first..=last)
         .filter_map(|q| {
             let rows = rows(q, (first, last), spans);
-            piece_on(f, strip_offset(spans, page, q), rows, q == page).map(|p| (q, p))
+            let piece = piece_on(f, strip_offset(spans, page, q), rows, q == page);
+            piece.map(|mut p| {
+                if q != page {
+                    carried(&mut p);
+                }
+                (q, p)
+            })
         })
         .collect()
 }
@@ -55,6 +66,12 @@ fn piece_on(f: &Fragment, dy: f32, (lo, hi): (f32, f32), keep: bool) -> Option<F
         }
         piece
     })
+}
+
+/// Mark `f` and its subtree as [`CARRIED`].
+fn carried(f: &mut Fragment) {
+    f.node_id = CARRIED;
+    f.children.iter_mut().for_each(carried);
 }
 
 /// How far a position on page `from` moves when shown on page `to` of the strip: the
@@ -144,6 +161,27 @@ mod tests {
                 (1, -20.0, Some((-1.0, FAR))),
             ]
         );
+        // The copy on page 1 (and its subtree) is carried; page 2 keeps its own piece.
+        assert_eq!(got[0].1.node_id, CARRIED);
+        assert_eq!(got[1].1.node_id, NodeId(1));
+    }
+
+    #[test]
+    fn a_carried_piece_marks_its_whole_subtree() {
+        let mut f = block(-20.0, 140.0);
+        let mut child = block(-20.0, 10.0);
+        child.children = vec![block(-20.0, 5.0)];
+        f.children = vec![child];
+        let got = pieces(&f, 1, (0, 1), &spans(&[320.0, 320.0]));
+        let ids = |p: &Fragment| {
+            (
+                p.node_id,
+                p.children[0].node_id,
+                p.children[0].children[0].node_id,
+            )
+        };
+        assert_eq!(ids(&got[0].1), (CARRIED, CARRIED, CARRIED));
+        assert_eq!(ids(&got[1].1), (NodeId(1), NodeId(1), NodeId(1)));
     }
 
     #[test]

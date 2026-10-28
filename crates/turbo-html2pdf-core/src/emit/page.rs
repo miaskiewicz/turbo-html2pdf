@@ -9,10 +9,10 @@
 //! running header/footer chrome) are marked `/Artifact` so assistive tech skips
 //! them (AC-11.1).
 
-use pdf_writer::Content;
+use pdf_writer::{Content, Name, TextStr};
 
 use crate::layout::fragment::{Fragment, FragmentContent};
-use crate::paginate::Page;
+use crate::paginate::{Page, CARRIED};
 
 use super::fonts::FontStore;
 use super::graphics::{fill_area, paint_box};
@@ -311,6 +311,23 @@ fn paint_one(
     }
 }
 
+/// Paint a text line. A line carried onto a neighbouring page ([`CARRIED`]) repeats text
+/// its own page carries: it is shown inside a `/Span` whose empty `/ActualText` replaces
+/// it for text extraction, so the text is extracted once (miaskiewicz/turbo-html2pdf#44).
+fn paint_line(content: &mut Content, frag: &Fragment, ctx: &PaintCtx) {
+    let carried = frag.node_id == CARRIED;
+    if carried {
+        content
+            .begin_marked_content_with_properties(Name(b"Span"))
+            .properties()
+            .actual_text(TextStr(""));
+    }
+    paint_text(content, frag, ctx.fonts, ctx.page_height_pt, ctx.cmyk);
+    if carried {
+        content.end_marked_content();
+    }
+}
+
 /// Dispatch a fragment's own paint by content kind.
 fn paint_content(content: &mut Content, frag: &Fragment, ctx: &PaintCtx) {
     match &frag.content {
@@ -326,9 +343,7 @@ fn paint_content(content: &mut Content, frag: &Fragment, ctx: &PaintCtx) {
                 ctx.cmyk,
             );
         }
-        FragmentContent::TextLine { .. } => {
-            paint_text(content, frag, ctx.fonts, ctx.page_height_pt, ctx.cmyk);
-        }
+        FragmentContent::TextLine { .. } => paint_line(content, frag, ctx),
         FragmentContent::Image(placement) => {
             paint_image(content, frag, placement, ctx.images, ctx.page_height_pt);
         }

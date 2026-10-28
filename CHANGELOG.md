@@ -6,6 +6,12 @@ PyPI, and crates.io packages release in lockstep from a `v*` tag (PyPI on `pyv*`
 
 ## [Unreleased]
 
+- **Fixed (turbo-html2pdf#44)**: paint a split relatively offset block carries onto a
+  neighbouring page (#42) repeats content its own page carries, so it is no longer tagged
+  or extracted twice: its fragments carry the id `paginate::CARRIED` (re-exported at the
+  crate root), a tagged render marks them `/Artifact` (no MCID, not in the structure
+  tree), and a carried text line is shown inside a `/Span` with an empty `/ActualText`,
+  so text extraction finds the text once, on its own page, tagged or not.
 - **Fixed (turbo-html2pdf#42, Chrome 156 print control)**: a relatively offset block
   split across pages is offset in the fragmented flow, as Chrome 156 prints it: its paint
   (content and sliced background/border) shifted across a page boundary is cut there
