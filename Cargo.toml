@@ -37,5 +37,5 @@ codegen-units = 1
 # (`cargo update -p turbo-dom-layout -p turbo-dom`) before tagging (see PUBLISHING.md);
 # the tag-only `release-guard` job in release-crates.yml fails while it is present.
 [patch.crates-io]
-turbo-dom-layout = { git = "https://github.com/miaskiewicz/turbo-dom", rev = "d660013fd436a6a7037067995a5a5b995dbea15f" }
-turbo-dom = { git = "https://github.com/miaskiewicz/turbo-dom", rev = "d660013fd436a6a7037067995a5a5b995dbea15f" }
+turbo-dom-layout = { git = "https://github.com/miaskiewicz/turbo-dom", rev = "443f4d8778b2991e89a79c409ea9e4c77363ade6" }
+turbo-dom = { git = "https://github.com/miaskiewicz/turbo-dom", rev = "443f4d8778b2991e89a79c409ea9e4c77363ade6" }
