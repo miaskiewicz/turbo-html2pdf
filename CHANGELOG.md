@@ -6,6 +6,11 @@ PyPI, and crates.io packages release in lockstep from a `v*` tag (PyPI on `pyv*`
 
 ## [Unreleased]
 
+- **Fixed (turbo-html2pdf#41, Chrome 156 print control)**: an absolutely positioned box at
+  its static position (no `top`/`bottom`) between the children of a split block is placed
+  at that position — right after the child before it, on that child's page — as Chrome
+  156 prints it, not after the block's later children (the galley lists it after them).
+  Control: `absolute-static-mid-split-relative` (no longer a `KNOWN` difference).
 - **Fixed (turbo-html2pdf#43, Chrome 156 print control)**: a split block with a definite
   height counts the space it takes on each page it breaks on — to the page end,
   including the gap left when a child moves to the next page — toward its height, as

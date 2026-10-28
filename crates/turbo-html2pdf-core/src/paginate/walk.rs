@@ -45,7 +45,9 @@
 //! Out-of-flow boxes (item 1, [`super::out_of_flow`]): fixed boxes and absolute boxes with a
 //! vertical inset are taken out of the galley before this walk and placed afterwards from
 //! the containing-block starts it records (`anchors`); an absolute box at its static
-//! position stays in the flow and is placed there without taking space.
+//! position stays in the flow and is placed there without taking space — on the page its
+//! static position falls on, which may be before content the walk already placed (the
+//! galley lists it after its in-flow siblings; miaskiewicz/turbo-html2pdf#41).
 //!
 //! Forced breaks (miaskiewicz/turbo-html2pdf#32): a forced break on a page with no flow
 //! content yet — before the first content, or a `break-before` right after a
@@ -172,6 +174,10 @@ struct Walker<'a> {
     /// (page, page-local flow top) — their height is laid out from there through the
     /// page capacities (miaskiewicz/turbo-html2pdf#43).
     sized: Vec<(f32, Option<(usize, f32)>)>,
+    /// Every fragment placed in the flow, in order: its galley flow bottom, page and
+    /// page-local bottom — where a static position met after later content maps to
+    /// (miaskiewicz/turbo-html2pdf#41).
+    placed: Vec<(f32, usize, f32)>,
 }
 
 impl<'a> Walker<'a> {
@@ -200,6 +206,7 @@ impl<'a> Walker<'a> {
             decorated: Vec::new(),
             split_boxes: Vec::new(),
             sized: Vec::new(),
+            placed: Vec::new(),
         }
     }
 
@@ -294,6 +301,8 @@ impl<'a> Walker<'a> {
         self.prev_bottom = Some(flow_top + f.height);
         self.fresh = false;
         self.pending = None;
+        let page = self.pages.len() - 1;
+        self.placed.push((flow_top + f.height, page, self.cursor));
         let span = self.spans.last_mut().expect("one span per page");
         span.last = Some((flow_top + f.height, self.cursor));
     }
@@ -302,17 +311,21 @@ impl<'a> Walker<'a> {
     /// relative shifts and its split ancestors' paint level), anchoring the containing
     /// blocks it starts.
     fn put(&mut self, f: &Fragment, top: f32) {
+        self.put_on(self.pages.len() - 1, f, top);
+    }
+
+    /// [`Self::put`] onto page `page`.
+    fn put_on(&mut self, page: usize, f: &Fragment, top: f32) {
         let mut clone = f.clone();
         clone.translate(0.0, top - self.flow_top(f));
         if let Some(z) = self.layer {
             lift(&mut clone, z);
         }
-        let page = self.pages.len() - 1;
         for (id, galley_top) in std::mem::take(&mut self.open) {
             self.anchors
                 .insert(id, (page, clone.y - (f.y - galley_top)));
         }
-        let index = self.current().len();
+        let index = self.pages[page].len();
         for (block, start) in self.decorated.iter_mut().filter(|(_, s)| s.is_none()) {
             *start = Some((page, index, clone.y - (f.y - block.y)));
         }
@@ -320,14 +333,31 @@ impl<'a> Walker<'a> {
         for (block_top, start) in self.sized.iter_mut().filter(|(_, s)| s.is_none()) {
             *start = Some((page, top - (flow_top - *block_top)));
         }
-        self.current().push(clone);
+        self.pages[page].push(clone);
     }
 
     /// An out-of-flow box left in the flow (an `absolute` box with neither `top` nor
-    /// `bottom`): at its static position, taking no space.
+    /// `bottom`): at its static position, taking no space. The galley lists it after its
+    /// in-flow siblings, so a static position above content already placed is mapped
+    /// through the placed fragment ending at or above it, on that fragment's page
+    /// (miaskiewicz/turbo-html2pdf#41).
     fn put_static(&mut self, f: &Fragment) {
-        let top = self.cursor + self.gap_before(f);
-        self.put(f, top);
+        match self.placed_above(self.flow_top(f)) {
+            Some((page, top)) => self.put_on(page, f, top),
+            None => self.put(f, self.cursor + self.gap_before(f)),
+        }
+    }
+
+    /// Where galley flow position `y` lies when content below it was placed already:
+    /// the page and page-local position below the last placed fragment ending at or
+    /// above it (`None` when `y` is at or below the content placed so far, or above all
+    /// of it).
+    fn placed_above(&self, y: f32) -> Option<(usize, f32)> {
+        if self.prev_bottom.is_none_or(|b| y > b - 0.5) {
+            return None;
+        }
+        let &(bottom, page, local) = self.placed.iter().rev().find(|p| p.0 <= y + 0.5)?;
+        Some((page, local + (y - bottom)))
     }
 
     /// An out-of-flow box the walk meets: an inset absolute box of the positioned block
