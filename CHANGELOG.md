@@ -6,6 +6,14 @@ PyPI, and crates.io packages release in lockstep from a `v*` tag (PyPI on `pyv*`
 
 ## [Unreleased]
 
+- **Fixed (turbo-html2pdf#43, Chrome 156 print control)**: a split block with a definite
+  height counts the space it takes on each page it breaks on — to the page end,
+  including the gap left when a child moves to the next page — toward its height, as
+  Chrome 156 prints it, so it ends (and the next block follows it) that far down the
+  page it ends on, above an overflowing last child; a height used up a page early ends
+  the block at that page's top. It used to carry its whole galley remaining height
+  below its last content (a page too late). Control: `remaining-height-pushed-child*`,
+  `remaining-height-used-up` in `scripts/pagination-chrome-control.mjs`.
 - **Changed (turbo-dom pin)**: `turbo-dom-layout` + `turbo-dom` are pinned to the final
   turbo-dom consolidation head (f860fea, was e888342). The only engine changes reaching
   html2pdf are turbo-dom#107 (turbo-dom-layout's AVIF size probe treats a truncated AVIF

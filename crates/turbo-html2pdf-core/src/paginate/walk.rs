@@ -37,7 +37,10 @@
 //! fits a page only together with them ([`super::boxes::trailing`]); a block that fits only
 //! without them is split so just its last content moves on. A block taller than its content
 //! instead ends in remaining height, which breaks like content: what does not fit runs onto
-//! the next page(s) before the next block (miaskiewicz/turbo-html2pdf#33).
+//! the next page(s) before the next block (miaskiewicz/turbo-html2pdf#33). Its height is
+//! laid out from where it starts through the page capacities, each page it breaks on
+//! counting to its end (gaps left by children moved on included), as Chrome 156 does
+//! (miaskiewicz/turbo-html2pdf#43).
 //!
 //! Out-of-flow boxes (item 1, [`super::out_of_flow`]): fixed boxes and absolute boxes with a
 //! vertical inset are taken out of the galley before this walk and placed afterwards from
@@ -164,6 +167,11 @@ struct Walker<'a> {
     /// (miaskiewicz/turbo-html2pdf#37 item 1).
     decorated: Vec<(Fragment, Option<BoxStart>)>,
     split_boxes: Vec<SplitBox>,
+    /// The blocks being split that are taller than their content (a definite height):
+    /// their galley flow top and, once their first fragment is placed, where they start
+    /// (page, page-local flow top) — their height is laid out from there through the
+    /// page capacities (miaskiewicz/turbo-html2pdf#43).
+    sized: Vec<(f32, Option<(usize, f32)>)>,
 }
 
 impl<'a> Walker<'a> {
@@ -191,6 +199,7 @@ impl<'a> Walker<'a> {
             deferred: Vec::new(),
             decorated: Vec::new(),
             split_boxes: Vec::new(),
+            sized: Vec::new(),
         }
     }
 
@@ -306,6 +315,10 @@ impl<'a> Walker<'a> {
         let index = self.current().len();
         for (block, start) in self.decorated.iter_mut().filter(|(_, s)| s.is_none()) {
             *start = Some((page, index, clone.y - (f.y - block.y)));
+        }
+        let flow_top = self.flow_top(f);
+        for (block_top, start) in self.sized.iter_mut().filter(|(_, s)| s.is_none()) {
+            *start = Some((page, top - (flow_top - *block_top)));
         }
         self.current().push(clone);
     }
@@ -538,13 +551,20 @@ impl<'a> Walker<'a> {
         } else {
             own_headers.clone()
         };
+        let last = last_content(self.boxes, &f.children);
+        // `f`'s own shift is already in `self.shift` here.
+        let sized = last.is_some_and(|i| remaining_height(self.boxes, f, &f.children[i]).is_some());
+        if sized {
+            self.sized.push((f.y - self.shift, None));
+        }
         for h in &own_headers {
             self.emit(h);
         }
-        let last = last_content(self.boxes, &f.children);
         self.place_children(f, &active, (tail, last), diags);
-        if let Some(i) = last {
-            self.carry_remaining(f, &f.children[i], headers);
+        if sized {
+            // Its in-flow content is placed through `put`, which records its start.
+            let start = self.sized.pop().and_then(|(_, start)| start);
+            self.carry_remaining(f, start.expect("a split block places its content"), headers);
         }
     }
 
@@ -565,21 +585,37 @@ impl<'a> Walker<'a> {
         }
     }
 
-    /// After the last content `last` of split block `f`: `f`'s remaining height (a
-    /// definite height taller than its content) and its bottom padding/border run on
-    /// below it; what does not fit this page continues on the next page(s), where the
-    /// next block follows it (miaskiewicz/turbo-html2pdf#33 — only margins are truncated
-    /// at a break). `last`'s bottom margin before it is truncated at the page end.
-    fn carry_remaining(&mut self, f: &Fragment, last: &Fragment, headers: &[Fragment]) {
-        let Some(rest) = remaining_height(self.boxes, f, last) else {
-            return;
-        };
-        let margin = f.bottom() - last.bottom() - rest;
-        let cap = self.page_capacity();
-        if self.cursor + margin + rest > cap {
-            let over = rest - (cap - self.cursor - margin).max(0.0);
-            self.continue_box(over, f.bottom() - self.shift, headers);
+    /// After the last content of split block `f`, taller than its content and started at
+    /// `start` (page, page-local top): Chrome 156 counts the space `f` takes on each page
+    /// it breaks on (to the page end, including a gap left when a child moves to the next
+    /// page) toward its height, so `f` ends that far into the current page — above its
+    /// last content when that overflows it — or, its remaining height not fitting, runs on
+    /// the next page(s), where the next block follows it (miaskiewicz/turbo-html2pdf#33,
+    /// #43 — only margins are truncated at a break). A height used up before the current
+    /// page ends `f` at its top, where the next block starts as after a break.
+    fn carry_remaining(&mut self, f: &Fragment, (first, top): (usize, f32), headers: &[Fragment]) {
+        let page = self.pages.len() - 1;
+        let used: f32 = self.spans[first..page].iter().map(|s| s.capacity).sum();
+        let end = top + f.height - used;
+        let bottom = f.bottom() - self.shift;
+        if end <= 0.0 {
+            self.cursor = 0.0;
+            self.prev_bottom = None;
+        } else if end > self.page_capacity() {
+            let over = end - self.page_capacity();
+            self.continue_box(over, bottom, headers);
+        } else {
+            self.end_box_at(end, bottom);
         }
+    }
+
+    /// The box ending at galley `bottom` ends at page-local `end` on the current page.
+    fn end_box_at(&mut self, end: f32, bottom: f32) {
+        self.cursor = end;
+        self.prev_bottom = Some(bottom);
+        self.fresh = false;
+        let span = self.spans.last_mut().expect("one span per page");
+        span.last = Some((bottom, end));
     }
 
     /// Run `over` px of a box ending at galley `bottom` onto the following page(s).
@@ -589,11 +625,7 @@ impl<'a> Walker<'a> {
             over -= self.page_capacity();
             self.new_page(headers);
         }
-        self.cursor += over;
-        self.prev_bottom = Some(bottom);
-        self.fresh = false;
-        let span = self.spans.last_mut().expect("one span per page");
-        span.last = Some((bottom, self.cursor));
+        self.end_box_at(self.cursor + over, bottom);
     }
 
     /// What must follow `child` of `parent` on its page: for the parent's last content,
@@ -932,16 +964,17 @@ mod tests {
             (f.node_id, f.y, f.height, f.children) = (NodeId(id), y, h, children);
             f
         };
-        // 150px pages. The 250px box splits: its second child moves to page 2 (0..100)
-        // and its 50px of remaining height end exactly at that page's end; the next
-        // block, 10px below the box in the galley, starts page 3 at its top.
+        // 150px pages. The 300px box splits: its second child moves to page 2 (0..100),
+        // page 1 counts 150px of its height (the 50px gap included,
+        // miaskiewicz/turbo-html2pdf#43), so its other 150px end exactly at page 2's end;
+        // the next block, 10px below the box in the galley, starts page 3 at its top.
         let split = at(
             2,
             0.0,
-            250.0,
+            300.0,
             vec![at(3, 0.0, 100.0, vec![]), at(4, 100.0, 100.0, vec![])],
         );
-        let root = at(0, 0.0, 290.0, vec![split, at(5, 260.0, 30.0, vec![])]);
+        let root = at(0, 0.0, 340.0, vec![split, at(5, 310.0, 30.0, vec![])]);
         let boxes = FlowBoxes::default();
         let galley = Galley {
             root: &root,
