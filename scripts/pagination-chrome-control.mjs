@@ -417,6 +417,46 @@ const CASES = [
     colors: ["blue", "red", "green"],
   },
   {
+    // miaskiewicz/turbo-html2pdf#43: a split box with a definite height counts the space
+    // its fragment takes on each page (to the page end, including the gap left when a
+    // child moves to the next page) toward its height, so it ends 240px down page 2 —
+    // above its last child, which overflows it — and the next block follows it there.
+    id: "remaining-height-pushed-child",
+    html: DOC(
+      "body{margin:0}",
+      block(C.green[0], 100) +
+        `<div style="height:460px">${blocks(["blue", "red", "yellow"], 140)}</div>` +
+        block(C.cyan[0], 60, "margin-top:10px"),
+    ),
+    colors: ["green", "blue", "red", "yellow", "cyan"],
+  },
+  {
+    // The same for a painting box: its background slice on page 1 runs to the page end,
+    // and on page 2 its box (bottom border included) ends at 245px, under its overflowing
+    // last child, with the next block 10px below it.
+    id: "remaining-height-pushed-child-decorated",
+    html: DOC(
+      "body{margin:0}",
+      block(C.green[0], 100) +
+        `<div style="height:460px;background:${C.orange[0]};border-bottom:5px solid ${C.magenta[0]}">${blocks(["blue", "red", "yellow"], 140)}</div>` +
+        block(C.cyan[0], 60, "margin-top:10px"),
+    ),
+    colors: ["green", "blue", "red", "yellow", "cyan", "orange", "magenta"],
+  },
+  {
+    // A box whose height is used up on an earlier page than its last child (220px on
+    // page 1, 320px on page 2 > 500px): it ends at the top of page 3, where the next
+    // block starts (its top margin truncated) and paints over that last child.
+    id: "remaining-height-used-up",
+    html: DOC(
+      "body{margin:0}",
+      block(C.green[0], 100) +
+        `<div style="height:500px">${block(C.blue[0], 140)}${block(C.red[0], 300)}${block(C.yellow[0], 50)}</div>` +
+        block(C.cyan[0], 60, "margin-top:10px"),
+    ),
+    colors: ["green", "blue", "red", "yellow", "cyan"],
+  },
+  {
     // Item 1: an absolute box far past the content creates the pages it lands on.
     id: "absolute-root-past-content",
     html: DOC(

@@ -1538,6 +1538,181 @@
       ]
     },
     {
+      "id": "remaining-height-pushed-child",
+      "html": "<!DOCTYPE html><html><head><style>@page{size:600px 400px;margin:40px}body{margin:0}</style></head><body><div style=\"height:100px;background:#00ff00;break-inside:avoid;\"></div><div style=\"height:460px\"><div style=\"height:140px;background:#0000ff;break-inside:avoid;\"></div><div style=\"height:140px;background:#ff0000;break-inside:avoid;\"></div><div style=\"height:140px;background:#ffff00;break-inside:avoid;\"></div></div><div style=\"height:60px;background:#00ffff;break-inside:avoid;margin-top:10px\"></div></body></html>",
+      "colors": {
+        "green": "#00ff00",
+        "blue": "#0000ff",
+        "red": "#ff0000",
+        "yellow": "#ffff00",
+        "cyan": "#00ffff"
+      },
+      "pages": [
+        {
+          "size": [600, 400],
+          "boxes": {
+            "green": {
+              "bbox": [40, 40, 559, 139],
+              "top": true,
+              "bottom": true
+            },
+            "blue": {
+              "bbox": [40, 140, 559, 279],
+              "top": true,
+              "bottom": true
+            },
+            "red": null,
+            "yellow": null,
+            "cyan": null
+          }
+        },
+        {
+          "size": [600, 400],
+          "boxes": {
+            "green": null,
+            "blue": null,
+            "red": {
+              "bbox": [40, 40, 559, 179],
+              "top": true,
+              "bottom": true
+            },
+            "yellow": {
+              "bbox": [40, 180, 559, 289],
+              "top": true,
+              "bottom": true
+            },
+            "cyan": {
+              "bbox": [40, 290, 559, 349],
+              "top": true,
+              "bottom": true
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "remaining-height-pushed-child-decorated",
+      "html": "<!DOCTYPE html><html><head><style>@page{size:600px 400px;margin:40px}body{margin:0}</style></head><body><div style=\"height:100px;background:#00ff00;break-inside:avoid;\"></div><div style=\"height:460px;background:#ff8000;border-bottom:5px solid #ff00ff\"><div style=\"height:140px;background:#0000ff;break-inside:avoid;\"></div><div style=\"height:140px;background:#ff0000;break-inside:avoid;\"></div><div style=\"height:140px;background:#ffff00;break-inside:avoid;\"></div></div><div style=\"height:60px;background:#00ffff;break-inside:avoid;margin-top:10px\"></div></body></html>",
+      "colors": {
+        "green": "#00ff00",
+        "blue": "#0000ff",
+        "red": "#ff0000",
+        "yellow": "#ffff00",
+        "cyan": "#00ffff",
+        "orange": "#ff8000",
+        "magenta": "#ff00ff"
+      },
+      "pages": [
+        {
+          "size": [600, 400],
+          "boxes": {
+            "green": {
+              "bbox": [40, 40, 559, 139],
+              "top": true,
+              "bottom": true
+            },
+            "blue": {
+              "bbox": [40, 140, 559, 279],
+              "top": true,
+              "bottom": true
+            },
+            "red": null,
+            "yellow": null,
+            "cyan": null,
+            "orange": {
+              "bbox": [40, 280, 559, 359],
+              "top": true,
+              "bottom": true
+            },
+            "magenta": null
+          }
+        },
+        {
+          "size": [600, 400],
+          "boxes": {
+            "green": null,
+            "blue": null,
+            "red": {
+              "bbox": [40, 40, 559, 179],
+              "top": true,
+              "bottom": true
+            },
+            "yellow": {
+              "bbox": [40, 180, 559, 294],
+              "top": true,
+              "bottom": true
+            },
+            "cyan": {
+              "bbox": [40, 295, 559, 354],
+              "top": true,
+              "bottom": true
+            },
+            "orange": null,
+            "magenta": null
+          }
+        }
+      ]
+    },
+    {
+      "id": "remaining-height-used-up",
+      "html": "<!DOCTYPE html><html><head><style>@page{size:600px 400px;margin:40px}body{margin:0}</style></head><body><div style=\"height:100px;background:#00ff00;break-inside:avoid;\"></div><div style=\"height:500px\"><div style=\"height:140px;background:#0000ff;break-inside:avoid;\"></div><div style=\"height:300px;background:#ff0000;break-inside:avoid;\"></div><div style=\"height:50px;background:#ffff00;break-inside:avoid;\"></div></div><div style=\"height:60px;background:#00ffff;break-inside:avoid;margin-top:10px\"></div></body></html>",
+      "colors": {
+        "green": "#00ff00",
+        "blue": "#0000ff",
+        "red": "#ff0000",
+        "yellow": "#ffff00",
+        "cyan": "#00ffff"
+      },
+      "pages": [
+        {
+          "size": [600, 400],
+          "boxes": {
+            "green": {
+              "bbox": [40, 40, 559, 139],
+              "top": true,
+              "bottom": true
+            },
+            "blue": {
+              "bbox": [40, 140, 559, 279],
+              "top": true,
+              "bottom": true
+            },
+            "red": null,
+            "yellow": null,
+            "cyan": null
+          }
+        },
+        {
+          "size": [600, 400],
+          "boxes": {
+            "green": null,
+            "blue": null,
+            "red": {
+              "bbox": [40, 40, 559, 339],
+              "top": true,
+              "bottom": true
+            },
+            "yellow": null,
+            "cyan": null
+          }
+        },
+        {
+          "size": [600, 400],
+          "boxes": {
+            "green": null,
+            "blue": null,
+            "red": null,
+            "yellow": null,
+            "cyan": {
+              "bbox": [40, 40, 559, 99],
+              "top": true,
+              "bottom": true
+            }
+          }
+        }
+      ]
+    },
+    {
       "id": "absolute-root-past-content",
       "html": "<!DOCTYPE html><html><head><style>@page{size:600px 400px;margin:40px}body{margin:0}</style></head><body><div style=\"position:absolute;top:900px;left:20px;width:50px;height:30px;background:#ff0000\"></div><div style=\"height:100px;background:#00ff00;break-inside:avoid;\"></div></body></html>",
       "colors": {
