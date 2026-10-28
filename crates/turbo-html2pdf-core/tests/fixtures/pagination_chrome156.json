@@ -1713,6 +1713,214 @@
       ]
     },
     {
+      "id": "remaining-height-table-header",
+      "html": "<!DOCTYPE html><html><head><style>@page{size:600px 400px;margin:40px}body{margin:0}</style></head><body><div style=\"height:500px\"><table style=\"width:100%;border-collapse:collapse;border-spacing:0\"><thead><tr style=\"break-inside:avoid\"><td style=\"height:40px;background:#0000ff;padding:0\"></td></tr></thead><tbody><tr style=\"break-inside:avoid\"><td style=\"height:100px;background:#ff0000;padding:0\"></td></tr><tr style=\"break-inside:avoid\"><td style=\"height:100px;background:#ffff00;padding:0\"></td></tr><tr style=\"break-inside:avoid\"><td style=\"height:100px;background:#ff00ff;padding:0\"></td></tr></tbody></table></div><div style=\"height:60px;background:#00ffff;break-inside:avoid;\"></div></body></html>",
+      "colors": {
+        "blue": "#0000ff",
+        "red": "#ff0000",
+        "yellow": "#ffff00",
+        "magenta": "#ff00ff",
+        "cyan": "#00ffff"
+      },
+      "pages": [
+        {
+          "size": [600, 400],
+          "boxes": {
+            "blue": {
+              "bbox": [40, 40, 559, 79],
+              "top": true,
+              "bottom": true
+            },
+            "red": {
+              "bbox": [40, 80, 559, 179],
+              "top": true,
+              "bottom": true
+            },
+            "yellow": {
+              "bbox": [40, 180, 559, 279],
+              "top": true,
+              "bottom": true
+            },
+            "magenta": null,
+            "cyan": null
+          }
+        },
+        {
+          "size": [600, 400],
+          "boxes": {
+            "blue": {
+              "bbox": [40, 40, 559, 79],
+              "top": true,
+              "bottom": true
+            },
+            "red": null,
+            "yellow": null,
+            "magenta": {
+              "bbox": [40, 80, 559, 179],
+              "top": true,
+              "bottom": true
+            },
+            "cyan": {
+              "bbox": [40, 220, 559, 279],
+              "top": true,
+              "bottom": true
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "remaining-height-table-header-3-pages",
+      "html": "<!DOCTYPE html><html><head><style>@page{size:600px 400px;margin:40px}body{margin:0}</style></head><body><div style=\"height:800px\"><table style=\"width:100%;border-collapse:collapse;border-spacing:0\"><thead><tr style=\"break-inside:avoid\"><td style=\"height:40px;background:#0000ff;padding:0\"></td></tr></thead><tbody><tr style=\"break-inside:avoid\"><td style=\"height:100px;background:#ff0000;padding:0\"></td></tr><tr style=\"break-inside:avoid\"><td style=\"height:100px;background:#ffff00;padding:0\"></td></tr><tr style=\"break-inside:avoid\"><td style=\"height:100px;background:#ff00ff;padding:0\"></td></tr><tr style=\"break-inside:avoid\"><td style=\"height:100px;background:#00ff00;padding:0\"></td></tr><tr style=\"break-inside:avoid\"><td style=\"height:100px;background:#ff8000;padding:0\"></td></tr></tbody></table></div><div style=\"height:60px;background:#00ffff;break-inside:avoid;\"></div></body></html>",
+      "colors": {
+        "blue": "#0000ff",
+        "red": "#ff0000",
+        "yellow": "#ffff00",
+        "magenta": "#ff00ff",
+        "green": "#00ff00",
+        "orange": "#ff8000",
+        "cyan": "#00ffff"
+      },
+      "pages": [
+        {
+          "size": [600, 400],
+          "boxes": {
+            "blue": {
+              "bbox": [40, 40, 559, 79],
+              "top": true,
+              "bottom": true
+            },
+            "red": {
+              "bbox": [40, 80, 559, 179],
+              "top": true,
+              "bottom": true
+            },
+            "yellow": {
+              "bbox": [40, 180, 559, 279],
+              "top": true,
+              "bottom": true
+            },
+            "magenta": null,
+            "green": null,
+            "orange": null,
+            "cyan": null
+          }
+        },
+        {
+          "size": [600, 400],
+          "boxes": {
+            "blue": {
+              "bbox": [40, 40, 559, 79],
+              "top": true,
+              "bottom": true
+            },
+            "red": null,
+            "yellow": null,
+            "magenta": {
+              "bbox": [40, 80, 559, 179],
+              "top": true,
+              "bottom": true
+            },
+            "green": {
+              "bbox": [40, 180, 559, 279],
+              "top": true,
+              "bottom": true
+            },
+            "orange": null,
+            "cyan": null
+          }
+        },
+        {
+          "size": [600, 400],
+          "boxes": {
+            "blue": {
+              "bbox": [40, 40, 559, 79],
+              "top": true,
+              "bottom": true
+            },
+            "red": null,
+            "yellow": null,
+            "magenta": null,
+            "green": null,
+            "orange": {
+              "bbox": [40, 80, 559, 179],
+              "top": true,
+              "bottom": true
+            },
+            "cyan": {
+              "bbox": [40, 200, 559, 259],
+              "top": true,
+              "bottom": true
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "remaining-height-table-header-overflow",
+      "html": "<!DOCTYPE html><html><head><style>@page{size:600px 400px;margin:40px}body{margin:0}</style></head><body><div style=\"height:100px;background:#00ff00;break-inside:avoid;\"></div><div style=\"height:400px\"><table style=\"width:100%;border-collapse:collapse;border-spacing:0\"><thead><tr style=\"break-inside:avoid\"><td style=\"height:40px;background:#0000ff;padding:0\"></td></tr></thead><tbody><tr style=\"break-inside:avoid\"><td style=\"height:100px;background:#ff0000;padding:0\"></td></tr><tr style=\"break-inside:avoid\"><td style=\"height:100px;background:#ffff00;padding:0\"></td></tr><tr style=\"break-inside:avoid\"><td style=\"height:100px;background:#ff00ff;padding:0\"></td></tr></tbody></table></div><div style=\"height:60px;background:#00ffff;break-inside:avoid;\"></div></body></html>",
+      "colors": {
+        "green": "#00ff00",
+        "blue": "#0000ff",
+        "red": "#ff0000",
+        "yellow": "#ffff00",
+        "magenta": "#ff00ff",
+        "cyan": "#00ffff"
+      },
+      "pages": [
+        {
+          "size": [600, 400],
+          "boxes": {
+            "green": {
+              "bbox": [40, 40, 559, 139],
+              "top": true,
+              "bottom": true
+            },
+            "blue": {
+              "bbox": [40, 140, 559, 179],
+              "top": true,
+              "bottom": true
+            },
+            "red": {
+              "bbox": [40, 180, 559, 279],
+              "top": true,
+              "bottom": true
+            },
+            "yellow": null,
+            "magenta": null,
+            "cyan": null
+          }
+        },
+        {
+          "size": [600, 400],
+          "boxes": {
+            "green": null,
+            "blue": {
+              "bbox": [40, 40, 559, 79],
+              "top": true,
+              "bottom": true
+            },
+            "red": null,
+            "yellow": {
+              "bbox": [40, 80, 559, 179],
+              "top": true,
+              "bottom": true
+            },
+            "magenta": {
+              "bbox": [40, 180, 559, 219],
+              "top": true,
+              "bottom": true
+            },
+            "cyan": {
+              "bbox": [40, 220, 559, 279],
+              "top": true,
+              "bottom": true
+            }
+          }
+        }
+      ]
+    },
+    {
       "id": "absolute-root-past-content",
       "html": "<!DOCTYPE html><html><head><style>@page{size:600px 400px;margin:40px}body{margin:0}</style></head><body><div style=\"position:absolute;top:900px;left:20px;width:50px;height:30px;background:#ff0000\"></div><div style=\"height:100px;background:#00ff00;break-inside:avoid;\"></div></body></html>",
       "colors": {

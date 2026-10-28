@@ -6,6 +6,12 @@ PyPI, and crates.io packages release in lockstep from a `v*` tag (PyPI on `pyv*`
 
 ## [Unreleased]
 
+- **Checked (turbo-html2pdf#45, Chrome 156 print control)**: a definite-height box around
+  a table whose header row repeats ends where Chrome 156 ends it — the repeated header is
+  the table's, inside the box, so the #43 model needs no header term. Controls:
+  `remaining-height-table-header*` in `scripts/pagination-chrome-control.mjs`. (A box
+  inside a repeating table's cell would need one, but the engine keeps table rows whole,
+  so such a box is never split.)
 - **Fixed (turbo-html2pdf#44)**: paint a split relatively offset block carries onto a
   neighbouring page (#42) repeats content its own page carries, so it is no longer tagged
   or extracted twice: its fragments carry the id `paginate::CARRIED` (re-exported at the

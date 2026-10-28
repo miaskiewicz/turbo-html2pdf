@@ -68,6 +68,14 @@ const C = {
   orange: ["#ff8000", [255, 128, 0]],
 };
 const blocks = (names, height, style) => names.map((n) => block(C[n][0], height, style)).join("");
+// A table with a 40px blue header row (repeated on every page it spans) and 100px body
+// rows of the named colours, kept whole (`break-inside: avoid`; Chrome would otherwise
+// slice an empty row across pages, the engine keeps rows whole).
+const row = (color, height) =>
+  `<tr style="break-inside:avoid"><td style="height:${height}px;background:${color};padding:0"></td></tr>`;
+const headerTable = (names) =>
+  `<table style="width:100%;border-collapse:collapse;border-spacing:0"><thead>${row(C.blue[0], 40)}</thead>` +
+  `<tbody>${names.map((n) => row(C[n][0], 100)).join("")}</tbody></table>`;
 
 const CASES = [
   {
@@ -455,6 +463,40 @@ const CASES = [
         block(C.cyan[0], 60, "margin-top:10px"),
     ),
     colors: ["green", "blue", "red", "yellow", "cyan"],
+  },
+  {
+    // miaskiewicz/turbo-html2pdf#45: a definite-height box around a table whose header
+    // row repeats: the repeated header is the table's (inside the box), so the box still
+    // counts each page it breaks on to the page end — 500px end 180px down page 2.
+    id: "remaining-height-table-header",
+    html: DOC(
+      "body{margin:0}",
+      `<div style="height:500px">${headerTable(["red", "yellow", "magenta"])}</div>` +
+        block(C.cyan[0], 60),
+    ),
+    colors: ["blue", "red", "yellow", "magenta", "cyan"],
+  },
+  {
+    // The same over three pages: 800px end 160px down page 3, below its last row.
+    id: "remaining-height-table-header-3-pages",
+    html: DOC(
+      "body{margin:0}",
+      `<div style="height:800px">${headerTable(["red", "yellow", "magenta", "green", "orange"])}</div>` +
+        block(C.cyan[0], 60),
+    ),
+    colors: ["blue", "red", "yellow", "magenta", "green", "orange", "cyan"],
+  },
+  {
+    // Starting 100px down page 1: 400px end 180px down page 2, above its last row, which
+    // the next block paints over.
+    id: "remaining-height-table-header-overflow",
+    html: DOC(
+      "body{margin:0}",
+      block(C.green[0], 100) +
+        `<div style="height:400px">${headerTable(["red", "yellow", "magenta"])}</div>` +
+        block(C.cyan[0], 60),
+    ),
+    colors: ["green", "blue", "red", "yellow", "magenta", "cyan"],
   },
   {
     // Item 1: an absolute box far past the content creates the pages it lands on.
