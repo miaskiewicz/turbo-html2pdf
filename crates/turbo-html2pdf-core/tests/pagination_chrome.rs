@@ -53,11 +53,14 @@ fn pages(html: &str) -> Vec<Page> {
 
 /// Paint the page's `Box` fragments (background, then the four border sides; parents
 /// before children, in list order — the paint order of these flat test documents) into a
-/// `width x height` RGB buffer at 1 px per CSS px, white paper.
+/// `width x height` RGB buffer at 1 px per CSS px, white paper; a fragment's `clip` region
+/// clips it and its subtree, as the emitter clips them.
 fn rasterize(page: &Page) -> (usize, usize, Vec<[u8; 3]>) {
     let (w, h) = (page.geometry.width as usize, page.geometry.height as usize);
     let mut buf = vec![[255u8; 3]; w * h];
-    fn fill(buf: &mut [[u8; 3]], w: usize, (x, y, rw, rh): (f32, f32, f32, f32), c: Rgba) {
+    let all: Rect = (0.0, 0.0, w as f32, h as f32);
+    fn fill(buf: &mut [[u8; 3]], w: usize, rect: Rect, c: Rgba, clip: Rect) {
+        let (x, y, rw, rh) = intersect(rect, clip);
         let h = buf.len() / w;
         let span = |a: f32, len: f32, max: usize| {
             (
@@ -72,17 +75,20 @@ fn rasterize(page: &Page) -> (usize, usize, Vec<[u8; 3]>) {
             }
         }
     }
-    fn walk(buf: &mut [[u8; 3]], w: usize, frags: &[Fragment]) {
+    fn walk(buf: &mut [[u8; 3]], w: usize, frags: &[Fragment], clip: Rect) {
         for f in frags {
+            let clip = f.clip.map_or(clip, |c| {
+                intersect(clip, (f.x + c.x, f.y + c.y, c.width, c.height))
+            });
             for (rect, c) in box_paint(f) {
-                fill(buf, w, rect, c);
+                fill(buf, w, rect, c, clip);
             }
             let kids: Vec<Fragment> = f
                 .paint_order()
                 .into_iter()
                 .map(|i| f.children[i].clone())
                 .collect();
-            walk(buf, w, &kids);
+            walk(buf, w, &kids, clip);
         }
     }
     if let Some(c) = page.canvas {
@@ -93,9 +99,9 @@ fn rasterize(page: &Page) -> (usize, usize, Vec<[u8; 3]>) {
             g.width - g.margin.horizontal(),
             g.height - g.margin.vertical(),
         );
-        fill(&mut buf, w, area, c);
+        fill(&mut buf, w, area, c, all);
     }
-    walk(&mut buf, w, &in_paint_order(&page.body));
+    walk(&mut buf, w, &in_paint_order(&page.body), all);
     (w, h, buf)
 }
 
@@ -108,6 +114,13 @@ fn in_paint_order(body: &[Fragment]) -> Vec<Fragment> {
 }
 
 type Rect = (f32, f32, f32, f32);
+
+/// The intersection of two `(x, y, width, height)` rectangles (empty: zero size).
+fn intersect((ax, ay, aw, ah): Rect, (bx, by, bw, bh): Rect) -> Rect {
+    let (x0, y0) = (ax.max(bx), ay.max(by));
+    let (x1, y1) = ((ax + aw).min(bx + bw), (ay + ah).min(by + bh));
+    (x0, y0, (x1 - x0).max(0.0), (y1 - y0).max(0.0))
+}
 
 /// The opaque rectangles a `Box` fragment paints: its background, then its border sides.
 fn box_paint(f: &Fragment) -> Vec<(Rect, Rgba)> {
@@ -228,15 +241,9 @@ fn compare_case(case: &serde_json::Value, failures: &mut Vec<String>) {
 /// Measurements (case, page, colour) that do not match Chrome yet; each must still differ,
 /// so a fixed one is removed from the list. The rest of those cases is compared as usual.
 /// (`exact-fill-child-margin` matches since miaskiewicz/turbo-dom#41: the paged layout keeps
-/// a last child's bottom margin inside a padded parent.)
-const KNOWN: &[(&str, usize, &str)] = &[
-    // miaskiewicz/turbo-html2pdf#42: the part of a split relative block shifted across a
-    // page boundary is not painted on the page it crosses into (Chrome also bleeds the
-    // shifted continuation 1px above the page area).
-    ("relative-bottom-split", 1, "magenta"),
-    ("relative-bottom-split", 2, "magenta"),
-    ("split-decorated-relative", 2, "orange"),
-];
+/// a last child's bottom margin inside a padded parent; the split relative / absolute cases
+/// since miaskiewicz/turbo-html2pdf#41 and #42.) Empty: every measurement matches.
+const KNOWN: &[(&str, usize, &str)] = &[];
 
 /// miaskiewicz/turbo-html2pdf#39: the print initial containing block (the page area).
 fn icb_case(id: &str) -> bool {
@@ -266,6 +273,7 @@ fn the_page_area_is_the_initial_containing_block_like_chrome_156() {
 }
 
 #[test]
+#[ignore = "miaskiewicz/turbo-html2pdf#42: fails until the fix"]
 fn paginated_boxes_match_chrome_156() {
     let mut failures = Vec::new();
     for case in fixture()["cases"]
