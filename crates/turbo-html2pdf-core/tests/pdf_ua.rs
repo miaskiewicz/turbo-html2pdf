@@ -401,3 +401,56 @@ fn a_captioned_table_passes_verapdf_ua1() {
         String::from_utf8_lossy(&out.stderr)
     );
 }
+
+/// A tagged render of a split `bottom: 20px` relative block whose one text line, moved to
+/// page 2, is shifted across the page boundary: Chrome 156 paints its top part at the end
+/// of page 1 (miaskiewicz/turbo-html2pdf#42).
+fn carried_text_pdf(pdf_ua: bool) -> Vec<u8> {
+    let template = r#"<!DOCTYPE html><html><head><style>@page{size:600px 400px;margin:40px}body{margin:0;font-family:Evolventa;font-size:12px}</style></head><body><div style="position:relative;bottom:20px"><div style="height:300px"></div><div style="height:40px;break-inside:avoid">Zebracorn</div></div></body></html>"#;
+    let (program, _) = compile(template, &CompileOptions::default()).expect("compile");
+    let cascade = build_cascade("", "", TokenSet::default());
+    let fonts = common::registry();
+    let inputs = RenderInputs {
+        program: &program,
+        data: &serde_json::json!({}),
+        cascade: &cascade,
+        at_rules: &[],
+        fonts: &fonts,
+        images: &turbo_html2pdf_core::NoImages,
+        now: Some(0),
+    };
+    let pages = render_pages(&inputs, &mut Diagnostics::default()).expect("render pages");
+    assert_eq!(pages.len(), 2);
+    emit_pdf(&pages, &EmitOptions { pdf_ua, ..opts() })
+}
+
+fn count(haystack: &[u8], needle: &[u8]) -> usize {
+    haystack
+        .windows(needle.len())
+        .filter(|w| *w == needle)
+        .count()
+}
+
+#[test]
+#[ignore = "miaskiewicz/turbo-html2pdf#44: fails until the fix"]
+fn text_carried_onto_the_previous_page_is_an_artifact() {
+    // miaskiewicz/turbo-html2pdf#44: the line paints on both pages (its copy on page 1
+    // clipped to that page's end), but only its own page tags it as content.
+    let pdf = carried_text_pdf(true);
+    assert_eq!(count(&pdf, b"\nBT\n"), 2, "painted twice");
+    assert_eq!(count(&pdf, b"/MCID"), 1, "tagged once");
+    if have("pdftotext") {
+        let path = write_temp(&pdf, "turbo_pdf_ua_carried_text.pdf");
+        let out = Command::new("pdftotext")
+            .arg(&path)
+            .arg("-")
+            .output()
+            .expect("pdftotext");
+        let text = String::from_utf8_lossy(&out.stdout);
+        assert_eq!(
+            text.matches("Zebracorn").count(),
+            1,
+            "extracted once: {text:?}"
+        );
+    }
+}
