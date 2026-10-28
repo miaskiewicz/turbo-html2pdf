@@ -6,6 +6,14 @@ PyPI, and crates.io packages release in lockstep from a `v*` tag (PyPI on `pyv*`
 
 ## [Unreleased]
 
+- **Fixed (turbo-html2pdf#42, Chrome 156 print control)**: a relatively offset block
+  split across pages is offset in the fragmented flow, as Chrome 156 prints it: its paint
+  (content and sliced background/border) shifted across a page boundary is cut there
+  (fragment `clip` regions) and the part beyond paints on the neighbouring page — shifted
+  above a page's area at the end of the previous page, past a page's end at the top of
+  the next — with Chrome's 1px bleed above a continuation page's area. It used to paint
+  into the page margin. Control: `relative-bottom-split`, `split-decorated-relative` (no
+  longer `KNOWN` differences; the `KNOWN` list is empty).
 - **Fixed (turbo-html2pdf#41, Chrome 156 print control)**: an absolutely positioned box at
   its static position (no `top`/`bottom`) between the children of a split block is placed
   at that position — right after the child before it, on that child's page — as Chrome

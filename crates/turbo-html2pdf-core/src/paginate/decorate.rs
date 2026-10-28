@@ -12,6 +12,7 @@
 
 use crate::layout::fragment::{Fragment, FragmentContent, NodeId};
 
+use super::shifted::pieces;
 use super::walk::PageSpan;
 
 /// Whether `f` paints anything of its own: a background colour or gradient, a shadow,
@@ -55,12 +56,14 @@ pub fn decorate(pages: &mut [Vec<Fragment>], spans: &[PageSpan], wrappers: &[Fra
 /// A block split across pages whose box paints (miaskiewicz/turbo-html2pdf#37 item 1):
 /// its own paint (children removed), where it starts — page, the index in that page's
 /// body where its first fragment went, its page-local border-box top — and where it ends
-/// (page, page-local bottom).
+/// (page, page-local bottom) — and its relative paint shift (its own and its split
+/// ancestors').
 #[derive(Debug, Clone)]
 pub(super) struct SplitBox {
     pub frag: Fragment,
     pub start: (usize, usize, f32),
     pub end: (usize, f32),
+    pub shift: f32,
 }
 
 /// Slice every split box onto the pages it spans, as Chrome 156 prints them under the
@@ -98,22 +101,36 @@ struct Insert {
     piece: Fragment,
 }
 
-/// The slices of split box `b` (the `order`-th closed) on the pages it spans.
+/// The slices of split box `b` (the `order`-th closed) on the pages it spans. A
+/// relatively offset box's slices are painted shifted with it — a page's slice runs from
+/// the shifted page top to the shifted page end — and re-cut onto the pages their paint
+/// reaches ([`pieces`], miaskiewicz/turbo-html2pdf#42).
 fn box_slices(b: &SplitBox, order: usize, spans: &[PageSpan]) -> Vec<Insert> {
     let ((first, index, top), (last, bottom)) = (b.start, b.end);
+    let at = |page: usize| if page == first { index } else { 0 };
     spans[first..=last]
         .iter()
         .zip(first..)
-        .map(|(span, page)| {
+        .flat_map(|(span, page)| {
             let (on_first, on_last) = (page == first, page == last);
-            let start = if on_first { top } else { 0.0 };
-            let end = if on_last { bottom } else { span.capacity };
-            Insert {
+            let start = if on_first { top } else { b.shift };
+            let end = if on_last {
+                bottom
+            } else {
+                span.capacity + b.shift
+            };
+            let piece = slice(&b.frag, start, end, on_first, on_last);
+            let cut = if b.shift == 0.0 {
+                vec![(page, piece)]
+            } else {
+                pieces(&piece, page, (first, last), spans)
+            };
+            cut.into_iter().map(move |(page, piece)| Insert {
                 page,
-                at: if on_first { index } else { 0 },
+                at: at(page),
                 order,
-                piece: slice(&b.frag, start, end, on_first, on_last),
-            }
+                piece,
+            })
         })
         .collect()
 }

@@ -21,6 +21,7 @@ mod decorate;
 mod footnotes;
 mod geometry;
 mod out_of_flow;
+mod shifted;
 mod walk;
 
 use crate::error::{Diagnostics, RenderError};

@@ -30,7 +30,9 @@
 //! Relative positioning (miaskiewicz/turbo-html2pdf#34): a `relative`/`sticky` box is
 //! painted shifted but the flow continues from its unshifted position, so gaps and fill
 //! are measured on flow positions; the children of a split positioned box paint at its
-//! level.
+//! level. A split block's shifted paint is cut at the page boundaries it crosses, the
+//! parts past them painted on the neighbouring pages (miaskiewicz/turbo-html2pdf#42,
+//! [`super::shifted`]).
 //!
 //! Box ends (item 6): no break separates a box's last content from the bottom padding and
 //! border that end the box (and its ancestors', `<body>`'s included), so the last content
@@ -74,6 +76,7 @@ use super::boxes::{
 };
 use super::decorate::{paints, slice_split_boxes, SplitBox};
 use super::out_of_flow::{Anchors, Taken};
+use super::shifted::pieces;
 use super::Galley;
 
 /// Per-page footnote reservation: the area (px) the page at the given 0-based
@@ -178,7 +181,14 @@ struct Walker<'a> {
     /// page-local bottom — where a static position met after later content maps to
     /// (miaskiewicz/turbo-html2pdf#41).
     placed: Vec<(f32, usize, f32)>,
+    /// The relatively offset blocks being split: the page of their first fragment and the
+    /// fragments placed for them (page, index), re-cut onto the pages they span when they
+    /// close (miaskiewicz/turbo-html2pdf#42, [`super::shifted`]).
+    threads: Vec<Thread>,
 }
+
+/// A relatively offset block being split: its first page and its placed fragments.
+type Thread = (Option<usize>, Vec<(usize, usize)>);
 
 impl<'a> Walker<'a> {
     fn new(capacity: f32, reserve: &'a Reserve<'a>, galley: Galley<'a>) -> Walker<'a> {
@@ -207,6 +217,7 @@ impl<'a> Walker<'a> {
             split_boxes: Vec::new(),
             sized: Vec::new(),
             placed: Vec::new(),
+            threads: Vec::new(),
         }
     }
 
@@ -326,14 +337,30 @@ impl<'a> Walker<'a> {
                 .insert(id, (page, clone.y - (f.y - galley_top)));
         }
         let index = self.pages[page].len();
+        self.start_blocks(f, (page, index), (top, clone.y));
+        self.pages[page].push(clone);
+    }
+
+    /// Record `f`, going to `page` at `index` with its flow top at page-local `top`
+    /// (painted at `painted`), as the start of the split blocks that placed nothing yet,
+    /// and as a fragment of the offset block being split.
+    fn start_blocks(
+        &mut self,
+        f: &Fragment,
+        (page, index): (usize, usize),
+        (top, painted): (f32, f32),
+    ) {
         for (block, start) in self.decorated.iter_mut().filter(|(_, s)| s.is_none()) {
-            *start = Some((page, index, clone.y - (f.y - block.y)));
+            *start = Some((page, index, painted - (f.y - block.y)));
         }
         let flow_top = self.flow_top(f);
         for (block_top, start) in self.sized.iter_mut().filter(|(_, s)| s.is_none()) {
             *start = Some((page, top - (flow_top - *block_top)));
         }
-        self.pages[page].push(clone);
+        if let Some((first, placed)) = self.threads.last_mut() {
+            first.get_or_insert(page);
+            placed.push((page, index));
+        }
     }
 
     /// An out-of-flow box left in the flow (an `absolute` box with neither `top` nor
@@ -511,6 +538,9 @@ impl<'a> Walker<'a> {
             own.children.clear();
             self.decorated.push((own, None));
         }
+        if self.own_shift(f) != 0.0 {
+            self.threads.push((None, Vec::new()));
+        }
         let opened = self.pending.is_none();
         if opened {
             self.pending = Some((self.flow_top(f), leading_margin(self.boxes, f)));
@@ -531,6 +561,27 @@ impl<'a> Walker<'a> {
         if paints(f) {
             self.close_decorated(f);
         }
+        if self.own_shift(f) != 0.0 {
+            let (first, placed) = self.threads.pop().expect("opened with the block");
+            self.recut(first.expect("a split block places its content"), &placed);
+        }
+    }
+
+    /// Re-cut the fragments `placed` for a relatively offset block that started on page
+    /// `first` and ends on the current page onto the pages its shifted paint reaches
+    /// ([`pieces`]): a fragment keeps its place, clipped to its page's window, and its
+    /// parts past that window go to the neighbouring pages.
+    fn recut(&mut self, first: usize, placed: &[(usize, usize)]) {
+        let range = (first, self.pages.len() - 1);
+        for &(page, index) in placed {
+            for (q, piece) in pieces(&self.pages[page][index], page, range, &self.spans) {
+                if q == page {
+                    self.pages[page][index] = piece;
+                } else {
+                    self.pages[q].push(piece);
+                }
+            }
+        }
     }
 
     /// Done splitting painting block `f`: its box ends below its last content by its
@@ -549,7 +600,12 @@ impl<'a> Walker<'a> {
         let visual = self.shift + self.own_shift(f);
         let bottom = (self.cursor + trailing + visual).min(self.page_capacity());
         let end = (self.pages.len() - 1, bottom);
-        self.split_boxes.push(SplitBox { frag, start, end });
+        self.split_boxes.push(SplitBox {
+            frag,
+            start,
+            end,
+            shift: visual,
+        });
     }
 
     /// An atomic fragment taller than a whole page: place it on a fresh page and
