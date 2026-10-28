@@ -169,3 +169,92 @@ fn assert_qpdf_clean(name: &str, pdf: &[u8]) {
         String::from_utf8_lossy(&out.stdout)
     );
 }
+
+// --------------------------------------------------------------------------
+// miaskiewicz/turbo-html2pdf#46: a vector image cut at a page boundary
+// --------------------------------------------------------------------------
+
+/// A 4x4 opaque red SVG.
+const SVG_RED: &str = r##"<svg xmlns="http://www.w3.org/2000/svg" width="4" height="4"><rect width="4" height="4" fill="#ff0000"/></svg>"##;
+
+/// A split `bottom: 20px` relative block whose 40px SVG image, moved to page 2, is
+/// shifted 20px above that page's area: its top half paints at the end of page 1
+/// (miaskiewicz/turbo-html2pdf#42).
+fn carried_svg_pdf() -> Vec<u8> {
+    let html = r#"<!DOCTYPE html><html><head><style>@page{size:600px 400px;margin:40px}body{margin:0}</style></head><body><div style="position:relative;bottom:20px"><div style="height:300px"></div><div style="height:40px;break-inside:avoid"><img src="red.svg" style="display:block;width:40px;height:40px"></div></div></body></html>"#;
+    let resolver = MapResolver::new(vec![("red.svg", svg_bytes(SVG_RED))]);
+    let (program, _) = turbo_html2pdf_core::compile(html, &Default::default()).expect("compile");
+    let cascade = build_cascade("", "", TokenSet::default());
+    let fonts = common::registry();
+    let inputs = turbo_html2pdf_core::RenderInputs {
+        program: &program,
+        data: &serde_json::Value::Null,
+        cascade: &cascade,
+        at_rules: &[],
+        fonts: &fonts,
+        images: &resolver,
+        now: Some(0),
+    };
+    let pages = turbo_html2pdf_core::render_pages(&inputs, &mut Diagnostics::default())
+        .expect("render_pages");
+    assert_eq!(pages.len(), 2);
+    emit_pdf_with_images(&pages, &EmitOptions::default(), &resolver)
+}
+
+#[test]
+fn a_vector_image_cut_at_a_page_boundary_paints_inside_its_clip_on_both_pages() {
+    let pdf = carried_svg_pdf();
+    let text = String::from_utf8_lossy(&pdf);
+    // Each page draws the image once, inside a saved state with a clipping path.
+    let draws: Vec<usize> = text.match_indices(" Do\n").map(|(i, _)| i).collect();
+    assert_eq!(draws.len(), 2, "drawn once per page");
+    for &at in &draws {
+        let clip = text[..at]
+            .rfind("re\nW\nn")
+            .expect("a clipping path before the draw");
+        assert!(text[..clip].rfind("q\n").is_some(), "in a saved state");
+        assert!(text[at..].find("Q\n").is_some(), "restored after the draw");
+    }
+    if std::process::Command::new("pdftoppm")
+        .arg("-v")
+        .output()
+        .is_err()
+    {
+        eprintln!("pdftoppm not on PATH; skipping the raster probe");
+        return;
+    }
+    let red = |page: usize, y: usize| raster_red(&pdf, page, 60, y);
+    // Page 1: the image's top half at 340..359, cut at the page area's end (360).
+    assert!(red(1, 341) && red(1, 358), "page 1 shows the carried half");
+    assert!(!red(1, 362), "page 1 is cut at its area's end");
+    // Page 2: the image at 20..59, shown from 1px above the page area (39).
+    assert!(red(2, 41) && red(2, 58), "page 2 shows its own half");
+    assert!(!red(2, 30), "page 2 is cut above its area");
+}
+
+/// Whether pixel (`x`, `y`) of page `page` (1-based), rasterized by `pdftoppm` at
+/// 96 dpi (1 device px per CSS px), is red.
+fn raster_red(pdf: &[u8], page: usize, x: usize, y: usize) -> bool {
+    let dir = std::env::temp_dir().join(format!("turbo_svg_clip_{}_{page}", std::process::id()));
+    std::fs::create_dir_all(&dir).expect("temp dir");
+    let input = dir.join("doc.pdf");
+    std::fs::write(&input, pdf).expect("write pdf");
+    let n = page.to_string();
+    let out = std::process::Command::new("pdftoppm")
+        .args(["-r", "96", "-f", &n, "-l", &n, "-singlefile"])
+        .arg(&input)
+        .arg(dir.join("page"))
+        .output()
+        .expect("run pdftoppm");
+    assert!(out.status.success());
+    let ppm = std::fs::read(dir.join("page.ppm")).expect("read ppm");
+    std::fs::remove_dir_all(&dir).ok();
+    let header: Vec<&[u8]> = ppm.splitn(4, |&b| b == b'\n').collect();
+    let width: usize = String::from_utf8_lossy(header[1])
+        .split(' ')
+        .next()
+        .and_then(|w| w.parse().ok())
+        .expect("ppm width");
+    let px = &header[3][(y * width + x) * 3..][..3];
+    px[0] > 200 && px[1] < 60 && px[2] < 60
+}

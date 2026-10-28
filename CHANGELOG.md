@@ -6,6 +6,12 @@ PyPI, and crates.io packages release in lockstep from a `v*` tag (PyPI on `pyv*`
 
 ## [Unreleased]
 
+- **Checked (turbo-html2pdf#46)**: the `svg` feature has no separate output backend — it
+  rasterizes `image/svg+xml` into an image XObject painted by the same PDF painter, so a
+  vector image cut at a page boundary by a split relative block (#42) is clipped there
+  like any fragment. Pinned by `tests/svg.rs`
+  (`a_vector_image_cut_at_a_page_boundary_paints_inside_its_clip_on_both_pages`: the
+  clip path around each page's draw, and a `pdftoppm` probe of both pages).
 - **Checked (turbo-html2pdf#45, Chrome 156 print control)**: a definite-height box around
   a table whose header row repeats ends where Chrome 156 ends it — the repeated header is
   the table's, inside the box, so the #43 model needs no header term. Controls:
