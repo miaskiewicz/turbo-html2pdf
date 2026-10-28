@@ -976,12 +976,13 @@ fn supports_not_negates() {
 }
 
 #[test]
-fn supports_unmatched_paren_group_is_treated_as_supported() {
-    // A group whose first paren does not close at the end (strip_group returns None
-    // via its depth-0 close arm) is treated as a bare/unrecognised → supported.
-    let css = "@supports (color: red) (display: grid) { div { color: green } }";
+fn supports_juxtaposed_groups_are_invalid_and_dropped() {
+    // Two condition groups with no `and`/`or` between them are not valid
+    // `<supports-condition>` grammar: Chrome 156 drops the whole rule (computed color
+    // stays the initial black), and so does turbo-dom's shared @supports evaluator.
+    let css = "div { color: red } @supports (color: red) (display: grid) { div { color: green } }";
     let n = styled("<div id='e'>x</div>", css);
-    assert_eq!(prop(&n, "e", "color").as_deref(), Some("green"));
+    assert_eq!(prop(&n, "e", "color").as_deref(), Some("red"));
 }
 
 // -------------------------------------------------- @media calc() breakpoint
