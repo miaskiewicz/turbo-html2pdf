@@ -103,7 +103,6 @@ fn facts(style: &BoxStyle, width: f32) -> BoxFacts {
         inset_bottom: style.inset_bottom,
         shift: relative_shift(style, width),
         definite_height: style.height != LengthPct::Auto,
-        avoid_break_inside: style.break_inside_avoid,
     }
 }
 

@@ -226,7 +226,6 @@ mod tests {
             inset_bottom: LengthPct::Auto,
             shift: 0.0,
             definite_height: false,
-            avoid_break_inside: false,
         }
     }
 

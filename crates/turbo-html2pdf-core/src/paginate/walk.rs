@@ -942,11 +942,11 @@ fn sliceable(boxes: &FlowBoxes, f: &Fragment) -> bool {
     plain && breakable(boxes, f) && f.children.iter().all(|c| sliceable(boxes, c))
 }
 
-/// Whether nothing keeps `f` whole: no `break-inside: avoid` (in its break hints or its
-/// used values), not out of flow, not a repeated table header.
+/// Whether nothing keeps `f` whole: no `break-inside: avoid` in its break hints (a table
+/// row's included, turbo-dom#158), not out of flow, not a repeated table header.
 fn breakable(boxes: &FlowBoxes, f: &Fragment) -> bool {
     let facts = boxes.get(f.node_id);
-    let avoid = f.break_meta.break_inside_avoid || facts.is_some_and(|b| b.avoid_break_inside);
+    let avoid = f.break_meta.break_inside_avoid;
     let out = facts.is_some_and(|b| b.position.is_out_of_flow());
     !avoid && !out && !is_repeat_header(f)
 }
@@ -1225,7 +1225,6 @@ mod tests {
                 inset_bottom: crate::layout::value::LengthPct::Auto,
                 shift: 0.0,
                 definite_height: true,
-                avoid_break_inside: false,
             },
         );
         let galley = Galley {
