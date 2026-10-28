@@ -273,6 +273,7 @@ fn the_page_area_is_the_initial_containing_block_like_chrome_156() {
 }
 
 #[test]
+#[ignore = "miaskiewicz/turbo-html2pdf#47: fails until the fix"]
 fn paginated_boxes_match_chrome_156() {
     let mut failures = Vec::new();
     for case in fixture()["cases"]

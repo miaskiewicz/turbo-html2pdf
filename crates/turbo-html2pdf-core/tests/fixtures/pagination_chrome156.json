@@ -1921,6 +1921,326 @@
       ]
     },
     {
+      "id": "slice-empty-block",
+      "html": "<!DOCTYPE html><html><head><style>@page{size:600px 400px;margin:40px}body{margin:0}</style></head><body><div style=\"height:200px;background:#00ff00;break-inside:avoid;\"></div><div style=\"height:200px;background:#ff0000\"></div><div style=\"height:60px;background:#00ffff;break-inside:avoid;\"></div></body></html>",
+      "colors": {
+        "green": "#00ff00",
+        "red": "#ff0000",
+        "cyan": "#00ffff"
+      },
+      "pages": [
+        {
+          "size": [600, 400],
+          "boxes": {
+            "green": {
+              "bbox": [40, 40, 559, 239],
+              "top": true,
+              "bottom": true
+            },
+            "red": {
+              "bbox": [40, 240, 559, 359],
+              "top": true,
+              "bottom": true
+            },
+            "cyan": null
+          }
+        },
+        {
+          "size": [600, 400],
+          "boxes": {
+            "green": null,
+            "red": {
+              "bbox": [40, 40, 559, 119],
+              "top": true,
+              "bottom": true
+            },
+            "cyan": {
+              "bbox": [40, 120, 559, 179],
+              "top": true,
+              "bottom": true
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "slice-empty-block-borders",
+      "html": "<!DOCTYPE html><html><head><style>@page{size:600px 400px;margin:40px}body{margin:0}</style></head><body><div style=\"height:200px;background:#00ff00;break-inside:avoid;\"></div><div style=\"height:200px;background:#ff0000;border-top:5px solid #0000ff;border-bottom:5px solid #ff00ff\"></div><div style=\"height:60px;background:#00ffff;break-inside:avoid;\"></div></body></html>",
+      "colors": {
+        "green": "#00ff00",
+        "red": "#ff0000",
+        "blue": "#0000ff",
+        "magenta": "#ff00ff",
+        "cyan": "#00ffff"
+      },
+      "pages": [
+        {
+          "size": [600, 400],
+          "boxes": {
+            "green": {
+              "bbox": [40, 40, 559, 239],
+              "top": true,
+              "bottom": true
+            },
+            "red": {
+              "bbox": [40, 245, 559, 359],
+              "top": true,
+              "bottom": true
+            },
+            "blue": {
+              "bbox": [40, 240, 559, 244],
+              "top": true,
+              "bottom": true
+            },
+            "magenta": null,
+            "cyan": null
+          }
+        },
+        {
+          "size": [600, 400],
+          "boxes": {
+            "green": null,
+            "red": {
+              "bbox": [40, 40, 559, 124],
+              "top": true,
+              "bottom": true
+            },
+            "blue": null,
+            "magenta": {
+              "bbox": [40, 125, 559, 129],
+              "top": true,
+              "bottom": true
+            },
+            "cyan": {
+              "bbox": [40, 130, 559, 189],
+              "top": true,
+              "bottom": true
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "slice-empty-block-tall",
+      "html": "<!DOCTYPE html><html><head><style>@page{size:600px 400px;margin:40px}body{margin:0}</style></head><body><div style=\"height:200px;background:#00ff00;break-inside:avoid;\"></div><div style=\"height:700px;background:#ff0000\"></div><div style=\"height:60px;background:#00ffff;break-inside:avoid;\"></div></body></html>",
+      "colors": {
+        "green": "#00ff00",
+        "red": "#ff0000",
+        "cyan": "#00ffff"
+      },
+      "pages": [
+        {
+          "size": [600, 400],
+          "boxes": {
+            "green": {
+              "bbox": [40, 40, 559, 239],
+              "top": true,
+              "bottom": true
+            },
+            "red": {
+              "bbox": [40, 240, 559, 359],
+              "top": true,
+              "bottom": true
+            },
+            "cyan": null
+          }
+        },
+        {
+          "size": [600, 400],
+          "boxes": {
+            "green": null,
+            "red": {
+              "bbox": [40, 40, 559, 359],
+              "top": true,
+              "bottom": true
+            },
+            "cyan": null
+          }
+        },
+        {
+          "size": [600, 400],
+          "boxes": {
+            "green": null,
+            "red": {
+              "bbox": [40, 40, 559, 299],
+              "top": true,
+              "bottom": true
+            },
+            "cyan": {
+              "bbox": [40, 300, 559, 359],
+              "top": true,
+              "bottom": true
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "slice-empty-nested",
+      "html": "<!DOCTYPE html><html><head><style>@page{size:600px 400px;margin:40px}body{margin:0}</style></head><body><div style=\"height:200px;background:#00ff00;break-inside:avoid;\"></div><div style=\"background:#ff0000;padding:10px\"><div style=\"height:180px;background:#ffff00\"></div></div><div style=\"height:60px;background:#00ffff;break-inside:avoid;\"></div></body></html>",
+      "colors": {
+        "green": "#00ff00",
+        "red": "#ff0000",
+        "yellow": "#ffff00",
+        "cyan": "#00ffff"
+      },
+      "pages": [
+        {
+          "size": [600, 400],
+          "boxes": {
+            "green": {
+              "bbox": [40, 40, 559, 239],
+              "top": true,
+              "bottom": true
+            },
+            "red": {
+              "bbox": [40, 240, 559, 359],
+              "top": true,
+              "bottom": false
+            },
+            "yellow": {
+              "bbox": [50, 250, 549, 359],
+              "top": true,
+              "bottom": true
+            },
+            "cyan": null
+          }
+        },
+        {
+          "size": [600, 400],
+          "boxes": {
+            "green": null,
+            "red": {
+              "bbox": [40, 40, 559, 119],
+              "top": false,
+              "bottom": true
+            },
+            "yellow": {
+              "bbox": [50, 40, 549, 109],
+              "top": true,
+              "bottom": true
+            },
+            "cyan": {
+              "bbox": [40, 120, 559, 179],
+              "top": true,
+              "bottom": true
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "slice-empty-table-row",
+      "html": "<!DOCTYPE html><html><head><style>@page{size:600px 400px;margin:40px}body{margin:0}</style></head><body><table style=\"width:100%;border-collapse:collapse;border-spacing:0\"><tr><td style=\"height:100px;background:#ff0000;padding:0\"></td></tr><tr><td style=\"height:100px;background:#ffff00;padding:0\"></td></tr><tr><td style=\"height:100px;background:#ff00ff;padding:0\"></td></tr><tr><td style=\"height:100px;background:#00ff00;padding:0\"></td></tr></table><div style=\"height:60px;background:#00ffff;break-inside:avoid;\"></div></body></html>",
+      "colors": {
+        "red": "#ff0000",
+        "yellow": "#ffff00",
+        "magenta": "#ff00ff",
+        "green": "#00ff00",
+        "cyan": "#00ffff"
+      },
+      "pages": [
+        {
+          "size": [600, 400],
+          "boxes": {
+            "red": {
+              "bbox": [40, 40, 559, 139],
+              "top": true,
+              "bottom": true
+            },
+            "yellow": {
+              "bbox": [40, 140, 559, 239],
+              "top": true,
+              "bottom": true
+            },
+            "magenta": {
+              "bbox": [40, 240, 559, 339],
+              "top": true,
+              "bottom": true
+            },
+            "green": {
+              "bbox": [40, 340, 559, 359],
+              "top": true,
+              "bottom": true
+            },
+            "cyan": null
+          }
+        },
+        {
+          "size": [600, 400],
+          "boxes": {
+            "red": null,
+            "yellow": null,
+            "magenta": null,
+            "green": {
+              "bbox": [40, 40, 559, 119],
+              "top": true,
+              "bottom": true
+            },
+            "cyan": {
+              "bbox": [40, 120, 559, 179],
+              "top": true,
+              "bottom": true
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "slice-empty-table-row-cells",
+      "html": "<!DOCTYPE html><html><head><style>@page{size:600px 400px;margin:40px}body{margin:0}</style></head><body><table style=\"width:100%;border-collapse:collapse;border-spacing:0\"><tr><td style=\"height:300px;background:#ff0000;padding:0\"></td><td style=\"background:#ffff00;padding:0\"></td></tr><tr><td style=\"height:100px;background:#ff00ff;padding:0\"></td><td style=\"background:#00ff00;padding:0\"></td></tr></table></body></html>",
+      "colors": {
+        "red": "#ff0000",
+        "yellow": "#ffff00",
+        "magenta": "#ff00ff",
+        "green": "#00ff00"
+      },
+      "pages": [
+        {
+          "size": [600, 400],
+          "boxes": {
+            "red": {
+              "bbox": [40, 40, 299, 339],
+              "top": true,
+              "bottom": true
+            },
+            "yellow": {
+              "bbox": [300, 40, 559, 339],
+              "top": true,
+              "bottom": true
+            },
+            "magenta": {
+              "bbox": [40, 340, 299, 359],
+              "top": true,
+              "bottom": true
+            },
+            "green": {
+              "bbox": [300, 340, 559, 359],
+              "top": true,
+              "bottom": true
+            }
+          }
+        },
+        {
+          "size": [600, 400],
+          "boxes": {
+            "red": null,
+            "yellow": null,
+            "magenta": {
+              "bbox": [40, 40, 299, 119],
+              "top": true,
+              "bottom": true
+            },
+            "green": {
+              "bbox": [300, 40, 559, 119],
+              "top": true,
+              "bottom": true
+            }
+          }
+        }
+      ]
+    },
+    {
       "id": "absolute-root-past-content",
       "html": "<!DOCTYPE html><html><head><style>@page{size:600px 400px;margin:40px}body{margin:0}</style></head><body><div style=\"position:absolute;top:900px;left:20px;width:50px;height:30px;background:#ff0000\"></div><div style=\"height:100px;background:#00ff00;break-inside:avoid;\"></div></body></html>",
       "colors": {

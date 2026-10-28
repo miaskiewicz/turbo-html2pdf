@@ -499,6 +499,73 @@ const CASES = [
     colors: ["green", "blue", "red", "yellow", "magenta", "cyan"],
   },
   {
+    // miaskiewicz/turbo-html2pdf#47: Chrome slices an empty block that does not fit at
+    // the page end (`box-decoration-break: slice`): 120px of it on page 1, 80px on page 2,
+    // where the next block follows it.
+    id: "slice-empty-block",
+    html: DOC(
+      "body{margin:0}",
+      block(C.green[0], 200) +
+        `<div style="height:200px;background:${C.red[0]}"></div>` +
+        block(C.cyan[0], 60),
+    ),
+    colors: ["green", "red", "cyan"],
+  },
+  {
+    // Its top border paints on page 1 only, its bottom border on page 2 only.
+    id: "slice-empty-block-borders",
+    html: DOC(
+      "body{margin:0}",
+      block(C.green[0], 200) +
+        `<div style="height:200px;background:${C.red[0]};border-top:5px solid ${C.blue[0]};border-bottom:5px solid ${C.magenta[0]}"></div>` +
+        block(C.cyan[0], 60),
+    ),
+    colors: ["green", "red", "blue", "magenta", "cyan"],
+  },
+  {
+    // An empty block taller than a page runs over three pages.
+    id: "slice-empty-block-tall",
+    html: DOC(
+      "body{margin:0}",
+      block(C.green[0], 200) +
+        `<div style="height:700px;background:${C.red[0]}"></div>` +
+        block(C.cyan[0], 60),
+    ),
+    colors: ["green", "red", "cyan"],
+  },
+  {
+    // A padded block around an empty one is sliced with it: its top padding on page 1
+    // only, its bottom padding on page 2 only.
+    id: "slice-empty-nested",
+    html: DOC(
+      "body{margin:0}",
+      block(C.green[0], 200) +
+        `<div style="background:${C.red[0]};padding:10px"><div style="height:180px;background:${C.yellow[0]}"></div></div>` +
+        block(C.cyan[0], 60),
+    ),
+    colors: ["green", "red", "yellow", "cyan"],
+  },
+  {
+    // The issue's case: a table row of empty cells is sliced at the page end.
+    id: "slice-empty-table-row",
+    html: DOC(
+      "body{margin:0}",
+      `<table style="width:100%;border-collapse:collapse;border-spacing:0">${["red", "yellow", "magenta", "green"].map((n) => `<tr><td style="height:100px;background:${C[n][0]};padding:0"></td></tr>`).join("")}</table>` +
+        block(C.cyan[0], 60),
+    ),
+    colors: ["red", "yellow", "magenta", "green", "cyan"],
+  },
+  {
+    // A row of two empty cells: both cells are sliced at the same row.
+    id: "slice-empty-table-row-cells",
+    html: DOC(
+      "body{margin:0}",
+      `<table style="width:100%;border-collapse:collapse;border-spacing:0"><tr><td style="height:300px;background:${C.red[0]};padding:0"></td><td style="background:${C.yellow[0]};padding:0"></td></tr>` +
+        `<tr><td style="height:100px;background:${C.magenta[0]};padding:0"></td><td style="background:${C.green[0]};padding:0"></td></tr></table>`,
+    ),
+    colors: ["red", "yellow", "magenta", "green"],
+  },
+  {
     // Item 1: an absolute box far past the content creates the pages it lands on.
     id: "absolute-root-past-content",
     html: DOC(
