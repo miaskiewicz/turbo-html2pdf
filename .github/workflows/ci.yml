@@ -4,6 +4,9 @@ on:
   push:
     branches: [main]
   pull_request:
+  # Release workflows call this as their `gate`, so a tag can never publish code
+  # that fails a gate PRs block on (fmt, clippy, tests, cc <= 5, coverage floor).
+  workflow_call:
 
 env:
   CARGO_TERM_COLOR: always

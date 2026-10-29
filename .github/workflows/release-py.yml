@@ -94,9 +94,14 @@ jobs:
       - uses: actions/checkout@v4
       - run: sh scripts/release-guard.sh "$GITHUB_REF_NAME"
 
+  gate:
+    name: gate (full CI)
+    needs: [release-guard]
+    uses: ./.github/workflows/ci.yml
+
   publish:
     name: publish to PyPI
-    needs: [build, sdist, release-guard]
+    needs: [build, sdist, release-guard, gate]
     runs-on: ubuntu-latest
     if: startsWith(github.ref, 'refs/tags/pyv')
     steps:
