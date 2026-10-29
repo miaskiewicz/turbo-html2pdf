@@ -404,18 +404,24 @@ fn an_avoided_break_keeps_the_next_siblings_first_piece_like_chrome_156() {
         block(100, g, "break-after:avoid"),
         block(250, b, "")
     );
-    let got = bands(&doc(&too_tall), &RGB);
-    assert_eq!(got.len(), 3);
-    assert_eq!(got[1][1], Some((40, 139)));
-    // Chrome then slices blue at page 2's end; the engine moves it on whole
-    // (miaskiewicz/turbo-html2pdf#57).
+    // Breaking before blue would violate green's `break-after: avoid`, breaking inside
+    // it blue's `break-inside: avoid`: Chrome takes the later break and slices blue at
+    // page 2's end (miaskiewicz/turbo-html2pdf#57).
+    assert_eq!(
+        bands(&doc(&too_tall), &RGB),
+        [
+            vec![Some((40, 189)), None, None],
+            vec![None, Some((40, 139)), Some((140, 359))],
+            vec![None, None, Some((40, 69))]
+        ]
+    );
 }
 
 #[test]
-fn a_row_of_cells_side_by_side_still_moves_on_whole() {
-    // miaskiewicz/turbo-html2pdf#51 covers stacked content only: Chrome 156 splits this
-    // two-cell row too (2 pages), but the walk places content in one column, so the row
-    // moves on whole (3 pages; miaskiewicz/turbo-html2pdf#56).
+fn a_row_of_cells_side_by_side_splits_like_chrome_156() {
+    // miaskiewicz/turbo-html2pdf#56, Chrome 156 `page.pdf()` (headless, this document):
+    // both cells split between their blocks at the same page end, so the row spans two
+    // pages (red / green / blue / cyan extents per page).
     let (r, g, b) = (RGB[0], RGB[1], RGB[2]);
     let cell = format!(
         r#"<td style="padding:0">{}{}</td>"#,
@@ -427,7 +433,13 @@ fn a_row_of_cells_side_by_side_still_moves_on_whole() {
         block(100, g, ""),
         block(60, "#00ffff", "")
     ));
-    assert_eq!(pages(&html).len(), 3);
+    assert_eq!(
+        bands(&html, &[r, g, b, "#00ffff"]),
+        [
+            vec![Some((140, 289)), Some((40, 139)), None, None],
+            vec![None, None, Some((40, 189)), Some((190, 249))]
+        ]
+    );
 }
 
 #[test]
