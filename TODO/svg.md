@@ -13,7 +13,7 @@ needs an MSRV-1.88 + determinism audit before adding it — shipping it unpinned
 would risk the build/coverage/determinism gates.
 
 ## Where to start
-- Source hook: `crates/turbo-html2pdf-core/src/image.rs` (top-of-file
+- Source hook: turbo-dom-layout's `src/image.rs` (turbo-dom repo) (top-of-file
   `TODO(phase15b, feature "svg")`). The decode path is the single integration
   point — current raster decode lives here.
 - The Phase 9b image XObject path (`src/emit/image.rs` `ImageStore`) is reused

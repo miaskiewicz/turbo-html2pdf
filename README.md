@@ -9,7 +9,7 @@ The incumbent way to make a PDF from HTML is to drive headless Chrome
 render, host a service. **turbo-html2pdf is just a binary.** It *is* the layout +
 PDF engine, so generating a PDF is a single library call — no Chromium to download,
 no service to run, no 200 ms spin-up, deterministic output, and **tens to hundreds
-of times faster** ([benchmarks](#why-its-fast)). It renders with **zero caller
+of times faster** in the last measured run ([benchmark history](docs/BENCHMARKS-history.md)). It renders with **zero caller
 fonts** too, because the default sans/serif/mono fonts ship in the build.
 
 **Then the kicker: the same engine also runs *inside* a web browser.** Because it
@@ -41,7 +41,7 @@ One engine, shipped to every ecosystem. Pick the one for your runtime:
 | **`turbo-html2pdf-react`** | npm | Author templates as **React** components → template string (at authoring time). | `npm i turbo-html2pdf-react` |
 | **`turbo-html2pdf-template`** | npm | Author templates with **plain functions** (no React). | `npm i turbo-html2pdf-template` |
 | **`turbo-html2pdf`** | PyPI | **Python** binding (PyO3 / maturin) — `compile`/`render` → `bytes`. Bundles the default fonts. | `pip install turbo-html2pdf` |
-| **`turbo-html2pdf-core`** | crates.io | The **pure-Rust** HTML/CSS + Jinja → PDF engine, for in-process Rust consumers. Also exposes a Jinja-free `layout_html` drive (raw HTML → positioned `Fragment` galley) for consumers that only want the layout + font engine. | `cargo add turbo-html2pdf-core` |
+| **`turbo-html2pdf-core`** | crates.io | The **pure-Rust** HTML/CSS + Jinja → PDF engine, for in-process Rust consumers. Re-exports the Jinja-free `layout_html` drive (raw HTML → positioned `Fragment` galley) of its layout engine, [`turbo-dom-layout`](https://github.com/miaskiewicz/turbo-dom/tree/main/crates/turbo-dom-layout), for consumers that only want the layout + font engine. | `cargo add turbo-html2pdf-core` |
 | **`turbo-html2pdf-mcp`** | crates.io | Native **MCP server** (stdio JSON-RPC 2.0) exposing `render` / `append_pdf` / `check_template` to agents. Installable binary, or prebuilt archives on each GitHub Release. | `cargo install turbo-html2pdf-mcp` |
 
 The two authoring packages (`-react`, `-template`) only *produce the template
@@ -50,7 +50,7 @@ string* — they pair with a render package (`turbo-html2pdf` on Node, a
 PDF. The Rust engine lives in
 [`crates/turbo-html2pdf-core`](https://github.com/miaskiewicz/turbo-html2pdf/tree/main/crates/turbo-html2pdf-core).
 
-> Release version: **`v0.3.9`**. See [CHANGELOG.md](./CHANGELOG.md) and
+> Release version: **`v0.6.0`**. See [CHANGELOG.md](./CHANGELOG.md) and
 > [publishing and registry verification](./PUBLISHING.md).
 
 ## 🌐 Bonus: the same engine runs *inside* a web browser
@@ -133,56 +133,16 @@ warning.
 No headless Chromium means no ~200 MB browser to ship, no per-process spin-up, and
 a small memory footprint. turbo-html2pdf is a native layout + PDF engine — a library
 call, not an IPC round-trip to Chrome — so the common "render one document" path is
-**tens to hundreds of times faster**. The numbers:
+**tens to hundreds of times faster** (last measured before 0.6.0; see below).
 
-### Benchmarks (this machine: Apple M3, 8 cores; `benches/competitive`)
+### Benchmarks — pending re-run
 
-Two scenarios, both measured:
-
-- **Warm (server):** the realistic server path — the template's compiled `Program`
-  is reused and **fonts are parsed once and cached** (the `Fonts` handle). This is
-  the number to lead with.
-- **Cold (one-shot):** a single render from a cold start (compile + parse fonts +
-  render), e.g. a CLI invocation.
-
-All engines render the **same** content (same fonts, A4 geometry, same text); a
-PNG-equivalence diff (`sim` ≈ 0.98 vs the reference) confirms the outputs are
-comparable, so this isn't "winning by doing less".
-
-**`invoice` — a one-page document (the bread-and-butter case), median ms:**
-
-| Engine | Warm (cached) | Cold | vs turbo (warm) | Memory | Ships a browser? |
-|---|--:|--:|--:|--:|:--:|
-| **turbo-html2pdf** | **1.27** | **1.48** | **1×** | **232 MB** | **no** |
-| Playwright (Chromium) | 46.3 | 49.4 | **36× slower** | 393 MB | yes (~200 MB) |
-| Gotenberg (Chromium) | 66.9 | 70.6 | **53× slower** | 424 MB | yes (~1 GB) |
-| Puppeteer (Chromium) | 86.1 | 132.2 | **68× slower** | 550 MB | yes (~200 MB) |
-| Typst (native, own DSL) | 63.8 | 62.7 | **50× slower** | 1.5 GB | no |
-| WeasyPrint (Python) | 375.8 | 379.3 | **296× slower** | 379 MB | no |
-
-**It's also the fastest on every other workload — not just the small one:**
-
-| Workload | turbo-html2pdf (warm/cold) | Playwright | Puppeteer | Gotenberg | WeasyPrint | Typst |
-|---|--:|--:|--:|--:|--:|--:|
-| `invoice` (1 page) | **1.27 / 1.48** | 46 / 49 | 86 / 132 | 67 / 71 | 376 / 379 | 64 / 63 |
-| `report-1k` (1 000-row table) | **119 / 130** | 187 / 170 | 384 / 429 | 204 / 204 | 2 550 / 2 547 | 220 / 221 |
-| `legal` (prose + footnotes) | **25 / 26** | 71 / 98 | 124 / 147 | 80 / 80 | 444 / 453 | 72 / 72 |
-| `mixed` (flex + table) | **8.6 / 9.2** | 57 / 58 | 94 / 229 | 73 / 73 | 432 / 437 | 69 / 71 |
-
-Against every **HTML/CSS-to-PDF** engine, turbo-html2pdf wins on **all** workloads —
-by 1.6× (big tables) up to ~300× (small docs) — at **lower memory** and with **no
-browser** to install.
-
-> **Honest footnote.** `pdfkit` (~6 ms) and `jspdf` (~2 ms) are faster on raw
-> output, but they are **imperative draw APIs** — *you* compute and place every box;
-> there is no HTML/CSS, no layout engine, no pagination. `@react-pdf` is a React
-> component DSL (no HTML/CSS) and its flexbox layout melts on big tables (`report-1k`
-> ≈ **1 300 ms**, ~10× slower than turbo). Different category from "give me HTML, get
-> a PDF". `wkhtmltopdf` (legacy/unmaintained) was not installed.
-
-Numbers are "on this machine", never absolutes — rerun with `cd benches/competitive
-&& pnpm bench`. Full table + methodology in
-[`benches/competitive/RESULTS.md`](benches/competitive/RESULTS.md).
+0.6.0 has not been re-benchmarked. The layout engine moved into the shared turbo-dom
+crates in this release, so the earlier numbers no longer describe the shipped code; a
+re-run of all four turbo-* repos together is planned after the release. The last
+measured (pre-consolidation, 0.1–0.2) numbers, with their machine and date, are kept in
+[`docs/BENCHMARKS-history.md`](docs/BENCHMARKS-history.md). Harness:
+[`benches/competitive/`](benches/competitive/) (`pnpm bench`).
 
 ### Why it's *that* fast
 
@@ -214,8 +174,9 @@ renders without you supplying a single font byte:
 | `monospace` | **Fira Code** | IBM Plex Mono |
 
 All bundled faces are **SIL Open Font License 1.1**. The attribution that ships with
-the font assets is in [`assets/fonts/NOTICE.md`](crates/turbo-html2pdf-core/assets/fonts/NOTICE.md);
-keep it alongside the binary when you redistribute.
+the font assets is in [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md) (generated by
+`scripts/package-notices.mjs` from turbo-dom-layout's `assets/fonts/NOTICE.md`, where the
+faces live); keep it alongside the binary when you redistribute.
 
 You can still pass your own fonts (via `Fonts.load(...)` on Node or the per-render
 `fonts` argument) — caller fonts win, the bundled ones are the fallback. The browser
@@ -228,7 +189,18 @@ default set in the `.wasm`.
 ## Architecture
 
 A template is **compiled once** into a reusable `Program`, then rendered against
-data many times. The pipeline (`crates/turbo-html2pdf-core`):
+data many times. Since 0.6.0 the engine is built on the shared
+[turbo-dom](https://github.com/miaskiewicz/turbo-dom) crates — the same DOM, selector
+engine and layout code turbo-test and turbo-surf use — instead of carrying its own copies:
+
+- **`turbo-dom`** — the document tree the rendered markup is parsed into, and the one
+  selector engine (`parse_for_cascade` / `match_for_cascade`) the cascade matches with.
+- **`turbo-dom-layout`** — style cascade, block / inline / flex / table layout, text
+  shaping and fonts (the bundled faces live there), images, SVG and layout snapshots.
+  `turbo-html2pdf-core` re-exports it at the old paths (`turbo_html2pdf_core::style::…`,
+  `::layout::…`, `::Fragment`).
+- **`turbo-html2pdf-core`** (this repo) — templating, `t:` directives, pagination,
+  PDF/UA semantics and the PDF emitter.
 
 ```
 template (HTML + Jinja + t: directives)
@@ -236,10 +208,10 @@ template (HTML + Jinja + t: directives)
    ▼
 render_pages(data, css, fonts):
    │  1. render markup               ── Jinja → HTML string (data substituted)
-   │  2. parse                       ── html5ever → node tree, t: directives typed
-   │  3. cascade + inherit           ── CSS subset → ComputedStyle per node
-   │  4. layout                      ── box tree → block / inline / flex (taffy) / table
-   │                                    → a "galley" of positioned, shaped fragments
+   │  2. parse                       ── turbo-dom document, t: directives as markers
+   │  3. cascade + inherit           ── turbo-dom-layout → ComputedStyle per node
+   │  4. layout                      ── turbo-dom-layout: block / inline / flex (taffy) /
+   │                                    table → a "galley" of positioned, shaped fragments
    │  5. paginate                    ── break the galley into pages (orphans/widows,
    │                                    break rules, repeated <thead>); resolve
    │                                    running headers/footers + footnotes per page
@@ -248,10 +220,11 @@ render_pages(data, css, fonts):
    PDF bytes                            borders, raster images, links, watermark
 ```
 
-Layout, font shaping (`rustybuzz`), and PDF writing (`pdf-writer` + `subsetter`) are
+Font shaping (`rustybuzz`), PDF writing (`pdf-writer` + `subsetter`) and layout are
 all native; `taffy` powers flexbox. The engine does no network or filesystem I/O —
 images are supplied by the caller, and fonts are either the bundled defaults or the
-ones you pass.
+ones you pass. Pagination is checked against Chrome 156 `page.pdf()` controls
+(`scripts/pagination-chrome-control.mjs`).
 
 **Frontends & bindings** (`packages/`, `crates/`):
 - `turbo-html2pdf` — Node native (N-API) addon (`compile`/`render` → `Buffer`).
@@ -348,7 +321,7 @@ program.render({
 - HTML + CSS subset (block / inline / flexbox / tables), automatic pagination.
 - **Bundled default fonts** (Node + Python) — `sans-serif` / `serif` / `monospace`
   resolve with zero caller fonts (SIL OFL 1.1; see
-  [`assets/fonts/NOTICE.md`](crates/turbo-html2pdf-core/assets/fonts/NOTICE.md)).
+  [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md)).
 - Running headers & footers with per-page values; auto-numbered footnotes.
 - Font subsetting + embedding (TrueType & CFF/OpenType); per-glyph fallback.
 - Raster images (PNG/JPEG, alpha → SMask) with a sane max-size clamp; optional SVG
@@ -368,6 +341,12 @@ destination + a `Link` annotation):
 ...
 <a href="#ch2">see Chapter 2</a>
 ```
+
+As in Chrome, an element `id` is a destination too (`<h2 id="ch2">` works without a
+`<t:anchor>`), and an absolute `href` (`https://…`, `mailto:…`) becomes a `URI` link.
+A relative `href` has no base URL and carries no link. Known gaps (turbo-dom#210): a
+`display:block` internal link's rectangle covers only its text, and an *inline*
+external link gets no annotation (block-level external links do).
 
 ### Append / merge
 
@@ -466,19 +445,36 @@ npm i turbo-html2pdf-svg    # identical API, SVG support baked in (resvg)
 
 (Rust users: enable the feature directly — `turbo-html2pdf-core = { features = ["svg"] }`.)
 
+## Build, test and gates
+
+```bash
+cargo test --workspace            # engine + bindings' Rust tests
+pnpm install && pnpm lint         # oxlint + biome for the JS/TS packages
+```
+
+PR CI (`.github/workflows/ci.yml`) runs on ubuntu: rustfmt, clippy `-D warnings`, the
+workspace tests, the core under `--features svg`, `--all-features` (perf budgets) and
+`--no-default-features` (the font-less wasm build), a cyclomatic-complexity gate
+(`tools/cc-check`, max 5, blocking), and **100% line coverage** of the covered crates
+(`cargo tarpaulin`; excludes and `fail-under = 100.0` in `tarpaulin.toml` — the napi, py,
+wasm and MCP shims are excluded). Binding conformance (napi + wasm + Python) and the JS
+lint run as separate jobs. macOS and Windows builds run only in the release workflows
+(`release.yml`, `release-py.yml`).
+
 ## Status
 
-**`v0.3.9`** is the current release version for npm, PyPI and crates.io.
-The [release procedure](./PUBLISHING.md) records the tag triggers and registry checks. The core engine is heavily tested (the
-`turbo-html2pdf-core` crate holds 100% line coverage with a cyclomatic-complexity ≤ 5
-gate). Bindings: Node (N-API), WebAssembly (lean + fonts), and Python (PyO3). See
-[`docs/`](docs/) for the full guide and
-[`benches/competitive/`](benches/competitive/) for the benchmark harness.
+**`v0.6.0`** is the release version for npm, PyPI and crates.io; the
+[release procedure](./PUBLISHING.md) records the tag triggers and registry checks.
+Until turbo-dom 0.6.0 is on crates.io the workspace pins the turbo-dom crates by git
+revision (`[patch.crates-io]` in `Cargo.toml`); the release guard refuses a tag while
+that patch remains. Bindings: Node (N-API), WebAssembly (lean + fonts), Python (PyO3),
+MCP. See [`docs/`](docs/) for the full guide and [`CHANGELOG.md`](CHANGELOG.md) for
+what changed in 0.6.0.
 
 ## License
 
 MIT (engine + bindings). Bundled fonts are SIL OFL 1.1 — see
-[`assets/fonts/NOTICE.md`](crates/turbo-html2pdf-core/assets/fonts/NOTICE.md).
+[`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md).
 
 ### Native live-tree layout snapshots
 

@@ -2,7 +2,8 @@
 
 turbo-html2pdf styles the document with a small, well-defined CSS subset. This page
 documents exactly what the code parses and applies, verified against
-`crates/turbo-html2pdf-core/src/style/` and `crates/turbo-html2pdf-core/src/layout/value.rs`.
+turbo-dom-layout's `src/style/` and `src/layout/value.rs` (the layout half of the
+engine, in the turbo-dom repo's `crates/turbo-dom-layout`; re-exported by turbo-html2pdf-core).
 Anything not listed here is **not** supported and is ignored.
 
 The internal unit is **CSS pixels at 96 dpi**. The default font size is `16px`.
@@ -11,32 +12,46 @@ The internal unit is **CSS pixels at 96 dpi**. The default font size is `16px`.
 
 ## 1. Selectors
 
-Supported simple selectors (`style/selector.rs`):
+Selectors are parsed and matched by turbo-dom's selector engine — the same engine
+behind turbo-dom's `matches` / `querySelector*` — through its stylesheet entry points
+(`turbo_dom::rtdom::query::parse_for_cascade` / `match_for_cascade`), and follow
+Chrome 156 (checked against turbo-dom's Chrome control,
+`crates/turbo-dom/tests/fixtures/cascade_selectors_chrome156.json`, and end to end
+through the HTML path by turbo-dom-layout's `tests/cascade_selectors_chrome.rs`):
 
-| Form | Example |
-|---|---|
-| Type / tag | `div` |
-| Universal | `*` |
-| Class | `.total` |
-| ID | `#footer` |
-| Attribute | `[data-x]`, `[type="text"]` |
-| Pseudo-class | `:first-child`, `:last-child`, `:nth-child(…)`, `:nth-of-type(…)` |
+- simple selectors: type, universal, `*|` / `|` namespace prefixes, `.class`, `#id`,
+  attribute selectors with every operator (`[a]`, `=`, `~=`, `|=`, `^=`, `$=`, `*=`,
+  quoted or not, the `i`/`s` flags), CSS escapes and non-ASCII identifiers;
+- all four combinators (descendant, `>`, `+`, `~`);
+- pseudo-classes: the structural ones (`:first-child`, `:last-child`, `:only-child`,
+  `:*-of-type`, `:nth-child()`, `:nth-last-child()` with `An+B of S`,
+  `:nth-of-type()`, `:nth-last-of-type()`, `:root`, `:empty`), `:is()`, `:where()`,
+  `:not()`, `:has()`, form state (`:checked`, `:disabled`, `:enabled`, `:required`,
+  `:optional`, `:read-only`, `:read-write`), `:link` / `:any-link`, `:lang()`,
+  `:defined`, `:scope` (= `:root`); pseudo-class names are ASCII case-insensitive;
+- user-action and other dynamic pseudo-classes (`:hover`, `:focus`, `:visited`,
+  `:target`, `:default`, `:placeholder-shown`, …) are valid and never match: a PDF is
+  the resting state;
+- pseudo-elements (`::before`, `::marker`, legacy `:before`, `::-webkit-*`, …) are
+  valid and never match an element (no generated content).
 
-Attribute operators: `[a]` (exists), `[a=v]`, `[a~=v]` (word), `[a|=v]`
-(dash-match), `[a^=v]` (prefix), `[a$=v]` (suffix), `[a*=v]` (substring). Values
-may be quoted.
+A selector list is all-or-nothing, as in a browser: an unknown pseudo-class or
+pseudo-element, an empty list item or a dangling combinator drops the whole rule
+(`:is()` / `:where()` arguments are forgiving).
 
-`:nth-child` / `:nth-of-type` accept `even`, `odd`, an integer, or `An+B`
-(`2n+1`, `n`, `-n`, `3n`, …).
+**Specificity** follows Selectors 4: `(ids, classes + attributes + pseudo-classes,
+types + pseudo-elements)`, with `:where()` = 0 and `:is()` / `:not()` / `:has()` =
+their most specific argument. The cascade layers UA styles below author CSS below
+inline node styles.
 
-**Combinators:** descendant (whitespace, `div p`) and child (`>`, `div > p`).
-**Sibling combinators (`+`, `~`) are not supported.**
-
-**Not supported:** pseudo-elements (`::before`), and any pseudo-class other than
-the four above (`:hover`, `:not()`, `:checked`, … are silently dropped).
-
-**Specificity** is the standard `(ids, classes+attrs+pseudo-classes, types)`
-tuple. The cascade layers UA styles below author CSS below inline node styles.
+The document (a template's rendered body, and the HTML path) is styled as a whole, as
+in Chrome (#29): `<html>`, `<head>` and `<body>` are real elements — `html:first-child`,
+`head + body`, `:root` match as in a browser, every `<style>` element (head or body, in
+document order) is author CSS ahead of the caller's `css`, `body` has the UA
+`margin: 8px`, and the root's (else `<body>`'s) background colour fills the page area.
+Footnote bodies and running header/footer regions match as their own scope: no
+ancestors above them and `:root` never matches. `t:` directives are never matched by
+type selectors.
 
 ---
 
@@ -51,7 +66,7 @@ tuple. The cascade layers UA styles below author CSS below inline node styles.
 - At-rules `@name prelude { body }` are sliced out and kept verbatim for later
   phases (e.g. `@page`); the parser itself does not interpret them.
 
-**Not supported:** `@import`, custom properties / `var()`, CSS nesting, escapes.
+**Not supported:** `@import`, CSS nesting.
 
 ---
 
@@ -69,7 +84,7 @@ tuple. The cascade layers UA styles below author CSS below inline node styles.
 | `mm` | |
 | `%` | resolved against the relevant context basis |
 | `em` | relative to the element's font size |
-| `rem` | **treated the same as `em`** (resolves against the parent font size, not the root) |
+| `rem` | relative to the root (`<html>`) element's font size (16px when it sets none) |
 
 No `ex`, `ch`, `vh`, `vw`, `vmin`, `vmax`, `Q`, `fr`. Unknown units cause the
 value to be rejected.
@@ -103,7 +118,7 @@ ignored.
 
 | Property | Accepted values |
 |---|---|
-| `display` | `block`, `inline`, `inline-block`, `flex`, `none`, `table`, `table-row`, `table-cell`, `table-header-group`, `table-footer-group`, `list-item` (anything else → `block`) |
+| `display` | `block`, `inline`, `inline-block`, `flex`, `none`, `table`, `table-row`, `table-cell`, `table-header-group`, `table-footer-group`, `table-caption`, `list-item` (anything else → `block`) |
 | `position` | only `relative` is meaningful (offsets a relatively-positioned box); other values are not positioned |
 | `margin`, `margin-top/right/bottom/left` | 1–4 length shorthand; longhands override; `auto` supported |
 | `padding`, `padding-*` | 1–4 length shorthand + longhands |
@@ -112,6 +127,7 @@ ignored.
 | `min-width`, `min-height` | length (default `0`) |
 | `max-width`, `max-height` | length / `%` / `auto` |
 | `box-sizing` | `border-box` or `content-box` (default) |
+| `clip` | `rect(top, right, bottom, left)` (lengths or `auto`, commas optional) on an absolutely positioned box: the box and its descendants paint only inside it; a rect that keeps nothing (the sr-only pattern) drops the box; ignored on other boxes |
 | `background-color` | any color (the `background` shorthand is **not** parsed) |
 
 ### Text
@@ -124,7 +140,7 @@ ignored.
 | `font-style` | `italic` or `oblique` → italic; else normal |
 | `color` | any color |
 | `line-height` | `normal`, a unitless multiplier, or a length |
-| `text-align` | `left` (default), `right`, `center`, `justify` |
+| `text-align` | `left` (default), `right`, `center`, `justify` (inline content); the legacy `-webkit-left` / `-webkit-center` / `-webkit-right` (UA `<center>`, `<caption>`, the `align` attribute of `div`/`p`/`h1`–`h6`/`td`/`th`/`tr`) also align block children |
 | `white-space` | `normal` (default), `pre`, `nowrap` |
 | `letter-spacing` | a length (default `0`) |
 | `vertical-align` | `baseline` (default), `sub`, `super`, `middle`, `top`, `bottom` |
@@ -154,8 +170,14 @@ styled defaults:
 `time`.
 
 **Table elements:** `table` → `table`, `thead` → `table-header-group`, `tfoot` →
-`table-footer-group`, `tr` → `table-row`, `td`/`th` → `table-cell`. `li` →
-`list-item`.
+`table-footer-group`, `tr` → `table-row`, `td`/`th` → `table-cell`, `caption` →
+`table-caption` (centred), `th` bold and centred. `li` → `list-item`. `<table>` is
+`box-sizing: border-box` with `border-spacing: 2px` (an inherited property, initially 0
+for other `display: table` boxes); a table's `height` beyond its rows is shared by them,
+and its extra width goes to its auto columns (empty ones share it equally). A table with a caption lays out as
+Chrome's table wrapper box: the captions above (`caption-side: top`, the default,
+inherited) or below (`bottom`) the grid, the table's border and background around the
+grid only; under PDF/UA the caption is the table's `Caption` structure element.
 
 **Typographic defaults:**
 

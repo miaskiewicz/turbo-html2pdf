@@ -9,13 +9,16 @@
 //! running header/footer chrome) are marked `/Artifact` so assistive tech skips
 //! them (AC-11.1).
 
-use pdf_writer::Content;
+use std::cell::Cell;
+use std::collections::BTreeSet;
+
+use pdf_writer::{Content, Name, TextStr};
 
 use crate::layout::fragment::{Fragment, FragmentContent};
-use crate::paginate::Page;
+use crate::paginate::{Page, CARRIED};
 
 use super::fonts::FontStore;
-use super::graphics::paint_box;
+use super::graphics::{fill_area, paint_box};
 use super::image::{paint_image, ImageStore};
 use super::text::paint_text;
 use super::unit::px_to_pt;
@@ -29,6 +32,10 @@ struct PaintCtx<'a> {
     images: &'a ImageStore,
     page_height_pt: f32,
     cmyk: bool,
+    /// Whether CSS `opacity` paints translucent (off for PDF/A, which emits no `/ca`).
+    fade: bool,
+    /// The opacity in effect: the product of the painted ancestors' opacities.
+    alpha: Cell<f32>,
 }
 
 /// Build the content-stream bytes for one page. A watermark, when present, is
@@ -55,10 +62,19 @@ pub fn content_stream(
         images,
         page_height_pt: px_to_pt(page.geometry.height),
         cmyk,
+        fade,
+        alpha: Cell::new(1.0),
     };
     let mut content = Content::new();
     #[cfg(feature = "pdf-ua")]
     let mut marker = tags.map(super::ua::Marker::new);
+    paint_canvas(
+        &mut content,
+        page,
+        &ctx,
+        #[cfg(feature = "pdf-ua")]
+        marker.is_some(),
+    );
     paint_watermark(
         &mut content,
         page,
@@ -78,6 +94,55 @@ pub fn content_stream(
         marker.as_mut(),
     );
     content.finish().to_vec()
+}
+
+/// Paint the canvas colour (the document's propagated root/`<body>` background,
+/// miaskiewicz/turbo-html2pdf#29) over the page area — inside the page margins, the
+/// area the document is laid out in — behind everything else, composited onto the
+/// white sheet. A tagged render marks it `/Artifact` (decoration).
+fn paint_canvas(
+    content: &mut Content,
+    page: &Page,
+    ctx: &PaintCtx,
+    #[cfg(feature = "pdf-ua")] tagged: bool,
+) {
+    let Some(canvas) = page.canvas else {
+        return;
+    };
+    let g = &page.geometry;
+    let area = (
+        g.margin.left,
+        g.margin.top,
+        g.width - g.margin.left - g.margin.right,
+        g.height - g.margin.top - g.margin.bottom,
+    );
+    #[cfg(feature = "pdf-ua")]
+    if tagged {
+        super::ua::begin_artifact(content);
+    }
+    fill_area(
+        content,
+        area,
+        over_white(canvas),
+        ctx.page_height_pt,
+        ctx.cmyk,
+    );
+    #[cfg(feature = "pdf-ua")]
+    if tagged {
+        content.end_marked_content();
+    }
+}
+
+/// `c` composited over the white sheet (source-over, straight alpha), opaque.
+fn over_white(c: crate::layout::value::Rgba) -> crate::layout::value::Rgba {
+    let a = u32::from(c.a);
+    let mix = |v: u8| ((u32::from(v) * a + 255 * (255 - a) + 127) / 255) as u8;
+    crate::layout::value::Rgba {
+        r: mix(c.r),
+        g: mix(c.g),
+        b: mix(c.b),
+        a: 255,
+    }
 }
 
 /// Paint the page watermark behind the body. When this render emits tagged PDF
@@ -105,13 +170,22 @@ fn paint_watermark(
     super::ua::end_watermark_artifact(content, tagged);
 }
 
+/// `frags` (siblings) in paint order: [`Fragment::paint_order`]'s stable sort by
+/// stacking level — negative `z-index`, in-flow boxes, positioned boxes, positive
+/// `z-index`; source order within a level (miaskiewicz/turbo-html2pdf#35).
+pub(super) fn painted(frags: &[Fragment]) -> Vec<&Fragment> {
+    let mut sorted: Vec<&Fragment> = frags.iter().collect();
+    sorted.sort_by_key(|f| (f.paint_z(), f.is_positioned));
+    sorted
+}
+
 /// Paint every band of a page in back-to-front order. Without `pdf-ua` the band
 /// identity is irrelevant; with a tagged render the header/footer bands paint as
 /// artifacts.
 #[cfg(not(feature = "pdf-ua"))]
 fn paint_bands(content: &mut Content, page: &Page, ctx: &PaintCtx) {
     for band in bands(page) {
-        for frag in band {
+        for frag in painted(band) {
             paint_fragment(content, frag, ctx);
         }
     }
@@ -127,7 +201,7 @@ fn paint_bands(
     mut marker: Option<&mut super::ua::Marker>,
 ) {
     for (index, band) in bands(page).into_iter().enumerate() {
-        for frag in band {
+        for frag in painted(band) {
             paint_fragment(
                 content,
                 frag,
@@ -152,14 +226,111 @@ fn bands(page: &Page) -> [&[Fragment]; 4] {
     [&page.body, &page.header, &page.footer, &page.footnotes]
 }
 
-/// Paint one fragment (its own content first, then its children atop it).
+/// Paint one fragment under its CSS `opacity` (miaskiewicz/turbo-html2pdf#55): an
+/// `opacity: 0` subtree is not painted at all (as Chrome 156 `page.pdf()`); a translucent
+/// one paints in a saved graphics state whose `ExtGState` sets `/ca` and `/CA` to its
+/// effective opacity (nested opacities multiply).
 fn paint_fragment(
+    content: &mut Content,
+    frag: &Fragment,
+    ctx: &PaintCtx,
+    #[cfg(feature = "pdf-ua")] marker: Option<&mut super::ua::Marker>,
+    #[cfg(feature = "pdf-ua")] artifact_band: bool,
+) {
+    if invisible(frag) {
+        return;
+    }
+    let outer = begin_opacity(content, frag, ctx);
+    paint_clipped(
+        content,
+        frag,
+        ctx,
+        #[cfg(feature = "pdf-ua")]
+        marker,
+        #[cfg(feature = "pdf-ua")]
+        artifact_band,
+    );
+    end_opacity(content, ctx, outer);
+}
+
+/// Whether `frag`'s subtree paints nothing (`opacity: 0`).
+pub(super) fn invisible(frag: &Fragment) -> bool {
+    frag.opacity <= 0.0
+}
+
+/// Enter `frag`'s opacity, returning the outer opacity to restore, or `None` when the
+/// fragment is opaque or the render emits no transparency.
+fn begin_opacity(content: &mut Content, frag: &Fragment, ctx: &PaintCtx) -> Option<f32> {
+    if frag.opacity >= 1.0 || !ctx.fade {
+        return None;
+    }
+    let outer = ctx.alpha.get();
+    let key = alpha_key(outer * frag.opacity);
+    ctx.alpha.set(outer * frag.opacity);
+    content.save_state();
+    content.set_parameters(Name(opacity_gs_name(key).as_bytes()));
+    Some(outer)
+}
+
+/// Leave the opacity [`begin_opacity`] entered.
+fn end_opacity(content: &mut Content, ctx: &PaintCtx, outer: Option<f32>) {
+    if let Some(outer) = outer {
+        content.restore_state();
+        ctx.alpha.set(outer);
+    }
+}
+
+/// An opacity in thousandths, the key of its `ExtGState` (`0.5` -> `500`).
+fn alpha_key(alpha: f32) -> u16 {
+    (alpha * 1000.0).round() as u16
+}
+
+/// The `ExtGState` resource name of an opacity key (`GSo500`).
+pub(super) fn opacity_gs_name(key: u16) -> String {
+    format!("GSo{key}")
+}
+
+/// The opacity keys a page's translucent fragments paint with, each written as one
+/// `ExtGState` of the page's resources.
+pub(super) fn opacity_keys(page: &Page) -> BTreeSet<u16> {
+    let mut keys = BTreeSet::new();
+    for band in bands(page) {
+        for frag in band {
+            collect_opacity(frag, 1.0, &mut keys);
+        }
+    }
+    keys
+}
+
+fn collect_opacity(frag: &Fragment, outer: f32, keys: &mut BTreeSet<u16>) {
+    if invisible(frag) {
+        return;
+    }
+    let alpha = outer * frag.opacity.min(1.0);
+    if frag.opacity < 1.0 {
+        keys.insert(alpha_key(alpha));
+    }
+    for child in &frag.children {
+        collect_opacity(child, alpha, keys);
+    }
+}
+
+/// Paint one fragment (its own content first, then its children atop it, in paint
+/// order), inside its `clip: rect()` region when it has one (miaskiewicz/turbo-dom#52): a
+/// saved graphics state with a rectangular clipping path. An empty region still paints
+/// (nothing shows), so tagged renders number their marked content the same as the
+/// structure walk.
+fn paint_clipped(
     content: &mut Content,
     frag: &Fragment,
     ctx: &PaintCtx,
     #[cfg(feature = "pdf-ua")] mut marker: Option<&mut super::ua::Marker>,
     #[cfg(feature = "pdf-ua")] artifact_band: bool,
 ) {
+    if let Some(clip) = frag.clip {
+        content.save_state();
+        clip_to(content, frag, clip, ctx.page_height_pt);
+    }
     paint_one(
         content,
         frag,
@@ -169,7 +340,7 @@ fn paint_fragment(
         #[cfg(feature = "pdf-ua")]
         artifact_band,
     );
-    for child in &frag.children {
+    for child in painted(&frag.children) {
         paint_fragment(
             content,
             child,
@@ -180,6 +351,26 @@ fn paint_fragment(
             artifact_band,
         );
     }
+    if frag.clip.is_some() {
+        content.restore_state();
+    }
+}
+
+/// Intersect the clipping path with `frag`'s clip region (px from its border-box corner).
+fn clip_to(
+    content: &mut Content,
+    frag: &Fragment,
+    clip: crate::layout::fragment::ClipRect,
+    page_height_pt: f32,
+) {
+    content.rect(
+        px_to_pt(frag.x + clip.x),
+        super::unit::flip_y(frag.y + clip.y + clip.height, page_height_pt),
+        px_to_pt(clip.width),
+        px_to_pt(clip.height),
+    );
+    content.clip_nonzero();
+    content.end_path();
 }
 
 /// Paint a single fragment's own content (no marked content).
@@ -218,6 +409,23 @@ fn paint_one(
     }
 }
 
+/// Paint a text line. A line carried onto a neighbouring page ([`CARRIED`]) repeats text
+/// its own page carries: it is shown inside a `/Span` whose empty `/ActualText` replaces
+/// it for text extraction, so the text is extracted once (miaskiewicz/turbo-html2pdf#44).
+fn paint_line(content: &mut Content, frag: &Fragment, ctx: &PaintCtx) {
+    let carried = frag.node_id == CARRIED;
+    if carried {
+        content
+            .begin_marked_content_with_properties(Name(b"Span"))
+            .properties()
+            .actual_text(TextStr(""));
+    }
+    paint_text(content, frag, ctx.fonts, ctx.page_height_pt, ctx.cmyk);
+    if carried {
+        content.end_marked_content();
+    }
+}
+
 /// Dispatch a fragment's own paint by content kind.
 fn paint_content(content: &mut Content, frag: &Fragment, ctx: &PaintCtx) {
     match &frag.content {
@@ -233,12 +441,10 @@ fn paint_content(content: &mut Content, frag: &Fragment, ctx: &PaintCtx) {
                 ctx.cmyk,
             );
         }
-        FragmentContent::TextLine { .. } => {
-            paint_text(content, frag, ctx.fonts, ctx.page_height_pt, ctx.cmyk);
-        }
+        FragmentContent::TextLine { .. } => paint_line(content, frag, ctx),
         FragmentContent::Image(placement) => {
             paint_image(content, frag, placement, ctx.images, ctx.page_height_pt);
         }
-        FragmentContent::Directive(_) => {}
+        FragmentContent::Marker(_) => {}
     }
 }

@@ -4,11 +4,11 @@ import { createHash } from "node:crypto";
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { createServer } from "node:http";
 import { tmpdir } from "node:os";
-import { dirname, join, resolve } from "node:path";
+import { join, resolve } from "node:path";
 import { parseArgs } from "node:util";
 import { fileURLToPath } from "node:url";
+import { layoutCrateDir, layoutFontsDir } from "./layout-crate-dir.mjs";
 
-const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const { values } = parseArgs({
   options: {
     runner: { type: "string" },
@@ -19,16 +19,15 @@ const { values } = parseArgs({
 });
 if (!values.runner || !values.out)
   throw new Error("Pass --runner /absolute/chrome-cdp-trace.mjs and --out /absolute/oracle.json");
+// The layout-snapshot fixtures and the fonts live in the turbo-dom-layout crate (turbo-dom
+// repo); find its checkout through cargo when --fixture is omitted.
 const fixturePath = resolve(
-  values.fixture ??
-    join(root, "crates/turbo-html2pdf-core/tests/fixtures/layout-snapshot/cases.json"),
+  values.fixture ?? join(layoutCrateDir(), "tests/fixtures/layout-snapshot/cases.json"),
 );
 const fixtureBytes = readFileSync(fixturePath);
 const fixture = JSON.parse(fixtureBytes);
 const fontBytes =
-  fixture.font === "Go"
-    ? readFileSync(join(root, "crates/turbo-html2pdf-core/assets/fonts/Go-Regular.ttf"))
-    : null;
+  fixture.font === "Go" ? readFileSync(join(layoutFontsDir(), "Go-Regular.ttf")) : null;
 const temporary = mkdtempSync(join(tmpdir(), "turbo-layout-oracle-"));
 const server = createServer((request, response) => {
   response.setHeader("Content-Type", request.url === "/font.ttf" ? "font/ttf" : "text/html");

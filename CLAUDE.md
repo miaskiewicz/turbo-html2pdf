@@ -3,6 +3,27 @@
 Native HTML/CSS + Jinja → PDF engine (Rust core) shipped to npm and PyPI via
 N-API / WebAssembly / PyO3 bindings.
 
+The layout half (style cascade, layout, text/fonts, layout snapshots, `layout_html`,
+images, errors) lives in the **turbo-dom-layout** crate of the turbo-dom workspace;
+`turbo-html2pdf-core` depends on it (and on `turbo-dom`) and re-exports it at its old
+paths (`turbo_html2pdf_core::style::…`, `::layout::…`, `::Tag`, …). Rendered markup is
+parsed into a turbo-dom document (`Flow`, `src/flow.rs`; `<t:…/>` expansion and the
+unknown-`t:` error in `src/template/markup.rs`) and styled through turbo-dom-layout's
+Tree input with the `t:` directives as layout markers (`src/markers.rs`). Footnote and
+endnote paragraphs are built by mutating that document. PDF/UA roles and xref
+links/anchors are derived after layout from the recorded box sources
+(`src/semantics.rs`, `src/semantics_derive.rs`) and ride on each `Page`. Layout tests
+and their Chrome fixtures live in turbo-dom-layout (as do the fonts: this repo keeps no
+copy of `assets/fonts` — tests and benches read them through turbo-dom-layout's
+`test-support` fixtures, JS scripts / napi tests / benches through
+`scripts/layout-crate-dir.mjs`, i.e. `cargo metadata`); the tests here are templating /
+`t:`-directive / paged / PDF ones (tree-literal inputs come from turbo-dom-layout's
+`test_support::literal`; the S2 legacy-vs-Tree equivalence gate was retired at S5 with
+the legacy input).
+Pre-publish, `turbo-dom-layout` and `turbo-dom` resolve through the root
+`[patch.crates-io]` (git revs of the turbo-dom consolidation branch; a local path while
+iterating).
+
 ## Release runbook
 
 Releases are **tag-driven**. Two independent tag prefixes:
@@ -19,7 +40,7 @@ Required GitHub repo secrets: **`NPM_TOKEN`** (npm token with public-package pub
 package, uploads nothing).
 
 The `turbo-html2pdf-mcp` crate depends on `turbo-html2pdf-core` with an explicit
-`version = "0.3"` (^0.3) alongside its `path` — crates.io requires a version on
+`version = "0.6"` (^0.6) alongside its `path` — crates.io requires a version on
 the dep. It only needs bumping on a **minor** (0.x) change, not every patch;
 keep it in sync with the workspace major.minor when you cross a minor boundary.
 
@@ -56,18 +77,32 @@ comments describe past releases — leave those.)
 
 ### 2. Pre-tag gate (all must pass locally; CI re-runs them)
 
+While the root `Cargo.toml` has the pre-publish `[patch.crates-io]`, first follow
+PUBLISHING.md "Pre-tag: drop the pre-publish patch" (turbo-dom crates on crates.io,
+delete the section, `cargo update -p turbo-dom-layout -p turbo-dom`, no git sources
+left). Every tag workflow's `release-guard` job (`scripts/release-guard.sh <tag>`) fails
+otherwise, or when a version above disagrees with the tag; run it locally for both tags.
+
 ```
+sh scripts/release-guard.sh vX.Y.Z && sh scripts/release-guard.sh pyvX.Y.Z
 RUSTFLAGS="-D warnings" cargo fmt --all -- --check
 RUSTFLAGS="-D warnings" cargo clippy --workspace --all-targets -- -D warnings
 cargo test --workspace
 cargo run --manifest-path tools/cc-check/Cargo.toml -- --max 5 crates   # cc < 6
 cargo tarpaulin                                                          # 100% gate
 node scripts/package-notices.mjs --check                                # packaged notices
+node scripts/package-notices.mjs --pack   # + writes the untracked npm Go-Regular.ttf
 ```
 
-`release.yml`'s `gate` job runs only fmt/clippy/test — so a red `cc-check` or
-coverage gate does NOT block a publish. Verify them locally anyway; a tag is
-public and hard to walk back.
+The napi package's `assets/fonts/Go-Regular.ttf` is not tracked; `publish-napi` /
+`publish-svg` run `package-notices.mjs --pack` before `npm publish` and assert the
+packed list contains it. `release-crates.yml` waits for the locked turbo-dom-layout /
+turbo-dom versions on the crates.io index (`scripts/wait-crates-index.sh`) before
+packaging core.
+
+Every release workflow (`release.yml`, `release-crates.yml`, `release-py.yml`)
+has a `gate` job that calls `ci.yml` as a reusable workflow, so a red fmt,
+clippy, test-variant, `cc-check` or coverage gate blocks every publish.
 
 ### 3. Merge, tag the merge commit, and push
 
@@ -94,11 +129,15 @@ Default build = `["bundled-fonts"]` only. Everything else is opt-in and kept out
 of the default-coverage surface (gated-only modules are listed in
 `tarpaulin.toml` `exclude-files`; gated branches in shared files are relocated
 into gated-only sibling modules so the tarpaulin cfg-mapping quirk can't flag
-them — see `layout/boxgen_ua.rs`, `layout/boxgen_xref.rs`).
+them — e.g. `src/semantics_derive.rs`).
 
 - `bundled-fonts` (default): embeds Inter/Roboto, Liberation Serif/PT Serif,
   Fira Code/IBM Plex Mono so docs render with no caller fonts (~6 MB).
 - `endnotes`, `xref`, `print-color`, `pdf-a`, `pdf-ua`, `append`, `encrypt`, `svg`.
+  `bundled-fonts`, `perf`, `svg` forward to turbo-dom-layout's features of the same
+  name; `xref` / `print-color` become turbo-dom-layout runtime options
+  (`atomic_internal_links`, `accept_cmyk`) and `pdf-ua`/`xref` turn on the post-layout
+  semantics derivation.
 - `pdf-a`/`pdf-ua`/`cmyk` are also **per-render** runtime toggles on
   `EmitOptions` (default off → byte-identical plain RGB/untagged output).
 

@@ -257,3 +257,199 @@ fn passes_verapdf_ua1() {
         String::from_utf8_lossy(&out.stderr)
     );
 }
+
+/// A tagged render of a document whose first paragraph is positioned (painted after
+/// the second, miaskiewicz/turbo-html2pdf#35).
+fn positioned_pdf() -> Vec<u8> {
+    let template = r#"<p style="position:relative;top:4px">First</p><p>Second</p>"#;
+    let (program, _) = compile(template, &CompileOptions::default()).expect("compile");
+    let cascade = build_cascade(CSS, "", TokenSet::default());
+    let fonts = common::registry();
+    let inputs = RenderInputs {
+        program: &program,
+        data: &serde_json::json!({}),
+        cascade: &cascade,
+        at_rules: &[],
+        fonts: &fonts,
+        images: &turbo_html2pdf_core::NoImages,
+        now: Some(0),
+    };
+    let pages = render_pages(&inputs, &mut Diagnostics::default()).expect("render pages");
+    emit_pdf(&pages, &opts())
+}
+
+#[test]
+fn marked_content_follows_paint_order_and_the_tree_reading_order() {
+    // The painter numbers content in paint order (the positioned paragraph last); the
+    // structure keeps document order: the first P owns the last-painted MCID.
+    let pdf = positioned_pdf();
+    let at = |needle: &[u8]| pdf.windows(needle.len()).position(|w| w == needle);
+    let (first, second) = (
+        at(b"/S /P\n  /P 12 0 R\n  /Pg 3 0 R\n  /K [1]"),
+        at(b"/K [0]"),
+    );
+    assert!(
+        first.is_some() && first < second,
+        "the first P owns MCID 1, written first"
+    );
+    if have("verapdf") {
+        let path = write_temp(&pdf, "turbo_pdf_ua_positioned_verapdf.pdf");
+        let out = Command::new("verapdf")
+            .args(["--flavour", "ua1"])
+            .arg(&path)
+            .output()
+            .expect("run verapdf");
+        assert!(String::from_utf8_lossy(&out.stdout).contains("isCompliant=\"true\""));
+    }
+}
+
+/// A captioned table (miaskiewicz/turbo-dom#51), tagged: the template and the PDF.
+fn caption_pdf() -> Vec<u8> {
+    const CAPTIONED: &str = "<table><caption>Quarterly revenue</caption>\
+        <tr><th>Quarter</th><th>Revenue</th></tr><tr><td>Q1</td><td>100</td></tr></table>";
+    let (program, _) = compile(CAPTIONED, &CompileOptions::default()).expect("compile");
+    let cascade = build_cascade(CSS, "", TokenSet::default());
+    let fonts = common::registry();
+    let inputs = RenderInputs {
+        program: &program,
+        data: &serde_json::json!({}),
+        cascade: &cascade,
+        at_rules: &[],
+        fonts: &fonts,
+        images: &turbo_html2pdf_core::NoImages,
+        now: Some(0),
+    };
+    let mut diags = Diagnostics::default();
+    emit_pdf(&render_pages(&inputs, &mut diags).expect("render"), &opts())
+}
+
+/// The structure elements of an (uncompressed-object) PDF: object number -> (`/S` role,
+/// `/P` parent object number).
+fn struct_elems(pdf: &[u8]) -> std::collections::BTreeMap<u32, (String, u32)> {
+    let text = String::from_utf8_lossy(pdf);
+    let mut out = std::collections::BTreeMap::new();
+    for (at, _) in text.match_indices(" 0 obj") {
+        let num: u32 = text[..at]
+            .rsplit(|c: char| !c.is_ascii_digit())
+            .next()
+            .and_then(|n| n.parse().ok())
+            .unwrap_or(0);
+        let body = &text[at..at + text[at..].find("endobj").unwrap_or(0)];
+        if !body.contains("/Type /StructElem") {
+            continue;
+        }
+        let word = |key: &str| {
+            body.split(key)
+                .nth(1)
+                .and_then(|rest| rest.split_whitespace().next())
+                .map(str::to_string)
+        };
+        let role = word("/S /").unwrap_or_default();
+        let parent = word("/P ").and_then(|n| n.parse().ok()).unwrap_or(0);
+        out.insert(num, (role, parent));
+    }
+    out
+}
+
+#[test]
+fn tags_a_table_caption_as_the_tables_caption() {
+    // PDF/UA: a <caption> is the `Caption` child of its `Table`, and the rows stay the
+    // table's children (the anonymous grid box of a captioned table is no structure).
+    let pdf = caption_pdf();
+    let elems = struct_elems(&pdf);
+    let of = |role: &str| -> Vec<u32> {
+        elems
+            .iter()
+            .filter(|(_, (r, _))| r == role)
+            .map(|(&n, _)| n)
+            .collect()
+    };
+    let tables = of("Table");
+    assert_eq!(tables.len(), 1, "one Table: {elems:?}");
+    let captions = of("Caption");
+    assert_eq!(captions.len(), 1, "one Caption: {elems:?}");
+    assert_eq!(
+        elems[&captions[0]].1, tables[0],
+        "the Caption's parent is the Table"
+    );
+    let rows = of("TR");
+    assert_eq!(rows.len(), 2, "{elems:?}");
+    for row in rows {
+        assert_eq!(
+            elems[&row].1, tables[0],
+            "a TR's parent is the Table: {elems:?}"
+        );
+    }
+}
+
+#[test]
+fn a_captioned_table_passes_verapdf_ua1() {
+    if !have("verapdf") {
+        eprintln!("verapdf not on PATH; skipping PDF/UA-1 validation");
+        return;
+    }
+    let path = write_temp(&caption_pdf(), "turbo_pdf_ua_caption_verapdf.pdf");
+    let out = Command::new("verapdf")
+        .args(["--flavour", "ua1"])
+        .arg(&path)
+        .output()
+        .expect("run verapdf");
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    assert!(
+        out.status.success() && stdout.contains("isCompliant=\"true\""),
+        "verapdf --flavour ua1 did not report compliance:\n{stdout}\n{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+}
+
+/// A tagged render of a split `bottom: 20px` relative block whose one text line, moved to
+/// page 2, is shifted across the page boundary: Chrome 156 paints its top part at the end
+/// of page 1 (miaskiewicz/turbo-html2pdf#42).
+fn carried_text_pdf() -> Vec<u8> {
+    let template = r#"<!DOCTYPE html><html><head><style>@page{size:600px 400px;margin:40px}body{margin:0;font-family:Evolventa;font-size:12px}</style></head><body><div style="position:relative;bottom:20px"><div style="height:300px"></div><div style="height:40px;break-inside:avoid">Zebracorn</div></div></body></html>"#;
+    let (program, _) = compile(template, &CompileOptions::default()).expect("compile");
+    let cascade = build_cascade("", "", TokenSet::default());
+    let fonts = common::registry();
+    let inputs = RenderInputs {
+        program: &program,
+        data: &serde_json::json!({}),
+        cascade: &cascade,
+        at_rules: &[],
+        fonts: &fonts,
+        images: &turbo_html2pdf_core::NoImages,
+        now: Some(0),
+    };
+    let pages = render_pages(&inputs, &mut Diagnostics::default()).expect("render pages");
+    assert_eq!(pages.len(), 2);
+    emit_pdf(&pages, &opts())
+}
+
+fn count(haystack: &[u8], needle: &[u8]) -> usize {
+    haystack
+        .windows(needle.len())
+        .filter(|w| *w == needle)
+        .count()
+}
+
+#[test]
+fn text_carried_onto_the_previous_page_is_an_artifact() {
+    // miaskiewicz/turbo-html2pdf#44: the line paints on both pages (its copy on page 1
+    // clipped to that page's end), but only its own page tags it as content.
+    let pdf = carried_text_pdf();
+    assert_eq!(count(&pdf, b"\nBT\n"), 2, "painted twice");
+    assert_eq!(count(&pdf, b"/MCID"), 1, "tagged once");
+    if have("pdftotext") {
+        let path = write_temp(&pdf, "turbo_pdf_ua_carried_text.pdf");
+        let out = Command::new("pdftotext")
+            .arg(&path)
+            .arg("-")
+            .output()
+            .expect("pdftotext");
+        let text = String::from_utf8_lossy(&out.stdout);
+        assert_eq!(
+            text.matches("Zebracorn").count(),
+            1,
+            "extracted once: {text:?}"
+        );
+    }
+}

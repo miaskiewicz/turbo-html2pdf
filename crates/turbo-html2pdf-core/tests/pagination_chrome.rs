@@ -1,0 +1,479 @@
+//! miaskiewicz/turbo-html2pdf#31: paginated box geometry against Chrome 156 `page.pdf()`.
+//!
+//! The control is `tests/fixtures/pagination_chrome156.json` (`scripts/pagination-chrome-
+//! control.mjs`): text-free documents of solid-colour blocks on `600px x 400px` pages with
+//! 40px margins, printed by Chrome for Testing 156 and rasterized at 96 dpi; per page and
+//! colour, the inclusive device-pixel bounding box of that colour and whether its first /
+//! last row is a full edge. Here the same documents run through `render_pages`, and the
+//! same per-page boxes are measured on the page fragments painted into a 1 px/CSS px
+//! buffer (backgrounds and border sides of `Box` fragments, in page coordinates).
+//!
+//! What it pins: a block's top margin is kept on page 1 and after a forced break and
+//! truncated after an unforced one (CSS Fragmentation §5.2), and `<html>`/`<body>` borders
+//! and backgrounds paint on every page fragment, sliced (`box-decoration-break: slice`:
+//! the top edge on the first page, the bottom edge on the last, the box running to the
+//! page area's end in between).
+//!
+//! miaskiewicz/turbo-html2pdf#32 extends it: fixed boxes repeat on every page and absolute
+//! boxes sit relative to their containing block; the canvas (`Page::canvas`, painted here
+//! over the page area as the emitter paints it) covers the page area only; a forced break
+//! before the first content makes no blank page; a split block keeps its top border and
+//! padding at a page start; after a forced break only the next block's own top margin is
+//! kept; and a block that exactly fills a page moves on with its ancestors' bottom padding.
+//! Fragments paint in their parent's paint order (`Fragment::paint_order`, positioned
+//! boxes over the flow), as the emitter paints them.
+
+mod common;
+
+use std::collections::BTreeMap;
+
+use turbo_html2pdf_core::layout::fragment::{Fragment, FragmentContent};
+use turbo_html2pdf_core::layout::value::Rgba;
+use turbo_html2pdf_core::style::TokenSet;
+use turbo_html2pdf_core::{
+    build_cascade, compile, render_pages, CompileOptions, Diagnostics, Page, RenderInputs,
+};
+
+fn pages(html: &str) -> Vec<Page> {
+    let (program, _) = compile(html, &CompileOptions::default()).expect("compile");
+    let cascade = build_cascade("", "", TokenSet::default());
+    let fonts = common::registry();
+    let data = serde_json::Value::Null;
+    let inputs = RenderInputs {
+        program: &program,
+        data: &data,
+        cascade: &cascade,
+        at_rules: &[],
+        fonts: &fonts,
+        images: &turbo_html2pdf_core::NoImages,
+        now: Some(0),
+    };
+    render_pages(&inputs, &mut Diagnostics::default()).expect("render_pages")
+}
+
+/// Paint the page's `Box` fragments (background, then the four border sides; parents
+/// before children, in list order — the paint order of these flat test documents) into a
+/// `width x height` RGB buffer at 1 px per CSS px, white paper; a fragment's `clip` region
+/// clips it and its subtree, as the emitter clips them.
+fn rasterize(page: &Page) -> (usize, usize, Vec<[u8; 3]>) {
+    let (w, h) = (page.geometry.width as usize, page.geometry.height as usize);
+    let mut buf = vec![[255u8; 3]; w * h];
+    let all: Rect = (0.0, 0.0, w as f32, h as f32);
+    fn fill(buf: &mut [[u8; 3]], w: usize, rect: Rect, c: Rgba, clip: Rect) {
+        let (x, y, rw, rh) = intersect(rect, clip);
+        let h = buf.len() / w;
+        let span = |a: f32, len: f32, max: usize| {
+            (
+                (a.round().max(0.0) as usize).min(max),
+                ((a + len).round().max(0.0) as usize).min(max),
+            )
+        };
+        let ((x0, x1), (y0, y1)) = (span(x, rw, w), span(y, rh, h));
+        for row in buf.chunks_mut(w).take(y1).skip(y0) {
+            for px in &mut row[x0..x1] {
+                *px = [c.r, c.g, c.b];
+            }
+        }
+    }
+    fn walk(buf: &mut [[u8; 3]], w: usize, frags: &[Fragment], clip: Rect) {
+        for f in frags {
+            let clip = f.clip.map_or(clip, |c| {
+                intersect(clip, (f.x + c.x, f.y + c.y, c.width, c.height))
+            });
+            for (rect, c) in box_paint(f) {
+                fill(buf, w, rect, c, clip);
+            }
+            let kids: Vec<Fragment> = f
+                .paint_order()
+                .into_iter()
+                .map(|i| f.children[i].clone())
+                .collect();
+            walk(buf, w, &kids, clip);
+        }
+    }
+    if let Some(c) = page.canvas {
+        let g = &page.geometry;
+        let area = (
+            g.margin.left,
+            g.margin.top,
+            g.width - g.margin.horizontal(),
+            g.height - g.margin.vertical(),
+        );
+        fill(&mut buf, w, area, c, all);
+    }
+    walk(&mut buf, w, &in_paint_order(&page.body), all);
+    (w, h, buf)
+}
+
+/// A page body's top-level fragments in paint order (as `Fragment::paint_order` orders a
+/// parent's children).
+fn in_paint_order(body: &[Fragment]) -> Vec<Fragment> {
+    let mut sorted = body.to_vec();
+    sorted.sort_by_key(|f| (f.paint_z(), f.is_positioned));
+    sorted
+}
+
+type Rect = (f32, f32, f32, f32);
+
+/// The intersection of two `(x, y, width, height)` rectangles (empty: zero size).
+fn intersect((ax, ay, aw, ah): Rect, (bx, by, bw, bh): Rect) -> Rect {
+    let (x0, y0) = (ax.max(bx), ay.max(by));
+    let (x1, y1) = ((ax + aw).min(bx + bw), (ay + ah).min(by + bh));
+    (x0, y0, (x1 - x0).max(0.0), (y1 - y0).max(0.0))
+}
+
+/// The opaque rectangles a `Box` fragment paints: its background, then its border sides.
+fn box_paint(f: &Fragment) -> Vec<(Rect, Rgba)> {
+    let FragmentContent::Box {
+        background, border, ..
+    } = &f.content
+    else {
+        return Vec::new();
+    };
+    let (x, y, fw, fh) = (f.x, f.y, f.width, f.height);
+    let (t, b) = (f32::from(border.top.width), f32::from(border.bottom.width));
+    let (l, r) = (f32::from(border.left.width), f32::from(border.right.width));
+    let sides = [
+        (border.top, (x, y, fw, t)),
+        (border.bottom, (x, y + fh - b, fw, b)),
+        (border.left, (x, y, l, fh)),
+        (border.right, (x + fw - r, y, r, fh)),
+    ];
+    let fill = background.map(|c| ((x, y, fw, fh), c));
+    let edges = sides
+        .into_iter()
+        .filter(|(side, _)| side.width > 0)
+        .filter_map(|(side, rect)| side.color.map(|c| (rect, c)));
+    fill.into_iter()
+        .chain(edges)
+        .filter(|(_, c)| c.a == 255)
+        .collect()
+}
+
+fn rgb(css: &str) -> [u8; 3] {
+    let v = |i: usize| u8::from_str_radix(&css[i..i + 2], 16).unwrap();
+    [v(1), v(3), v(5)]
+}
+
+/// The control's measurement of one colour: `[x0, y0, x1, y1]` (inclusive px) and whether
+/// the first / last row is that colour across >= 90% of the box's width.
+fn measure(
+    (w, h, buf): &(usize, usize, Vec<[u8; 3]>),
+    color: [u8; 3],
+) -> Option<(Vec<i64>, bool, bool)> {
+    let is = |x: usize, y: usize| buf[y * w + x] == color;
+    let (mut x0, mut y0, mut x1, mut y1) = (usize::MAX, usize::MAX, 0, 0);
+    let mut any = false;
+    for y in 0..*h {
+        for x in 0..*w {
+            if is(x, y) {
+                any = true;
+                (x0, y0, x1, y1) = (x0.min(x), y0.min(y), x1.max(x), y1.max(y));
+            }
+        }
+    }
+    if !any {
+        return None;
+    }
+    let row = |y: usize| (x0..=x1).filter(|&x| is(x, y)).count() * 10 >= (x1 - x0 + 1) * 9;
+    let bbox = [x0, y0, x1, y1].map(|v| v as i64).to_vec();
+    Some((bbox, row(y0), row(y1)))
+}
+
+type Measured = Option<(Vec<i64>, bool, bool)>;
+
+/// The control's record for one colour on one page (`null` = the colour is absent).
+fn chrome_box(want: &serde_json::Value) -> Measured {
+    (!want.is_null()).then(|| {
+        let bbox = want["bbox"].as_array().unwrap();
+        (
+            bbox.iter().map(|v| v.as_i64().unwrap()).collect(),
+            want["top"].as_bool().unwrap(),
+            want["bottom"].as_bool().unwrap(),
+        )
+    })
+}
+
+/// Every colour of a case compared on one page; mismatches are pushed to `failures`.
+fn compare_page(
+    id: &str,
+    n: usize,
+    (page, want): (&Page, &serde_json::Value),
+    colors: &BTreeMap<String, String>,
+    failures: &mut Vec<String>,
+) {
+    let raster = rasterize(page);
+    for (name, css) in colors {
+        let (got, want) = (measure(&raster, rgb(css)), chrome_box(&want["boxes"][name]));
+        let known = KNOWN.contains(&(id, n, name.as_str()));
+        failures.extend(verdict(known, &got, &want).map(|v| format!("{id} page {n} {name}: {v}")));
+    }
+}
+
+/// The failure for one measurement: a difference not listed in [`KNOWN`], or a listed
+/// one that now matches (stale).
+fn verdict(known: bool, got: &Measured, want: &Measured) -> Option<String> {
+    match (known, got == want) {
+        (true, true) => Some("matches Chrome, remove it from KNOWN".to_string()),
+        (false, false) => Some(format!("{got:?}, Chrome {want:?}")),
+        _ => None,
+    }
+}
+
+fn compare_case(case: &serde_json::Value, failures: &mut Vec<String>) {
+    let id = case["id"].as_str().unwrap();
+    let ours = pages(case["html"].as_str().unwrap());
+    let chrome = case["pages"].as_array().unwrap();
+    let known = KNOWN_PAGE_COUNTS.contains(&id);
+    if ours.len() != chrome.len() || known {
+        let (n, want) = (ours.len(), chrome.len());
+        failures.extend(match (known, n == want) {
+            (true, true) => Some(format!(
+                "{id}: matches Chrome's page count, remove it from KNOWN_PAGE_COUNTS"
+            )),
+            (false, false) => Some(format!("{id}: {n} pages, Chrome {want}")),
+            _ => None,
+        });
+        return;
+    }
+    let colors: BTreeMap<String, String> = serde_json::from_value(case["colors"].clone()).unwrap();
+    for (n, pair) in ours.iter().zip(chrome).enumerate() {
+        compare_page(id, n + 1, pair, &colors, failures);
+    }
+}
+
+/// Measurements (case, page, colour) that do not match Chrome yet; each must still differ,
+/// so a fixed one is removed from the list. The rest of those cases is compared as usual.
+/// (`exact-fill-child-margin` matches since miaskiewicz/turbo-dom#41: the paged layout keeps
+/// a last child's bottom margin inside a padded parent; the split relative / absolute cases
+/// since miaskiewicz/turbo-html2pdf#41 and #42.) Empty: every measurement matches.
+///
+/// miaskiewicz/turbo-html2pdf#49: on the third and later pages of a bottom padding that
+/// runs over several pages, Chrome 156 paints one device-pixel row of the padding above
+/// the page area (y = 39); the engine's slices start at the page area's top.
+const KNOWN: &[(&str, usize, &str)] = &[
+    ("tail-padding-taller-than-page", 3, "orange"),
+    ("tail-padding-taller-than-page", 4, "orange"),
+    ("tail-padding-taller-than-page", 5, "orange"),
+    ("tail-padding-grandparent", 3, "orange"),
+    ("tail-padding-grandparent", 4, "orange"),
+    ("tail-padding-grandparent", 5, "orange"),
+];
+
+/// Cases whose page count does not match Chrome 156 yet (each must still differ; their
+/// pages are not compared): multi-column is not supported (miaskiewicz/turbo-html2pdf#52).
+/// (Forced left/right/recto breaks match since miaskiewicz/turbo-dom#204.)
+const KNOWN_PAGE_COUNTS: &[&str] = &["r3-multicol"];
+
+/// miaskiewicz/turbo-html2pdf#39: the print initial containing block (the page area).
+fn icb_case(id: &str) -> bool {
+    id.starts_with("icb-")
+}
+
+fn fixture() -> serde_json::Value {
+    let path = concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/tests/fixtures/pagination_chrome156.json"
+    );
+    serde_json::from_str(&std::fs::read_to_string(path).expect("fixture")).unwrap()
+}
+
+#[test]
+fn the_page_area_is_the_initial_containing_block_like_chrome_156() {
+    let mut failures = Vec::new();
+    let mut compared = 0;
+    for case in fixture()["cases"].as_array().unwrap() {
+        if icb_case(case["id"].as_str().unwrap()) {
+            compared += 1;
+            compare_case(case, &mut failures);
+        }
+    }
+    assert_eq!(compared, 4);
+    assert!(failures.is_empty(), "{}", failures.join("\n"));
+}
+
+#[test]
+fn paginated_boxes_match_chrome_156() {
+    let mut failures = Vec::new();
+    for case in fixture()["cases"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|case| !icb_case(case["id"].as_str().unwrap()))
+    {
+        compare_case(case, &mut failures);
+    }
+    assert!(failures.is_empty(), "{}", failures.join("\n"));
+}
+
+#[test]
+fn an_absolute_box_stays_inside_its_positioned_parent_placed_whole() {
+    // Its containing block moves as a whole, so the box stays its child (its paint and
+    // tagged structure with it) rather than being re-placed at the page level.
+    let html = r#"<!DOCTYPE html><html><head><style>@page{size:600px 400px;margin:40px}body{margin:0}</style></head><body><div style="height:300px"></div><div style="position:relative;height:200px;break-inside:avoid"><div style="position:absolute;top:20px;left:30px;width:50px;height:30px;background:#f00"></div></div></body></html>"#;
+    let pages = pages(html);
+    assert_eq!(pages.len(), 2);
+    let parent = &pages[1].body[0];
+    assert_eq!(parent.children.len(), 1);
+    assert_eq!(parent.children[0].y - parent.y, 20.0);
+}
+
+#[test]
+fn a_bottom_padding_too_tall_to_keep_with_text_breaks_like_chrome_156() {
+    // miaskiewicz/turbo-html2pdf#49: Chrome 156's page counts for these documents (the
+    // fixture font); the padding after the text line runs on over the following pages.
+    let doc = |body: &str| {
+        format!("<!DOCTYPE html><html><head><style>@page{{size:600px 400px;margin:40px}}</style></head><body>{body}</body></html>")
+    };
+    for (body, chrome) in [
+        (r#"<div style="padding-bottom:1000px">a</div><p>t</p>"#, 5),
+        (
+            r#"<div style="padding-bottom:1000px"><div>a</div></div><p>t</p>"#,
+            5,
+        ),
+        (r#"<div style="padding-bottom:300px">a</div><p>t</p>"#, 3),
+    ] {
+        assert_eq!(pages(&doc(body)).len(), chrome, "{body}");
+    }
+}
+
+/// Each page's vertical extent (inclusive device px) of each of `colors`, measured as the
+/// control measures them.
+fn bands(html: &str, colors: &[&str]) -> Vec<Vec<Option<(i64, i64)>>> {
+    pages(html)
+        .iter()
+        .map(|page| {
+            let raster = rasterize(page);
+            let band = |c: &&str| measure(&raster, rgb(c)).map(|(b, _, _)| (b[1], b[3]));
+            colors.iter().map(band).collect()
+        })
+        .collect()
+}
+
+fn block(height: u32, color: &str, style: &str) -> String {
+    format!(
+        r#"<div style="height:{height}px;background:{color};break-inside:avoid;{style}"></div>"#
+    )
+}
+
+fn doc(body: &str) -> String {
+    format!("<!DOCTYPE html><html><head><style>@page{{size:600px 400px;margin:40px}}body{{margin:0}}</style></head><body>{body}</body></html>")
+}
+
+const RGB: [&str; 3] = ["#ff0000", "#00ff00", "#0000ff"];
+
+#[test]
+fn an_avoided_break_keeps_the_next_siblings_first_piece_like_chrome_156() {
+    // miaskiewicz/turbo-html2pdf#50, Chrome 156 `page.pdf()` (headless, these documents):
+    // red / green / blue extents per page.
+    let (r, g, b) = (RGB[0], RGB[1], RGB[2]);
+    // A split green block with `break-after: avoid`: its last part moves on with blue.
+    let split = format!(
+        "{}<div style=\"break-after:avoid\">{}{}</div>{}",
+        block(150, r, ""),
+        block(50, g, ""),
+        block(50, g, ""),
+        block(100, b, "")
+    );
+    assert_eq!(
+        bands(&doc(&split), &RGB),
+        [
+            vec![Some((40, 189)), Some((190, 239)), None],
+            vec![None, Some((40, 89)), Some((90, 189))]
+        ]
+    );
+    // Blue is a breakable block: green moves on with blue's first piece.
+    let breakable = format!(
+        "{}{}<div>{}{}</div>",
+        block(150, r, ""),
+        block(100, g, "break-after:avoid"),
+        block(100, b, ""),
+        block(100, b, "")
+    );
+    assert_eq!(
+        bands(&doc(&breakable), &RGB),
+        [
+            vec![Some((40, 189)), None, None],
+            vec![None, Some((40, 139)), Some((140, 339))]
+        ]
+    );
+    // Green and blue cannot share a page: Chrome still breaks before green.
+    let too_tall = format!(
+        "{}{}{}",
+        block(150, r, ""),
+        block(100, g, "break-after:avoid"),
+        block(250, b, "")
+    );
+    // Breaking before blue would violate green's `break-after: avoid`, breaking inside
+    // it blue's `break-inside: avoid`: Chrome takes the later break and slices blue at
+    // page 2's end (miaskiewicz/turbo-html2pdf#57).
+    assert_eq!(
+        bands(&doc(&too_tall), &RGB),
+        [
+            vec![Some((40, 189)), None, None],
+            vec![None, Some((40, 139)), Some((140, 359))],
+            vec![None, None, Some((40, 69))]
+        ]
+    );
+}
+
+#[test]
+fn a_row_of_cells_side_by_side_splits_like_chrome_156() {
+    // miaskiewicz/turbo-html2pdf#56, Chrome 156 `page.pdf()` (headless, this document):
+    // both cells split between their blocks at the same page end, so the row spans two
+    // pages (red / green / blue / cyan extents per page).
+    let (r, g, b) = (RGB[0], RGB[1], RGB[2]);
+    let cell = format!(
+        r#"<td style="padding:0">{}{}</td>"#,
+        block(150, r, ""),
+        block(150, b, "")
+    );
+    let html = doc(&format!(
+        r#"{}<table style="width:100%;border-collapse:collapse"><tr>{cell}{cell}</tr></table>{}"#,
+        block(100, g, ""),
+        block(60, "#00ffff", "")
+    ));
+    assert_eq!(
+        bands(&html, &[r, g, b, "#00ffff"]),
+        [
+            vec![Some((140, 289)), Some((40, 139)), None, None],
+            vec![None, None, Some((40, 189)), Some((190, 249))]
+        ]
+    );
+}
+
+#[test]
+fn a_cell_done_on_the_first_page_leaves_its_neighbour_to_run_on() {
+    // miaskiewicz/turbo-html2pdf#56, Chrome 156 `page.pdf()` (headless, this document): the
+    // first cell ends on page 1, the second runs on over page 2, where the row ends.
+    let (r, g, b) = (RGB[0], RGB[1], RGB[2]);
+    let td = |inner: String| format!(r#"<td style="padding:0;vertical-align:top">{inner}</td>"#);
+    let row = td(block(100, r, "")) + &td(block(150, b, "").repeat(3));
+    let html = doc(&format!(
+        r#"{}<table style="width:100%;border-collapse:collapse"><tr>{row}</tr></table>{}"#,
+        block(100, g, ""),
+        block(60, "#00ffff", "")
+    ));
+    assert_eq!(
+        bands(&html, &[r, g, b, "#00ffff"]),
+        [
+            vec![Some((140, 239)), Some((40, 139)), Some((140, 289)), None],
+            vec![None, None, Some((40, 339)), None],
+            vec![None, None, None, Some((40, 99))]
+        ]
+    );
+}
+
+#[test]
+fn a_page_holding_only_carried_padding_is_not_empty_for_the_next_paragraph() {
+    // Chrome 156 `page.pdf()` (headless): "a" on page 1, its 310px bottom padding on
+    // page 2 alone, the 33 lines of 20px from page 3 on (16, 15, 2): 5 pages.
+    let lines: Vec<String> = (0..33).map(|i| format!("L{i}")).collect();
+    let html = format!(
+        "<!DOCTYPE html><html><head><style>@page{{size:600px 400px;margin:40px}}body{{margin:0;font-size:16px;line-height:20px}}p{{margin:0}}</style></head><body><div style=\"padding-bottom:310px\">a</div><p>{}</p></body></html>",
+        lines.join("<br>")
+    );
+    let pages = pages(&html);
+    assert_eq!(pages.len(), 5);
+    assert!(pages[1].body.is_empty(), "{:?}", pages[1].body);
+}

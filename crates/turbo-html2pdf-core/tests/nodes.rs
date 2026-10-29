@@ -1,14 +1,19 @@
-//! Node-tree tests (§1 Stage 1, §2.1): Jinja render → html5ever → typed `t:`
-//! nodes. Covers t: recognition, self-closing expansion, unknown-element errors,
-//! and the real-markup half of AC-2.6.
+//! Flow tests (§1 Stage 1, §2.1): Jinja render → turbo-dom parse → `t:`
+//! directives as markers, checked through the flow's content as tree literals. Covers
+//! t: recognition, self-closing expansion, unknown-element errors, and the
+//! real-markup half of AC-2.6.
+
+mod common;
 
 use serde_json::{json, Value as Json};
-use turbo_html2pdf_core::node::t_kind;
-use turbo_html2pdf_core::{compile, CompileOptions, Element, ErrorCode, Node, TKind, Tag};
+use turbo_dom_layout::test_support::literal::{Element, Node};
+use turbo_html2pdf_core::markers::t_kind;
+use turbo_html2pdf_core::{compile, CompileOptions, ErrorCode, TKind, Tag};
 
 fn nodes(tpl: &str, data: &Json) -> Vec<Node> {
     let (program, _) = compile(tpl, &CompileOptions::default()).expect("compile");
-    program.render_nodes(data, None).expect("render_nodes").0
+    let (flow, _) = program.render_nodes(data, None).expect("render_nodes");
+    common::flow_nodes(&flow)
 }
 
 fn nodes_nil(tpl: &str) -> Vec<Node> {
@@ -18,9 +23,9 @@ fn nodes_nil(tpl: &str) -> Vec<Node> {
 fn directive_of(node: &Node) -> Option<TKind> {
     match node {
         Node::Element(Element {
-            tag: Tag::Directive(k),
+            tag: Tag::Marker(k),
             ..
-        }) => Some(*k),
+        }) => TKind::from_marker(*k),
         _ => None,
     }
 }

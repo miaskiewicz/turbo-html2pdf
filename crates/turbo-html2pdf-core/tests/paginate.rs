@@ -27,7 +27,11 @@ fn box_content() -> FragmentContent {
 
 /// A box fragment at galley `y` with height `h`, width 200.
 fn boxf(y: f32, h: f32) -> Fragment {
-    Fragment::new(NodeId(0), 0.0, y, 200.0, h, box_content())
+    // An unbreakable leaf (`break-inside: avoid`), standing for content: an empty box
+    // would be sliced at a page end (miaskiewicz/turbo-html2pdf#47).
+    let mut f = Fragment::new(NodeId(0), 0.0, y, 200.0, h, box_content());
+    f.break_meta.break_inside_avoid = true;
+    f
 }
 
 /// A text-line fragment at galley `y` with height `h`.
@@ -39,6 +43,7 @@ fn line(y: f32, h: f32) -> Fragment {
         100.0,
         h,
         FragmentContent::TextLine {
+            text: String::new(),
             glyphs: Vec::new(),
             face: common::evolventa(),
             font_size: h,
@@ -243,6 +248,120 @@ fn ac_6_2_forced_break_after() {
 }
 
 #[test]
+fn forced_break_keeps_the_galley_gap_of_a_box_with_unknown_margins() {
+    // No `FlowBoxes` facts (a bare galley): after a forced break the next block keeps its
+    // galley distance from the content before the break (here 60 - 40 = 20px).
+    let mut blocks = vec![boxf(0.0, 40.0), boxf(60.0, 40.0)];
+    blocks[1].break_meta.break_before = BreakRule::Page;
+    let (pages, _) = run(&root(blocks), &cap120());
+    assert_eq!(pages.len(), 2);
+    assert_eq!(pages[1].body[0].y, 20.0);
+}
+
+#[test]
+fn forced_break_before_the_first_content_makes_no_blank_page() {
+    // miaskiewicz/turbo-html2pdf#32 item 3 (Chrome 156: the break is ignored).
+    let mut blocks = stack(&[40.0, 40.0]);
+    blocks[0].break_meta.break_before = BreakRule::Page;
+    let (pages, _) = run(&root(blocks), &cap120());
+    assert_eq!(pages.len(), 1);
+    assert_eq!(pages[0].body.len(), 2);
+}
+
+#[test]
+fn break_after_and_break_before_at_one_point_break_once() {
+    // miaskiewicz/turbo-html2pdf#32 item 3: no blank page between the two blocks.
+    let mut blocks = stack(&[40.0, 40.0]);
+    blocks[0].break_meta.break_after = BreakRule::Page;
+    blocks[1].break_meta.break_before = BreakRule::Page;
+    let (pages, _) = run(&root(blocks), &cap120());
+    assert_eq!(pages.len(), 2);
+    assert_eq!((pages[0].body.len(), pages[1].body.len()), (1, 1));
+}
+
+#[test]
+fn split_block_starting_a_page_keeps_its_top_padding() {
+    // miaskiewicz/turbo-html2pdf#32 item 4: the container (10px above its first child:
+    // its top border + padding) splits; its first child moves to page 2 and keeps the
+    // 10px there (only margins are truncated at an unforced break).
+    let mut wrap = boxf(100.0, 140.0);
+    wrap.children = vec![boxf(110.0, 60.0), boxf(170.0, 60.0)];
+    let (pages, _) = run(&root(vec![boxf(0.0, 100.0), wrap]), &cap120());
+    assert_eq!(pages.len(), 3);
+    assert!(close(pages[1].body[0].y, 10.0));
+    assert!(close(pages[2].body[0].y, 0.0)); // later breaks inside it truncate
+}
+
+/// A container whose children sit contiguously from its `y`, closed by a bottom border
+/// `bottom` px wide.
+fn bordered(y: f32, children: Vec<Fragment>, bottom: u16) -> Fragment {
+    let mut c = container(y, children);
+    c.height += f32::from(bottom);
+    if let FragmentContent::Box { border, .. } = &mut c.content {
+        border.bottom.width = bottom;
+    }
+    c
+}
+
+#[test]
+fn last_content_moves_on_with_the_bottom_border_that_ends_its_parent() {
+    // miaskiewicz/turbo-html2pdf#32 item 6: the second child exactly fills page 1, but
+    // its parent's 20px bottom border cannot be separated from it: it moves to page 2.
+    let wrap = bordered(0.0, vec![boxf(0.0, 60.0), boxf(60.0, 60.0)], 20);
+    let (pages, _) = run(&root(vec![wrap]), &cap120());
+    assert_eq!(pages.len(), 2);
+    assert_eq!((pages[0].body.len(), pages[1].body.len()), (1, 1));
+    assert!(close(pages[1].body[0].y, 0.0));
+}
+
+#[test]
+fn last_content_that_never_fits_with_its_tail_stays() {
+    // A 120px leaf + the 20px border never fit a 120px page: the leaf stays put and the
+    // border starts page 2, as Chrome 156 breaks it (miaskiewicz/turbo-html2pdf#49,
+    // `tail-border-past-page-end` in pagination_chrome156.json).
+    let wrap = bordered(0.0, vec![boxf(0.0, 120.0)], 20);
+    let (pages, diags) = run(&root(vec![wrap]), &cap120());
+    assert_eq!(pages.len(), 2);
+    assert!(close(pages[0].body[0].y, 0.0));
+    assert!(diags.lints.is_empty());
+}
+
+#[test]
+fn split_block_remaining_height_runs_onto_the_next_pages() {
+    // miaskiewicz/turbo-html2pdf#33: a 300px box holding one 60px child splits; its
+    // remaining 240px fill the rest of page 1 (60), all of page 2 (120) and 60px of
+    // page 3, where the next block follows.
+    let mut tall = boxf(0.0, 300.0);
+    tall.children = vec![boxf(0.0, 60.0)];
+    let (pages, _) = run(&root(vec![tall, boxf(300.0, 20.0)]), &cap120());
+    assert_eq!(pages.len(), 3);
+    assert!(pages[1].body.is_empty());
+    assert!(close(pages[2].body[0].y, 60.0));
+}
+
+#[test]
+fn rows_follow_the_repeated_header_on_a_continued_page() {
+    // miaskiewicz/turbo-html2pdf#36: on page 2 the repeated header sits at the top and
+    // the next row right below it (Chrome 156), not at its galley distance from the
+    // header's original position at the top of the table.
+    let mut header = boxf(0.0, 20.0);
+    header.break_meta.repeatable = Some(turbo_html2pdf_core::RepeatKind::Header);
+    let mut rows = vec![header];
+    rows.extend((0..4).map(|i| boxf(20.0 + 40.0 * i as f32, 40.0)));
+    let (pages, _) = run(&root(vec![container(0.0, rows)]), &cap120());
+    let ys: Vec<Vec<f32>> = pages
+        .iter()
+        .map(|p| p.body.iter().map(|f| f.y).collect())
+        .collect();
+    assert_eq!(pages.len(), 2, "page tops {ys:?}");
+    let ys = &ys[1];
+    assert!(
+        close(ys[0], 0.0) && close(ys[1], 20.0) && close(ys[2], 60.0),
+        "{ys:?}"
+    );
+}
+
+#[test]
 fn ac_6_2_trailing_empty_page_trimmed() {
     let mut blocks = stack(&[40.0]);
     blocks[0].break_meta.break_after = BreakRule::Page;
@@ -352,6 +471,47 @@ fn ac_6_2_widows_pull_lines_back() {
     assert_eq!(pages.len(), 2);
     assert_eq!(pages[0].body.len(), 3);
     assert_eq!(pages[1].body.len(), 2);
+}
+
+#[test]
+fn lines_exactly_filling_the_page_stay_on_it() {
+    // 5 lines × 30 = 150 > 120, orphans/widows 1: lines 1-4 fill page 1 exactly (no gap
+    // between contiguous lines), line 5 goes on.
+    let para = paragraph(0.0, 5, 30.0, 1, 1);
+    let (pages, _) = run(&root(vec![para]), &cap120());
+    assert_eq!(pages.len(), 2);
+    assert_eq!((pages[0].body.len(), pages[1].body.len()), (4, 1));
+    assert!(close(pages[1].body[0].y, 0.0));
+}
+
+#[test]
+fn spaced_lines_fill_the_page_with_their_gaps() {
+    // 4 lines of 30 at galley 0, 35, 70, 105 (5px apart) on a 130px page: three fit with
+    // their gaps (to 100); the fourth would end at 135 and goes on.
+    let mut para = paragraph(0.0, 4, 30.0, 1, 1);
+    for (i, l) in para.children.iter_mut().enumerate() {
+        l.y = 35.0 * i as f32;
+    }
+    para.height = 135.0;
+    let (pages, _) = run(&root(vec![para]), &page("size: 200px 130px; margin: 0"));
+    assert_eq!(pages.len(), 2);
+    assert_eq!((pages[0].body.len(), pages[1].body.len()), (3, 1));
+    assert!(close(pages[0].body[2].y, 70.0));
+}
+
+#[test]
+fn a_paragraphs_last_line_moves_on_with_its_parents_bottom_border() {
+    // 4 lines × 30 = 120 plus a 10px bottom border: the last line fits page 1 only
+    // without the border that ends its paragraph, so it moves on with it; earlier lines
+    // carry no tail.
+    let mut para = paragraph(0.0, 4, 30.0, 1, 1);
+    para.height += 10.0;
+    if let FragmentContent::Box { border, .. } = &mut para.content {
+        border.bottom.width = 10;
+    }
+    let (pages, _) = run(&root(vec![para]), &cap120());
+    assert_eq!(pages.len(), 2);
+    assert_eq!((pages[0].body.len(), pages[1].body.len()), (3, 1));
 }
 
 #[test]

@@ -4,6 +4,284 @@ All notable changes to turbo-html2pdf are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/); versions follow SemVer. The npm,
 PyPI, and crates.io packages release in lockstep from a `v*` tag (PyPI on `pyv*`).
 
+## [0.6.0] — 2026-10-26 — turbo-dom consolidation
+
+The engine is now built on the turbo-dom workspace crates instead of carrying its own
+copies: `turbo-html2pdf-core` depends on **turbo-dom-layout 0.6** (style cascade,
+layout, text/fonts incl. the bundled faces, images, SVG, layout snapshots) and
+**turbo-dom 0.6** (the DOM templates are parsed into and the one Chrome-correct selector
+engine). Every rendered PDF of the release corpora (templates, conformance pages, PDF/UA,
+CMYK, PDF/A, the image matrix, with and without `svg`) is byte-identical to 0.3.9 through
+the consolidation steps; the behaviour changes are the selector fixes and the P5b bug fixes
+below, each backed by a Chrome 156 control.
+The version jumps from 0.3.9 to 0.6.0 so every consolidated package (turbo-dom,
+turbo-test, turbo-html2pdf, turbo-surf) releases on one version line.
+
+- **Fixed (`xref`)**: an element `id` names a destination (so `href="#sec"` resolves
+  without a `<t:anchor>`), and a block-level `<a>` with an absolute `href` gets a `/S /URI`
+  Link annotation, as in Chrome 156 `page.pdf()` (turbo-html2pdf#53). New
+  `Semantics::link_uri`. Still open: block internal-link rects and inline external links
+  (turbo-dom#210).
+- **Fixed (PDF size)**: decoded PNG (and rasterized SVG) samples and their `SMask` alpha
+  planes are embedded `FlateDecode`-compressed, as Chrome 156 `page.pdf()` embeds them,
+  instead of as raw uncompressed streams (a 300x300 RGBA PNG went from 361 KB to under
+  60 KB of PDF). Image-bearing PDFs therefore differ in bytes from 0.3.9; JPEGs still ride
+  through as `DCTDecode`.
+- **Changed (turbo-dom pin)**: `turbo-dom-layout` + `turbo-dom` are pinned to the final
+  turbo-dom consolidation head (223c4c8; via 03a856d, c9f991c, 0189e4d, f0fb306, d660013 and 443f4d8, was f860fea). Render changes, each checked
+  against Chrome 156 `page.pdf()`: `pre`, `pre-wrap` and `pre-line` break at newlines and
+  `pre-wrap` keeps its spaces (turbo-dom#120/#121/#122/#166); an inline-block sits on its
+  last line's baseline (turbo-dom#142); `@supports` with two condition groups and no
+  `and`/`or` is invalid and dropped. A table row's `break-inside: avoid` now reaches the
+  break hints (turbo-dom#158), so html2pdf's `BoxFacts::avoid_break_inside` workaround is
+  removed. Render parity corpus (html2pdf, html2pdf-svg): no output changes. The
+  later repins bring turbo-dom#176 (font shorthand) and the turbo-dom-browser-env
+  panic fixes turbo-dom#183/#184 (a crate html2pdf does not link). The 03a856d repin
+  brings forced left/right/recto breaks (turbo-dom#204, now matching Chrome's page
+  counts), glyph cluster text (turbo-dom#205) and `Fragment::opacity` (turbo-dom#206); 223c4c8
+  is a browser-env-only fix (no render change).
+- **Fixed (turbo-html2pdf#54)**: `/ToUnicode` maps each glyph to the source text of the
+  cluster it was shaped from, so `pdftotext` of curly quotes (Inter) and Fira Code's
+  `->` / `!=` / `=>` matches Chrome 156 `page.pdf()`.
+- **Fixed (turbo-html2pdf#55)**: CSS `opacity` paints through an `ExtGState` with `/ca`
+  and `/CA` (nested opacities multiply) on a page with a `/Transparency` group, as Chrome
+  156 does; an `opacity: 0` subtree is not painted or tagged. PDF/A renders stay opaque.
+  Overlapping children of one translucent box are each faded rather than composited as
+  one group.
+- **Fixed (turbo-html2pdf#56, #57)**: a table row of plain cells side by side is split
+  at the page end, each cell between its own children (a row or cell that paints still
+  moves on whole); an unbreakable block after an avoided break that still does not fit is
+  sliced at the page end, as Chrome 156 does.
+
+- **Fixed (turbo-html2pdf#47, Chrome 156 print control)**: a content-free block (an empty
+  `<div>`, a table row of empty cells; nothing inside it `break-inside: avoid`,
+  positioned or a repeated header) that does not fit is sliced at the page end as Chrome
+  156 slices it: the box is drawn on each page it spans, clipped to the rows it covers
+  there (top border/padding on the first page, bottom ones on the last), its
+  continuations as `CARRIED` copies, below the next page's repeated headers. It used to
+  move to the next page whole (or overflow one taller than a page). A table row's
+  `break-inside: avoid` comes from its fragment's break hints (turbo-dom#158). Controls: `slice-empty-*`.
+- **Checked (turbo-html2pdf#46)**: the `svg` feature has no separate output backend — it
+  rasterizes `image/svg+xml` into an image XObject painted by the same PDF painter, so a
+  vector image cut at a page boundary by a split relative block (#42) is clipped there
+  like any fragment. Pinned by `tests/svg.rs`
+  (`a_vector_image_cut_at_a_page_boundary_paints_inside_its_clip_on_both_pages`: the
+  clip path around each page's draw, and a `pdftoppm` probe of both pages).
+- **Checked (turbo-html2pdf#45, Chrome 156 print control)**: a definite-height box around
+  a table whose header row repeats ends where Chrome 156 ends it — the repeated header is
+  the table's, inside the box, so the #43 model needs no header term. Controls:
+  `remaining-height-table-header*` in `scripts/pagination-chrome-control.mjs`. (A box
+  inside a repeating table's cell would need one, but the engine keeps table rows whole,
+  so such a box is never split.)
+- **Fixed (turbo-html2pdf#44)**: paint a split relatively offset block carries onto a
+  neighbouring page (#42) repeats content its own page carries, so it is no longer tagged
+  or extracted twice: its fragments carry the id `paginate::CARRIED` (re-exported at the
+  crate root), a tagged render marks them `/Artifact` (no MCID, not in the structure
+  tree), and a carried text line is shown inside a `/Span` with an empty `/ActualText`,
+  so text extraction finds the text once, on its own page, tagged or not.
+- **Fixed (turbo-html2pdf#42, Chrome 156 print control)**: a relatively offset block
+  split across pages is offset in the fragmented flow, as Chrome 156 prints it: its paint
+  (content and sliced background/border) shifted across a page boundary is cut there
+  (fragment `clip` regions) and the part beyond paints on the neighbouring page — shifted
+  above a page's area at the end of the previous page, past a page's end at the top of
+  the next — with Chrome's 1px bleed above a continuation page's area. It used to paint
+  into the page margin. Control: `relative-bottom-split`, `split-decorated-relative` (no
+  longer `KNOWN` differences; the `KNOWN` list is empty).
+- **Fixed (turbo-html2pdf#41, Chrome 156 print control)**: an absolutely positioned box at
+  its static position (no `top`/`bottom`) between the children of a split block is placed
+  at that position — right after the child before it, on that child's page — as Chrome
+  156 prints it, not after the block's later children (the galley lists it after them).
+  Control: `absolute-static-mid-split-relative` (no longer a `KNOWN` difference).
+- **Fixed (turbo-html2pdf#43, Chrome 156 print control)**: a split block with a definite
+  height counts the space it takes on each page it breaks on — to the page end,
+  including the gap left when a child moves to the next page — toward its height, as
+  Chrome 156 prints it, so it ends (and the next block follows it) that far down the
+  page it ends on, above an overflowing last child; a height used up a page early ends
+  the block at that page's top. It used to carry its whole galley remaining height
+  below its last content (a page too late). An auto-height box taller than its content
+  (`min-height`, a table's border spacing) keeps carrying its remaining height below its
+  content (`BoxFacts::definite_height` tells them apart). Control: `remaining-height-pushed-child*`,
+  `remaining-height-used-up` in `scripts/pagination-chrome-control.mjs`.
+- **Changed (turbo-dom pin)**: `turbo-dom-layout` + `turbo-dom` are pinned to the final
+  turbo-dom consolidation head (f860fea, was e888342). The only engine changes reaching
+  html2pdf are turbo-dom#107 (turbo-dom-layout's AVIF size probe treats a truncated AVIF
+  — primary item's `iloc` extents missing from the data — as broken, like Chrome 156)
+  and the additive `rtdom::color` canvas serialization of turbo-dom#108; the rest
+  (turbo-dom#99, #109–#112, turbo-test#125/#127) is in turbo-dom-browser-env /
+  turbo-dom-raster, which html2pdf does not link. Render parity (html2pdf, html2pdf-svg,
+  html2pdf-extra): no output changes.
+- **Fixed (turbo-html2pdf#39, Chrome 156 print control)**: the page area is the print
+  initial containing block for layout too: the body flow is laid out with
+  `turbo_dom_layout::layout_recorded_in_viewport` at the page area's height, so a
+  `position: fixed` box (on every page) and an absolutely positioned box of the initial
+  containing block resolve `%` insets (`top: 50%`), `%` heights and `top` + `bottom`
+  stretching against it, as Chrome prints them (they collapsed to the page top / to no
+  height). Control: `icb-*` in `scripts/pagination-chrome-control.mjs`
+  (`tests/pagination_chrome.rs`). Pinned to turbo-dom `consol/p5b-w7` (db8c699; the entry
+  since e76da05), which also brings the P5b-W6 / W7 layout fixes (turbo-dom#75–#89,
+  #93, #100–#102: margins, heights, intrinsic widths, inline-block margins, floats,
+  column flex, flow-root, positioned boxes, block-in-inline).
+- **Changed (turbo-dom-layout P5b-W5, Chrome 156 controls)**: through the turbo-dom pin,
+  PDFs lay tables and alignment out as Chrome does — `<table>` is `box-sizing:
+  border-box` (turbo-dom#62); `border-spacing` is inherited and 0 except on `<table>`
+  (turbo-dom#63); a table's extra height goes to its rows (turbo-dom#64) and its extra
+  width to its auto columns, so empty cells of a `width:100%` table get their share
+  (turbo-dom#55); `box-sizing: border-box` widths are not counted twice in intrinsic and
+  column widths (turbo-dom#65); only the legacy `-webkit-*` alignment (`<center>`,
+  `align` attributes) moves block children, `text-align: center` aligns inline content
+  only (turbo-dom#69); `<th>` is bold and centred (turbo-dom#70). The corpus outputs each
+  changes are listed in turbo-dom's `tools/parity/expected/p5b-w5-turbo-dom-*.json`.
+- **Fixed (turbo-dom#41)**: paged layouts keep a last child's bottom margin inside a
+  padded / bordered parent (and collapse it through an auto-height one) as Chrome does —
+  turbo-dom-layout's generic policy used to drop it. The pagination control's
+  `exact-fill-child-margin` case (#32 item 6) now matches Chrome 156 (no longer pending).
+  Changes the galley of every document whose blocks end with a margined child.
+- **Fixed (turbo-dom#52)**: a partially clipped box (`position: absolute` with
+  `clip: rect(…)`, e.g. a CSS sprite) no longer vanishes from the PDF: turbo-dom-layout
+  keeps it and records its region in `Fragment::clip`, and the emitter paints the box and
+  its subtree inside a saved graphics state with that rectangle as the clipping path
+  (`q … re W n … Q`). A box whose clip keeps nothing (the sr-only pattern) is still left
+  out of layout, so its text stays out of the PDF and its tags; `clip` on a box that is
+  not absolutely positioned is ignored, as in Chrome. Control: turbo-dom's `clip-*`
+  Chrome 156 cases; `tests/clip_rect.rs` (clip operators, `pdftoppm` probes).
+- **Fixed (turbo-dom#51)**: a table `<caption>` is laid out (by turbo-dom-layout) as
+  Chrome does — in the table wrapper box above or below the grid, with its own box,
+  widening the table to its min-content; before, its content became grid rows and its
+  text was dropped. Under PDF/UA it is tagged as the `Caption` child of its `Table`
+  (`UaRole::Caption`), and the anonymous grid box of a captioned table
+  (`NodeSources::table_grids`) is no structure element, so the rows stay the table's `TR`
+  children (it was an unsourced box tagged `P`). Control: turbo-dom's `caption-*` Chrome
+  156 cases; `tests/pdf_ua.rs` (`Table > Caption, TR`, veraPDF ua1).
+- **Fixed (#32)**: pagination matches Chrome 156 `page.pdf()` for positioned boxes and
+  breaks. `position: fixed` boxes repeat on every page at their page-area position.
+  `position: absolute` boxes with `top`/`bottom` sit at their offset from their
+  containing block's start, continued across pages (new pages past the content);
+  static-position ones take no space. A forced break before the first content (or a
+  second one at the same break point) makes no blank page. A split block starting a page
+  keeps its top border and padding. After a forced break only the next block's own top
+  margin is kept. A block's last content moves to the next page with its ancestors'
+  bottom padding/border. The canvas already painted only the page area (now covered by
+  the control). `paginate_document` takes a `Galley { root, wrappers, boxes }`;
+  `render_pages` records the body's used box values (`FlowBoxes`/`BoxFacts`). Control:
+  `scripts/pagination-chrome-control.mjs` (41 cases); corpus changes in turbo-dom
+  `tools/parity/expected/p5b-w4-turbo-html2pdf-32-*.json`.
+- **Fixed (#33)**: a split block taller than its content keeps its remaining height (and
+  bottom padding) at the top of the next page.
+- **Fixed (#34)**: a relatively positioned block's offset no longer shifts the rest of
+  the paginated flow. The content of a split positioned block keeps its paint level.
+- **Fixed (#37)**: a block split across pages paints a slice of its box (background,
+  border, shadow) on every page it spans (`box-decoration-break: slice`, as for
+  `<html>`/`<body>`). The fragmenter's percentage margins and paddings resolve against
+  each box's containing block, not the page width.
+- **Fixed (#38)**: a forced break inside a block that fits on the page now breaks the
+  page.
+- **Fixed (#36)**: on a continued page the rows of a split table follow its repeated
+  header directly. Before, they sat at their distance from the header's original
+  position: `template-report` printed 4 pages, and now prints 2 like Chrome.
+- **Fixed (#35)**: the PDF emitter paints fragments in stacking order (negative
+  `z-index`, flow, positioned, positive `z-index`), as the raster does. Tagged PDFs
+  number their marked content in that order and keep the structure in document order.
+- **Fixed (#31)**: paginated PDFs place blocks at page starts as Chrome 156 prints them
+  (CSS Fragmentation §5.2): the first page keeps the leading top margins (and the
+  `<html>`/`<body>` margin, border and padding), a forced break keeps the next block's
+  gap, an unforced break still truncates it. `<html>`/`<body>` backgrounds, borders and
+  shadows are painted on every page fragment (`box-decoration-break: slice`: top edge on
+  the first page, bottom edge on the last, the box running to the page area's end in
+  between); new `paginate_document`. Control: `scripts/pagination-chrome-control.mjs`
+  (Chrome `page.pdf()` rasterized at 96 dpi) → `tests/pagination_chrome.rs`. Every
+  rendered PDF whose first block sits below the top of the page area changes (page 1
+  moves down by the body margin + first margin) — turbo-dom
+  `tools/parity/expected/p5b-w2-turbo-html2pdf-31.json`.
+- **Fixed (#28)**: CI tests and lints the core in the configurations the workspace run
+  never builds: `--features svg`, `--all-features` (the `perf` hot-path budgets) and
+  `--no-default-features` (the font-less wasm build). The last `--no-default-features`
+  failure (`native_inline_coverage`, which shapes text) is gated on `bundled-fonts`, and
+  the `perf` shape budget is restated for the bounded shape cache (distinct runs are
+  shaped at most twice: 6096 for the 3000-run table on every platform, budget
+  `<= 2 x 3000 + 100`), with a new repeated-runs test pinning the dedupe (3 shapes).
+
+- **Fixed (#29)**: HTML documents render like Chrome. `<head>` `<style>` sheets apply (in
+  the PDF render as well as `layoutBoxes`/`layout_html`; document sheets come before the
+  caller's `css`, a caller `@page` rule takes precedence over the document's), `<html>` and
+  `<body>` are real boxes (UA `body { margin: 8px }`, html/body margin, padding, width),
+  `rem` follows the root font size, `<style>`/`<script>`/`<noscript>` text is no longer
+  painted into the PDF, and the root/`<body>` background colour fills each page's page area
+  (`Page::canvas`). The `<html>`/`<body>` boxes are dissolved into the page flow before
+  pagination (their own borders were not painted, as for any block split across pages;
+  sliced onto every page since #31, below).
+  Nearly every PDF/`layoutBoxes` output of the corpora changes (body margin); the
+  conformance pages' boxes now match Chrome 156 for 172 of 209 tagged elements (was 1).
+- **Fixed (#30)**: EXIF orientation (JPEG APP1, PNG eXIf — as Chrome 156; WebP EXIF is
+  ignored there too) is honoured: images lay out at their displayed size (orientations
+  5-8 swap width/height) and the embedded image is drawn turned (the stored JPEG still
+  rides through as `DCTDecode`; the placement `cm` rotates/flips it). `image-orientation:
+  none` keeps the stored orientation.
+- **Image formats (turbo-surf#30, shared image layer)**: BMP, ICO/CUR and AVIF `<img>` /
+  background images are now sized from their headers (as Chrome loads them); like GIF and
+  WebP they are not embedded in the PDF yet. `layoutBoxes` decodes percent-encoded
+  `data:` image URLs too (e.g. inline `data:image/svg+xml,…` icons under the `svg` build).
+- Summary for users: same public paths (`turbo_html2pdf_core::style::…`, `::layout::…`,
+  `::Tag`, `::Fragment`, …, re-exported from turbo-dom-layout); selectors match like
+  Chrome (escapes, namespaces, `:has()`, `of S`, `:nth-last-*`, `:lang()`, `:defined`,
+  `:read-only`/`:read-write`, `:required`/`:optional`, unknown pseudo-classes drop their
+  rule, Selectors 4 specificity); fonts come from turbo-dom-layout (no duplicated
+  `assets/fonts` in this repo); the legacy owned-`Node` API is removed (see below).
+- `turbo-html2pdf-mcp` depends on core `version = "0.6"`; workspace
+  `rust-version = "1.89"` (was 1.88; turbo-dom-layout's floor).
+- Release: `release-crates.yml` waits for turbo-dom-layout 0.6.0 / turbo-dom 0.6.0 on
+  the crates.io index before publishing core, and a tag-only `release-guard` job fails
+  while `[patch.crates-io]` or git dependency sources remain. The npm package's
+  `assets/fonts/Go-Regular.ttf` is no longer tracked: `package-notices.mjs` writes it
+  from turbo-dom-layout's font tree at pack time (the published file list is unchanged).
+
+- turbo-dom-layout's legacy owned-`Node` input is gone, so are the re-exports built on it:
+  `node`, `Node`, `Element`, `style_tree`, `collect_style_css` (the Tree versions are
+  `style_input` and `html_layout::collect_style_css_tree`; `Attr` / `MarkerKind` / `Tag`
+  stay, from turbo-dom-layout's `tag`), `Flow::to_nodes`; `parse_html` now returns the
+  parsed `Flow` (`t:` directives as markers). The S2 legacy-vs-Tree equivalence test is
+  retired. Output is byte-identical.
+- No vendored fonts: `crates/turbo-html2pdf-core/assets/fonts` (a copy of
+  turbo-dom-layout's) is deleted; Rust tests and benches read the fixtures through
+  turbo-dom-layout's `test-support` API, JS scripts, the napi tests and the benches
+  through `scripts/layout-crate-dir.mjs` (`cargo metadata`). `package-notices.mjs`
+  builds the shipped notices from turbo-dom-layout's font tree and now also writes and
+  checks the npm package's `Go-Regular.ttf`.
+
+- The layout half of `turbo-html2pdf-core` (style cascade, layout, text/fonts incl.
+  the bundled faces, layout snapshots, `layout_html`, images, SVG, perf counters,
+  errors, the `t:` markup parse) moved verbatim to the `turbo-dom-layout` crate in
+  the turbo-dom workspace. `turbo-html2pdf-core` depends on it and re-exports it at
+  the same paths, so `turbo_html2pdf_core::style::…`, `::layout::…`, `::Fragment`,
+  … are unchanged (the legacy `::Node` input went at S5, first bullet); output is
+  byte-identical. Its `bundled-fonts`,
+  `perf`, `svg`, `xref`, `pdf-ua` and `print-color` features forward to the layout
+  crate. Layout tests and their Chrome fixtures, and the `font_startup` example,
+  moved with the code.
+- html2pdf no longer keeps its own DOM: rendered markup is parsed into a turbo-dom
+  document and styled through turbo-dom-layout's Tree input (output byte-identical).
+  `Program::render_nodes` / `render_region` return a `Flow` (`Flow::style`; the
+  interim `Flow::to_nodes` legacy copy is gone again, first bullet); `TKind` lives in the new `markers`
+  module and directives are `Tag::Marker` / `FragmentContent::Marker` in the layout
+  types. PDF/UA roles/alt text and xref links/anchors are derived after layout into
+  `Page::semantics` (`Semantics::role` / `alt` / `link_href` / `anchor`) instead of
+  `Fragment` fields; `UaRole` moved to `semantics`. The `xref`, `pdf-ua` and
+  `print-color` features no longer forward to turbo-dom-layout (they set its
+  runtime options). The root `layout_html` / `layout_boxes` / `parse_html` stay
+  html2pdf-mode; `html_layout::*` is turbo-dom-layout's directive-free drive.
+- Selectors are parsed and matched by turbo-dom's one selector engine (the engine
+  behind turbo-dom's `matches` / `querySelector*`), through its stylesheet entry points
+  `parse_for_cascade` / `match_for_cascade`; html2pdf's own selector parser and matcher
+  are gone. Behaviour changes only where the old matcher disagreed with Chrome 156, each
+  backed by turbo-dom's Chrome control: CSS escapes, `*|`/`|` namespace prefixes, `of S`,
+  `:has()`, `:read-only`/`:read-write`, `:required`/`:optional`, `:nth-last-*`,
+  `:lang()`, `:defined` and case-insensitive pseudo-class names now work; an unknown
+  pseudo-class or pseudo-element drops its rule (it used to be ignored, so the rest of
+  the compound matched); pseudo-elements never style the element; `[href]` no longer
+  matches a namespaced `xlink:href`; specificity follows Selectors 4 (`:where()` = 0,
+  `:is()`/`:not()`/`:has()` = their most specific argument). Every rendered output of the
+  release corpora is byte-identical. `Rule::selectors` is a `RuleSelectors` (prelude +
+  the parsed list) instead of `Vec<Selector>`. See docs/css-support.md.
+
 ## [0.3.9] — 2026-10-25 — iterate computed style pairs
 
 - Add `ComputedStyle::iter` to iterate computed property name/value pairs, small

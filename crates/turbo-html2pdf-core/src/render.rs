@@ -8,13 +8,21 @@
 //!
 //! Footnotes are content-driven: a `<t:footnote>` leaves an inline marker in the
 //! body and its note body is flowed *here* (the orchestrator is the one layer
-//! that has the node tree, the cascade, and pagination together). We collect the
-//! note sources in document order, lay each body out into its own small galley
-//! with its mark, tag the body galley's markers with their note index, and hand
-//! the notes to `paginate_with_footnotes`, which runs the fixpoint (§6.4) so each
-//! page reserves the area of the notes it actually references. `page`-reset
+//! that has the document, the cascade, and pagination together). We collect the
+//! note sources in document order, move each body into a synthetic
+//! `<p class="footnote">` (built in the document) after its mark, lay it out into
+//! its own small galley, tag the body galley's markers with their note index, and
+//! hand the notes to `paginate_with_footnotes`, which runs the fixpoint (§6.4) so
+//! each page reserves the area of the notes it actually references. `page`-reset
 //! numbering, which depends on which page a note lands on, is resolved in a second
 //! relabel pass once placement is known.
+//!
+//! ## Node ids and semantics
+//!
+//! Every flow (body, notes, regions) is laid out with its own disjoint
+//! [`NodeId`](crate::NodeId) range; with the `pdf-ua`/`xref` features each layout
+//! also records its box sources and the derived [`Semantics`] (structure roles,
+//! links, anchors) ride on every returned [`Page`].
 //!
 //! Layering: `crate::paginate` stays free of template/style deps — it only walks
 //! a laid-out galley against geometry. This module is the one place that knows
@@ -47,14 +55,20 @@
 //! geometry, with `page.number`/`page.total` late evaluation.
 
 use serde::Serialize;
+use turbo_dom::rtdom::tree::NodeType;
+use turbo_dom::{Handle, Tree};
+use turbo_dom_layout::TreeView;
 
 use crate::error::{Diagnostics, LintCode, RenderError, Span};
+use crate::flow::Flow;
 use crate::image::ImageResolver;
-use crate::layout::fragment::{Fragment, FragmentContent};
-use crate::layout::{layout, layout_with_images, ImageCtx};
-use crate::node::{Element, Node, TKind, Tag};
-use crate::paginate::{paginate_with_footnotes, resolve_geometry, Note, Page, PageGeometry};
-use crate::style::{style_tree, AtRule, Cascade};
+use crate::layout::fragment::{Fragment, NodeId};
+use crate::layout::ImageCtx;
+use crate::markers::{directive_of, TKind};
+use crate::paginate::{
+    paginate_document, resolve_geometry, FlowBoxes, Galley, Note, Page, PageGeometry,
+};
+use crate::style::{AtRule, Cascade};
 use crate::template::{Program, FOOTER, HEADER};
 use crate::text::FontRegistry;
 
@@ -106,6 +120,45 @@ pub struct RenderInputs<'a, T: Serialize> {
     pub now: Option<i64>,
 }
 
+/// Per-render state: the diagnostics sink, the next free box id, and (with the
+/// `pdf-ua`/`xref` features) the semantics recorded from every flow laid out.
+struct Run<'d> {
+    diags: &'d mut Diagnostics,
+    #[cfg(any(feature = "pdf-ua", feature = "xref"))]
+    next_id: u32,
+    #[cfg(any(feature = "pdf-ua", feature = "xref"))]
+    derived: crate::semantics::derive::Derived,
+}
+
+/// No image resolver, no page height: the region/footnote layout.
+const NO_IMAGES: ImageCtx<'static> = ImageCtx {
+    resolver: &crate::NoImages,
+    body_height: None,
+};
+
+impl<'d> Run<'d> {
+    fn new(diags: &'d mut Diagnostics) -> Run<'d> {
+        Run {
+            diags,
+            // Id 0 stays free for the fragmenter's synthetic fragments (the
+            // footnote separator rule), so it never aliases a laid-out box.
+            #[cfg(any(feature = "pdf-ua", feature = "xref"))]
+            next_id: 1,
+            #[cfg(any(feature = "pdf-ua", feature = "xref"))]
+            derived: Default::default(),
+        }
+    }
+}
+
+// The two layout strategies live in gated-only sibling files (the workspace coverage
+// build unifies the binding crates' features, so only one of them is compiled there).
+#[cfg(any(feature = "pdf-ua", feature = "xref"))]
+#[path = "render_semantics.rs"]
+mod lay;
+#[cfg(not(any(feature = "pdf-ua", feature = "xref")))]
+#[path = "render_plain.rs"]
+mod lay;
+
 /// Drive a compiled [`Program`] all the way to paginated [`Page`]s with running
 /// header/footer regions filled and page-number field codes late-evaluated.
 ///
@@ -115,61 +168,197 @@ pub fn render_pages<T: Serialize>(
     inputs: &RenderInputs<T>,
     diags: &mut Diagnostics,
 ) -> Result<Vec<Page>, RenderError> {
-    let (mut body, sources, reset) = lay_out_body(inputs, diags)?;
+    let mut run = Run::new(diags);
+    let (mut body, mut flow, sources, reset, document) = lay_out_body(inputs, &mut run)?;
+    // Everything after the body renders against the document's own sheets too (its
+    // `@page` rules, its `<style>` rules in notes and regions) and its root font size.
+    let inputs = &RenderInputs {
+        cascade: &document.cascade,
+        at_rules: &document.at_rules,
+        ..*inputs
+    };
+    let _root_font = turbo_dom_layout::root_font_scope(document.root_font_px);
     let base = resolve_geometry(inputs.at_rules, PageGeometry::a4())?;
-    let geometry = reserve_bands(inputs, base, diags)?;
-    let notes = lay_out_notes(inputs, &sources, &geometry, diags);
+    let geometry = reserve_bands(inputs, base, &mut run)?;
+    let bodies = note_bodies(&mut flow, &sources);
+    let marks = continuous_marks(&sources);
+    let notes = flow_notes(inputs, &mut flow, &bodies, &marks, &geometry, &mut run);
     tag_markers(&mut body, notes.len());
-    let mut pages = paginate_with_footnotes(&body, geometry, &notes, diags);
-    relabel_page_reset(inputs, &sources, reset, &geometry, &body, &mut pages, diags);
-    fill_regions(inputs, &mut pages, diags)?;
+    let paged = PagedBody {
+        root: &body,
+        wrappers: &document.wrappers,
+        boxes: &document.boxes,
+    };
+    let mut pages = paged.paginate(geometry, &notes, run.diags);
+    let notes = NoteFlow {
+        flow: &mut flow,
+        bodies: &bodies,
+        sources: &sources,
+    };
+    relabel_page_reset(
+        inputs, notes, reset, &geometry, &paged, &mut pages, &mut run,
+    );
+    fill_regions(inputs, &mut pages, &mut run)?;
+    run.finish(&mut pages);
+    pages
+        .iter_mut()
+        .for_each(|page| page.canvas = document.canvas);
     Ok(pages)
+}
+
+/// What the body document contributes to the rest of the render
+/// (miaskiewicz/turbo-html2pdf#29): the cascade and `@page` rules with the document's
+/// own `<style>` sheets (before the caller's CSS), the root element's font size `rem`
+/// resolves against, and the canvas colour propagated from `<html>`/`<body>`.
+struct DocumentStyle {
+    cascade: Cascade,
+    at_rules: Vec<AtRule>,
+    root_font_px: f32,
+    canvas: Option<crate::layout::value::Rgba>,
+    /// The dissolved `<html>`/`<body>` boxes (outermost first, children removed).
+    wrappers: Vec<Fragment>,
+    /// The body flow's used box values, for the fragmenter (miaskiewicz/turbo-html2pdf#32).
+    boxes: FlowBoxes,
+}
+
+/// The body galley the fragmenter walks, with the `<html>`/`<body>` boxes dissolved
+/// out of it (their paint is sliced onto every page).
+struct PagedBody<'a> {
+    root: &'a Fragment,
+    wrappers: &'a [Fragment],
+    boxes: &'a FlowBoxes,
+}
+
+impl PagedBody<'_> {
+    fn paginate(
+        &self,
+        geometry: PageGeometry,
+        notes: &[Note],
+        diags: &mut Diagnostics,
+    ) -> Vec<Page> {
+        let galley = Galley {
+            root: self.root,
+            wrappers: self.wrappers,
+            boxes: self.boxes,
+        };
+        paginate_document(galley, geometry, notes, diags)
+    }
+}
+
+impl DocumentStyle {
+    fn of<T: Serialize>(inputs: &RenderInputs<T>, flow: &Flow) -> DocumentStyle {
+        let css = flow.document_css();
+        // The geometry reads the first `@page` rule: the caller's, else the document's.
+        let mut at_rules = inputs.at_rules.to_vec();
+        at_rules.extend(crate::style::parse_stylesheet(&css).at_rules);
+        DocumentStyle {
+            cascade: inputs.cascade.for_document(&css),
+            at_rules,
+            root_font_px: 16.0,
+            canvas: None,
+            wrappers: Vec::new(),
+            boxes: FlowBoxes::default(),
+        }
+    }
+}
+
+/// Dissolve the `<html>`/`<body>` boxes of a laid-out document into their content:
+/// every fragment whose box came from one of `wrappers` is replaced by its children
+/// (already in absolute galley coordinates), so the fragmenter walks the body content
+/// as the page flow, exactly as it walks a detached flow. Their own paint is kept in
+/// `boxes` (outermost first, children removed): the canvas colour is painted per page
+/// and the fragmenter slices their backgrounds/borders onto every page
+/// (miaskiewicz/turbo-html2pdf#31).
+fn dissolve_wrappers(
+    children: Vec<Fragment>,
+    wrappers: &[NodeId],
+    boxes: &mut Vec<Fragment>,
+) -> Vec<Fragment> {
+    let mut out = Vec::with_capacity(children.len());
+    for mut frag in children {
+        if wrappers.contains(&frag.node_id) {
+            let children = std::mem::take(&mut frag.children);
+            boxes.push(frag);
+            out.extend(dissolve_wrappers(children, wrappers, boxes));
+        } else {
+            out.push(frag);
+        }
+    }
+    out
 }
 
 /// Expand `<t:endnote>`/`<t:endnotes/>` when the `endnotes` feature is on; an
 /// identity otherwise. Wrapping the gate in a function keeps the default body
 /// free of any conditionally-compiled statement line.
 #[cfg(not(feature = "endnotes"))]
-fn expand_endnotes(nodes: Vec<Node>) -> Vec<Node> {
-    nodes
-}
+fn expand_endnotes(_flow: &mut Flow) {}
 
 /// Expand `<t:endnote>`/`<t:endnotes/>` into inline markers plus the rendered
 /// note list (`endnotes` feature, §3).
 #[cfg(feature = "endnotes")]
-fn expand_endnotes(nodes: Vec<Node>) -> Vec<Node> {
-    crate::endnotes::expand(nodes)
+fn expand_endnotes(flow: &mut Flow) {
+    crate::endnotes::expand(flow);
 }
 
 /// Render → style → lay out the body flow into one continuous galley, returning
-/// the galley plus the footnote sources collected from the rendered node tree in
-/// document order (their bodies are flowed separately into the footnote area).
+/// the galley, the flow, plus the footnote sources found in it in document order
+/// (their bodies are flowed separately into the footnote area).
 fn lay_out_body<T: Serialize>(
     inputs: &RenderInputs<T>,
-    diags: &mut Diagnostics,
-) -> Result<(Fragment, Vec<FootnoteSrc>, ResetMode), RenderError> {
-    let (nodes, rdiags) = inputs.program.render_nodes(inputs.data, inputs.now)?;
-    diags.lints.extend(rdiags.lints);
-    let nodes = expand_endnotes(nodes);
-    let sources = collect_footnotes(&nodes);
-    let reset = reset_mode(&nodes);
-    let styled = style_tree(&nodes, inputs.cascade);
+    run: &mut Run,
+) -> Result<(Fragment, Flow, Vec<FootnoteSrc>, ResetMode, DocumentStyle), RenderError> {
+    let (mut flow, rdiags) = inputs.program.render_nodes(inputs.data, inputs.now)?;
+    run.diags.lints.extend(rdiags.lints);
+    expand_endnotes(&mut flow);
+    let sources = collect_footnotes(&flow);
+    let reset = reset_mode(&flow);
+    let mut document = DocumentStyle::of(inputs, &flow);
+    let mut styled = flow.style_document(&document.cascade);
+    document.canvas = turbo_dom_layout::html_layout::propagate_canvas_background(&mut styled);
+    document.root_font_px = turbo_dom_layout::document_root_font_px(&styled);
+    let _root_font = turbo_dom_layout::root_font_scope(document.root_font_px);
     // Size images against the base geometry's body height (the 60% cap basis).
     // Bands reserved later only shrink it slightly, so the base height is a
     // stable approximation and keeps body layout single-pass.
-    let geo = resolve_geometry(inputs.at_rules, PageGeometry::a4())?;
+    let geo = resolve_geometry(&document.at_rules, PageGeometry::a4())?;
     let image_ctx = ImageCtx {
         resolver: inputs.images,
         body_height: Some(geo.body_height()),
     };
-    let galley = layout_with_images(
+    // The page area is the print initial containing block: fixed boxes and absolute
+    // boxes of the initial containing block resolve `%` / `bottom` insets and `%`
+    // heights against its height (turbo-html2pdf#39).
+    let laid = run.lay_recorded(
+        &flow,
         &styled,
-        geo.content_width(),
+        (geo.content_width(), geo.body_height()),
         inputs.fonts,
         &image_ctx,
-        diags,
     );
-    Ok((galley, sources, reset))
+    let mut galley = laid.galley;
+    document.boxes =
+        crate::flow_boxes::flow_boxes(&styled, &laid.sources, &galley, geo.content_width());
+    let wrappers = wrapper_ids(&flow, &laid.sources);
+    galley.children = dissolve_wrappers(
+        std::mem::take(&mut galley.children),
+        &wrappers,
+        &mut document.wrappers,
+    );
+    Ok((galley, flow, sources, reset, document))
+}
+
+/// The box ids of the document's `<html>` and `<body>` elements.
+fn wrapper_ids(flow: &Flow, sources: &turbo_dom_layout::NodeSources) -> Vec<NodeId> {
+    let view = TreeView::new(flow.tree());
+    let elements = [view.find_element("html"), view.find_element("body")];
+    let mut ids: Vec<NodeId> = sources
+        .elements
+        .iter()
+        .filter(|(_, h)| elements.contains(&Some(**h)))
+        .map(|(&id, _)| id)
+        .collect();
+    ids.sort_by_key(|id| id.0);
+    ids
 }
 
 // --------------------------------------------------------------------------
@@ -185,79 +374,100 @@ enum ResetMode {
     Page,
 }
 
-/// One footnote as found in the rendered node tree, before its body is flowed
-/// into the footnote area.
-struct FootnoteSrc {
-    /// The note body's child nodes (markup + text).
-    children: Vec<Node>,
+/// One footnote as found in the body flow, before its body is flowed into the
+/// footnote area.
+pub(crate) struct FootnoteSrc {
+    /// The `<t:footnote>` element.
+    pub(crate) element: Handle,
     /// A manual mark (`<t:footnote mark="*">`), independent of auto-numbering.
-    manual: Option<String>,
+    pub(crate) manual: Option<String>,
 }
 
-/// Collect every `<t:footnote>` in `nodes` in document (pre-order) order, the
-/// same order the layout assigns the inline marker fragments.
-fn collect_footnotes(nodes: &[Node]) -> Vec<FootnoteSrc> {
+/// The content children (elements and text) of `h`.
+fn kept_children(tree: &Tree, h: Handle) -> Vec<Handle> {
+    TreeView::new(tree).children(h)
+}
+
+/// Whether `h` is a `<t:footnote>` element.
+fn is_footnote(tree: &Tree, h: Handle) -> bool {
+    tree.node_type(h) == NodeType::Element
+        && tree.local_name(h).and_then(directive_of) == Some(TKind::Footnote)
+}
+
+/// Collect every `<t:footnote>` in the flow in document (pre-order) order, the
+/// same order the layout assigns the inline marker fragments. A footnote's own
+/// body is not searched (a nested note belongs to its note).
+pub(crate) fn collect_footnotes(flow: &Flow) -> Vec<FootnoteSrc> {
     let mut out = Vec::new();
-    for node in nodes {
-        collect_footnotes_node(node, &mut out);
-    }
+    collect_footnotes_in(flow.tree(), flow.roots(), &mut out);
     out
 }
 
-fn collect_footnotes_node(node: &Node, out: &mut Vec<FootnoteSrc>) {
-    let Some(el) = node.as_element() else {
-        return;
-    };
-    if matches!(el.tag, Tag::Directive(TKind::Footnote)) {
-        out.push(FootnoteSrc {
-            children: el.children.clone(),
-            manual: el.attr("mark").map(str::to_string),
-        });
-        return;
-    }
-    for child in &el.children {
-        collect_footnotes_node(child, out);
+fn collect_footnotes_in(tree: &Tree, nodes: &[Handle], out: &mut Vec<FootnoteSrc>) {
+    for &node in nodes {
+        if is_footnote(tree, node) {
+            out.push(FootnoteSrc {
+                element: node,
+                manual: tree.get_attribute_local(node, "mark").map(str::to_string),
+            });
+        } else {
+            collect_footnotes_in(tree, &kept_children(tree, node), out);
+        }
     }
 }
 
 /// The document's footnote-reset policy: the first `footnote-reset` attribute
 /// declared on any footnote wins; absent or `none`/`section` is continuous.
 /// TODO(phase15): `section` reset awaits section anchors; treated as continuous.
-fn reset_mode(nodes: &[Node]) -> ResetMode {
-    find_reset(nodes)
+fn reset_mode(flow: &Flow) -> ResetMode {
+    find_reset(flow.tree(), flow.roots())
         .filter(|v| v == "page")
         .map_or(ResetMode::Continuous, |_| ResetMode::Page)
 }
 
-fn find_reset(nodes: &[Node]) -> Option<String> {
-    nodes.iter().find_map(find_reset_node)
+fn find_reset(tree: &Tree, nodes: &[Handle]) -> Option<String> {
+    nodes.iter().find_map(|&node| find_reset_node(tree, node))
 }
 
-fn find_reset_node(node: &Node) -> Option<String> {
-    let el = node.as_element()?;
-    if matches!(el.tag, Tag::Directive(TKind::Footnote)) {
-        if let Some(v) = el.attr("footnote-reset") {
+fn find_reset_node(tree: &Tree, node: Handle) -> Option<String> {
+    if is_footnote(tree, node) {
+        if let Some(v) = tree.get_attribute_local(node, "footnote-reset") {
             return Some(v.to_string());
         }
     }
-    el.children.iter().find_map(find_reset_node)
+    find_reset(tree, &kept_children(tree, node))
 }
 
-/// Lay out each footnote body into its own galley with a continuous mark prefix
-/// (the placement-driving pass; page-reset relabeling happens afterward).
-fn lay_out_notes<T: Serialize>(
-    inputs: &RenderInputs<T>,
-    sources: &[FootnoteSrc],
-    geometry: &PageGeometry,
-    diags: &mut Diagnostics,
-) -> Vec<Note> {
-    let marks = continuous_marks(sources);
-    flow_notes(inputs, sources, &marks, geometry, diags)
+/// One footnote's synthetic `<p class="footnote">` (its body moved after a mark
+/// text node) in the body document.
+pub(crate) struct NoteBody {
+    pub(crate) paragraph: Handle,
+    pub(crate) mark: Handle,
+}
+
+/// Build each note's `<p class="footnote">`: a mark text node followed by the
+/// footnote's body, moved out of the (already laid out) `<t:footnote>` marker, so
+/// it flows as an ordinary small paragraph through the existing layout path.
+pub(crate) fn note_bodies(flow: &mut Flow, sources: &[FootnoteSrc]) -> Vec<NoteBody> {
+    let tree = flow.tree_mut();
+    sources
+        .iter()
+        .map(|src| {
+            let paragraph = tree.create_element("p");
+            tree.set_attribute(paragraph, "class", "footnote");
+            let mark = tree.create_text_node("");
+            tree.append_child(paragraph, mark);
+            for child in kept_children(tree, src.element) {
+                tree.append_child(paragraph, child);
+            }
+            NoteBody { paragraph, mark }
+        })
+        .collect()
 }
 
 /// Document-continuous marks: manual marks pass through; auto notes take the next
 /// integer in their own sequence (AC-3.20, independent sequences).
-fn continuous_marks(sources: &[FootnoteSrc]) -> Vec<String> {
+pub(crate) fn continuous_marks(sources: &[FootnoteSrc]) -> Vec<String> {
     let mut auto = 0u32;
     sources
         .iter()
@@ -275,35 +485,22 @@ fn continuous_marks(sources: &[FootnoteSrc]) -> Vec<String> {
 /// galley fragment, returning the resolved [`Note`] list.
 fn flow_notes<T: Serialize>(
     inputs: &RenderInputs<T>,
-    sources: &[FootnoteSrc],
+    flow: &mut Flow,
+    bodies: &[NoteBody],
     marks: &[String],
     geometry: &PageGeometry,
-    diags: &mut Diagnostics,
+    run: &mut Run,
 ) -> Vec<Note> {
     let width = geometry.content_width();
-    let mut out = Vec::with_capacity(sources.len());
-    for (i, src) in sources.iter().enumerate() {
-        let nodes = note_nodes(&marks[i], &src.children);
-        let styled = style_tree(&nodes, inputs.cascade);
-        let galley = layout(&styled, width, inputs.fonts, diags);
+    let mut out = Vec::with_capacity(bodies.len());
+    for (i, body) in bodies.iter().enumerate() {
+        flow.tree_mut()
+            .set_node_value(body.mark, &format!("{} ", marks[i]));
+        let styled = flow.style_roots(&[body.paragraph], inputs.cascade);
+        let galley = run.lay(flow, &styled, width, inputs.fonts, &NO_IMAGES);
         out.push(Note::new(i, galley));
     }
     out
-}
-
-/// Wrap a note's mark and body into a `<p class="footnote">` node so it flows as
-/// an ordinary small paragraph through the existing layout path.
-fn note_nodes(mark: &str, body: &[Node]) -> Vec<Node> {
-    let mut children = vec![Node::Text(format!("{mark} "))];
-    children.extend(body.iter().cloned());
-    vec![Node::Element(Element {
-        tag: Tag::Html("p".to_string()),
-        attrs: vec![crate::node::Attr {
-            name: "class".to_string(),
-            value: "footnote".to_string(),
-        }],
-        children,
-    })]
 }
 
 /// Tag the body galley's footnote markers, in document order, with their note
@@ -314,7 +511,7 @@ fn tag_markers(body: &mut Fragment, count: usize) {
 }
 
 fn tag_markers_in(frag: &mut Fragment, count: usize, next: &mut usize) {
-    if matches!(frag.content, FragmentContent::Directive(TKind::Footnote)) && *next < count {
+    if TKind::of_fragment(&frag.content) == Some(TKind::Footnote) && *next < count {
         frag.break_meta.footnotes.push(*next);
         *next += 1;
     }
@@ -323,24 +520,31 @@ fn tag_markers_in(frag: &mut Fragment, count: usize, next: &mut usize) {
     }
 }
 
+/// The body flow plus its notes, for the page-reset relabel pass.
+struct NoteFlow<'a> {
+    flow: &'a mut Flow,
+    bodies: &'a [NoteBody],
+    sources: &'a [FootnoteSrc],
+}
+
 /// Under `page` reset, renumber each note from its position within the page it
 /// landed on (AC-3.16), re-flow the note galleys with the new marks, and
 /// re-paginate once so the relabeled bands are placed. A no-op for continuous.
 fn relabel_page_reset<T: Serialize>(
     inputs: &RenderInputs<T>,
-    sources: &[FootnoteSrc],
+    notes: NoteFlow,
     reset: ResetMode,
     geometry: &PageGeometry,
-    body: &Fragment,
+    body: &PagedBody,
     pages: &mut Vec<Page>,
-    diags: &mut Diagnostics,
+    run: &mut Run,
 ) {
     if reset != ResetMode::Page {
         return;
     }
-    let marks = page_reset_marks(sources, pages);
-    let notes = flow_notes(inputs, sources, &marks, geometry, diags);
-    *pages = paginate_with_footnotes(body, *geometry, &notes, diags);
+    let marks = page_reset_marks(notes.sources, pages);
+    let flowed = flow_notes(inputs, notes.flow, notes.bodies, &marks, geometry, run);
+    *pages = body.paginate(*geometry, &flowed, run.diags);
 }
 
 /// Per-page marks: each page restarts auto-numbering at 1 in note-index order;
@@ -390,14 +594,14 @@ fn collect_marker_indices(frag: &Fragment, out: &mut Vec<usize>) {
 fn reserve_bands<T: Serialize>(
     inputs: &RenderInputs<T>,
     base: PageGeometry,
-    diags: &mut Diagnostics,
+    run: &mut Run,
 ) -> Result<PageGeometry, RenderError> {
     let mut geo = base;
     let probe = PageContext::new(1, 1);
-    if let Some(galley) = render_region(inputs, HEADER, probe, diags)? {
+    if let Some(galley) = render_region(inputs, HEADER, probe, run)? {
         geo.header_extent = band_extent(&galley, base.margin.top);
     }
-    if let Some(galley) = render_region(inputs, FOOTER, probe, diags)? {
+    if let Some(galley) = render_region(inputs, FOOTER, probe, run)? {
         geo.footer_extent = band_extent(&galley, base.margin.bottom);
     }
     Ok(geo)
@@ -415,7 +619,7 @@ fn render_region<T: Serialize>(
     inputs: &RenderInputs<T>,
     name: &str,
     ctx: PageContext,
-    diags: &mut Diagnostics,
+    run: &mut Run,
 ) -> Result<Option<Fragment>, RenderError> {
     let region_ctx = RegionCtx {
         page: ctx,
@@ -424,11 +628,17 @@ fn render_region<T: Serialize>(
     let Some(result) = inputs.program.render_region(name, &region_ctx, inputs.now) else {
         return Ok(None);
     };
-    let (nodes, rdiags) = result?;
-    diags.lints.extend(rdiags.lints);
-    let styled = style_tree(&nodes, inputs.cascade);
+    let (flow, rdiags) = result?;
+    run.diags.lints.extend(rdiags.lints);
+    let styled = flow.style(inputs.cascade);
     let width = resolve_geometry(inputs.at_rules, PageGeometry::a4())?.content_width();
-    Ok(Some(layout(&styled, width, inputs.fonts, diags)))
+    Ok(Some(run.lay(
+        &flow,
+        &styled,
+        width,
+        inputs.fonts,
+        &NO_IMAGES,
+    )))
 }
 
 /// Re-render every page's regions with that page's real `{number, total}` and
@@ -436,13 +646,13 @@ fn render_region<T: Serialize>(
 fn fill_regions<T: Serialize>(
     inputs: &RenderInputs<T>,
     pages: &mut [Page],
-    diags: &mut Diagnostics,
+    run: &mut Run,
 ) -> Result<(), RenderError> {
     let total = pages.len() as u32;
     for page in pages.iter_mut() {
         let ctx = PageContext::new(page.number, total);
-        place_band(inputs, page, ctx, HEADER, diags)?;
-        place_band(inputs, page, ctx, FOOTER, diags)?;
+        place_band(inputs, page, ctx, HEADER, run)?;
+        place_band(inputs, page, ctx, FOOTER, run)?;
     }
     Ok(())
 }
@@ -453,13 +663,13 @@ fn place_band<T: Serialize>(
     page: &mut Page,
     ctx: PageContext,
     name: &str,
-    diags: &mut Diagnostics,
+    run: &mut Run,
 ) -> Result<(), RenderError> {
-    let Some(mut galley) = render_region(inputs, name, ctx, diags)? else {
+    let Some(mut galley) = render_region(inputs, name, ctx, run)? else {
         return Ok(());
     };
     let (extent, dy) = band_placement(name, &page.geometry);
-    clip_region(&mut galley, extent, diags);
+    clip_region(&mut galley, extent, run.diags);
     galley.translate(page.geometry.margin.left, dy);
     let frags = std::mem::take(&mut galley.children);
     store_band(page, name, frags);

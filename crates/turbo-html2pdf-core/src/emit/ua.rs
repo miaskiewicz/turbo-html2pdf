@@ -14,15 +14,20 @@
 //!   `/ParentTree`. Reading order is document order.
 //!
 //! The two walks must assign MCIDs identically; both rely on [`wrap_kind`] and
-//! the band split ([`super::page`]) to decide what is content vs. artifact, so a
-//! given page yields the same MCID sequence in both passes.
+//! the band split ([`super::page`]) to decide what is content vs. artifact. The
+//! painter numbers content in paint order ([`super::page::painted`]); the planner
+//! walks document order (the reading order) and gives each content fragment the
+//! MCID of its paint position ([`paint_mcids`]).
+
+use std::collections::HashMap;
 
 use pdf_writer::types::StructRole;
 use pdf_writer::{Content, Finish, Name, Pdf, Ref, TextStr};
 
-use crate::layout::fragment::{Fragment, FragmentContent, UaRole};
+use crate::layout::fragment::{Fragment, FragmentContent};
 use crate::layout::value::BorderEdges;
-use crate::paginate::Page;
+use crate::paginate::{Page, CARRIED};
+use crate::semantics::{Semantics, UaRole};
 
 use super::EmitOptions;
 
@@ -51,14 +56,19 @@ pub(super) fn wrap_kind(frag: &Fragment, artifact_band: bool) -> WrapKind {
 }
 
 /// The wrap for a fragment in a content band: real text/images are tagged
-/// content; a painting box is decoration; everything else is unbracketed.
+/// content; a painting box is decoration; everything else is unbracketed. A copy carried
+/// onto a neighbouring page ([`CARRIED`]) is an artifact: its own page tags the content
+/// (miaskiewicz/turbo-html2pdf#44).
 fn content_band_kind(frag: &Fragment) -> WrapKind {
+    if frag.node_id == CARRIED {
+        return artifact_or_none(frag);
+    }
     match &frag.content {
         FragmentContent::TextLine { .. } | FragmentContent::Image(_) => WrapKind::Content,
         FragmentContent::Box {
             background, border, ..
         } => box_wrap(*background, border),
-        FragmentContent::Directive(_) => WrapKind::None,
+        FragmentContent::Marker(_) => WrapKind::None,
     }
 }
 
@@ -89,7 +99,7 @@ fn paints(frag: &Fragment) -> bool {
         FragmentContent::Box {
             background, border, ..
         } => background.is_some() || border.any_visible(),
-        FragmentContent::Directive(_) => false,
+        FragmentContent::Marker(_) => false,
     }
 }
 
@@ -250,12 +260,19 @@ struct TreeBuilder {
     nodes: Vec<StructNode>,
     roots: Vec<usize>,
     mcid_counts: Vec<i32>,
+    /// The fragment semantics of the page being walked.
+    semantics: Semantics,
+    /// The MCID of each content fragment of the page being walked (by address: the
+    /// pages are borrowed for the whole walk).
+    order: HashMap<*const Fragment, i32>,
 }
 
 impl TreeBuilder {
     /// Walk every page's content bands, growing the tree.
     fn run(&mut self, pages: &[Page]) {
         for (page, frags) in pages.iter().enumerate() {
+            self.semantics = frags.semantics.clone();
+            self.order = paint_mcids([&frags.body, &frags.footnotes]);
             let mut mcid = 0i32;
             self.walk_band(&frags.body, page, None, &mut mcid);
             self.walk_band(&frags.footnotes, page, None, &mut mcid);
@@ -280,6 +297,9 @@ impl TreeBuilder {
     /// Recurse one fragment: open its element (if it has a role), attach its own
     /// MCID to the nearest enclosing element, then descend.
     fn walk(&mut self, frag: &Fragment, page: usize, parent: Option<usize>, mcid: &mut i32) {
+        if super::page::invisible(frag) {
+            return;
+        }
         let holder = self.open_element(frag, page, parent);
         self.attach_content(frag, page, holder, mcid);
         for child in &frag.children {
@@ -295,11 +315,12 @@ impl TreeBuilder {
         page: usize,
         parent: Option<usize>,
     ) -> Option<usize> {
-        let role = match frag.role {
+        let role = match self.semantics.role(frag) {
             Some(UaRole::Artifact) | None => return parent,
             Some(r) => r,
         };
-        let idx = self.push_node(map_role(role), frag.alt.clone(), page);
+        let alt = self.semantics.alt(frag).map(str::to_string);
+        let idx = self.push_node(map_role(role), alt, page);
         match parent {
             Some(p) => self.nodes[p].children.push(idx),
             None => self.roots.push(idx),
@@ -320,7 +341,7 @@ impl TreeBuilder {
             return;
         }
         let owner = holder.unwrap_or_else(|| self.synthetic_paragraph(page));
-        let id = *mcid;
+        let id = self.order[&std::ptr::from_ref(frag)];
         *mcid += 1;
         self.nodes[owner].mcids.push(id);
     }
@@ -347,13 +368,34 @@ impl TreeBuilder {
     }
 }
 
+/// Each content fragment of a page's content bands (body, then footnotes) by its MCID:
+/// its position in paint order, as the painter numbers them.
+fn paint_mcids(bands: [&[Fragment]; 2]) -> HashMap<*const Fragment, i32> {
+    let mut order = HashMap::new();
+    for band in bands {
+        number_in_paint_order(&super::page::painted(band), &mut order);
+    }
+    order
+}
+
+fn number_in_paint_order(frags: &[&Fragment], order: &mut HashMap<*const Fragment, i32>) {
+    for &frag in frags.iter().filter(|f| !super::page::invisible(f)) {
+        if is_content(frag) {
+            let next = order.len() as i32;
+            order.insert(std::ptr::from_ref(frag), next);
+        }
+        number_in_paint_order(&super::page::painted(&frag.children), order);
+    }
+}
+
 /// Whether a fragment contributes a content MCID in a content band (matches the
 /// painter's [`wrap_kind`] `Content` arm).
 fn is_content(frag: &Fragment) -> bool {
-    matches!(
+    let real = matches!(
         frag.content,
         FragmentContent::TextLine { .. } | FragmentContent::Image(_)
-    )
+    );
+    real && frag.node_id != CARRIED
 }
 
 /// Map a layout [`UaRole`] to a `pdf_writer` structure role.
@@ -366,6 +408,7 @@ fn map_role(role: UaRole) -> StructRole {
         UaRole::ListItem => StructRole::LI,
         UaRole::ListBody => StructRole::LBody,
         UaRole::Table => StructRole::Table,
+        UaRole::Caption => StructRole::Caption,
         UaRole::TableRow => StructRole::TR,
         UaRole::TableHeader => StructRole::TH,
         UaRole::TableData => StructRole::TD,

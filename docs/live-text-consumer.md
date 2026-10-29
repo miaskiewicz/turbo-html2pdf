@@ -63,8 +63,8 @@ internal ligature carets, CSS whitespace modes, fragmented inline borders and
 uncontrolled fallback-font geometry remain open. Atomic-inline line metrics
 retain their existing policy; the new negative-leading control covers pure text.
 
-The independent fixture `tests/fixtures/text-source-chrome155.json` under the core
-crate records real Chrome 155, the exact bundled Go font hash, final collector,
+The independent fixture `tests/fixtures/text-source-chrome155.json` under the
+turbo-dom-layout crate (turbo-dom repo; the layout half moved there) records real Chrome 155, the exact bundled Go font hash, final collector,
 probe and runner source hashes, and all offsets/queries. Sixteen controlled-font
 graphs certify 168 exact Range client-rectangle lists and 107 caret hits, including
 negative leading, 13/15px physical font metrics, rotation and skew. The emoji-fallback graph is

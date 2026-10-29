@@ -9,15 +9,15 @@ members = [
 ]
 
 [workspace.package]
-version = "0.3.9"
+version = "0.6.0"
 edition = "2021"
 license = "MIT"
 repository = "https://github.com/miaskiewicz/turbo-html2pdf"
 authors = ["turbo-pdf contributors"]
-# Real workspace floor: the default `cargo build --workspace` is dominated by
-# `napi-build` (rust-version 1.88); the core engine's font-subset stack
-# (`subsetter`/`skrifa`/`write-fonts`) needs 1.85. So 1.88 is the true MSRV.
-rust-version = "1.88"
+# Real workspace floor: turbo-dom-layout / turbo-dom 0.6 declare rust-version 1.89
+# (smol_str 0.3.6 sets it), above `napi-build` (1.88) and the core engine's
+# font-subset stack (`subsetter`/`skrifa`/`write-fonts`, 1.85). So 1.89 is the MSRV.
+rust-version = "1.89"
 
 [workspace.dependencies]
 minijinja = { version = "2", features = ["loader", "macros", "custom_syntax", "preserve_order"] }
@@ -31,3 +31,11 @@ wasm-bindgen = "0.2"
 opt-level = 3
 lto = "thin"
 codegen-units = 1
+
+# Pre-publish only: turbo-dom-layout 0.6.0 and turbo-dom 0.6.0 come from the turbo-dom
+# consolidation branch until they are on crates.io. Remove this block and re-lock
+# (`cargo update -p turbo-dom-layout -p turbo-dom`) before tagging (see PUBLISHING.md);
+# the tag-only `release-guard` job in release-crates.yml fails while it is present.
+[patch.crates-io]
+turbo-dom-layout = { git = "https://github.com/miaskiewicz/turbo-dom", rev = "223c4c894e698334a73bac52b292229dc2113025" }
+turbo-dom = { git = "https://github.com/miaskiewicz/turbo-dom", rev = "223c4c894e698334a73bac52b292229dc2113025" }

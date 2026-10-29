@@ -5,7 +5,7 @@
 //! `Type0` font with `Identity-H` encoding, so the codes we show in the content
 //! stream are simply the *new* (remapped) glyph ids as 2-byte values.
 
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 
 use pdf_writer::types::{CidFontType, FontFlags, SystemInfo};
 use pdf_writer::{Chunk, Finish, Name, Rect, Ref, Str};
@@ -20,6 +20,9 @@ use crate::text::FontFace;
 struct UsedFont {
     face: FontFace,
     glyphs: BTreeSet<u16>,
+    /// Each glyph's source text: the cluster it was first shaped from
+    /// (miaskiewicz/turbo-dom#205), so a ligature maps to all its characters.
+    texts: BTreeMap<u16, String>,
 }
 
 /// All faces used across the document, keyed by font-program identity. Built by
@@ -59,19 +62,28 @@ impl FontStore {
     }
 
     fn collect_fragment(&mut self, frag: &Fragment) {
-        if let FragmentContent::TextLine { glyphs, face, .. } = &frag.content {
-            self.record(face, glyphs);
+        if let FragmentContent::TextLine {
+            glyphs, face, text, ..
+        } = &frag.content
+        {
+            self.record(face, glyphs, text);
         }
         for child in &frag.children {
             self.collect_fragment(child);
         }
     }
 
-    fn record(&mut self, face: &FontFace, glyphs: &[PositionedGlyph]) {
+    fn record(&mut self, face: &FontFace, glyphs: &[PositionedGlyph], text: &str) {
         let idx = self.face_index(face);
         let used = &mut self.fonts[idx];
         for g in glyphs {
             used.glyphs.insert(g.glyph_id);
+            let cluster = g.text(text);
+            if !cluster.is_empty() {
+                used.texts
+                    .entry(g.glyph_id)
+                    .or_insert_with(|| cluster.to_owned());
+            }
         }
     }
 
@@ -94,6 +106,7 @@ impl FontStore {
         self.fonts.push(UsedFont {
             face: face.clone(),
             glyphs: BTreeSet::new(),
+            texts: BTreeMap::new(),
         });
         self.fonts.len() - 1
     }
@@ -185,14 +198,23 @@ fn write_font(font: &UsedFont, chunk: &mut Chunk, alloc: &mut RefAlloc) -> Ref {
 }
 
 /// Write the `/ToUnicode` CMap stream mapping each shown 2-byte glyph code (the
-/// subset-local gid) to its Unicode scalar for search and copy/paste.
+/// subset-local gid) to its source text for search and copy/paste: the cluster
+/// text recorded from the layout (miaskiewicz/turbo-html2pdf#54), falling back to
+/// the font's cmap for glyphs shown without text (watermark / stamp words).
 fn write_to_unicode(chunk: &mut Chunk, to_unicode: Ref, font: &UsedFont, remapper: &GlyphRemapper) {
     let used: Vec<u16> = font.glyphs.iter().copied().collect();
-    let pairs: Vec<(u16, u32)> = font
+    let from_cmap = font
         .face
         .glyph_to_unicode(&used)
         .into_iter()
-        .filter_map(|(old, cp)| remapper.get(old).map(|new| (new, cp)))
+        .filter(|(old, _)| !font.texts.contains_key(old))
+        .filter_map(|(old, cp)| char::from_u32(cp).map(|c| (old, c.to_string())));
+    let pairs: Vec<(u16, String)> = font
+        .texts
+        .iter()
+        .map(|(old, text)| (*old, text.clone()))
+        .chain(from_cmap)
+        .filter_map(|(old, text)| remapper.get(old).map(|new| (new, text)))
         .collect();
     let cmap = super::tounicode::build(&pairs);
     chunk.stream(to_unicode, cmap.as_bytes()).finish();

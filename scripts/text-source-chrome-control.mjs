@@ -6,6 +6,7 @@ import { createServer } from "node:http";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
+import { layoutFontsDir } from "./layout-crate-dir.mjs";
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const { values } = parseArgs({
   options: {
@@ -17,7 +18,7 @@ const { values } = parseArgs({
 });
 if (!values.runner || !values.out)
   throw Error("Pass --runner /absolute/chrome-cdp-trace.mjs and --out /absolute/oracle.json");
-const font = readFileSync(join(root, "crates/turbo-html2pdf-core/assets/fonts/Go-Regular.ttf"));
+const font = readFileSync(join(layoutFontsDir(), "Go-Regular.ttf"));
 const recovery = join(root, "target/parity-recovery/text-controls");
 mkdirSync(recovery, { recursive: true });
 const temporary = mkdtempSync(join(recovery, "capture-"));

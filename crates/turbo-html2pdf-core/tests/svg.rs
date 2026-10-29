@@ -8,19 +8,20 @@
 //!
 //! All SVG inputs are tiny committed byte strings (shapes only — no external
 //! files, no fonts, so rendering is host-independent and deterministic).
+//!
+//! Split at the S1 relocation: the layout-only cases moved to turbo-dom-layout's
+//! `tests/svg.rs`; the ones here need TKind directives, templating or the PDF emitter.
 
 #![cfg(feature = "svg")]
 
 mod common;
 
 use std::collections::HashMap;
-
-use turbo_html2pdf_core::image::{decode, probe, ColorSpace, Payload};
+use turbo_dom_layout::test_support::literal::{Element, Node};
 use turbo_html2pdf_core::paginate::{paginate, Page};
-use turbo_html2pdf_core::svg::{decode_svg, is_svg, probe_svg};
 use turbo_html2pdf_core::{
-    build_cascade, emit_pdf_with_images, layout_with_images, style_tree, Attr, Diagnostics,
-    Element, EmitOptions, ImageCtx, ImageResolver, Node, Tag,
+    build_cascade, emit_pdf_with_images, layout_with_images, Attr, Diagnostics, EmitOptions,
+    ImageCtx, ImageResolver, Tag,
 };
 use turbo_html2pdf_core::{style::TokenSet, StyledNode};
 
@@ -34,11 +35,6 @@ const SVG_RED_4X4: &str = r##"<svg xmlns="http://www.w3.org/2000/svg" width="4" 
   <rect x="0" y="0" width="4" height="4" fill="#0000ff" fill-opacity="0.5"/>
   <rect x="1" y="1" width="2" height="2" fill="#ff0000"/>
 </svg>"##;
-
-/// A minimal SVG behind a UTF-8 BOM, leading whitespace and an `<?xml ?>` prolog,
-/// to exercise that branch of the sniffer (XML is case-sensitive, so the element
-/// itself stays lowercase `svg`).
-const SVG_WITH_PROLOG: &str = "\u{feff}<?xml version=\"1.0\"?>\n  <svg xmlns=\"http://www.w3.org/2000/svg\" width=\"2\" height=\"2\"><rect width=\"2\" height=\"2\" fill=\"green\"/></svg>";
 
 fn svg_bytes(s: &str) -> Vec<u8> {
     s.as_bytes().to_vec()
@@ -68,126 +64,6 @@ fn contains(haystack: &[u8], needle: &[u8]) -> bool {
 }
 
 // --------------------------------------------------------------------------
-// sniff
-// --------------------------------------------------------------------------
-
-#[test]
-fn is_svg_recognizes_svg_and_rejects_raster() {
-    assert!(is_svg(SVG_RED_4X4.as_bytes()), "plain <svg> recognized");
-    assert!(
-        is_svg(SVG_WITH_PROLOG.as_bytes()),
-        "BOM + leading whitespace + <?xml?> prolog recognized"
-    );
-    // The tag sniff is case-insensitive (an uppercase root still sniffs as SVG).
-    assert!(is_svg(b"<SVG xmlns=\"http://www.w3.org/2000/svg\"></SVG>"));
-    assert!(!is_svg(b"not an svg"));
-    assert!(!is_svg(&[]));
-    // PNG magic must not be mistaken for SVG.
-    assert!(!is_svg(&[0x89, b'P', b'N', b'G', 0x0D, 0x0A, 0x1A, 0x0A]));
-    // An XML prolog with no <svg> element is not an SVG.
-    assert!(!is_svg(b"<?xml version=\"1.0\"?><html></html>"));
-}
-
-// --------------------------------------------------------------------------
-// probe / decode
-// --------------------------------------------------------------------------
-
-#[test]
-fn probe_svg_reports_oversampled_size_and_alpha() {
-    let p = probe_svg(SVG_RED_4X4.as_bytes()).expect("probe svg");
-    // SVG_SCALE = 2 => 4px intrinsic rasterizes to 8px.
-    assert_eq!((p.width, p.height), (8, 8));
-    assert!(p.has_alpha, "rasterized svg always carries an alpha plane");
-}
-
-#[test]
-fn probe_routes_svg_through_svg_path() {
-    // The public `probe` entry point must detect SVG (gated) before raster sniff.
-    let p = probe(SVG_RED_4X4.as_bytes()).expect("probe routes svg");
-    assert_eq!((p.width, p.height, p.has_alpha), (8, 8, true));
-}
-
-#[test]
-fn decode_svg_yields_rgb_samples_and_alpha_plane() {
-    let img = decode_svg(SVG_RED_4X4.as_bytes()).expect("decode svg");
-    assert_eq!((img.width, img.height), (8, 8));
-    assert_eq!(img.color(), ColorSpace::Rgb);
-    let alpha = img.alpha.expect("svg must yield an alpha plane");
-    assert_eq!(alpha.len(), 8 * 8, "one alpha byte per pixel");
-    // The inner red square is opaque; the surrounding blue is half-opaque; so the
-    // plane has both fully-opaque and partial values (not a flat 255).
-    assert!(alpha.contains(&255), "opaque pixels present");
-    assert!(
-        alpha.iter().any(|&a| a > 0 && a < 255),
-        "partial-alpha pixels present"
-    );
-    match img.payload {
-        Payload::Raw { samples, color } => {
-            assert_eq!(color, ColorSpace::Rgb);
-            assert_eq!(samples.len(), 8 * 8 * 3, "3 rgb samples per pixel");
-            // Centre pixel (the opaque red square) is red.
-            let centre = (4 * 8 + 4) * 3;
-            assert_eq!(&samples[centre..centre + 3], &[255, 0, 0], "centre is red");
-        }
-        Payload::Jpeg { .. } => panic!("svg must rasterize to raw samples"),
-    }
-}
-
-#[test]
-fn decode_routes_svg_through_svg_path() {
-    let img = decode(SVG_RED_4X4.as_bytes()).expect("decode routes svg");
-    assert_eq!((img.width, img.height), (8, 8));
-    assert!(img.alpha.is_some());
-}
-
-#[test]
-fn decode_svg_is_byte_deterministic() {
-    let a = decode_svg(SVG_RED_4X4.as_bytes()).expect("a");
-    let b = decode_svg(SVG_RED_4X4.as_bytes()).expect("b");
-    assert_eq!(a.width, b.width);
-    assert_eq!(a.height, b.height);
-    assert_eq!(a.alpha, b.alpha, "alpha plane must be identical run-to-run");
-    let (Payload::Raw { samples: sa, .. }, Payload::Raw { samples: sb, .. }) =
-        (&a.payload, &b.payload)
-    else {
-        panic!("raw payload expected");
-    };
-    assert_eq!(sa, sb, "rgb samples must be byte-identical run-to-run");
-}
-
-#[test]
-fn malformed_svg_is_handled_without_panic() {
-    // Looks like an SVG (sniff hits) but the body is not parseable XML.
-    let broken = b"<svg xmlns=\"http://www.w3.org/2000/svg\"><rect";
-    assert!(is_svg(broken), "sniff still matches the opening tag");
-    assert!(
-        decode_svg(broken).is_none(),
-        "malformed svg must not decode"
-    );
-    assert!(probe_svg(broken).is_none(), "malformed svg must not probe");
-    // And via the public routers.
-    assert!(decode(broken).is_none());
-    assert!(probe(broken).is_none());
-}
-
-#[test]
-fn zero_sized_svg_decodes_to_nothing() {
-    // A syntactically valid SVG whose canvas collapses to zero has no pixels to
-    // rasterize: it must yield `None`, not an empty/garbage buffer.
-    let zero = br#"<svg xmlns="http://www.w3.org/2000/svg" width="0" height="0"></svg>"#;
-    assert!(decode_svg(zero).is_none(), "zero-size svg decodes to none");
-    assert!(probe_svg(zero).is_none(), "zero-size svg probes to none");
-}
-
-#[test]
-fn prolog_svg_decodes() {
-    // The BOM/prolog/uppercase variant must parse and rasterize too.
-    let img = decode(SVG_WITH_PROLOG.as_bytes()).expect("decode prolog svg");
-    assert_eq!((img.width, img.height), (4, 4)); // 2px * SVG_SCALE
-    assert!(img.alpha.is_some());
-}
-
-// --------------------------------------------------------------------------
 // layout + emit pipeline
 // --------------------------------------------------------------------------
 
@@ -204,7 +80,7 @@ fn img_node(src: &str) -> Vec<Node> {
 
 fn styled_img(src: &str) -> Vec<StyledNode> {
     let cascade = build_cascade("", "", TokenSet::default());
-    style_tree(&img_node(src), &cascade)
+    common::style_nodes(&img_node(src), &cascade)
 }
 
 fn paginate_img(src: &str, resolver: &dyn ImageResolver) -> Vec<Page> {
@@ -292,4 +168,93 @@ fn assert_qpdf_clean(name: &str, pdf: &[u8]) {
         "{name}: qpdf --check failed: {}",
         String::from_utf8_lossy(&out.stdout)
     );
+}
+
+// --------------------------------------------------------------------------
+// miaskiewicz/turbo-html2pdf#46: a vector image cut at a page boundary
+// --------------------------------------------------------------------------
+
+/// A 4x4 opaque red SVG.
+const SVG_RED: &str = r##"<svg xmlns="http://www.w3.org/2000/svg" width="4" height="4"><rect width="4" height="4" fill="#ff0000"/></svg>"##;
+
+/// A split `bottom: 20px` relative block whose 40px SVG image, moved to page 2, is
+/// shifted 20px above that page's area: its top half paints at the end of page 1
+/// (miaskiewicz/turbo-html2pdf#42).
+fn carried_svg_pdf() -> Vec<u8> {
+    let html = r#"<!DOCTYPE html><html><head><style>@page{size:600px 400px;margin:40px}body{margin:0}</style></head><body><div style="position:relative;bottom:20px"><div style="height:300px"></div><div style="height:40px;break-inside:avoid"><img src="red.svg" style="display:block;width:40px;height:40px"></div></div></body></html>"#;
+    let resolver = MapResolver::new(vec![("red.svg", svg_bytes(SVG_RED))]);
+    let (program, _) = turbo_html2pdf_core::compile(html, &Default::default()).expect("compile");
+    let cascade = build_cascade("", "", TokenSet::default());
+    let fonts = common::registry();
+    let inputs = turbo_html2pdf_core::RenderInputs {
+        program: &program,
+        data: &serde_json::Value::Null,
+        cascade: &cascade,
+        at_rules: &[],
+        fonts: &fonts,
+        images: &resolver,
+        now: Some(0),
+    };
+    let pages = turbo_html2pdf_core::render_pages(&inputs, &mut Diagnostics::default())
+        .expect("render_pages");
+    assert_eq!(pages.len(), 2);
+    emit_pdf_with_images(&pages, &EmitOptions::default(), &resolver)
+}
+
+#[test]
+fn a_vector_image_cut_at_a_page_boundary_paints_inside_its_clip_on_both_pages() {
+    let pdf = carried_svg_pdf();
+    let text = String::from_utf8_lossy(&pdf);
+    // Each page draws the image once, inside a saved state with a clipping path.
+    let draws: Vec<usize> = text.match_indices(" Do\n").map(|(i, _)| i).collect();
+    assert_eq!(draws.len(), 2, "drawn once per page");
+    for &at in &draws {
+        let clip = text[..at]
+            .rfind("re\nW\nn")
+            .expect("a clipping path before the draw");
+        assert!(text[..clip].rfind("q\n").is_some(), "in a saved state");
+        assert!(text[at..].find("Q\n").is_some(), "restored after the draw");
+    }
+    if std::process::Command::new("pdftoppm")
+        .arg("-v")
+        .output()
+        .is_err()
+    {
+        eprintln!("pdftoppm not on PATH; skipping the raster probe");
+        return;
+    }
+    let red = |page: usize, y: usize| raster_red(&pdf, page, 60, y);
+    // Page 1: the image's top half at 340..359, cut at the page area's end (360).
+    assert!(red(1, 341) && red(1, 358), "page 1 shows the carried half");
+    assert!(!red(1, 362), "page 1 is cut at its area's end");
+    // Page 2: the image at 20..59, shown from 1px above the page area (39).
+    assert!(red(2, 41) && red(2, 58), "page 2 shows its own half");
+    assert!(!red(2, 30), "page 2 is cut above its area");
+}
+
+/// Whether pixel (`x`, `y`) of page `page` (1-based), rasterized by `pdftoppm` at
+/// 96 dpi (1 device px per CSS px), is red.
+fn raster_red(pdf: &[u8], page: usize, x: usize, y: usize) -> bool {
+    let dir = std::env::temp_dir().join(format!("turbo_svg_clip_{}_{page}", std::process::id()));
+    std::fs::create_dir_all(&dir).expect("temp dir");
+    let input = dir.join("doc.pdf");
+    std::fs::write(&input, pdf).expect("write pdf");
+    let n = page.to_string();
+    let out = std::process::Command::new("pdftoppm")
+        .args(["-r", "96", "-f", &n, "-l", &n, "-singlefile"])
+        .arg(&input)
+        .arg(dir.join("page"))
+        .output()
+        .expect("run pdftoppm");
+    assert!(out.status.success());
+    let ppm = std::fs::read(dir.join("page.ppm")).expect("read ppm");
+    std::fs::remove_dir_all(&dir).ok();
+    let header: Vec<&[u8]> = ppm.splitn(4, |&b| b == b'\n').collect();
+    let width: usize = String::from_utf8_lossy(header[1])
+        .split(' ')
+        .next()
+        .and_then(|w| w.parse().ok())
+        .expect("ppm width");
+    let px = &header[3][(y * width + x) * 3..][..3];
+    px[0] > 200 && px[1] < 60 && px[2] < 60
 }

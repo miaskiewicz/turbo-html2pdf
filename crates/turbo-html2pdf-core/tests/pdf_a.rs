@@ -20,8 +20,8 @@ use turbo_html2pdf_core::layout::value::Rgba;
 use turbo_html2pdf_core::paginate::{paginate, Page};
 use turbo_html2pdf_core::style::TokenSet;
 use turbo_html2pdf_core::{
-    build_cascade, compile, emit_pdf, layout, style_tree, CompileOptions, Diagnostics, EmitOptions,
-    StyledNode, TextWatermark, Watermark,
+    build_cascade, compile, emit_pdf, layout, CompileOptions, Diagnostics, EmitOptions, StyledNode,
+    TextWatermark, Watermark,
 };
 
 fn fixture_path(name: &str, file: &str) -> String {
@@ -50,12 +50,12 @@ fn paginate_fixture(name: &str) -> Vec<Page> {
 
     let (program, _) = compile(&template, &CompileOptions::default())
         .unwrap_or_else(|e| panic!("compile {name}: {:?}", e.code));
-    let (nodes, _) = program
+    let (flow, _) = program
         .render_nodes(&data, Some(0))
         .unwrap_or_else(|e| panic!("render {name}: {:?}", e.code));
 
     let cascade = build_cascade(&css, "", TokenSet::default());
-    let styled: Vec<StyledNode> = style_tree(&nodes, &cascade);
+    let styled: Vec<StyledNode> = common::style_flow(&flow, &cascade);
 
     let mut diags = Diagnostics::default();
     let galley = layout(&styled, 540.0, &common::registry(), &mut diags);

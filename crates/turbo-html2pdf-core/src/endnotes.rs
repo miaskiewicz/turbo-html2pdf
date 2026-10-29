@@ -5,144 +5,135 @@
 //!
 //! Unlike footnotes — which are page-anchored and resolved by the body/footnote
 //! fixpoint (§6.4) — endnotes are *document-anchored*: all notes gather to the one
-//! `<t:endnotes/>` slot. That makes this a pure node→node rewrite that runs once,
-//! right after templating, before the rest of the spine (style → layout →
-//! paginate) sees the tree. The numbering builds on the same first-encounter,
-//! document-order counting the footnote infra uses.
+//! `<t:endnotes/>` slot. That makes this a pure rewrite of the flow's document
+//! that runs once, right after templating, before the rest of the spine
+//! (style → layout → paginate) sees the tree. The numbering builds on the same
+//! first-encounter, document-order counting the footnote infra uses.
 //!
 //! The rewrite uses only plain HTML elements (`<sup>` for the marker, `<div>` for
-//! each rendered note), so it needs no new layout, style, or emit support: the
-//! existing pipeline lays it out like any other markup.
+//! each rendered note), built by mutating the document, so it needs no new
+//! layout, style, or emit support: the existing pipeline lays it out like any
+//! other markup.
 
-use crate::node::{Attr, Element, Node, TKind, Tag};
+use turbo_dom::rtdom::tree::NodeType;
+use turbo_dom::{Handle, Tree};
+use turbo_dom_layout::TreeView;
+
+use crate::flow::Flow;
+use crate::markers::{directive_of, TKind};
 
 /// Rewrite `<t:endnote>`/`<t:endnotes/>` in place: replace each `<t:endnote>` with
 /// a `<sup>` marker carrying its number, collect the note bodies in document
-/// order, then expand the first `<t:endnotes/>` into the rendered list. A tree
-/// with neither directive is returned untouched.
-pub fn expand(nodes: Vec<Node>) -> Vec<Node> {
-    let mut collected: Vec<Vec<Node>> = Vec::new();
-    let mut marked = mark_nodes(nodes, &mut collected);
-    if !collected.is_empty() {
-        place_list(&mut marked, &collected);
+/// order, then expand the first `<t:endnotes/>` into the rendered list. A flow
+/// with neither directive is left untouched.
+pub fn expand(flow: &mut Flow) {
+    let roots = flow.roots().to_vec();
+    let tree = flow.tree_mut();
+    let mut collected: Vec<Vec<Handle>> = Vec::new();
+    mark_nodes(tree, roots, &mut collected);
+    if collected.is_empty() {
+        return;
     }
-    marked
+    let roots = kept_children(tree, crate::template::markup::body_of(tree));
+    place_into(tree, roots, &collected, &mut false);
+    let roots = kept_children(tree, crate::template::markup::body_of(tree));
+    flow.set_roots(roots);
+}
+
+/// The content children (elements and text) of `h`.
+fn kept_children(tree: &Tree, h: Handle) -> Vec<Handle> {
+    TreeView::new(tree).children(h)
+}
+
+/// The directive an element node is, if any.
+fn directive(tree: &Tree, h: Handle) -> Option<TKind> {
+    tree.local_name(h).and_then(directive_of)
+}
+
+/// The element nodes among `nodes` (node types never change, so filtering up
+/// front is the same as skipping text while rewriting).
+fn elements(tree: &Tree, nodes: Vec<Handle>) -> Vec<Handle> {
+    nodes
+        .into_iter()
+        .filter(|&h| tree.node_type(h) == NodeType::Element)
+        .collect()
 }
 
 /// Replace every `<t:endnote>` with its superscript marker, pushing its body onto
 /// `collected` and assigning the next document-order number.
-fn mark_nodes(nodes: Vec<Node>, collected: &mut Vec<Vec<Node>>) -> Vec<Node> {
-    nodes
-        .into_iter()
-        .map(|node| mark_node(node, collected))
-        .collect()
-}
-
-fn mark_node(node: Node, collected: &mut Vec<Vec<Node>>) -> Node {
-    let Node::Element(el) = node else {
-        return node;
-    };
-    if matches!(el.tag, Tag::Directive(TKind::Endnote)) {
-        collected.push(el.children);
-        return marker(collected.len());
+fn mark_nodes(tree: &mut Tree, nodes: Vec<Handle>, collected: &mut Vec<Vec<Handle>>) {
+    for node in elements(tree, nodes) {
+        if directive(tree, node) == Some(TKind::Endnote) {
+            collected.push(kept_children(tree, node));
+            let marker = marker(tree, collected.len());
+            tree.replace_with(node, &[marker]);
+            continue;
+        }
+        let children = kept_children(tree, node);
+        mark_nodes(tree, children, collected);
     }
-    Node::Element(Element {
-        tag: el.tag,
-        attrs: el.attrs,
-        children: mark_nodes(el.children, collected),
-    })
 }
 
 /// A superscript marker element holding the note number as text.
-fn marker(number: usize) -> Node {
-    Node::Element(Element {
-        tag: Tag::Html("sup".to_string()),
-        attrs: vec![class_attr("endnote-ref")],
-        children: vec![Node::Text(number.to_string())],
-    })
+fn marker(tree: &mut Tree, number: usize) -> Handle {
+    let sup = element_with_class(tree, "sup", "endnote-ref");
+    let text = tree.create_text_node(&number.to_string());
+    tree.append_child(sup, text);
+    sup
 }
 
-/// Expand the first `<t:endnotes/>` in pre-order into the rendered list, dropping
-/// any later `<t:endnotes/>` (the list is emitted once). `emitted` carries the
-/// "already placed" state across the recursion.
-fn place_list(nodes: &mut Vec<Node>, collected: &[Vec<Node>]) {
-    let mut emitted = false;
-    place_into(nodes, collected, &mut emitted);
-}
-
-fn place_into(nodes: &mut Vec<Node>, collected: &[Vec<Node>], emitted: &mut bool) {
-    let mut out = Vec::with_capacity(nodes.len());
-    for node in std::mem::take(nodes) {
-        push_placed(&mut out, node, collected, emitted);
-    }
-    nodes.extend(out);
-}
-
-/// Place one node into `out`: an `<t:endnotes/>` slot becomes the list (once) or
-/// is dropped; any other node recurses into its children.
-fn push_placed(out: &mut Vec<Node>, node: Node, collected: &[Vec<Node>], emitted: &mut bool) {
-    if endnotes_slot(&node) {
-        if !*emitted {
-            *emitted = true;
-            out.push(notes_list(collected));
+/// Place the list at the first `<t:endnotes/>` in pre-order, dropping every later
+/// slot met at a level still being walked (the list is emitted once). After the
+/// list is placed, elements are no longer descended into.
+fn place_into(tree: &mut Tree, nodes: Vec<Handle>, collected: &[Vec<Handle>], emitted: &mut bool) {
+    for node in elements(tree, nodes) {
+        if directive(tree, node) == Some(TKind::Endnotes) {
+            place_slot(tree, node, collected, emitted);
+        } else if !*emitted {
+            let children = kept_children(tree, node);
+            place_into(tree, children, collected, emitted);
         }
+    }
+}
+
+/// An `<t:endnotes/>` slot becomes the list (once) or is dropped.
+fn place_slot(tree: &mut Tree, slot: Handle, collected: &[Vec<Handle>], emitted: &mut bool) {
+    if *emitted {
+        let parent = tree.parent(slot).expect("a flow slot has a parent");
+        tree.remove_child(parent, slot);
         return;
     }
-    out.push(descend(node, collected, emitted));
-}
-
-/// Whether a node is an `<t:endnotes/>` slot.
-fn endnotes_slot(node: &Node) -> bool {
-    node.as_element()
-        .is_some_and(|el| matches!(el.tag, Tag::Directive(TKind::Endnotes)))
-}
-
-/// Recurse into an element's children to place a nested `<t:endnotes/>`.
-fn descend(node: Node, collected: &[Vec<Node>], emitted: &mut bool) -> Node {
-    let Node::Element(el) = node else {
-        return node;
-    };
-    let mut children = el.children;
-    if !*emitted {
-        place_into(&mut children, collected, emitted);
-    }
-    Node::Element(Element {
-        tag: el.tag,
-        attrs: el.attrs,
-        children,
-    })
+    *emitted = true;
+    let list = notes_list(tree, collected);
+    tree.replace_with(slot, &[list]);
 }
 
 /// The rendered notes as a `<div class="endnotes">` wrapping one
 /// `<div class="endnote">` per note, each prefixed with its number.
-fn notes_list(collected: &[Vec<Node>]) -> Node {
-    let items = collected
-        .iter()
-        .enumerate()
-        .map(|(i, body)| note_item(i + 1, body))
-        .collect();
-    Node::Element(Element {
-        tag: Tag::Html("div".to_string()),
-        attrs: vec![class_attr("endnotes")],
-        children: items,
-    })
-}
-
-/// One rendered note: `<div class="endnote">N. <body…></div>`.
-fn note_item(number: usize, body: &[Node]) -> Node {
-    let mut children = vec![Node::Text(format!("{number}. "))];
-    children.extend(body.iter().cloned());
-    Node::Element(Element {
-        tag: Tag::Html("div".to_string()),
-        attrs: vec![class_attr("endnote")],
-        children,
-    })
-}
-
-/// A `class="…"` attribute.
-fn class_attr(value: &str) -> Attr {
-    Attr {
-        name: "class".to_string(),
-        value: value.to_string(),
+fn notes_list(tree: &mut Tree, collected: &[Vec<Handle>]) -> Handle {
+    let list = element_with_class(tree, "div", "endnotes");
+    for (i, body) in collected.iter().enumerate() {
+        let item = note_item(tree, i + 1, body);
+        tree.append_child(list, item);
     }
+    list
+}
+
+/// One rendered note: `<div class="endnote">N. <body…></div>` (the body nodes
+/// move out of their detached `<t:endnote>`).
+fn note_item(tree: &mut Tree, number: usize, body: &[Handle]) -> Handle {
+    let item = element_with_class(tree, "div", "endnote");
+    let prefix = tree.create_text_node(&format!("{number}. "));
+    tree.append_child(item, prefix);
+    for &node in body {
+        tree.append_child(item, node);
+    }
+    item
+}
+
+/// A new `<name class="…">` element.
+fn element_with_class(tree: &mut Tree, name: &str, class: &str) -> Handle {
+    let element = tree.create_element(name);
+    tree.set_attribute(element, "class", class);
+    element
 }

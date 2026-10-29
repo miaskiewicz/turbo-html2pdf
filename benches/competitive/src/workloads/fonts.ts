@@ -1,14 +1,13 @@
-// Font resolution. Reuse the engine crate's bundled fonts so every adapter shapes
-// the SAME glyphs — no copying large binaries, just reference by relative path.
+// Font resolution. Reuse the layout engine crate's fonts (turbo-dom-layout's
+// assets/fonts, located through cargo) so every adapter shapes the SAME glyphs — no
+// copying large binaries, just reference them where they live.
 
 import { existsSync } from "node:fs";
-import { dirname, join, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
+import { join } from "node:path";
+import { layoutFontsDir } from "../../../../scripts/layout-crate-dir.mjs";
 
-const HERE = dirname(fileURLToPath(import.meta.url));
-
-/** Repo-root-relative path to the shared font assets. */
-export const FONT_DIR = resolve(HERE, "../../../../crates/turbo-html2pdf-core/assets/fonts");
+/** turbo-dom-layout's font assets. */
+export const FONT_DIR = layoutFontsDir();
 
 /** The regular + bold faces every workload uses. Evolventa = our base sans. */
 export const FONTS = {

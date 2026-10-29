@@ -25,6 +25,7 @@ import { dirname, join } from "node:path";
 import { test } from "node:test";
 import { fileURLToPath } from "node:url";
 import { createRequire } from "node:module";
+import { layoutFontsDir } from "../../../scripts/layout-crate-dir.mjs";
 
 const require = createRequire(import.meta.url);
 const here = dirname(fileURLToPath(import.meta.url));
@@ -39,7 +40,7 @@ function tryLoad() {
 }
 
 const lib = tryLoad();
-const FONT = join(root, "assets", "fonts", "Go-Regular.ttf");
+const FONT = join(layoutFontsDir(), "Go-Regular.ttf");
 
 const CSS = "@page { size: 320px 240px; margin: 24px } p { font-size: 13px }";
 const TEMPLATE =
