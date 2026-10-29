@@ -100,9 +100,9 @@ packed list contains it. `release-crates.yml` waits for the locked turbo-dom-lay
 turbo-dom versions on the crates.io index (`scripts/wait-crates-index.sh`) before
 packaging core.
 
-`release.yml`'s `gate` job runs only fmt/clippy/test — so a red `cc-check` or
-coverage gate does NOT block a publish. Verify them locally anyway; a tag is
-public and hard to walk back.
+Every release workflow (`release.yml`, `release-crates.yml`, `release-py.yml`)
+has a `gate` job that calls `ci.yml` as a reusable workflow, so a red fmt,
+clippy, test-variant, `cc-check` or coverage gate blocks every publish.
 
 ### 3. Merge, tag the merge commit, and push
 

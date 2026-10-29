@@ -44,9 +44,14 @@ jobs:
       - uses: actions/checkout@v4
       - run: sh scripts/release-guard.sh "$GITHUB_REF_NAME"
 
+  gate:
+    name: gate (full CI)
+    needs: [release-guard]
+    uses: ./.github/workflows/ci.yml
+
   publish:
     name: publish crates to crates.io
-    needs: [release-guard]
+    needs: [release-guard, gate]
     runs-on: ubuntu-latest
     if: startsWith(github.ref, 'refs/tags/v')
     steps:

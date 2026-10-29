@@ -134,8 +134,8 @@ jobs:
 
   # ---------------------------------------------------------------------------
   # 2. Quality gate before any publish.
-  #    Mirrors turbo-dom's `publish: needs: [build, test]`. Re-runs the Rust
-  #    gate inline rather than editing the live .github/workflows/ci.yml.
+  #    Mirrors turbo-dom's `publish: needs: [build, test]`. Calls ci.yml as a
+  #    reusable workflow so the release gate can never drift from the PR gate.
   # ---------------------------------------------------------------------------
   release-guard:
     name: release guard (no [patch], no git sources, versions == tag)
@@ -146,23 +146,11 @@ jobs:
       - run: sh scripts/release-guard.sh "$GITHUB_REF_NAME"
 
   gate:
-    name: gate (rust fmt/clippy/test)
+    name: gate (full CI)
     needs: [release-guard]
-    runs-on: ubuntu-latest
-    env:
-      RUSTFLAGS: "-D warnings"
-    steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
-        with:
-          components: rustfmt, clippy
-      - uses: Swatinem/rust-cache@v2
-      - name: Format
-        run: cargo fmt --all -- --check
-      - name: Clippy
-        run: cargo clippy --workspace --all-targets -- -D warnings
-      - name: Test
-        run: cargo test --workspace
+    # The same jobs ci.yml blocks PRs on — fmt, clippy, every core feature test
+    # variant, cc <= 5, the tarpaulin coverage floor, JS lint and binding tests.
+    uses: ./.github/workflows/ci.yml
 
   # ---------------------------------------------------------------------------
   # 3. Publish turbo-html2pdf — single bundled package.
