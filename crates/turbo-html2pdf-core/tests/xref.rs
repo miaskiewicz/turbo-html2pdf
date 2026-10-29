@@ -104,6 +104,65 @@ fn external_and_empty_links_are_not_internal() {
     assert!(all_hrefs(&pages).is_empty());
 }
 
+/// Every external `link_uri` found across the pages' body fragments.
+fn all_uris(pages: &[Page]) -> Vec<String> {
+    fn walk(sem: &Semantics, frag: &Fragment, out: &mut Vec<String>) {
+        if let Some(uri) = sem.link_uri(frag) {
+            out.push(uri.to_string());
+        }
+        for child in &frag.children {
+            walk(sem, child, out);
+        }
+    }
+    let mut out = Vec::new();
+    for page in pages {
+        for frag in &page.body {
+            walk(&page.semantics, frag, &mut out);
+        }
+    }
+    out
+}
+
+// -- turbo-html2pdf#53 (Chrome 156: external links, id destinations) ------------
+
+#[test]
+fn id_attribute_defines_a_destination() {
+    // Chrome 156 names a destination after every element `id`, so `href="#sec"`
+    // resolves without a `<t:anchor>`.
+    let pages = pages("<h2 id=\"sec\">Section</h2><p id=\"\">no name</p>");
+    assert_eq!(all_anchors(&pages), vec!["sec".to_string()]);
+}
+
+#[test]
+fn id_destination_is_written_to_dests() {
+    let pages = pages("<p><a href=\"#sec\">go</a></p><h2 id=\"sec\">Section</h2>");
+    let pdf = emit_pdf(&pages, &EmitOptions::default());
+    assert!(contains(&pdf, b"/Dests"), "an id defines a destination");
+    assert!(contains(&pdf, b"/sec ["), "the destination is named after the id");
+}
+
+#[test]
+fn block_external_link_is_a_uri_link() {
+    // Chrome 156 writes a `/S /URI` Link annotation for an absolute href.
+    let pages = pages(
+        "<a href=\"https://example.com/x\" style=\"display:block\">external</a>\
+         <a href=\"page.html\" style=\"display:block\">relative</a>",
+    );
+    assert_eq!(all_uris(&pages), vec!["https://example.com/x".to_string()]);
+    assert!(all_hrefs(&pages).is_empty(), "an external href is not internal");
+    let pdf = emit_pdf(&pages, &EmitOptions::default());
+    assert!(contains(&pdf, b"/S /URI"), "the link uses a URI action");
+    assert!(contains(&pdf, b"(https://example.com/x)"), "the URI is written");
+    assert!(!contains(&pdf, b"/S /GoTo"), "no GoTo for an external link");
+    assert!(!contains(&pdf, b"page.html"), "a relative href has no base to resolve");
+}
+
+#[test]
+fn internal_links_are_not_uris() {
+    let pages = pages("<a href=\"#ch2\" style=\"display:block\">go</a>");
+    assert!(all_uris(&pages).is_empty());
+}
+
 // -- emit ----------------------------------------------------------------------
 
 fn anchor_and_link_pdf() -> Vec<u8> {
