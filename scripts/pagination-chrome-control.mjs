@@ -883,6 +883,146 @@ const CASES = [
     ),
     colors: ["red", "green", "blue", "yellow"],
   },
+  // --- miaskiewicz/turbo-html2pdf#49: a bottom padding/border tail that does not fit ---
+  {
+    // A padding taller than the page breaks across pages (it is not kept whole with the
+    // last content): the orange box runs over four pages, the next block follows it.
+    id: "tail-padding-taller-than-page",
+    html: DOC(
+      "body{margin:0}",
+      `<div style="padding-bottom:1000px;background:${C.orange[0]}">${block(C.blue[0], 40)}</div>` +
+        block(C.green[0], 60),
+    ),
+    colors: ["orange", "blue", "green"],
+  },
+  {
+    // A padding that does not fit the page remainder but fits a page: it breaks too.
+    id: "tail-padding-past-page-end",
+    html: DOC(
+      "body{margin:0}",
+      `<div style="padding-bottom:300px;background:${C.orange[0]}">${block(C.blue[0], 40)}</div>` +
+        block(C.green[0], 60),
+    ),
+    colors: ["orange", "blue", "green"],
+  },
+  {
+    // The same through a grandparent's padding.
+    id: "tail-padding-grandparent",
+    html: DOC(
+      "body{margin:0}",
+      `<div style="padding-bottom:1000px;background:${C.orange[0]}"><div>${block(C.blue[0], 40)}</div></div>` +
+        block(C.green[0], 60),
+    ),
+    colors: ["orange", "blue", "green"],
+  },
+  {
+    // A tall bottom border.
+    id: "tail-border-past-page-end",
+    html: DOC(
+      "body{margin:0}",
+      `<div style="border-bottom:300px solid ${C.magenta[0]}">${block(C.blue[0], 40)}</div>` +
+        block(C.green[0], 60),
+    ),
+    colors: ["magenta", "blue", "green"],
+  },
+  // --- review round 3 probes ---
+  {
+    // Collapsed parent/child top margins after an unforced break are truncated together.
+    id: "r3-collapsed-margins-after-break",
+    html: DOC(
+      "body{margin:0}",
+      block(C.red[0], 250) +
+        `<div style="margin-top:40px"><div style="margin-top:60px">${block(C.green[0], 100)}</div></div>`,
+    ),
+    colors: ["red", "green"],
+  },
+  {
+    // A bottom margin before an unforced break is truncated at the page end.
+    id: "r3-bottom-margin-at-break",
+    html: DOC(
+      "body{margin:0}",
+      block(C.red[0], 200, "margin-bottom:100px") + block(C.green[0], 60),
+    ),
+    colors: ["red", "green"],
+  },
+  {
+    // `break-before: left` on page 1 (a right page): page 2 is a left page, no blank.
+    id: "r3-break-before-left",
+    html: DOC("body{margin:0}", block(C.red[0], 60) + block(C.green[0], 60, "break-before:left")),
+    colors: ["red", "green"],
+  },
+  {
+    // `break-before: right` from page 1 inserts a blank page 2.
+    id: "r3-break-before-right",
+    html: DOC("body{margin:0}", block(C.red[0], 60) + block(C.green[0], 60, "break-before:right")),
+    colors: ["red", "green"],
+  },
+  {
+    // `break-after: recto` likewise.
+    id: "r3-break-after-recto",
+    html: DOC("body{margin:0}", block(C.red[0], 60, "break-after:recto") + block(C.green[0], 60)),
+    colors: ["red", "green"],
+  },
+  {
+    // `break-after: avoid` keeps the block with the next one, which does not fit.
+    id: "r3-break-after-avoid",
+    html: DOC(
+      "body{margin:0}",
+      block(C.red[0], 150) + block(C.green[0], 100, "break-after:avoid") + block(C.blue[0], 100),
+    ),
+    colors: ["red", "green", "blue"],
+  },
+  {
+    // `break-before: avoid` the same.
+    id: "r3-break-before-avoid",
+    html: DOC(
+      "body{margin:0}",
+      block(C.red[0], 150) + block(C.green[0], 100) + block(C.blue[0], 100, "break-before:avoid"),
+    ),
+    colors: ["red", "green", "blue"],
+  },
+  {
+    // A table row whose cell holds blocks splits between them.
+    id: "r3-table-row-split",
+    html: DOC(
+      "body{margin:0}",
+      block(C.green[0], 100) +
+        `<table style="width:100%;border-collapse:collapse;border-spacing:0"><tr><td style="padding:0;background:${C.yellow[0]}">${blocks(["red", "blue"], 150)}</td></tr></table>` +
+        block(C.cyan[0], 60),
+    ),
+    colors: ["green", "yellow", "red", "blue", "cyan"],
+  },
+  {
+    // A float that does not fit moves to the next page.
+    id: "r3-float-next-page",
+    html: DOC(
+      "body{margin:0}",
+      block(C.green[0], 250) +
+        `<div style="float:left;width:100px;height:150px;background:${C.red[0]};break-inside:avoid"></div>` +
+        `<div style="clear:both"></div>` + block(C.blue[0], 40),
+    ),
+    colors: ["green", "red", "blue"],
+  },
+  {
+    // A float holding blocks splits between them.
+    id: "r3-float-split",
+    html: DOC(
+      "body{margin:0}",
+      block(C.green[0], 100) +
+        `<div style="float:left;width:100px">${blocks(["red", "blue"], 150, "width:100px")}</div>` +
+        `<div style="clear:both"></div>` + block(C.cyan[0], 40),
+    ),
+    colors: ["green", "red", "blue", "cyan"],
+  },
+  {
+    // Two-column multi-column container over two pages.
+    id: "r3-multicol",
+    html: DOC(
+      "body{margin:0}",
+      `<div style="columns:2;column-gap:0">${blocks(["red", "green", "blue", "yellow", "magenta", "cyan"], 200)}</div>`,
+    ),
+    colors: ["red", "green", "blue", "yellow", "magenta", "cyan"],
+  },
 ];
 
 /** Parse a binary PPM (P6, maxval 255) into { width, height, px(x, y) -> [r,g,b] }. */
