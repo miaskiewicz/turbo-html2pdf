@@ -462,3 +462,49 @@ fn assert_qpdf_clean(name: &str, pdf: &[u8]) {
         String::from_utf8_lossy(&out.stdout)
     );
 }
+
+/// Every image XObject's stream body, asserted `FlateDecode` and inflated back to
+/// its raw samples, in file order.
+fn inflated_image_streams(pdf: &[u8]) -> Vec<Vec<u8>> {
+    let mut out = Vec::new();
+    let mut rest = pdf;
+    while let Some(at) = rest.windows(15).position(|w| w == b"/Subtype /Image") {
+        let tail = &rest[at..];
+        let dict_end = tail.windows(6).position(|w| w == b"stream").unwrap();
+        assert!(
+            contains(&tail[..dict_end], b"/FlateDecode"),
+            "image stream must be Flate-compressed"
+        );
+        let body = &tail[dict_end + 7..];
+        let end = body.windows(9).position(|w| w == b"endstream").unwrap();
+        out.push(miniz_oxide::inflate::decompress_to_vec_zlib(&body[..end]).expect("valid zlib"));
+        rest = &tail[dict_end..];
+    }
+    out
+}
+
+#[test]
+fn png_samples_and_smask_are_flate_compressed_losslessly() {
+    // A 300x300 RGBA PNG: raw it is 270 000 colour + 90 000 alpha bytes. Chrome 156
+    // Flate-compresses both planes; embedding them uncompressed bloats every PDF that
+    // carries a photo/logo PNG by its full decoded size.
+    let (w, h) = (300u32, 300u32);
+    let mut px = Vec::with_capacity((w * h * 4) as usize);
+    for i in 0..w * h {
+        px.extend_from_slice(&[(i % 251) as u8, 40, 200, if i % 3 == 0 { 255 } else { 128 }]);
+    }
+    let resolver = MapResolver::new(vec![("big.png", make_png(w, h, png::ColorType::Rgba, &px))]);
+    let pages = paginate_img("big.png", &resolver);
+    let pdf = emit_pdf_with_images(&pages, &EmitOptions::default(), &resolver);
+    assert!(
+        pdf.len() < 60_000,
+        "uncompressed image: {} bytes",
+        pdf.len()
+    );
+    let streams = inflated_image_streams(&pdf);
+    assert_eq!(streams.len(), 2, "colour XObject + SMask");
+    let rgb: Vec<u8> = px.chunks(4).flat_map(|p| [p[0], p[1], p[2]]).collect();
+    let alpha: Vec<u8> = px.chunks(4).map(|p| p[3]).collect();
+    assert!(streams.contains(&rgb), "colour plane round-trips");
+    assert!(streams.contains(&alpha), "alpha plane round-trips");
+}

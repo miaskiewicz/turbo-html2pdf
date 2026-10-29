@@ -1,6 +1,6 @@
 //! Image XObject embedding (§7.4, Phase 9b, AC-7.4). Every `Image` fragment names
 //! a raster the caller's [`ImageResolver`] supplies; this module decodes each
-//! distinct name once (PNG to raw RGB/gray samples, JPEG passed through as
+//! distinct name once (PNG to Flate-compressed RGB/gray samples, JPEG passed through as
 //! `DCTDecode`), embeds it as an image XObject, attaches an `SMask` when the
 //! source had alpha, and paints it with a placement transform.
 //!
@@ -9,6 +9,8 @@
 //! under a stable name (`Im0`, `Im1`, …), so output stays deterministic
 //! (AC-7.6). A name the resolver can't supply (or can't decode) is dropped: it
 //! occupies no object and paints nothing.
+
+use std::borrow::Cow;
 
 use pdf_writer::{Chunk, Filter, Finish, Name, Ref};
 
@@ -163,16 +165,14 @@ fn write_image(chunk: &mut Chunk, image: &RasterImage, alloc: &mut RefAlloc) {
     }
 }
 
-/// Write the main color XObject. PNG samples ride a `FlateDecode`-free raw
-/// stream; JPEG bytes ride through as `DCTDecode`.
+/// Write the main color XObject. Decoded PNG samples ride a `FlateDecode`
+/// stream (as Chrome 156 embeds them); JPEG bytes ride through as `DCTDecode`.
 fn write_xobject(chunk: &mut Chunk, id: Ref, image: &RasterImage, smask: Option<Ref>) {
     let (data, filter) = stream_data(image);
-    let mut xobj = chunk.image_xobject(id, data);
+    let mut xobj = chunk.image_xobject(id, &data);
     xobj.width(image.width as i32);
     xobj.height(image.height as i32);
-    if let Some(f) = filter {
-        xobj.filter(f);
-    }
+    xobj.filter(filter);
     set_color_space(&mut xobj, image.color());
     xobj.bits_per_component(8);
     if let Some(s) = smask {
@@ -181,12 +181,18 @@ fn write_xobject(chunk: &mut Chunk, id: Ref, image: &RasterImage, smask: Option<
     xobj.finish();
 }
 
-/// The encoded stream bytes and optional filter for an image's color payload.
-fn stream_data(image: &RasterImage) -> (&[u8], Option<Filter>) {
+/// The encoded stream bytes and filter for an image's color payload.
+fn stream_data(image: &RasterImage) -> (Cow<'_, [u8]>, Filter) {
     match &image.payload {
-        Payload::Raw { samples, .. } => (samples, None),
-        Payload::Jpeg { bytes, .. } => (bytes, Some(Filter::DctDecode)),
+        Payload::Raw { samples, .. } => (Cow::Owned(deflate(samples)), Filter::FlateDecode),
+        Payload::Jpeg { bytes, .. } => (Cow::Borrowed(bytes), Filter::DctDecode),
     }
+}
+
+/// Zlib-compress raw samples for a `FlateDecode` stream. Deterministic: a fixed
+/// level over the same bytes always yields the same output (AC-7.6).
+fn deflate(raw: &[u8]) -> Vec<u8> {
+    miniz_oxide::deflate::compress_to_vec_zlib(raw, 6)
 }
 
 fn set_color_space(xobj: &mut pdf_writer::writers::ImageXObject, color: ColorSpace) {
@@ -196,12 +202,14 @@ fn set_color_space(xobj: &mut pdf_writer::writers::ImageXObject, color: ColorSpa
     }
 }
 
-/// Write the alpha plane as a `DeviceGray`, 8-bit image XObject that the color
+/// Write the alpha plane as a Flate-compressed `DeviceGray`, 8-bit image XObject that the color
 /// image references through `/SMask` (§7.4 AC-7.4).
 fn write_smask(chunk: &mut Chunk, id: Ref, image: &RasterImage, alpha: &[u8]) {
-    let mut mask = chunk.image_xobject(id, alpha);
+    let packed = deflate(alpha);
+    let mut mask = chunk.image_xobject(id, &packed);
     mask.width(image.width as i32);
     mask.height(image.height as i32);
+    mask.filter(Filter::FlateDecode);
     mask.color_space().device_gray();
     mask.bits_per_component(8);
     mask.finish();
