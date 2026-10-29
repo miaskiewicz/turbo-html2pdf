@@ -175,8 +175,9 @@ pub fn paginate_document(
         anchors,
         deferred,
     } = footnotes::resolve(flow, geometry, notes, diags);
-    let (mut bodies, mut bands): (Vec<_>, Vec<_>) =
-        trim_trailing_pages(&mut pages, bands).into_iter().unzip();
+    let (mut bodies, mut bands): (Vec<_>, Vec<_>) = trim_trailing_pages(&mut pages, &spans, bands)
+        .into_iter()
+        .unzip();
     spans.truncate(bodies.len());
     let pages = out_of_flow::Paged {
         bodies: &mut bodies,
@@ -194,14 +195,17 @@ pub fn paginate_document(
         .collect()
 }
 
-/// Drop a single trailing empty page with no footnotes, pairing each surviving
-/// body with its footnote band.
+/// Drop a single trailing empty page with no footnotes — unless a box runs onto it (its
+/// span records where that box ends: a bottom padding carried over,
+/// miaskiewicz/turbo-html2pdf#49) — pairing each surviving body with its footnote band.
 fn trim_trailing_pages(
     pages: &mut Vec<Vec<Fragment>>,
+    spans: &[walk::PageSpan],
     mut bands: Vec<FootnoteBand>,
 ) -> Vec<(Vec<Fragment>, FootnoteBand)> {
     if pages.len() > 1
         && pages.last().is_some_and(Vec::is_empty)
+        && spans.last().is_some_and(|s| s.last.is_none())
         && bands.last().is_some_and(|b| b.fragments.is_empty())
     {
         pages.pop();

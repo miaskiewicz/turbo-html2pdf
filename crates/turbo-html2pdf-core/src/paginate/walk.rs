@@ -863,6 +863,31 @@ impl<'a> Walker<'a> {
         }
     }
 
+    /// What must follow the galley's last content `child`: the dissolved `<html>`/`<body>`
+    /// tail ([`wrapper_tail`]), unless it is too tall to keep with it (as [`Self::tail_of`]).
+    fn wrapper_tail_of(&self, galley: Galley, child: &Fragment) -> f32 {
+        let after = wrapper_tail(galley, child);
+        if self.last_leaf(child).height + after > self.capacity + 0.5 {
+            0.0
+        } else {
+            after
+        }
+    }
+
+    /// After the galley's last content: the `<html>`/`<body>` bottom padding/border that
+    /// does not fit what is left of the page starts the next page and runs on, as
+    /// [`Self::carry_frame`] (miaskiewicz/turbo-html2pdf#49).
+    fn carry_wrapper_frame(&mut self, galley: Galley) {
+        let Some(i) = last_content(galley.boxes, &galley.root.children) else {
+            return;
+        };
+        let frame = wrapper_tail(galley, &galley.root.children[i]);
+        if self.cursor + frame > self.page_capacity() + 0.5 {
+            let bottom = self.prev_bottom.unwrap_or_default() + frame;
+            self.continue_box(frame, bottom, &[]);
+        }
+    }
+
     /// The innermost last content of `f` (itself when it has none): what a tail after `f`
     /// must share a page with.
     fn last_leaf<'f>(&self, f: &'f Fragment) -> &'f Fragment {
@@ -1128,12 +1153,13 @@ pub fn walk_reserved(
     let last = last_content(galley.boxes, children);
     for (i, child) in children.iter().enumerate() {
         let tail = if Some(i) == last {
-            wrapper_tail(galley, child)
+            w.wrapper_tail_of(galley, child)
         } else {
             0.0
         };
         w.place_one(child, &[], tail, diags);
     }
+    w.carry_wrapper_frame(galley);
     let mut pages = w.pages;
     slice_split_boxes(&mut pages, &w.spans, &w.split_boxes);
     Walked {
