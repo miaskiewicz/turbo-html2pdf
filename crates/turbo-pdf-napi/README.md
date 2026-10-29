@@ -119,9 +119,9 @@ template (HTML + Jinja + t: directives)
    ▼
 render_pages(data, css, fonts):
    │  1. render markup               ── Jinja → HTML string (data substituted)
-   │  2. parse                       ── html5ever → node tree, t: directives typed
-   │  3. cascade + inherit           ── CSS subset → ComputedStyle per node
-   │  4. layout                      ── box tree → block / inline / flex (taffy) / table
+   │  2. parse                       ── turbo-dom document, t: directives as markers
+   │  3. cascade + inherit           ── turbo-dom-layout → ComputedStyle per node
+   │  4. layout                      ── turbo-dom-layout: block / inline / flex (taffy) / table
    │                                    → a "galley" of positioned, shaped fragments
    │  5. paginate                    ── break the galley into pages (orphans/widows,
    │                                    break rules, repeated <thead>); resolve
@@ -131,7 +131,7 @@ render_pages(data, css, fonts):
    PDF bytes                            borders, raster images, watermark
 ```
 
-Layout, font shaping (`rustybuzz`), and PDF writing (`pdf-writer` + `subsetter`) are
+Layout (the shared `turbo-dom-layout` crate), font shaping (`rustybuzz`), and PDF writing (`pdf-writer` + `subsetter`) are
 all native; `taffy` powers flexbox. The engine embeds no fonts and does no network
 or filesystem I/O — fonts and images are supplied by the caller.
 
