@@ -42,10 +42,18 @@ fn contains(hay: &[u8], needle: &[u8]) -> bool {
 #[test]
 fn ligatures_and_curly_quotes_map_to_their_source_text() {
     let pdf = pdf();
-    // A Fira Code ligature glyph maps to every character of its cluster.
-    for lig in [&b"> <002D003E>\n"[..], b"> <0021003D>\n", b"> <003D003E>\n"] {
-        assert!(contains(&pdf, lig), "{}", String::from_utf8_lossy(lig));
-    }
+    // Fira Code draws `->`, `!=` and `=>` with contextual glyphs that have no cmap
+    // entry of their own: each maps to the character it was shaped from, so both
+    // contextual `=` and both contextual `>` glyphs are mapped.
+    let count = |needle: &str| {
+        pdf.windows(needle.len())
+            .filter(|w| *w == needle.as_bytes())
+            .count()
+    };
+    assert_eq!(count("> <003E>\n"), 2);
+    assert_eq!(count("> <003D>\n"), 2);
+    assert_eq!(count("> <002D>\n"), 1);
+    assert_eq!(count("> <0021>\n"), 1);
     // Inter's curly quotes map to themselves, not a lower code point sharing the glyph.
     for quote in ["201C", "201D", "2018", "2019"] {
         assert!(

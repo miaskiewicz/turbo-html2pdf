@@ -1,17 +1,17 @@
 //! `/ToUnicode` CMap construction for searchable, extractable PDF text. This builds
 //! a CMap mapping each 2-byte subset glyph code (what the content stream shows
-//! under `Identity-H`) to its Unicode scalar.
+//! under `Identity-H`) to its source text (several characters for a ligature).
 //!
 //! Emitted for every embedded font, independently of PDF/UA tagging. The
 //! glyph -> codepoint reversal itself (`reverse_cmap`) lives in
 //! `turbo_dom_layout::cmap`, shared with the text layer.
 
-/// Build a `/ToUnicode` CMap stream body from `(code, codepoint)` pairs, where
+/// Build a `/ToUnicode` CMap stream body from `(code, text)` pairs, where
 /// `code` is the 2-byte subset glyph id shown in the content stream. The pairs
 /// are sorted and chunked into `bfchar` blocks (the spec caps a block at 100
 /// entries). An empty mapping still yields a structurally valid CMap.
-pub(super) fn build(pairs: &[(u16, u32)]) -> String {
-    let mut sorted: Vec<(u16, u32)> = pairs.to_vec();
+pub(super) fn build(pairs: &[(u16, String)]) -> String {
+    let mut sorted: Vec<(u16, String)> = pairs.to_vec();
     sorted.sort_unstable();
     sorted.dedup_by_key(|(code, _)| *code);
     let mut out = String::with_capacity(512 + sorted.len() * 16);
@@ -22,37 +22,26 @@ pub(super) fn build(pairs: &[(u16, u32)]) -> String {
 }
 
 /// Emit the `bfchar` blocks, at most 100 entries each (PDF spec limit).
-fn write_bfchars(out: &mut String, pairs: &[(u16, u32)]) {
+fn write_bfchars(out: &mut String, pairs: &[(u16, String)]) {
     for chunk in pairs.chunks(100) {
         out.push_str(&format!("{} beginbfchar\n", chunk.len()));
-        for &(code, cp) in chunk {
-            write_entry(out, code, cp);
+        for (code, text) in chunk {
+            write_entry(out, *code, text);
         }
         out.push_str("endbfchar\n");
     }
 }
 
-/// One `<src> <dst>` line: the 2-byte code mapped to its UTF-16BE destination.
-fn write_entry(out: &mut String, code: u16, cp: u32) {
+/// One `<src> <dst>` line: the 2-byte code mapped to its text as UTF-16BE (a
+/// surrogate pair above the BMP).
+fn write_entry(out: &mut String, code: u16, text: &str) {
     out.push('<');
     out.push_str(&format!("{code:04X}"));
     out.push_str("> <");
-    for unit in char_units(cp) {
+    for unit in text.encode_utf16() {
         out.push_str(&format!("{unit:04X}"));
     }
     out.push_str(">\n");
-}
-
-/// The UTF-16BE code units for a Unicode scalar (a surrogate pair above the BMP),
-/// falling back to U+FFFD for an invalid scalar so the CMap is always well-formed.
-fn char_units(cp: u32) -> Vec<u16> {
-    match char::from_u32(cp) {
-        Some(c) => {
-            let mut buf = [0u16; 2];
-            c.encode_utf16(&mut buf).to_vec()
-        }
-        None => vec![0xFFFD],
-    }
 }
 
 const HEADER: &str = "/CIDInit /ProcSet findresource begin\n\
@@ -90,13 +79,17 @@ mod tests {
 
     #[test]
     fn unicode_destinations_use_utf16_and_codes_are_sorted_and_unique() {
-        let cmap = build(&[(3, 0x1F600), (2, 0xE9), (1, 0x41), (2, 0xE9), (4, 0x110000)]);
-        assert!(cmap.contains("4 beginbfchar\n<0001> <0041>\n<0002> <00E9>\n<0003> <D83DDE00>\n<0004> <FFFD>\nendbfchar"));
+        let pairs: Vec<(u16, String)> = [(3, "😀"), (2, "é"), (1, "A"), (2, "é"), (4, "->")]
+            .iter()
+            .map(|&(code, text)| (code, text.to_string()))
+            .collect();
+        let cmap = build(&pairs);
+        assert!(cmap.contains("4 beginbfchar\n<0001> <0041>\n<0002> <00E9>\n<0003> <D83DDE00>\n<0004> <002D003E>\nendbfchar"));
     }
 
     #[test]
     fn cmap_blocks_are_limited_to_one_hundred_entries() {
-        let pairs: Vec<_> = (0..201).map(|code| (code, u32::from(code))).collect();
+        let pairs: Vec<_> = (0..201).map(|code| (code, "a".to_string())).collect();
         let cmap = build(&pairs);
         assert_eq!(cmap.matches("100 beginbfchar").count(), 2);
         assert_eq!(cmap.matches("1 beginbfchar").count(), 1);
