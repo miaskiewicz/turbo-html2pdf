@@ -1240,6 +1240,33 @@ mod tests {
     }
 
     #[test]
+    fn last_content_stays_when_its_tail_fits_no_reserved_page_with_it() {
+        // 150px pages that all reserve 40px (110px left): a 100px leaf + its parent's 20px
+        // bottom border fit a bare page but no reserved one, so moving the leaf on gains
+        // nothing: it stays on page 1, and the border runs onto page 2.
+        let mut leaf = boxf(false, None);
+        (leaf.node_id, leaf.height) = (NodeId(3), 100.0);
+        leaf.break_meta.break_inside_avoid = true;
+        let mut parent = boxf(false, None);
+        (parent.node_id, parent.height, parent.children) = (NodeId(2), 120.0, vec![leaf]);
+        if let FragmentContent::Box { border, .. } = &mut parent.content {
+            border.bottom.width = 20;
+        }
+        let mut root = boxf(false, None);
+        (root.node_id, root.height, root.children) = (NodeId(0), 120.0, vec![parent]);
+        let boxes = FlowBoxes::default();
+        let galley = Galley {
+            root: &root,
+            wrappers: &[],
+            boxes: &boxes,
+        };
+        let walked = walk_reserved(galley, 150.0, &|_| 40.0, &mut Diagnostics::default());
+        assert_eq!(walked.pages.len(), 2);
+        assert_eq!(walked.pages[0][0].node_id, NodeId(3));
+        assert_eq!(walked.pages[0][0].y, 0.0);
+    }
+
+    #[test]
     fn remaining_height_that_exactly_fills_a_page_ends_there() {
         let at = |id: u32, y: f32, h: f32, children: Vec<Fragment>| {
             let mut f = boxf(false, None);
