@@ -13,7 +13,7 @@
 //! | box of an element (incl. a table row) | by tag | — | `href` (not for rows) | `id` |
 //! | the anonymous grid box of a captioned table | — | — | — | — |
 //! | block marker box | — | — | `href` | — |
-//! | inline marker | — | — | — | `<t:anchor name>` |
+//! | inline marker | — | — | — | `<t:anchor name>` (else `id`) |
 //! | replaced `<img>` image | by tag (`Figure`) | `alt` (or "") | — | — |
 //! | background / mask image, text line | — | — | — | — |
 //!
@@ -281,13 +281,16 @@ impl super::Semantics {
         }
     }
 
-    /// The destination name a fragment defines: a `<t:anchor name>` marker's
-    /// `name`, or an element box's `id` (Chrome names a destination per `id`).
+    /// The destination name a fragment defines: a `<t:anchor>` marker's `name`
+    /// (else its `id`, as `packages/react`'s `Anchor` emits), or an element box's
+    /// `id` (Chrome names a destination per `id`).
     #[cfg(feature = "xref")]
     pub fn anchor(&self, frag: &Fragment) -> Option<&str> {
         let info = self.derived.nodes.get(&frag.node_id)?;
         match &frag.content {
-            FragmentContent::Marker(kind) if kind.inline => info.marker.and(info.anchor.as_deref()),
+            FragmentContent::Marker(kind) if kind.inline => info
+                .marker
+                .and(info.anchor.as_deref().or(info.id.as_deref())),
             FragmentContent::Box { .. } => info.id.as_deref(),
             _ => None,
         }
