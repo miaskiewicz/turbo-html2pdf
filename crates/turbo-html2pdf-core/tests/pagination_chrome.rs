@@ -434,3 +434,17 @@ fn a_row_of_cells_side_by_side_still_moves_on_whole() {
     ));
     assert_eq!(pages(&html).len(), 3);
 }
+
+#[test]
+fn a_page_holding_only_carried_padding_is_not_empty_for_the_next_paragraph() {
+    // Chrome 156 `page.pdf()` (headless): "a" on page 1, its 310px bottom padding on
+    // page 2 alone, the 33 lines of 20px from page 3 on (16, 15, 2): 5 pages.
+    let lines: Vec<String> = (0..33).map(|i| format!("L{i}")).collect();
+    let html = format!(
+        "<!DOCTYPE html><html><head><style>@page{{size:600px 400px;margin:40px}}body{{margin:0;font-size:16px;line-height:20px}}p{{margin:0}}</style></head><body><div style=\"padding-bottom:310px\">a</div><p>{}</p></body></html>",
+        lines.join("<br>")
+    );
+    let pages = pages(&html);
+    assert_eq!(pages.len(), 5);
+    assert!(pages[1].body.is_empty(), "{:?}", pages[1].body);
+}
