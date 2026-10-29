@@ -65,10 +65,15 @@
 //! slices it (miaskiewicz/turbo-html2pdf#47, [`sliceable`]). A block containing a forced
 //! break is split there (miaskiewicz/turbo-html2pdf#38).
 //!
+//! Unforced breaks (miaskiewicz/turbo-html2pdf#51): a breakable block whose content stacks
+//! top to bottom (a table row, a float, any block) that does not fit is split at the page
+//! end, as Chrome 156 splits it, even when it would fit an empty page; a row of several
+//! cells side by side still moves on whole (#56). An avoided break between siblings
+//! (`break-after` / `break-before: avoid`, #50) keeps the next sibling's first unbreakable
+//! piece on the page with the one before it, so the break moves before that one.
+//!
 //! **Deferred (documented):** orphans/widows are enforced at each single break but the
-//! multi-page paragraph tail is greedy; a block with content that fits on an empty page
-//! moves there whole rather than being split at the page end (AC-6.2, where Chrome would
-//! split it).
+//! multi-page paragraph tail is greedy.
 
 use crate::error::{Diagnostics, LintCode, Span};
 use crate::layout::fragment::{Fragment, FragmentContent, NodeId, RepeatKind};
@@ -549,10 +554,23 @@ impl<'a> Walker<'a> {
         if self.fits_now(f, 0.0) {
             return self.placement_without_tail(f, headers, tail);
         }
-        if self.fits_on_empty(f, headers, 0.0) {
+        if self.fits_on_empty(f, headers, 0.0) && !self.splits_at_page_end(f) {
             return Placement::NextPage;
         }
         Placement::Split
+    }
+
+    /// Whether `f`, fitting on an empty page but not here, is split at the page end
+    /// rather than moved on whole, as Chrome 156 splits it (a table row, a float or any
+    /// block; miaskiewicz/turbo-html2pdf#51): it has in-flow content, nothing keeps it
+    /// whole, and that content stacks top to bottom (a row of several cells side by side
+    /// still moves on whole: the walk places content in one column). A paragraph keeps its
+    /// own line breaking ([`Self::split_paragraph`], orphans/widows).
+    fn splits_at_page_end(&self, f: &Fragment) -> bool {
+        !is_paragraph(f)
+            && last_content(self.boxes, &f.children).is_some()
+            && breakable(self.boxes, f)
+            && stacked(&f.children)
     }
 
     /// Whether `f` has in-flow content and a forced break inside it.
@@ -765,7 +783,8 @@ impl<'a> Walker<'a> {
         for (i, child) in f.children.iter().enumerate() {
             if !is_repeat_header(child) {
                 let after = self.tail_of(f, child, tail, Some(i) == last);
-                self.place_one(child, headers, after, diags);
+                let kept = self.kept_with_next(&f.children, i);
+                self.place_one(child, headers, after + kept, diags);
             }
         }
     }
@@ -888,6 +907,39 @@ impl<'a> Walker<'a> {
         }
     }
 
+    /// What must follow `children[i]` on its page because the break before the next
+    /// sibling is avoided (`break-after: avoid` on it or `break-before: avoid` on the
+    /// next; miaskiewicz/turbo-html2pdf#50): down to the end of the next sibling's first
+    /// unbreakable piece ([`Self::first_piece`]). Chrome 156 then breaks before
+    /// `children[i]` instead, moving both on — even when the two cannot share a page, so
+    /// what is kept is at most what fits a page below `children[i]`'s last content.
+    fn kept_with_next(&self, children: &[Fragment], i: usize) -> f32 {
+        let (Some(c), Some(n)) = (children.get(i), children.get(i + 1)) else {
+            return 0.0;
+        };
+        if !avoids_break(c, n) {
+            return 0.0;
+        }
+        let piece = self.first_piece(n);
+        let kept = (piece.bottom() - c.bottom()).max(0.0);
+        kept.min(self.capacity - self.last_leaf(c).height).max(0.0)
+    }
+
+    /// The first part of `f` no break can separate from its start: `f` itself when it is
+    /// kept whole (no in-flow content, or `break-inside: avoid`), else the first piece of
+    /// its first content.
+    fn first_piece<'f>(&self, f: &'f Fragment) -> &'f Fragment {
+        match f.children.first() {
+            Some(first) if breakable(self.boxes, f) && !self.atomic(f) => self.first_piece(first),
+            _ => f,
+        }
+    }
+
+    /// Whether `f` has no in-flow content (it is placed whole).
+    fn atomic(&self, f: &Fragment) -> bool {
+        last_content(self.boxes, &f.children).is_none()
+    }
+
     /// The innermost last content of `f` (itself when it has none): what a tail after `f`
     /// must share a page with.
     fn last_leaf<'f>(&self, f: &'f Fragment) -> &'f Fragment {
@@ -1005,6 +1057,16 @@ fn has_forced_break(f: &Fragment) -> bool {
     forced(f.break_meta.break_before)
         || forced(f.break_meta.break_after)
         || f.children.iter().any(has_forced_break)
+}
+
+/// Whether `children` stack top to bottom: none starts above the bottom of one before it.
+fn stacked(children: &[Fragment]) -> bool {
+    children.windows(2).all(|w| w[1].y + 0.5 >= w[0].bottom())
+}
+
+/// Whether the break between siblings `c` and `n` is avoided.
+fn avoids_break(c: &Fragment, n: &Fragment) -> bool {
+    c.break_meta.break_after == BreakRule::Avoid || n.break_meta.break_before == BreakRule::Avoid
 }
 
 /// Where [`Walker::placement`] puts a fragment.
@@ -1157,7 +1219,8 @@ pub fn walk_reserved(
         } else {
             0.0
         };
-        w.place_one(child, &[], tail, diags);
+        let kept = w.kept_with_next(children, i);
+        w.place_one(child, &[], tail + kept, diags);
     }
     w.carry_wrapper_frame(galley);
     let mut pages = w.pages;

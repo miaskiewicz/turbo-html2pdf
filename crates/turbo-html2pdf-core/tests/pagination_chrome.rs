@@ -341,3 +341,96 @@ fn a_bottom_padding_too_tall_to_keep_with_text_breaks_like_chrome_156() {
         assert_eq!(pages(&doc(body)).len(), chrome, "{body}");
     }
 }
+
+/// Each page's vertical extent (inclusive device px) of each of `colors`, measured as the
+/// control measures them.
+fn bands(html: &str, colors: &[&str]) -> Vec<Vec<Option<(i64, i64)>>> {
+    pages(html)
+        .iter()
+        .map(|page| {
+            let raster = rasterize(page);
+            let band = |c: &&str| measure(&raster, rgb(c)).map(|(b, _, _)| (b[1], b[3]));
+            colors.iter().map(band).collect()
+        })
+        .collect()
+}
+
+fn block(height: u32, color: &str, style: &str) -> String {
+    format!(
+        r#"<div style="height:{height}px;background:{color};break-inside:avoid;{style}"></div>"#
+    )
+}
+
+fn doc(body: &str) -> String {
+    format!("<!DOCTYPE html><html><head><style>@page{{size:600px 400px;margin:40px}}body{{margin:0}}</style></head><body>{body}</body></html>")
+}
+
+const RGB: [&str; 3] = ["#ff0000", "#00ff00", "#0000ff"];
+
+#[test]
+fn an_avoided_break_keeps_the_next_siblings_first_piece_like_chrome_156() {
+    // miaskiewicz/turbo-html2pdf#50, Chrome 156 `page.pdf()` (headless, these documents):
+    // red / green / blue extents per page.
+    let (r, g, b) = (RGB[0], RGB[1], RGB[2]);
+    // A split green block with `break-after: avoid`: its last part moves on with blue.
+    let split = format!(
+        "{}<div style=\"break-after:avoid\">{}{}</div>{}",
+        block(150, r, ""),
+        block(50, g, ""),
+        block(50, g, ""),
+        block(100, b, "")
+    );
+    assert_eq!(
+        bands(&doc(&split), &RGB),
+        [
+            vec![Some((40, 189)), Some((190, 239)), None],
+            vec![None, Some((40, 89)), Some((90, 189))]
+        ]
+    );
+    // Blue is a breakable block: green moves on with blue's first piece.
+    let breakable = format!(
+        "{}{}<div>{}{}</div>",
+        block(150, r, ""),
+        block(100, g, "break-after:avoid"),
+        block(100, b, ""),
+        block(100, b, "")
+    );
+    assert_eq!(
+        bands(&doc(&breakable), &RGB),
+        [
+            vec![Some((40, 189)), None, None],
+            vec![None, Some((40, 139)), Some((140, 339))]
+        ]
+    );
+    // Green and blue cannot share a page: Chrome still breaks before green.
+    let too_tall = format!(
+        "{}{}{}",
+        block(150, r, ""),
+        block(100, g, "break-after:avoid"),
+        block(250, b, "")
+    );
+    let got = bands(&doc(&too_tall), &RGB);
+    assert_eq!(got.len(), 3);
+    assert_eq!(got[1][1], Some((40, 139)));
+    // Chrome then slices blue at page 2's end; the engine moves it on whole
+    // (miaskiewicz/turbo-html2pdf#57).
+}
+
+#[test]
+fn a_row_of_cells_side_by_side_still_moves_on_whole() {
+    // miaskiewicz/turbo-html2pdf#51 covers stacked content only: Chrome 156 splits this
+    // two-cell row too (2 pages), but the walk places content in one column, so the row
+    // moves on whole (3 pages; miaskiewicz/turbo-html2pdf#56).
+    let (r, g, b) = (RGB[0], RGB[1], RGB[2]);
+    let cell = format!(
+        r#"<td style="padding:0">{}{}</td>"#,
+        block(150, r, ""),
+        block(150, b, "")
+    );
+    let html = doc(&format!(
+        r#"{}<table style="width:100%;border-collapse:collapse"><tr>{cell}{cell}</tr></table>{}"#,
+        block(100, g, ""),
+        block(60, "#00ffff", "")
+    ));
+    assert_eq!(pages(&html).len(), 3);
+}
