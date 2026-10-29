@@ -1008,7 +1008,8 @@ const CASES = [
       "body{margin:0}",
       block(C.green[0], 250) +
         `<div style="float:left;width:100px;height:150px;background:${C.red[0]};break-inside:avoid"></div>` +
-        `<div style="clear:both"></div>` + block(C.blue[0], 40),
+        `<div style="clear:both"></div>` +
+        block(C.blue[0], 40),
     ),
     colors: ["green", "red", "blue"],
   },
@@ -1019,7 +1020,8 @@ const CASES = [
       "body{margin:0}",
       block(C.green[0], 100) +
         `<div style="float:left;width:100px">${blocks(["red", "blue"], 150, "width:100px")}</div>` +
-        `<div style="clear:both"></div>` + block(C.cyan[0], 40),
+        `<div style="clear:both"></div>` +
+        block(C.cyan[0], 40),
     ),
     colors: ["green", "red", "blue", "cyan"],
   },
