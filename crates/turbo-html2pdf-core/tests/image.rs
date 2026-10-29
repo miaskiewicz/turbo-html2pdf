@@ -496,7 +496,11 @@ fn png_samples_and_smask_are_flate_compressed_losslessly() {
     let resolver = MapResolver::new(vec![("big.png", make_png(w, h, png::ColorType::Rgba, &px))]);
     let pages = paginate_img("big.png", &resolver);
     let pdf = emit_pdf_with_images(&pages, &EmitOptions::default(), &resolver);
-    assert!(pdf.len() < 60_000, "uncompressed image: {} bytes", pdf.len());
+    assert!(
+        pdf.len() < 60_000,
+        "uncompressed image: {} bytes",
+        pdf.len()
+    );
     let streams = inflated_image_streams(&pdf);
     assert_eq!(streams.len(), 2, "colour XObject + SMask");
     let rgb: Vec<u8> = px.chunks(4).flat_map(|p| [p[0], p[1], p[2]]).collect();

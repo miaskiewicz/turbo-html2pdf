@@ -17,6 +17,11 @@ below, each backed by a Chrome 156 control.
 The version jumps from 0.3.9 to 0.6.0 so every consolidated package (turbo-dom,
 turbo-test, turbo-html2pdf, turbo-surf) releases on one version line.
 
+- **Fixed (PDF size)**: decoded PNG (and rasterized SVG) samples and their `SMask` alpha
+  planes are embedded `FlateDecode`-compressed, as Chrome 156 `page.pdf()` embeds them,
+  instead of as raw uncompressed streams (a 300x300 RGBA PNG went from 361 KB to under
+  60 KB of PDF). Image-bearing PDFs therefore differ in bytes from 0.3.9; JPEGs still ride
+  through as `DCTDecode`.
 - **Changed (turbo-dom pin)**: `turbo-dom-layout` + `turbo-dom` are pinned to the final
   turbo-dom consolidation head (c9f991c; via 0189e4d, f0fb306, d660013 and 443f4d8, was f860fea). Render changes, each checked
   against Chrome 156 `page.pdf()`: `pre`, `pre-wrap` and `pre-line` break at newlines and
