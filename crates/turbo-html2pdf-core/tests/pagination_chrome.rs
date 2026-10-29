@@ -261,14 +261,9 @@ const KNOWN: &[(&str, usize, &str)] = &[
 ];
 
 /// Cases whose page count does not match Chrome 156 yet (each must still differ; their
-/// pages are not compared): forced left/right/recto breaks are dropped (miaskiewicz/turbo-dom#204),
-/// multi-column is not supported (miaskiewicz/turbo-html2pdf#52).
-const KNOWN_PAGE_COUNTS: &[&str] = &[
-    "r3-break-before-left",
-    "r3-break-before-right",
-    "r3-break-after-recto",
-    "r3-multicol",
-];
+/// pages are not compared): multi-column is not supported (miaskiewicz/turbo-html2pdf#52).
+/// (Forced left/right/recto breaks match since miaskiewicz/turbo-dom#204.)
+const KNOWN_PAGE_COUNTS: &[&str] = &["r3-multicol"];
 
 /// miaskiewicz/turbo-html2pdf#39: the print initial containing block (the page area).
 fn icb_case(id: &str) -> bool {

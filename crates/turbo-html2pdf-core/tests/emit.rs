@@ -154,6 +154,8 @@ fn text_fragment(face: FontFace, glyph_ids: &[u16]) -> Fragment {
             glyph_id,
             x: i as f32 * 10.0,
             y: 12.0,
+            text_start: 0,
+            text_end: 0,
         })
         .collect();
     Fragment::new(
@@ -165,6 +167,7 @@ fn text_fragment(face: FontFace, glyph_ids: &[u16]) -> Fragment {
         FragmentContent::TextLine {
             glyphs,
             face,
+            text: String::new(),
             font_size: 12.0,
             color: Rgba::new(20, 40, 60, 255),
         },

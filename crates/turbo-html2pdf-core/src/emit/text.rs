@@ -30,6 +30,7 @@ pub fn paint_text(
         face,
         font_size,
         color,
+        ..
     } = &frag.content
     {
         let line = Line {

@@ -43,6 +43,7 @@ fn line(y: f32, h: f32) -> Fragment {
         100.0,
         h,
         FragmentContent::TextLine {
+            text: String::new(),
             glyphs: Vec::new(),
             face: common::evolventa(),
             font_size: h,

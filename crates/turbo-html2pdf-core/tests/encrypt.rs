@@ -48,6 +48,8 @@ fn body_text(face: FontFace) -> Fragment {
             glyph_id,
             x: i as f32 * 10.0,
             y: 12.0,
+            text_start: 0,
+            text_end: 0,
         })
         .collect();
     Fragment::new(
@@ -59,6 +61,7 @@ fn body_text(face: FontFace) -> Fragment {
         FragmentContent::TextLine {
             glyphs,
             face,
+            text: String::new(),
             font_size: 12.0,
             color: Rgba::new(0, 0, 0, 255),
         },
