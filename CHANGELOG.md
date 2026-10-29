@@ -18,7 +18,7 @@ The version jumps from 0.3.9 to 0.6.0 so every consolidated package (turbo-dom,
 turbo-test, turbo-html2pdf, turbo-surf) releases on one version line.
 
 - **Changed (turbo-dom pin)**: `turbo-dom-layout` + `turbo-dom` are pinned to the final
-  turbo-dom consolidation head (0189e4d; via f0fb306, d660013 and 443f4d8, was f860fea). Render changes, each checked
+  turbo-dom consolidation head (c9f991c; via 0189e4d, f0fb306, d660013 and 443f4d8, was f860fea). Render changes, each checked
   against Chrome 156 `page.pdf()`: `pre`, `pre-wrap` and `pre-line` break at newlines and
   `pre-wrap` keeps its spaces (turbo-dom#120/#121/#122/#166); an inline-block sits on its
   last line's baseline (turbo-dom#142); `@supports` with two condition groups and no
