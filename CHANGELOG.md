@@ -4,16 +4,29 @@ All notable changes to turbo-html2pdf are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/); versions follow SemVer. The npm,
 PyPI, and crates.io packages release in lockstep from a `v*` tag (PyPI on `pyv*`).
 
-## [Unreleased]
+## [0.6.0] — 2026-10-26 — turbo-dom consolidation
+
+The engine is now built on the turbo-dom workspace crates instead of carrying its own
+copies: `turbo-html2pdf-core` depends on **turbo-dom-layout 0.6** (style cascade,
+layout, text/fonts incl. the bundled faces, images, SVG, layout snapshots) and
+**turbo-dom 0.6** (the DOM templates are parsed into and the one Chrome-correct selector
+engine). Every rendered PDF of the release corpora (templates, conformance pages, PDF/UA,
+CMYK, PDF/A, the image matrix, with and without `svg`) is byte-identical to 0.3.9 through
+the consolidation steps; the behaviour changes are the selector fixes and the P5b bug fixes
+below, each backed by a Chrome 156 control.
+The version jumps from 0.3.9 to 0.6.0 so every consolidated package (turbo-dom,
+turbo-test, turbo-html2pdf, turbo-surf) releases on one version line.
 
 - **Changed (turbo-dom pin)**: `turbo-dom-layout` + `turbo-dom` are pinned to the final
-  turbo-dom consolidation head (f0fb306, was f860fea). Render changes, each checked
+  turbo-dom consolidation head (0189e4d; via f0fb306, d660013 and 443f4d8, was f860fea). Render changes, each checked
   against Chrome 156 `page.pdf()`: `pre`, `pre-wrap` and `pre-line` break at newlines and
   `pre-wrap` keeps its spaces (turbo-dom#120/#121/#122/#166); an inline-block sits on its
   last line's baseline (turbo-dom#142); `@supports` with two condition groups and no
   `and`/`or` is invalid and dropped. A table row's `break-inside: avoid` now reaches the
   break hints (turbo-dom#158), so html2pdf's `BoxFacts::avoid_break_inside` workaround is
-  removed. Render parity corpus (html2pdf, html2pdf-svg): no output changes.
+  removed. Render parity corpus (html2pdf, html2pdf-svg): no output changes. The
+  later repins bring turbo-dom#176 (font shorthand) and the turbo-dom-browser-env
+  panic fixes turbo-dom#183/#184 (a crate html2pdf does not link).
 
 - **Fixed (turbo-html2pdf#47, Chrome 156 print control)**: a content-free block (an empty
   `<div>`, a table row of empty cells; nothing inside it `break-inside: avoid`,
@@ -162,19 +175,6 @@ PyPI, and crates.io packages release in lockstep from a `v*` tag (PyPI on `pyv*`
   shaped at most twice: 6096 for the 3000-run table on every platform, budget
   `<= 2 x 3000 + 100`), with a new repeated-runs test pinning the dedupe (3 shapes).
 
-## [0.6.0] — 2026-10-26 — turbo-dom consolidation
-
-The engine is now built on the turbo-dom workspace crates instead of carrying its own
-copies: `turbo-html2pdf-core` depends on **turbo-dom-layout 0.6** (style cascade,
-layout, text/fonts incl. the bundled faces, images, SVG, layout snapshots) and
-**turbo-dom 0.6** (the DOM templates are parsed into and the one Chrome-correct selector
-engine). Every rendered PDF of the release corpora (templates, conformance pages, PDF/UA,
-CMYK, PDF/A, the image matrix, with and without `svg`) is byte-identical to 0.3.9 through
-the consolidation steps; the behaviour changes are the selector fixes and the P5b bug fixes
-below, each backed by a Chrome 156 control.
-The version jumps from 0.3.9 to 0.6.0 so every consolidated package (turbo-dom,
-turbo-test, turbo-html2pdf, turbo-surf) releases on one version line.
-
 - **Fixed (#29)**: HTML documents render like Chrome. `<head>` `<style>` sheets apply (in
   the PDF render as well as `layoutBoxes`/`layout_html`; document sheets come before the
   caller's `css`, a caller `@page` rule takes precedence over the document's), `<html>` and
@@ -183,7 +183,7 @@ turbo-test, turbo-html2pdf, turbo-surf) releases on one version line.
   painted into the PDF, and the root/`<body>` background colour fills each page's page area
   (`Page::canvas`). The `<html>`/`<body>` boxes are dissolved into the page flow before
   pagination (their own borders were not painted, as for any block split across pages;
-  sliced onto every page since #31, see [Unreleased]).
+  sliced onto every page since #31, below).
   Nearly every PDF/`layoutBoxes` output of the corpora changes (body margin); the
   conformance pages' boxes now match Chrome 156 for 172 of 209 tagged elements (was 1).
 - **Fixed (#30)**: EXIF orientation (JPEG APP1, PNG eXIf — as Chrome 156; WebP EXIF is
