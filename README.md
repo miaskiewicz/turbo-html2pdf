@@ -342,6 +342,12 @@ destination + a `Link` annotation):
 <a href="#ch2">see Chapter 2</a>
 ```
 
+As in Chrome, an element `id` is a destination too (`<h2 id="ch2">` works without a
+`<t:anchor>`), and an absolute `href` (`https://…`, `mailto:…`) becomes a `URI` link.
+A relative `href` has no base URL and carries no link. Known gaps (turbo-dom#210): a
+`display:block` internal link's rectangle covers only its text, and an *inline*
+external link gets no annotation (block-level external links do).
+
 ### Append / merge
 
 Glue an **existing external PDF after the rendered pages** — e.g. attach a

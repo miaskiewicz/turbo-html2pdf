@@ -10,12 +10,17 @@
 //! |---|---|---|---|---|
 //! | box of the flow root | `Group` | — | — | — |
 //! | box of an anonymous (unsourced) block | `Paragraph` | — | — | — |
-//! | box of an element (incl. a table row) | by tag | — | `href="#…"` (not for rows) | — |
+//! | box of an element (incl. a table row) | by tag | — | `href` (not for rows) | `id` |
 //! | the anonymous grid box of a captioned table | — | — | — | — |
-//! | block marker box | — | — | `href="#…"` | — |
-//! | inline marker | — | — | — | `<t:anchor name>` |
+//! | block marker box | — | — | `href` | — |
+//! | inline marker | — | — | — | `<t:anchor name>` (else `id`) |
 //! | replaced `<img>` image | by tag (`Figure`) | `alt` (or "") | — | — |
 //! | background / mask image, text line | — | — | — | — |
+//!
+//! A link `href` is internal (`#name`, a GoTo to the named destination) or external
+//! (an absolute URL with a scheme, a URI action); a relative href has no base URL to
+//! resolve against, so it carries no link. Like Chrome, every element `id` names a
+//! destination, as does `<t:anchor name>`.
 
 // A single-feature build reads only its half of the table.
 #![cfg_attr(not(all(feature = "pdf-ua", feature = "xref")), allow(dead_code))]
@@ -76,9 +81,43 @@ struct NodeInfo {
     #[cfg(feature = "pdf-ua")]
     alt: Option<String>,
     #[cfg(feature = "xref")]
-    link: Option<String>,
+    link: Option<LinkTarget>,
     #[cfg(feature = "xref")]
     anchor: Option<String>,
+    /// The element's non-empty `id`: a named destination (as in Chrome).
+    #[cfg(feature = "xref")]
+    id: Option<String>,
+}
+
+/// Where a link `href` points.
+#[cfg(feature = "xref")]
+#[derive(Debug, PartialEq, Eq)]
+enum LinkTarget {
+    /// `#name`: a named destination in this document.
+    Internal(String),
+    /// An absolute URL (it has a scheme).
+    Uri(String),
+}
+
+/// Classify an `href`: `#name` (non-empty) is internal, an absolute URL is a URI,
+/// anything else (empty, bare `#`, relative) carries no link.
+#[cfg(feature = "xref")]
+fn link_target(href: &str) -> Option<LinkTarget> {
+    if let Some(name) = href.strip_prefix('#') {
+        return (!name.is_empty()).then(|| LinkTarget::Internal(name.to_string()));
+    }
+    has_scheme(href).then(|| LinkTarget::Uri(href.to_string()))
+}
+
+/// Whether `href` starts with a URL scheme (`ALPHA *(ALPHA / DIGIT / "+" / "-" / ".") ":"`).
+#[cfg(feature = "xref")]
+fn has_scheme(href: &str) -> bool {
+    let Some((scheme, _)) = href.split_once(':') else {
+        return false;
+    };
+    let mut chars = scheme.chars();
+    chars.next().is_some_and(|c| c.is_ascii_alphabetic())
+        && chars.all(|c| c.is_ascii_alphanumeric() || matches!(c, '+' | '-' | '.'))
 }
 
 /// The derived table for one render.
@@ -149,15 +188,16 @@ fn node_info(view: &TreeView, h: turbo_dom::Handle) -> NodeInfo {
         #[cfg(feature = "pdf-ua")]
         alt: img.then(|| view.attr(h, "alt").unwrap_or("").to_string()),
         #[cfg(feature = "xref")]
-        link: view
-            .attr(h, "href")
-            .and_then(|href| href.strip_prefix('#'))
-            .filter(|target| !target.is_empty())
-            .map(str::to_string),
+        link: view.attr(h, "href").and_then(link_target),
         #[cfg(feature = "xref")]
         anchor: (marker == Some(TKind::Anchor))
             .then(|| view.attr(h, "name").filter(|n| !n.is_empty()))
             .flatten()
+            .map(str::to_string),
+        #[cfg(feature = "xref")]
+        id: view
+            .attr(h, "id")
+            .filter(|id| !id.is_empty())
             .map(str::to_string),
     }
 }
@@ -226,19 +266,33 @@ impl super::Semantics {
     /// The bare `#name` target of an internal-link box fragment.
     #[cfg(feature = "xref")]
     pub fn link_href(&self, frag: &Fragment) -> Option<&str> {
-        self.derived.link_box(frag)?.link.as_deref()
+        match self.derived.link_box(frag)?.link.as_ref()? {
+            LinkTarget::Internal(name) => Some(name),
+            LinkTarget::Uri(_) => None,
+        }
     }
 
-    /// The destination name a `<t:anchor name>` marker fragment defines.
+    /// The absolute URL of an external-link box fragment (`href` with a scheme).
+    #[cfg(feature = "xref")]
+    pub fn link_uri(&self, frag: &Fragment) -> Option<&str> {
+        match self.derived.link_box(frag)?.link.as_ref()? {
+            LinkTarget::Uri(uri) => Some(uri),
+            LinkTarget::Internal(_) => None,
+        }
+    }
+
+    /// The destination name a fragment defines: a `<t:anchor>` marker's `name`
+    /// (else its `id`, as `packages/react`'s `Anchor` emits), or an element box's
+    /// `id` (Chrome names a destination per `id`).
     #[cfg(feature = "xref")]
     pub fn anchor(&self, frag: &Fragment) -> Option<&str> {
-        let FragmentContent::Marker(kind) = &frag.content else {
-            return None;
-        };
-        if !kind.inline {
-            return None;
-        }
         let info = self.derived.nodes.get(&frag.node_id)?;
-        info.marker.and(info.anchor.as_deref())
+        match &frag.content {
+            FragmentContent::Marker(kind) if kind.inline => info
+                .marker
+                .and(info.anchor.as_deref().or(info.id.as_deref())),
+            FragmentContent::Box { .. } => info.id.as_deref(),
+            _ => None,
+        }
     }
 }

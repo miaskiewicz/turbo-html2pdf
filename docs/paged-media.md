@@ -11,7 +11,8 @@ per-page context, footnotes, and the pagination rules. See
 
 > **Implemented vs deferred.** The current slice implements the *master-less*
 > running header/footer path, footnotes, and the auto-pagination break walk.
-> Page masters, the general counter, leaders, endnotes, and a few related
+> Endnotes (`endnotes` feature) and `<t:anchor>` (`xref` feature) are implemented
+> behind their features. Page masters, the general counter, leaders, and a few related
 > directives are recognized by the parser but **not yet implemented** — they are
 > flagged below with the `TODO(phase…)` note from the source.
 
@@ -41,9 +42,9 @@ local names. Their implementation status (verified against the handling code and
 | `<t:region>` | **Deferred** — `TODO(phase7b)` | Named master region. Parsed but not implemented. |
 | `<t:counter>` | **Deferred** — `TODO(phase7b)` | General named counter. Parsed but not implemented. |
 | `<t:leader>` | **Deferred** — `TODO(phase7b)` | Dot-leader fill (e.g. for a TOC). Parsed but not implemented. |
-| `<t:anchor>` | **Deferred** — `TODO(phase15)` | Section anchor (needed for `section`-reset footnotes). Parsed but not implemented. |
-| `<t:endnote>` | **Deferred** — `TODO(phase15)` | Document-end note. Parsed but not implemented. |
-| `<t:endnotes>` | **Deferred** — `TODO(phase15)` | Endnote collection point. Parsed but not implemented. |
+| `<t:anchor>` | **Implemented** (`xref` feature) | Named destination (`name`, else `id`) for `<a href="#…">` links. Without `xref` it renders nothing. |
+| `<t:endnote>` | **Implemented** (`endnotes` feature) | Document-end note. Without `endnotes` it is parsed but not implemented. |
+| `<t:endnotes>` | **Implemented** (`endnotes` feature) | Endnote collection point. Without `endnotes` it is parsed but not implemented. |
 
 The two field codes `<t:page/>` and `<t:pages/>` are only meaningful **inside a
 running region**, where they desugar to `{{ page.number }}` / `{{ page.total }}`

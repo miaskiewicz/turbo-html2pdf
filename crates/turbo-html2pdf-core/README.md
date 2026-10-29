@@ -50,7 +50,7 @@ crate. This crate depends on it and re-exports it at the same paths
 and PDF emit stay here. A rendered template is a turbo-dom document (`Flow`:
 `Program::render_nodes` returns it, `parse_html` parses raw HTML into one; `Flow::style`
 styles it, `Flow::view` / `Flow::roots` read it); the `t:` directives are turbo-dom-layout markers (`markers`), and
-PDF/UA roles + internal links are derived after layout (`Semantics`, on each `Page`).
+PDF/UA roles + links (internal and URI) and destinations are derived after layout (`Semantics`, on each `Page`).
 The root `layout_html` / `layout_boxes` / `parse_html` are the html2pdf-mode HTML
 drive (directives classified, unknown `t:` rejected); `html_layout::*` is
 turbo-dom-layout's directive-free one. The
