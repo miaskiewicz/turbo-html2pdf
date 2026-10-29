@@ -982,7 +982,9 @@ impl<'a> Walker<'a> {
         diags: &mut Diagnostics,
     ) -> usize {
         let lines = run.lines;
-        let empty = self.fresh || self.current().is_empty();
+        // A page holding only the carried part of a box (`continue_box`) is not empty: a
+        // line that does not fit below it moves on rather than being forced there.
+        let empty = self.fresh;
         let fit = self.lines_that_fit(&lines[start..], run.tail, empty, diags);
         let take = resolve_take(start, fit, lines.len(), run.orphans, run.widows, empty);
         if take == 0 {
