@@ -68,9 +68,12 @@
 //! Unforced breaks (miaskiewicz/turbo-html2pdf#51): a breakable block whose content stacks
 //! top to bottom (a table row, a float, any block) that does not fit is split at the page
 //! end, as Chrome 156 splits it, even when it would fit an empty page; a row of several
-//! cells side by side still moves on whole (#56). An avoided break between siblings
-//! (`break-after` / `break-before: avoid`, #50) keeps the next sibling's first unbreakable
-//! piece on the page with the one before it, so the break moves before that one.
+//! plain cells side by side is split in parallel, each cell between its own children at
+//! the same page end (#56; a row or cell that paints still moves on whole). An avoided
+//! break between siblings (`break-after` / `break-before: avoid`, #50) keeps the next
+//! sibling's first unbreakable piece on the page with the one before it, so the break
+//! moves before that one; an unbreakable sibling that then still does not fit is sliced
+//! at the page end rather than moved on (#57).
 //!
 //! **Deferred (documented):** orphans/widows are enforced at each single break but the
 //! multi-page paragraph tail is greedy.
@@ -200,6 +203,11 @@ struct Walker<'a> {
     /// fragments placed for them (page, index), re-cut onto the pages they span when they
     /// close (miaskiewicz/turbo-html2pdf#42, [`super::shifted`]).
     threads: Vec<Thread>,
+    /// The break before the fragment being placed is avoided (`break-after: avoid` on
+    /// the sibling before it on this page, or `break-before: avoid` on it): an
+    /// unbreakable fragment that does not fit is then sliced, not moved on
+    /// (miaskiewicz/turbo-html2pdf#57). Read by [`Self::placement`], reset after it.
+    avoided_before: bool,
 }
 
 /// A relatively offset block being split: its first page and its placed fragments.
@@ -234,6 +242,7 @@ impl<'a> Walker<'a> {
             sized: Vec::new(),
             placed: Vec::new(),
             threads: Vec::new(),
+            avoided_before: false,
         }
     }
 
@@ -513,7 +522,9 @@ impl<'a> Walker<'a> {
         tail: f32,
         diags: &mut Diagnostics,
     ) {
-        match self.placement(f, headers, tail) {
+        let placement = self.placement(f, headers, tail);
+        self.avoided_before = false;
+        match placement {
             Placement::Here => self.emit(f),
             Placement::NextPage => {
                 self.new_page(headers);
@@ -521,6 +532,7 @@ impl<'a> Walker<'a> {
             }
             Placement::Split => self.split(f, headers, tail, diags),
             Placement::Slice => self.slice(f, headers),
+            Placement::Parallel => self.split_parallel(f, headers),
         }
     }
 
@@ -554,17 +566,144 @@ impl<'a> Walker<'a> {
         if self.fits_now(f, 0.0) {
             return self.placement_without_tail(f, headers, tail);
         }
+        if self.splits_in_parallel(f) {
+            return Placement::Parallel;
+        }
         if self.fits_on_empty(f, headers, 0.0) && !self.splits_at_page_end(f) {
-            return Placement::NextPage;
+            return self.moved_on(f);
         }
         Placement::Split
+    }
+
+    /// [`Self::placement`] of an `f` that fits on an empty page and is not split at the
+    /// page end: moved on whole, unless the break before it is avoided and it follows
+    /// content on this page. Breaking before it would violate that `avoid`, breaking
+    /// inside it its own `break-inside: avoid`: Chrome 156 takes the later break and
+    /// slices it at the page end (miaskiewicz/turbo-html2pdf#57).
+    fn moved_on(&self, f: &Fragment) -> Placement {
+        if self.avoided_before && !self.fresh && !f.is_positioned {
+            Placement::Slice
+        } else {
+            Placement::NextPage
+        }
+    }
+
+    /// Whether `f` is a row of cells side by side that does not fit here and is split
+    /// in parallel, as Chrome 156 splits it (miaskiewicz/turbo-html2pdf#56): each cell
+    /// breaks between its own children at the same page end, the row continuing on the
+    /// next page. Only plain boxes qualify (no painted, positioned or shifted row or
+    /// cell, no forced break or out-of-flow box in a cell, each cell's children stacked
+    /// and no taller than a page), and only when some cell's first child fits here.
+    fn splits_in_parallel(&self, f: &Fragment) -> bool {
+        f.children.len() > 1
+            && !stacked(&f.children)
+            && self.plain(f)
+            && f.children.iter().all(|c| self.parallel_cell(c))
+            && self.a_first_piece_fits(f)
+    }
+
+    /// Whether `f` is a breakable box placed as-is: not painted, positioned or shifted.
+    fn plain(&self, f: &Fragment) -> bool {
+        breakable(self.boxes, f) && !paints(f) && !f.is_positioned && self.own_shift(f) == 0.0
+    }
+
+    /// Whether cell `c` can split between its children ([`Self::splits_in_parallel`]).
+    fn parallel_cell(&self, c: &Fragment) -> bool {
+        self.plain(c) && stacked(&c.children) && c.children.iter().all(|g| self.parallel_piece(g))
+    }
+
+    /// Whether `g` is placed whole by a parallel split: in flow, no forced break, and
+    /// no taller than a page.
+    fn parallel_piece(&self, g: &Fragment) -> bool {
+        let out = self
+            .boxes
+            .get(g.node_id)
+            .is_some_and(|b| b.position.is_out_of_flow());
+        !out && !has_forced_break(g) && g.height <= self.capacity
+    }
+
+    /// Whether the first child of some cell of row `f` fits on this page.
+    fn a_first_piece_fits(&self, f: &Fragment) -> bool {
+        let top = self.cursor + self.gap_before(f);
+        f.children
+            .iter()
+            .filter_map(|c| c.children.first())
+            .any(|g| top + (g.bottom() - f.y) <= self.page_capacity())
+    }
+
+    /// Split row `f` in parallel ([`Self::splits_in_parallel`]): on each page every
+    /// cell places its next children that fit, from the row's start (first page) or
+    /// the page top; the row ends below its tallest cell's end on its last page.
+    fn split_parallel(&mut self, f: &Fragment, headers: &[Fragment]) {
+        let mut next = vec![0usize; f.children.len()];
+        let mut origin = self.cursor + self.gap_before(f);
+        let mut first = true;
+        loop {
+            let end = self.place_cells(f, &mut next, origin, first);
+            if next
+                .iter()
+                .zip(&f.children)
+                .all(|(n, c)| *n == c.children.len())
+            {
+                return self.advance(f, end);
+            }
+            self.new_page(headers);
+            self.fresh = false;
+            (origin, first) = (self.cursor, false);
+        }
+    }
+
+    /// Place each cell's next children that fit the page below `origin` (the row's top
+    /// on its first page: children keep their offsets in the row; else the page top:
+    /// each cell's next child starts there). Returns the page-local bottom of the row
+    /// so far: its tallest cell's placed content (with the cell's and row's space below
+    /// it once the cell is done).
+    fn place_cells(&mut self, f: &Fragment, next: &mut [usize], origin: f32, first: bool) -> f32 {
+        let mut end = origin;
+        for (cell, n) in f.children.iter().zip(next.iter_mut()) {
+            let Some(start) = cell.children.get(*n) else {
+                continue;
+            };
+            let base = if first { f.y } else { start.y };
+            let fit = self.place_fitting_pieces(&cell.children[*n..], origin - base);
+            *n += fit;
+            if fit > 0 {
+                end = end.max(self.cell_end(f, cell, *n, origin - base));
+            }
+        }
+        end
+    }
+
+    /// Place the leading `pieces` that fit the page shifted by `offset` (galley to
+    /// page-local); returns how many were placed.
+    fn place_fitting_pieces(&mut self, pieces: &[Fragment], offset: f32) -> usize {
+        let fit = pieces
+            .iter()
+            .take_while(|g| g.bottom() + offset <= self.page_capacity())
+            .count();
+        for g in &pieces[..fit] {
+            self.put(g, g.y + offset);
+            self.advance(g, g.bottom() + offset);
+        }
+        fit
+    }
+
+    /// Where `cell` of row `f` ends on this page, its first `placed` (at least one)
+    /// children placed at `offset`: below its last placed child, plus the cell's and the
+    /// row's bottom padding and border once the cell is done.
+    fn cell_end(&self, f: &Fragment, cell: &Fragment, placed: usize, offset: f32) -> f32 {
+        let last = cell.children[placed - 1].bottom() + offset;
+        if placed < cell.children.len() {
+            return last;
+        }
+        last + bottom_frame(self.boxes, cell) + bottom_frame(self.boxes, f)
     }
 
     /// Whether `f`, fitting on an empty page but not here, is split at the page end
     /// rather than moved on whole, as Chrome 156 splits it (a table row, a float or any
     /// block; miaskiewicz/turbo-html2pdf#51): it has in-flow content, nothing keeps it
     /// whole, and that content stacks top to bottom (a row of several cells side by side
-    /// still moves on whole: the walk places content in one column). A paragraph keeps its
+    /// is split in parallel instead, [`Self::splits_in_parallel`]). A paragraph keeps its
     /// own line breaking ([`Self::split_paragraph`], orphans/widows).
     fn splits_at_page_end(&self, f: &Fragment) -> bool {
         !is_paragraph(f)
@@ -784,6 +923,7 @@ impl<'a> Walker<'a> {
             if !is_repeat_header(child) {
                 let after = self.tail_of(f, child, tail, Some(i) == last);
                 let kept = self.kept_with_next(&f.children, i);
+                self.avoided_before = avoided_before(&f.children, i);
                 self.place_one(child, headers, after + kept, diags);
             }
         }
@@ -1066,6 +1206,12 @@ fn stacked(children: &[Fragment]) -> bool {
     children.windows(2).all(|w| w[1].y + 0.5 >= w[0].bottom())
 }
 
+/// Whether the break before `children[i]` (after its previous sibling) is avoided.
+fn avoided_before(children: &[Fragment], i: usize) -> bool {
+    i.checked_sub(1)
+        .is_some_and(|p| avoids_break(&children[p], &children[i]))
+}
+
 /// Whether the break between siblings `c` and `n` is avoided.
 fn avoids_break(c: &Fragment, n: &Fragment) -> bool {
     c.break_meta.break_after == BreakRule::Avoid || n.break_meta.break_before == BreakRule::Avoid
@@ -1077,6 +1223,8 @@ enum Placement {
     NextPage,
     Split,
     Slice,
+    /// A row of cells side by side split at one page end (miaskiewicz/turbo-html2pdf#56).
+    Parallel,
 }
 
 /// Whether `f` is a content-free block Chrome 156 slices across a page break
@@ -1222,6 +1370,7 @@ pub fn walk_reserved(
             0.0
         };
         let kept = w.kept_with_next(children, i);
+        w.avoided_before = avoided_before(children, i);
         w.place_one(child, &[], tail + kept, diags);
     }
     w.carry_wrapper_frame(galley);

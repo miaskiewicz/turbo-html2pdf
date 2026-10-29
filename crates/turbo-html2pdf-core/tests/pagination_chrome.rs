@@ -443,6 +443,28 @@ fn a_row_of_cells_side_by_side_splits_like_chrome_156() {
 }
 
 #[test]
+fn a_cell_done_on_the_first_page_leaves_its_neighbour_to_run_on() {
+    // miaskiewicz/turbo-html2pdf#56, Chrome 156 `page.pdf()` (headless, this document): the
+    // first cell ends on page 1, the second runs on over page 2, where the row ends.
+    let (r, g, b) = (RGB[0], RGB[1], RGB[2]);
+    let td = |inner: String| format!(r#"<td style="padding:0;vertical-align:top">{inner}</td>"#);
+    let row = td(block(100, r, "")) + &td(block(150, b, "").repeat(3));
+    let html = doc(&format!(
+        r#"{}<table style="width:100%;border-collapse:collapse"><tr>{row}</tr></table>{}"#,
+        block(100, g, ""),
+        block(60, "#00ffff", "")
+    ));
+    assert_eq!(
+        bands(&html, &[r, g, b, "#00ffff"]),
+        [
+            vec![Some((140, 239)), Some((40, 139)), Some((140, 289)), None],
+            vec![None, None, Some((40, 339)), None],
+            vec![None, None, None, Some((40, 99))]
+        ]
+    );
+}
+
+#[test]
 fn a_page_holding_only_carried_padding_is_not_empty_for_the_next_paragraph() {
     // Chrome 156 `page.pdf()` (headless): "a" on page 1, its 310px bottom padding on
     // page 2 alone, the 33 lines of 20px from page 3 on (16, 15, 2): 5 pages.
