@@ -315,10 +315,13 @@ fn last_content_moves_on_with_the_bottom_border_that_ends_its_parent() {
 
 #[test]
 fn last_content_that_never_fits_with_its_tail_stays() {
-    // A 120px leaf + the 20px border never fit a 120px page: the leaf stays put.
+    // A 120px leaf + the 20px border never fit a 120px page: the leaf stays put and the
+    // border starts page 2, as Chrome 156 breaks it (miaskiewicz/turbo-html2pdf#49,
+    // `tail-border-past-page-end` in pagination_chrome156.json).
     let wrap = bordered(0.0, vec![boxf(0.0, 120.0)], 20);
     let (pages, diags) = run(&root(vec![wrap]), &cap120());
-    assert_eq!(pages.len(), 1);
+    assert_eq!(pages.len(), 2);
+    assert!(close(pages[0].body[0].y, 0.0));
     assert!(diags.lints.is_empty());
 }
 

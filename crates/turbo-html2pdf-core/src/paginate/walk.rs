@@ -882,7 +882,7 @@ impl<'a> Walker<'a> {
             return;
         };
         let frame = wrapper_tail(galley, &galley.root.children[i]);
-        if self.cursor + frame > self.page_capacity() + 0.5 {
+        if frame > 0.0 && self.cursor + frame > self.page_capacity() + 0.5 {
             let bottom = self.prev_bottom.unwrap_or_default() + frame;
             self.continue_box(frame, bottom, &[]);
         }
