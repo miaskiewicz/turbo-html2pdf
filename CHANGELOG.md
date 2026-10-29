@@ -28,7 +28,7 @@ turbo-test, turbo-html2pdf, turbo-surf) releases on one version line.
   60 KB of PDF). Image-bearing PDFs therefore differ in bytes from 0.3.9; JPEGs still ride
   through as `DCTDecode`.
 - **Changed (turbo-dom pin)**: `turbo-dom-layout` + `turbo-dom` are pinned to the final
-  turbo-dom consolidation head (c9f991c; via 0189e4d, f0fb306, d660013 and 443f4d8, was f860fea). Render changes, each checked
+  turbo-dom consolidation head (03a856d; via c9f991c, 0189e4d, f0fb306, d660013 and 443f4d8, was f860fea). Render changes, each checked
   against Chrome 156 `page.pdf()`: `pre`, `pre-wrap` and `pre-line` break at newlines and
   `pre-wrap` keeps its spaces (turbo-dom#120/#121/#122/#166); an inline-block sits on its
   last line's baseline (turbo-dom#142); `@supports` with two condition groups and no
@@ -36,7 +36,21 @@ turbo-test, turbo-html2pdf, turbo-surf) releases on one version line.
   break hints (turbo-dom#158), so html2pdf's `BoxFacts::avoid_break_inside` workaround is
   removed. Render parity corpus (html2pdf, html2pdf-svg): no output changes. The
   later repins bring turbo-dom#176 (font shorthand) and the turbo-dom-browser-env
-  panic fixes turbo-dom#183/#184 (a crate html2pdf does not link).
+  panic fixes turbo-dom#183/#184 (a crate html2pdf does not link). The 03a856d repin
+  brings forced left/right/recto breaks (turbo-dom#204, now matching Chrome's page
+  counts), glyph cluster text (turbo-dom#205) and `Fragment::opacity` (turbo-dom#206).
+- **Fixed (turbo-html2pdf#54)**: `/ToUnicode` maps each glyph to the source text of the
+  cluster it was shaped from, so `pdftotext` of curly quotes (Inter) and Fira Code's
+  `->` / `!=` / `=>` matches Chrome 156 `page.pdf()`.
+- **Fixed (turbo-html2pdf#55)**: CSS `opacity` paints through an `ExtGState` with `/ca`
+  and `/CA` (nested opacities multiply) on a page with a `/Transparency` group, as Chrome
+  156 does; an `opacity: 0` subtree is not painted or tagged. PDF/A renders stay opaque.
+  Overlapping children of one translucent box are each faded rather than composited as
+  one group.
+- **Fixed (turbo-html2pdf#56, #57)**: a table row of plain cells side by side is split
+  at the page end, each cell between its own children (a row or cell that paints still
+  moves on whole); an unbreakable block after an avoided break that still does not fit is
+  sliced at the page end, as Chrome 156 does.
 
 - **Fixed (turbo-html2pdf#47, Chrome 156 print control)**: a content-free block (an empty
   `<div>`, a table row of empty cells; nothing inside it `break-inside: avoid`,
