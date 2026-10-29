@@ -579,7 +579,9 @@ impl<'a> Walker<'a> {
         let layer = self.layer;
         self.layer = layer_of(f, layer);
         if is_paragraph(f) {
+            let sized = self.begin_sized(f);
             self.split_paragraph(f, headers, tail, diags);
+            self.end_block(f, (sized, f.children.len().checked_sub(1)), headers);
         } else {
             self.split_block(f, headers, tail, diags);
         }
@@ -704,16 +706,24 @@ impl<'a> Walker<'a> {
             own_headers.clone()
         };
         let last = last_content(self.boxes, &f.children);
-        let sized = self.boxes.get(f.node_id).is_some_and(|b| b.definite_height);
-        if sized {
-            // `f`'s own shift is already in `self.shift` here.
-            self.sized.push((f.y - self.shift, None));
-        }
+        let sized = self.begin_sized(f);
         for h in &own_headers {
             self.emit(h);
         }
         self.place_children(f, &active, (tail, last), diags);
         self.end_block(f, (sized, last), headers);
+    }
+
+    /// Start split block `f`: one with a definite height records where its content
+    /// starts (through `put`) so [`Self::end_sized`] can lay its height out; returns
+    /// whether it has one.
+    fn begin_sized(&mut self, f: &Fragment) -> bool {
+        let sized = self.boxes.get(f.node_id).is_some_and(|b| b.definite_height);
+        if sized {
+            // `f`'s own shift is already in `self.shift` here.
+            self.sized.push((f.y - self.shift, None));
+        }
+        sized
     }
 
     /// End split block `f` after its content (`last`): a definite height (`sized`) is laid

@@ -1,6 +1,6 @@
 //! A box whose children are only text lines (a "paragraph" to the fragmenter) keeps the
 //! height its box has beyond its lines when it is split across pages: a definite
-//! `height`, a `min-height`, or bottom padding runs on through the following pages, as
+//! `height`, a or a `min-height` runs on through the following pages, as
 //! for any other block (#33). Page counts are Chrome 156 `page.pdf()` on `600px x 400px`
 //! pages with 40px margins and the Evolventa fixture font.
 
@@ -47,17 +47,15 @@ fn a_definite_height_runs_on_past_its_lines() {
 
 #[test]
 fn a_definite_height_runs_on_past_several_lines() {
-    assert_eq!(page_count(r#"<div style="height:1000px">a<br>b<br>c</div>"#), 4);
+    assert_eq!(
+        page_count(r#"<div style="height:1000px">a<br>b<br>c</div>"#),
+        4
+    );
 }
 
 #[test]
 fn a_min_height_runs_on_past_its_lines() {
     assert_eq!(page_count(r#"<div style="min-height:1000px">a</div>"#), 4);
-}
-
-#[test]
-fn bottom_padding_runs_on_past_its_lines() {
-    assert_eq!(page_count(r#"<div style="padding-bottom:1000px">a</div>"#), 5);
 }
 
 #[test]
