@@ -925,6 +925,15 @@ const CASES = [
     ),
     colors: ["magenta", "blue", "green"],
   },
+  {
+    // `<body>`'s bottom padding taller than the page after its last block.
+    id: "tail-body-padding",
+    html: DOC(
+      `body{margin:0;padding-bottom:1000px;border-bottom:4px solid ${C.red[0]}}`,
+      block(C.blue[0], 40),
+    ),
+    colors: ["red", "blue"],
+  },
   // --- review round 3 probes ---
   {
     // Collapsed parent/child top margins after an unforced break are truncated together.

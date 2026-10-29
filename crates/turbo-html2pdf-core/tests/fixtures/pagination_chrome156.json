@@ -5983,6 +5983,84 @@
    ]
   },
   {
+   "id": "tail-body-padding",
+   "html": "<!DOCTYPE html><html><head><style>@page{size:600px 400px;margin:40px}body{margin:0;padding-bottom:1000px;border-bottom:4px solid #ff0000}</style></head><body><div style=\"height:40px;background:#0000ff;break-inside:avoid;\"></div></body></html>",
+   "colors": {
+    "red": "#ff0000",
+    "blue": "#0000ff"
+   },
+   "pages": [
+    {
+     "size": [
+      600,
+      400
+     ],
+     "boxes": {
+      "red": null,
+      "blue": {
+       "bbox": [
+        40,
+        40,
+        559,
+        79
+       ],
+       "top": true,
+       "bottom": true
+      }
+     }
+    },
+    {
+     "size": [
+      600,
+      400
+     ],
+     "boxes": {
+      "red": null,
+      "blue": null
+     }
+    },
+    {
+     "size": [
+      600,
+      400
+     ],
+     "boxes": {
+      "red": null,
+      "blue": null
+     }
+    },
+    {
+     "size": [
+      600,
+      400
+     ],
+     "boxes": {
+      "red": null,
+      "blue": null
+     }
+    },
+    {
+     "size": [
+      600,
+      400
+     ],
+     "boxes": {
+      "red": {
+       "bbox": [
+        40,
+        80,
+        559,
+        83
+       ],
+       "top": true,
+       "bottom": true
+      },
+      "blue": null
+     }
+    }
+   ]
+  },
+  {
    "id": "r3-collapsed-margins-after-break",
    "html": "<!DOCTYPE html><html><head><style>@page{size:600px 400px;margin:40px}body{margin:0}</style></head><body><div style=\"height:250px;background:#ff0000;break-inside:avoid;\"></div><div style=\"margin-top:40px\"><div style=\"margin-top:60px\"><div style=\"height:100px;background:#00ff00;break-inside:avoid;\"></div></div></div></body></html>",
    "colors": {
