@@ -258,25 +258,15 @@ const KNOWN: &[(&str, usize, &str)] = &[
     ("tail-padding-grandparent", 3, "orange"),
     ("tail-padding-grandparent", 4, "orange"),
     ("tail-padding-grandparent", 5, "orange"),
-    // miaskiewicz/turbo-html2pdf#50: `break-before/after: avoid` between siblings is not honoured.
-    ("r3-break-after-avoid", 1, "green"),
-    ("r3-break-after-avoid", 2, "green"),
-    ("r3-break-after-avoid", 2, "blue"),
-    ("r3-break-before-avoid", 1, "green"),
-    ("r3-break-before-avoid", 2, "green"),
-    ("r3-break-before-avoid", 2, "blue"),
 ];
 
 /// Cases whose page count does not match Chrome 156 yet (each must still differ; their
 /// pages are not compared): forced left/right/recto breaks are dropped (miaskiewicz/turbo-dom#204),
-/// table rows and floats are kept whole (miaskiewicz/turbo-html2pdf#51), multi-column is
-/// not supported (#52).
+/// multi-column is not supported (miaskiewicz/turbo-html2pdf#52).
 const KNOWN_PAGE_COUNTS: &[&str] = &[
     "r3-break-before-left",
     "r3-break-before-right",
     "r3-break-after-recto",
-    "r3-table-row-split",
-    "r3-float-split",
     "r3-multicol",
 ];
 
