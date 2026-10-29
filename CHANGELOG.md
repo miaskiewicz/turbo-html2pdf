@@ -17,6 +17,11 @@ below, each backed by a Chrome 156 control.
 The version jumps from 0.3.9 to 0.6.0 so every consolidated package (turbo-dom,
 turbo-test, turbo-html2pdf, turbo-surf) releases on one version line.
 
+- **Fixed (`xref`)**: an element `id` names a destination (so `href="#sec"` resolves
+  without a `<t:anchor>`), and a block-level `<a>` with an absolute `href` gets a `/S /URI`
+  Link annotation, as in Chrome 156 `page.pdf()` (turbo-html2pdf#53). New
+  `Semantics::link_uri`. Still open: block internal-link rects and inline external links
+  (turbo-dom#210).
 - **Fixed (PDF size)**: decoded PNG (and rasterized SVG) samples and their `SMask` alpha
   planes are embedded `FlateDecode`-compressed, as Chrome 156 `page.pdf()` embeds them,
   instead of as raw uncompressed streams (a 300x300 RGBA PNG went from 361 KB to under
