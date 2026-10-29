@@ -134,11 +134,22 @@ fn id_attribute_defines_a_destination() {
 }
 
 #[test]
+fn anchor_id_attribute_names_the_destination() {
+    // packages/react's `Anchor({ id })` emits `<t:anchor id=…>`; that id is a
+    // destination like any other element id.
+    let pages = pages("<t:anchor id=\"ch2\"/><div>body</div>");
+    assert_eq!(all_anchors(&pages), vec!["ch2".to_string()]);
+}
+
+#[test]
 fn id_destination_is_written_to_dests() {
     let pages = pages("<p><a href=\"#sec\">go</a></p><h2 id=\"sec\">Section</h2>");
     let pdf = emit_pdf(&pages, &EmitOptions::default());
     assert!(contains(&pdf, b"/Dests"), "an id defines a destination");
-    assert!(contains(&pdf, b"/sec ["), "the destination is named after the id");
+    assert!(
+        contains(&pdf, b"/sec ["),
+        "the destination is named after the id"
+    );
 }
 
 #[test]
@@ -149,12 +160,21 @@ fn block_external_link_is_a_uri_link() {
          <a href=\"page.html\" style=\"display:block\">relative</a>",
     );
     assert_eq!(all_uris(&pages), vec!["https://example.com/x".to_string()]);
-    assert!(all_hrefs(&pages).is_empty(), "an external href is not internal");
+    assert!(
+        all_hrefs(&pages).is_empty(),
+        "an external href is not internal"
+    );
     let pdf = emit_pdf(&pages, &EmitOptions::default());
     assert!(contains(&pdf, b"/S /URI"), "the link uses a URI action");
-    assert!(contains(&pdf, b"(https://example.com/x)"), "the URI is written");
+    assert!(
+        contains(&pdf, b"(https://example.com/x)"),
+        "the URI is written"
+    );
     assert!(!contains(&pdf, b"/S /GoTo"), "no GoTo for an external link");
-    assert!(!contains(&pdf, b"page.html"), "a relative href has no base to resolve");
+    assert!(
+        !contains(&pdf, b"page.html"),
+        "a relative href has no base to resolve"
+    );
 }
 
 #[test]

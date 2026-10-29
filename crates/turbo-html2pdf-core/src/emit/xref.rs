@@ -151,7 +151,11 @@ fn walk(
     let action = semantics
         .link_href(frag)
         .map(|name| Action::GoTo(name.to_string()))
-        .or_else(|| semantics.link_uri(frag).map(|uri| Action::Uri(uri.to_string())));
+        .or_else(|| {
+            semantics
+                .link_uri(frag)
+                .map(|uri| Action::Uri(uri.to_string()))
+        });
     if let Some(action) = action {
         links.push(Link {
             action,
