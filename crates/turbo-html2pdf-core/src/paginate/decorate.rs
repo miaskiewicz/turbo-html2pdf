@@ -64,6 +64,10 @@ pub(super) struct SplitBox {
     pub start: (usize, usize, f32),
     pub end: (usize, f32),
     pub shift: f32,
+    /// The page (and page-local end) where the box's content ends when its bottom
+    /// padding/border starts the next page (miaskiewicz/turbo-html2pdf#49): its slice
+    /// there ends at that content.
+    pub cut: Option<(usize, f32)>,
 }
 
 /// Slice every split box onto the pages it spans, as Chrome 156 prints them under the
@@ -114,10 +118,10 @@ fn box_slices(b: &SplitBox, order: usize, spans: &[PageSpan]) -> Vec<Insert> {
         .flat_map(|(span, page)| {
             let (on_first, on_last) = (page == first, page == last);
             let start = if on_first { top } else { b.shift };
-            let end = if on_last {
-                bottom
-            } else {
-                span.capacity + b.shift
+            let end = match b.cut {
+                _ if on_last => bottom,
+                Some((at, end)) if at == page => end + b.shift,
+                _ => span.capacity + b.shift,
             };
             let piece = slice(&b.frag, start, end, on_first, on_last);
             let cut = if b.shift == 0.0 {

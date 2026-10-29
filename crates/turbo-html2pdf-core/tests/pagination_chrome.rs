@@ -224,12 +224,16 @@ fn compare_case(case: &serde_json::Value, failures: &mut Vec<String>) {
     let id = case["id"].as_str().unwrap();
     let ours = pages(case["html"].as_str().unwrap());
     let chrome = case["pages"].as_array().unwrap();
-    if ours.len() != chrome.len() {
-        failures.push(format!(
-            "{id}: {} pages, Chrome {}",
-            ours.len(),
-            chrome.len()
-        ));
+    let known = KNOWN_PAGE_COUNTS.contains(&id);
+    if ours.len() != chrome.len() || known {
+        let (n, want) = (ours.len(), chrome.len());
+        failures.extend(match (known, n == want) {
+            (true, true) => Some(format!(
+                "{id}: matches Chrome's page count, remove it from KNOWN_PAGE_COUNTS"
+            )),
+            (false, false) => Some(format!("{id}: {n} pages, Chrome {want}")),
+            _ => None,
+        });
         return;
     }
     let colors: BTreeMap<String, String> = serde_json::from_value(case["colors"].clone()).unwrap();
@@ -243,7 +247,38 @@ fn compare_case(case: &serde_json::Value, failures: &mut Vec<String>) {
 /// (`exact-fill-child-margin` matches since miaskiewicz/turbo-dom#41: the paged layout keeps
 /// a last child's bottom margin inside a padded parent; the split relative / absolute cases
 /// since miaskiewicz/turbo-html2pdf#41 and #42.) Empty: every measurement matches.
-const KNOWN: &[(&str, usize, &str)] = &[];
+///
+/// miaskiewicz/turbo-html2pdf#49: on the third and later pages of a bottom padding that
+/// runs over several pages, Chrome 156 paints one device-pixel row of the padding above
+/// the page area (y = 39); the engine's slices start at the page area's top.
+const KNOWN: &[(&str, usize, &str)] = &[
+    ("tail-padding-taller-than-page", 3, "orange"),
+    ("tail-padding-taller-than-page", 4, "orange"),
+    ("tail-padding-taller-than-page", 5, "orange"),
+    ("tail-padding-grandparent", 3, "orange"),
+    ("tail-padding-grandparent", 4, "orange"),
+    ("tail-padding-grandparent", 5, "orange"),
+    // miaskiewicz/turbo-html2pdf#50: `break-before/after: avoid` between siblings is not honoured.
+    ("r3-break-after-avoid", 1, "green"),
+    ("r3-break-after-avoid", 2, "green"),
+    ("r3-break-after-avoid", 2, "blue"),
+    ("r3-break-before-avoid", 1, "green"),
+    ("r3-break-before-avoid", 2, "green"),
+    ("r3-break-before-avoid", 2, "blue"),
+];
+
+/// Cases whose page count does not match Chrome 156 yet (each must still differ; their
+/// pages are not compared): forced left/right/recto breaks are dropped (miaskiewicz/turbo-dom#204),
+/// table rows and floats are kept whole (miaskiewicz/turbo-html2pdf#51), multi-column is
+/// not supported (#52).
+const KNOWN_PAGE_COUNTS: &[&str] = &[
+    "r3-break-before-left",
+    "r3-break-before-right",
+    "r3-break-after-recto",
+    "r3-table-row-split",
+    "r3-float-split",
+    "r3-multicol",
+];
 
 /// miaskiewicz/turbo-html2pdf#39: the print initial containing block (the page area).
 fn icb_case(id: &str) -> bool {
@@ -296,4 +331,23 @@ fn an_absolute_box_stays_inside_its_positioned_parent_placed_whole() {
     let parent = &pages[1].body[0];
     assert_eq!(parent.children.len(), 1);
     assert_eq!(parent.children[0].y - parent.y, 20.0);
+}
+
+#[test]
+fn a_bottom_padding_too_tall_to_keep_with_text_breaks_like_chrome_156() {
+    // miaskiewicz/turbo-html2pdf#49: Chrome 156's page counts for these documents (the
+    // fixture font); the padding after the text line runs on over the following pages.
+    let doc = |body: &str| {
+        format!("<!DOCTYPE html><html><head><style>@page{{size:600px 400px;margin:40px}}</style></head><body>{body}</body></html>")
+    };
+    for (body, chrome) in [
+        (r#"<div style="padding-bottom:1000px">a</div><p>t</p>"#, 5),
+        (
+            r#"<div style="padding-bottom:1000px"><div>a</div></div><p>t</p>"#,
+            5,
+        ),
+        (r#"<div style="padding-bottom:300px">a</div><p>t</p>"#, 3),
+    ] {
+        assert_eq!(pages(&doc(body)).len(), chrome, "{body}");
+    }
 }

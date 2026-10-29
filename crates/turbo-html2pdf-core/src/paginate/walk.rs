@@ -75,7 +75,8 @@ use crate::layout::fragment::{Fragment, FragmentContent, NodeId, RepeatKind};
 use crate::layout::value::BreakRule;
 
 use super::boxes::{
-    last_content, leading_margin, remaining_height, trailing, wrapper_tail, BoxFacts, FlowBoxes,
+    bottom_frame, last_content, leading_margin, remaining_height, trailing, wrapper_tail, BoxFacts,
+    FlowBoxes,
 };
 use super::decorate::{paints, slice_split_boxes, SplitBox};
 use super::out_of_flow::{Anchors, Taken};
@@ -178,6 +179,9 @@ struct Walker<'a> {
     /// (miaskiewicz/turbo-html2pdf#37 item 1).
     decorated: Vec<(Fragment, Option<BoxStart>)>,
     split_boxes: Vec<SplitBox>,
+    /// Set by [`Self::carry_frame`] for the block being closed: the page its content ends
+    /// on and where, its bottom padding/border starting the next page.
+    frame_cut: Option<(usize, f32)>,
     /// The blocks being split that are taller than their content (a definite height):
     /// their galley flow top and, once their first fragment is placed, where they start
     /// (page, page-local flow top) — their height is laid out from there through the
@@ -221,6 +225,7 @@ impl<'a> Walker<'a> {
             deferred: Vec::new(),
             decorated: Vec::new(),
             split_boxes: Vec::new(),
+            frame_cut: None,
             sized: Vec::new(),
             placed: Vec::new(),
             threads: Vec::new(),
@@ -626,8 +631,9 @@ impl<'a> Walker<'a> {
             self.positioned.pop();
             debug_assert!(self.open.is_empty(), "a split block placed nothing");
         }
+        let cut = self.frame_cut.take();
         if paints(f) {
-            self.close_decorated(f);
+            self.close_decorated(f, cut);
         }
         if self.own_shift(f) != 0.0 {
             let (first, placed) = self.threads.pop().expect("opened with the block");
@@ -654,9 +660,12 @@ impl<'a> Walker<'a> {
 
     /// Done splitting painting block `f`: its box ends below its last content by its
     /// trailing padding/border (at most the page area's end), on the current page.
-    fn close_decorated(&mut self, f: &Fragment) {
+    fn close_decorated(&mut self, f: &Fragment, cut: Option<(usize, f32)>) {
         if let Some((frag, Some(start))) = self.decorated.pop() {
             self.end_decorated(f, frag, start);
+            if let Some(b) = self.split_boxes.last_mut() {
+                b.cut = cut;
+            }
         }
     }
 
@@ -673,6 +682,7 @@ impl<'a> Walker<'a> {
             start,
             end,
             shift: visual,
+            cut: None,
         });
     }
 
@@ -791,13 +801,29 @@ impl<'a> Walker<'a> {
     /// `last`'s bottom margin before it is truncated at the page end.
     fn carry_remaining(&mut self, f: &Fragment, last: &Fragment, headers: &[Fragment]) {
         let Some(rest) = remaining_height(self.boxes, f, last) else {
-            return;
+            return self.carry_frame(f, headers);
         };
         let margin = f.bottom() - last.bottom() - rest;
         let cap = self.page_capacity();
         if self.cursor + margin + rest > cap {
             let over = rest - (cap - self.cursor - margin).max(0.0);
             self.continue_box(over, f.bottom() - self.shift, headers);
+        }
+    }
+
+    /// After the last content of split block `f` with an auto height: a bottom
+    /// padding/border that was too tall to keep with that content ([`Self::tail_of`]) and
+    /// does not fit what is left of the page starts the next page whole and runs on from
+    /// there, like Chrome 156 (miaskiewicz/turbo-html2pdf#49); the last content's bottom
+    /// margin before it is truncated at the page end.
+    fn carry_frame(&mut self, f: &Fragment, headers: &[Fragment]) {
+        let frame = bottom_frame(self.boxes, f);
+        let end = self.prev_bottom.map_or(self.cursor, |b| {
+            self.cursor + (f.bottom() - self.shift - b).max(0.0)
+        });
+        if frame > 0.0 && end > self.page_capacity() + 0.5 {
+            self.frame_cut = Some((self.pages.len() - 1, self.cursor));
+            self.continue_box(frame, f.bottom() - self.shift, headers);
         }
     }
 
@@ -823,10 +849,26 @@ impl<'a> Walker<'a> {
     /// What must follow `child` of `parent` on its page: for the parent's last content,
     /// the parent's [`trailing`] extent (else nothing).
     fn tail_of(&self, parent: &Fragment, child: &Fragment, tail: f32, last: bool) -> f32 {
-        if last {
-            trailing(self.boxes, parent, child, tail)
-        } else {
+        if !last {
+            return 0.0;
+        }
+        let after = trailing(self.boxes, parent, child, tail);
+        // A tail too tall to fit even a fresh page with the last piece of content it
+        // follows does not hold that content back: it breaks after it instead
+        // ([`Self::carry_frame`]).
+        if self.last_leaf(child).height + after > self.capacity + 0.5 {
             0.0
+        } else {
+            after
+        }
+    }
+
+    /// The innermost last content of `f` (itself when it has none): what a tail after `f`
+    /// must share a page with.
+    fn last_leaf<'f>(&self, f: &'f Fragment) -> &'f Fragment {
+        match last_content(self.boxes, &f.children) {
+            Some(i) => self.last_leaf(&f.children[i]),
+            None => f,
         }
     }
 

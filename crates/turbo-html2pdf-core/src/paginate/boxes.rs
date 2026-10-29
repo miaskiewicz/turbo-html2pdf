@@ -117,7 +117,7 @@ pub(super) fn remaining_height(
 }
 
 /// `parent`'s bottom padding + border.
-fn bottom_frame(boxes: &FlowBoxes, parent: &Fragment) -> f32 {
+pub(super) fn bottom_frame(boxes: &FlowBoxes, parent: &Fragment) -> f32 {
     boxes.get(parent.node_id).map_or(0.0, |f| f.padding_bottom) + bottom_border(parent)
 }
 
