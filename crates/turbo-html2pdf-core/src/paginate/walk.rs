@@ -346,6 +346,11 @@ impl<'a> Walker<'a> {
             first = false;
             self.new_page(headers);
             top = self.cursor;
+            // Repeated headers filling the whole page leave no rows for the next
+            // part: let the rest overflow here instead of adding pages forever.
+            if top >= self.page_capacity() {
+                break;
+            }
         }
         self.put_rows(f, top - shown, (top, FAR_END), first);
         self.advance(f, top - shown + f.height);
@@ -848,7 +853,7 @@ impl<'a> Walker<'a> {
         diags: &mut Diagnostics,
     ) -> usize {
         let lines = run.lines;
-        let empty = self.current().is_empty();
+        let empty = self.fresh || self.current().is_empty();
         let fit = self.lines_that_fit(&lines[start..], run.tail, empty, diags);
         let take = resolve_take(start, fit, lines.len(), run.orphans, run.widows, empty);
         if take == 0 {
