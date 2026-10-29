@@ -118,6 +118,8 @@ turbo-dom = "0.6"
 rustybuzz = "0.20.1"
 pdf-writer = "0.15.0"
 subsetter = "0.2.6"
+# Flate-compresses decoded PNG samples and SMasks (already in the tree via `png`).
+miniz_oxide = "0.8"
 
 # `append` feature only (off by default). Read+write+merge for the post-emit PDF
 # glue step; `pdf-writer` is write-only and cannot parse a foreign PDF. Default
