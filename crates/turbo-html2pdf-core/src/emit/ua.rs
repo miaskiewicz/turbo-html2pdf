@@ -297,6 +297,9 @@ impl TreeBuilder {
     /// Recurse one fragment: open its element (if it has a role), attach its own
     /// MCID to the nearest enclosing element, then descend.
     fn walk(&mut self, frag: &Fragment, page: usize, parent: Option<usize>, mcid: &mut i32) {
+        if super::page::invisible(frag) {
+            return;
+        }
         let holder = self.open_element(frag, page, parent);
         self.attach_content(frag, page, holder, mcid);
         for child in &frag.children {
@@ -376,7 +379,7 @@ fn paint_mcids(bands: [&[Fragment]; 2]) -> HashMap<*const Fragment, i32> {
 }
 
 fn number_in_paint_order(frags: &[&Fragment], order: &mut HashMap<*const Fragment, i32>) {
-    for &frag in frags {
+    for &frag in frags.iter().filter(|f| !super::page::invisible(f)) {
         if is_content(frag) {
             let next = order.len() as i32;
             order.insert(std::ptr::from_ref(frag), next);

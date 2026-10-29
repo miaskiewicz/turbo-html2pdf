@@ -9,6 +9,9 @@
 //! running header/footer chrome) are marked `/Artifact` so assistive tech skips
 //! them (AC-11.1).
 
+use std::cell::Cell;
+use std::collections::BTreeSet;
+
 use pdf_writer::{Content, Name, TextStr};
 
 use crate::layout::fragment::{Fragment, FragmentContent};
@@ -29,6 +32,10 @@ struct PaintCtx<'a> {
     images: &'a ImageStore,
     page_height_pt: f32,
     cmyk: bool,
+    /// Whether CSS `opacity` paints translucent (off for PDF/A, which emits no `/ca`).
+    fade: bool,
+    /// The opacity in effect: the product of the painted ancestors' opacities.
+    alpha: Cell<f32>,
 }
 
 /// Build the content-stream bytes for one page. A watermark, when present, is
@@ -55,6 +62,8 @@ pub fn content_stream(
         images,
         page_height_pt: px_to_pt(page.geometry.height),
         cmyk,
+        fade,
+        alpha: Cell::new(1.0),
     };
     let mut content = Content::new();
     #[cfg(feature = "pdf-ua")]
@@ -217,12 +226,101 @@ fn bands(page: &Page) -> [&[Fragment]; 4] {
     [&page.body, &page.header, &page.footer, &page.footnotes]
 }
 
+/// Paint one fragment under its CSS `opacity` (miaskiewicz/turbo-html2pdf#55): an
+/// `opacity: 0` subtree is not painted at all (as Chrome 156 `page.pdf()`); a translucent
+/// one paints in a saved graphics state whose `ExtGState` sets `/ca` and `/CA` to its
+/// effective opacity (nested opacities multiply).
+fn paint_fragment(
+    content: &mut Content,
+    frag: &Fragment,
+    ctx: &PaintCtx,
+    #[cfg(feature = "pdf-ua")] marker: Option<&mut super::ua::Marker>,
+    #[cfg(feature = "pdf-ua")] artifact_band: bool,
+) {
+    if invisible(frag) {
+        return;
+    }
+    let outer = begin_opacity(content, frag, ctx);
+    paint_clipped(
+        content,
+        frag,
+        ctx,
+        #[cfg(feature = "pdf-ua")]
+        marker,
+        #[cfg(feature = "pdf-ua")]
+        artifact_band,
+    );
+    end_opacity(content, ctx, outer);
+}
+
+/// Whether `frag`'s subtree paints nothing (`opacity: 0`).
+pub(super) fn invisible(frag: &Fragment) -> bool {
+    frag.opacity <= 0.0
+}
+
+/// Enter `frag`'s opacity, returning the outer opacity to restore, or `None` when the
+/// fragment is opaque or the render emits no transparency.
+fn begin_opacity(content: &mut Content, frag: &Fragment, ctx: &PaintCtx) -> Option<f32> {
+    if frag.opacity >= 1.0 || !ctx.fade {
+        return None;
+    }
+    let outer = ctx.alpha.get();
+    let key = alpha_key(outer * frag.opacity);
+    ctx.alpha.set(outer * frag.opacity);
+    content.save_state();
+    content.set_parameters(Name(opacity_gs_name(key).as_bytes()));
+    Some(outer)
+}
+
+/// Leave the opacity [`begin_opacity`] entered.
+fn end_opacity(content: &mut Content, ctx: &PaintCtx, outer: Option<f32>) {
+    if let Some(outer) = outer {
+        content.restore_state();
+        ctx.alpha.set(outer);
+    }
+}
+
+/// An opacity in thousandths, the key of its `ExtGState` (`0.5` -> `500`).
+fn alpha_key(alpha: f32) -> u16 {
+    (alpha * 1000.0).round() as u16
+}
+
+/// The `ExtGState` resource name of an opacity key (`GSo500`).
+pub(super) fn opacity_gs_name(key: u16) -> String {
+    format!("GSo{key}")
+}
+
+/// The opacity keys a page's translucent fragments paint with, each written as one
+/// `ExtGState` of the page's resources.
+pub(super) fn opacity_keys(page: &Page) -> BTreeSet<u16> {
+    let mut keys = BTreeSet::new();
+    for band in bands(page) {
+        for frag in band {
+            collect_opacity(frag, 1.0, &mut keys);
+        }
+    }
+    keys
+}
+
+fn collect_opacity(frag: &Fragment, outer: f32, keys: &mut BTreeSet<u16>) {
+    if invisible(frag) {
+        return;
+    }
+    let alpha = outer * frag.opacity.min(1.0);
+    if frag.opacity < 1.0 {
+        keys.insert(alpha_key(alpha));
+    }
+    for child in &frag.children {
+        collect_opacity(child, alpha, keys);
+    }
+}
+
 /// Paint one fragment (its own content first, then its children atop it, in paint
 /// order), inside its `clip: rect()` region when it has one (miaskiewicz/turbo-dom#52): a
 /// saved graphics state with a rectangular clipping path. An empty region still paints
 /// (nothing shows), so tagged renders number their marked content the same as the
 /// structure walk.
-fn paint_fragment(
+fn paint_clipped(
     content: &mut Content,
     frag: &Fragment,
     ctx: &PaintCtx,
