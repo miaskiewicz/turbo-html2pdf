@@ -465,9 +465,7 @@ lint run as separate jobs. macOS and Windows builds run only in the release work
 
 **`v0.6.0`** is the release version for npm, PyPI and crates.io; the
 [release procedure](./PUBLISHING.md) records the tag triggers and registry checks.
-Until turbo-dom 0.6.0 is on crates.io the workspace pins the turbo-dom crates by git
-revision (`[patch.crates-io]` in `Cargo.toml`); the release guard refuses a tag while
-that patch remains. Bindings: Node (N-API), WebAssembly (lean + fonts), Python (PyO3),
+The turbo-dom crates (0.6.0) come from crates.io. Bindings: Node (N-API), WebAssembly (lean + fonts), Python (PyO3),
 MCP. See [`docs/`](docs/) for the full guide and [`CHANGELOG.md`](CHANGELOG.md) for
 what changed in 0.6.0.
 

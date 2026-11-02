@@ -27,8 +27,8 @@ turbo-test, turbo-html2pdf, turbo-surf) releases on one version line.
   instead of as raw uncompressed streams (a 300x300 RGBA PNG went from 361 KB to under
   60 KB of PDF). Image-bearing PDFs therefore differ in bytes from 0.3.9; JPEGs still ride
   through as `DCTDecode`.
-- **Changed (turbo-dom pin)**: `turbo-dom-layout` + `turbo-dom` are pinned to the final
-  turbo-dom consolidation head (d6da581; via 223c4c8, 03a856d, c9f991c, 0189e4d, f0fb306, d660013 and 443f4d8, was f860fea). Render changes, each checked
+- **Changed (turbo-dom 0.6.0)**: `turbo-dom-layout` + `turbo-dom` 0.6.0 come from crates.io,
+  published from the final turbo-dom consolidation head (d6da581; via 223c4c8, 03a856d, c9f991c, 0189e4d, f0fb306, d660013 and 443f4d8, was f860fea). Render changes, each checked
   against Chrome 156 `page.pdf()`: `pre`, `pre-wrap` and `pre-line` break at newlines and
   `pre-wrap` keeps its spaces (turbo-dom#120/#121/#122/#166); an inline-block sits on its
   last line's baseline (turbo-dom#142); `@supports` with two condition groups and no

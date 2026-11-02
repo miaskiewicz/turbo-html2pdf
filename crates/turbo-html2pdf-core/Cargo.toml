@@ -110,8 +110,7 @@ thiserror = { workspace = true }
 # snapshots, the HTML drive, images, errors), relocated to the turbo-dom workspace
 # and re-exported from this crate at its old paths. bundled-fonts/perf/svg are
 # forwarded; xref/pdf-ua/print-color are this crate's own (runtime layout options +
-# post-layout semantics). Pre-publish both resolve through the workspace
-# `[patch.crates-io]` (see the root Cargo.toml).
+# post-layout semantics).
 turbo-dom-layout = { version = "0.6.0", default-features = false }
 # The DOM templates are parsed into and styled from (`Flow`).
 turbo-dom = "0.6"

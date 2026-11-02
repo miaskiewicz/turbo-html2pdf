@@ -20,9 +20,8 @@ copy of `assets/fonts` — tests and benches read them through turbo-dom-layout'
 `t:`-directive / paged / PDF ones (tree-literal inputs come from turbo-dom-layout's
 `test_support::literal`; the S2 legacy-vs-Tree equivalence gate was retired at S5 with
 the legacy input).
-Pre-publish, `turbo-dom-layout` and `turbo-dom` resolve through the root
-`[patch.crates-io]` (git revs of the turbo-dom consolidation branch; a local path while
-iterating).
+`turbo-dom-layout` and `turbo-dom` 0.6.0 come from crates.io (a local `[patch.crates-io]`
+path only while iterating, never committed).
 
 ## Release runbook
 
