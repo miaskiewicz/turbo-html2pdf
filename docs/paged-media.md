@@ -11,7 +11,8 @@ per-page context, footnotes, and the pagination rules. See
 
 > **Implemented vs deferred.** The current slice implements the *master-less*
 > running header/footer path, footnotes, and the auto-pagination break walk.
-> Page masters, the general counter, leaders, endnotes, and a few related
+> Endnotes (`endnotes` feature) and `<t:anchor>` (`xref` feature) are implemented
+> behind their features. Page masters, the general counter, leaders, and a few related
 > directives are recognized by the parser but **not yet implemented** — they are
 > flagged below with the `TODO(phase…)` note from the source.
 
@@ -20,7 +21,10 @@ per-page context, footnotes, and the pagination rules. See
 ## 1. The `t:` directives
 
 `t:`-prefixed elements are recognized as typed directives
-(`crates/turbo-html2pdf-core/src/node.rs`, `TKind`). The parser knows the following
+(`TKind` in `crates/turbo-html2pdf-core/src/markers.rs`, re-exported as
+`turbo_html2pdf_core::TKind`; the template parse, `<t:…/>` expansion and the
+unknown-`t:` error are in `src/template/markup.rs`, and layout sees each directive as
+an opaque turbo-dom-layout marker). The parser knows the following
 local names. Their implementation status (verified against the handling code and
 `TODO(phase…)` markers) is:
 
@@ -38,9 +42,9 @@ local names. Their implementation status (verified against the handling code and
 | `<t:region>` | **Deferred** — `TODO(phase7b)` | Named master region. Parsed but not implemented. |
 | `<t:counter>` | **Deferred** — `TODO(phase7b)` | General named counter. Parsed but not implemented. |
 | `<t:leader>` | **Deferred** — `TODO(phase7b)` | Dot-leader fill (e.g. for a TOC). Parsed but not implemented. |
-| `<t:anchor>` | **Deferred** — `TODO(phase15)` | Section anchor (needed for `section`-reset footnotes). Parsed but not implemented. |
-| `<t:endnote>` | **Deferred** — `TODO(phase15)` | Document-end note. Parsed but not implemented. |
-| `<t:endnotes>` | **Deferred** — `TODO(phase15)` | Endnote collection point. Parsed but not implemented. |
+| `<t:anchor>` | **Implemented** (`xref` feature) | Named destination (`name`, else `id`) for `<a href="#…">` links. Without `xref` it renders nothing. |
+| `<t:endnote>` | **Implemented** (`endnotes` feature) | Document-end note. Without `endnotes` it is parsed but not implemented. |
+| `<t:endnotes>` | **Implemented** (`endnotes` feature) | Endnote collection point. Without `endnotes` it is parsed but not implemented. |
 
 The two field codes `<t:page/>` and `<t:pages/>` are only meaningful **inside a
 running region**, where they desugar to `{{ page.number }}` / `{{ page.total }}`
@@ -226,6 +230,74 @@ A block that cannot fit even on an empty page is split internally; an atomic lea
 taller than a page overflows onto a fresh page with a `RegionOverflow` lint
 (content is never dropped).
 
+### Margins at page starts
+
+As Chrome prints (CSS Fragmentation §5.2; turbo-html2pdf#31, #32): only margins are
+truncated at a break, never padding, borders or a box's remaining height.
+
+- The first page starts at the top of the document, so the first block keeps its top
+  margin (and `<html>`/`<body>` margins, borders and padding above it).
+- After an **unforced** break (content moved because it did not fit) the margin is
+  truncated and the block starts at the top of the page area. If the content that moved
+  is the first content of a block being split, the break is before that block: its top
+  border and padding (and any margin inside them) stay above the content on the new
+  page, and only the block's own margin is truncated.
+- After a **forced** break the next block keeps **its own** top margin (collapsed with its
+  first child's when no padding or border separates them). It does not keep a larger
+  bottom margin of the block before the break.
+- A forced break on a page that has no content yet starts no new page, so Chrome's
+  behaviour applies: `break-before: page` on the first content makes no blank first page,
+  and `break-after` on one block plus `break-before` on the next break only once.
+- No break can separate a box's last content from the bottom padding and border that end
+  the box (or its ancestors', `<body>`'s included). A block that would exactly fill the
+  page is followed by such padding, so it moves to the next page with it. A trailing
+  margin on its own does not move it.
+- A box taller than its content (a definite `height`) ends in remaining height that
+  breaks like content: what doesn't fit continues at the top of the next page, before
+  the next block (#33).
+- A `position: relative` box is painted shifted, but the flow continues from its
+  unshifted position (#34).
+
+### Split boxes
+
+A block split across pages paints a slice of its box (background, border, shadow) on
+every page it spans, like `<html>`/`<body>` above: Chrome's default
+`box-decoration-break: slice` (#37). The top edge is on the first page and the bottom edge
+on the last, the box running to the page area's end in between. A forced break anywhere
+inside a block breaks the page there (#38). Percentage margins and paddings resolve
+against each box's containing block.
+
+### Positioned boxes in print
+
+As Chrome prints them (#32):
+
+- A **`position: fixed`** box repeats on **every page**. It sits at its insets from the
+  page area (the print viewport), or at its static position if it has none. With only
+  `bottom` set, it is anchored to the page area's bottom.
+- A **`position: absolute`** box with `top` or `bottom` set sits at that offset from its
+  containing block, which is the nearest positioned ancestor, or else the first page
+  area. The offset is measured from where that block starts and runs on through the
+  following pages, so `top: 900px` on a 320px-tall page area lands on page 3, adding
+  pages after the content if needed. A box placed inside a static block that moves to a
+  later page stays relative to the first page.
+- An `absolute` box with neither `top` nor `bottom` stays at its static position in the
+  flow and takes no space.
+- Fragments paint in stacking order: a `z-index` below 0, then the flow, then positioned
+  boxes, then a positive `z-index` (#35).
+
+The page area is the page minus its `@page` margins. The root (or propagated `<body>`)
+background fills only that area, as in Chrome.
+
+### `<html>` / `<body>` boxes across pages
+
+`<html>` and `<body>` are dissolved into the page flow before pagination; their
+background (when not propagated to the canvas — e.g. `<body>`'s when `<html>` has one),
+border and shadow are painted on **every page** as Chrome's default
+`box-decoration-break: slice` does: from the box's top on the first page (top edge
+there only), through the page area's end on every page but the last, to the end of the
+content plus padding and border on the last page (bottom edge there only). A sliced box
+has square corners.
+
 ### Orphans and widows
 
 Paragraphs honor `orphans` (minimum lines before a break) and `widows` (minimum
@@ -243,7 +315,7 @@ lines after a break), default `2` each.
 `<thead>` rows (UA `display: table-header-group`) and `<tfoot>` rows
 (`table-footer-group`) are marked repeatable, so when a table spans multiple
 pages the header is **re-emitted atop every continued page** (`layout/table.rs`,
-`paginate/walk.rs`). This needs no extra attribute — just use `<thead>`:
+`paginate/walk.rs`), and the next rows follow it directly (#36). This needs no extra attribute — just use `<thead>`:
 
 ```html
 <table>
@@ -259,8 +331,14 @@ pages the header is **re-emitted atop every continued page** (`layout/table.rs`,
 
 From `paginate/walk.rs`:
 
-- When a block is split across pages, its box wrapper (background/border) is **not
-  re-emitted** around each part — children are emitted directly.
+- A block that does not fit the rest of the page but fits on an empty one moves to the
+  next page whole (AC-6.2), where Chrome would split it at the page end.
+- An absolutely positioned box taller than the page remainder is placed whole (Chrome
+  fragments it); a fixed box's containing block is the page body area (between any
+  running header and footer bands).
+- A last child's bottom margin is dropped by the paged layout (turbo-dom#41), so a block
+  whose own bottom margin would push it past the page end with its parent's padding
+  stays.
 - Orphans/widows are enforced at each single break, but a paragraph tail spanning
   more than two pages is greedy.
 

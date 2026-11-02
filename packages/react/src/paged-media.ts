@@ -1,6 +1,6 @@
 // Paged-media components. These map to the `t:` directive elements that must
 // survive into the parsed DOM as typed layout nodes (§3). The element names match
-// `turbo-pdf-core`'s authoritative `t_kind()` table exactly (node.rs).
+// `turbo-html2pdf-core`'s authoritative `t_kind()` table exactly (src/markers.rs).
 //
 // We build these with `createElement(string, …)` rather than JSX, because a JSX
 // tag like `<t:running-header>` parses as the member expression `t.running` — the
@@ -140,7 +140,7 @@ export function Endnotes(): ReactElement {
  * So `<Running name="section">` renders that attribute on a host element (default
  * `<span>`, override via `as`), optionally with `t:running-policy`.
  *
- * TODO(phase11): the handoff sketched `<Running>` -> `<t:running>`, but node.rs
+ * TODO(phase11): the handoff sketched `<Running>` -> `<t:running>`, but markers.rs
  * has no such directive; spec §3.5 defines it as an attribute, which is what we emit.
  */
 export function Running(props: {

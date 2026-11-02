@@ -39,20 +39,12 @@ import { dirname, join } from "node:path";
 import { test } from "node:test";
 import { fileURLToPath } from "node:url";
 import { createRequire } from "node:module";
+import { layoutFontsDir } from "../../../scripts/layout-crate-dir.mjs";
 
 const require = createRequire(import.meta.url);
 const here = dirname(fileURLToPath(import.meta.url));
 const root = join(here, "..");
-const repoRoot = join(root, "..", "..");
-const CUSTOM_FONT = join(
-  repoRoot,
-  "crates",
-  "turbo-html2pdf-core",
-  "assets",
-  "fonts",
-  "roboto",
-  "Roboto-Regular.ttf",
-);
+const CUSTOM_FONT = join(layoutFontsDir(), "roboto", "Roboto-Regular.ttf");
 
 function tryLoad() {
   try {

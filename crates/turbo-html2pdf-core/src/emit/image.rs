@@ -1,6 +1,6 @@
 //! Image XObject embedding (§7.4, Phase 9b, AC-7.4). Every `Image` fragment names
 //! a raster the caller's [`ImageResolver`] supplies; this module decodes each
-//! distinct name once (PNG to raw RGB/gray samples, JPEG passed through as
+//! distinct name once (PNG to Flate-compressed RGB/gray samples, JPEG passed through as
 //! `DCTDecode`), embeds it as an image XObject, attaches an `SMask` when the
 //! source had alpha, and paints it with a placement transform.
 //!
@@ -10,9 +10,11 @@
 //! (AC-7.6). A name the resolver can't supply (or can't decode) is dropped: it
 //! occupies no object and paints nothing.
 
+use std::borrow::Cow;
+
 use pdf_writer::{Chunk, Filter, Finish, Name, Ref};
 
-use crate::image::{decode, ColorSpace, ImageResolver, Payload, RasterImage};
+use crate::image::{decode, ColorSpace, ImageResolver, Orientation, Payload, RasterImage};
 use crate::layout::fragment::{Fragment, FragmentContent, ImagePlacement};
 
 use super::fonts::RefAlloc;
@@ -163,16 +165,14 @@ fn write_image(chunk: &mut Chunk, image: &RasterImage, alloc: &mut RefAlloc) {
     }
 }
 
-/// Write the main color XObject. PNG samples ride a `FlateDecode`-free raw
-/// stream; JPEG bytes ride through as `DCTDecode`.
+/// Write the main color XObject. Decoded PNG samples ride a `FlateDecode`
+/// stream (as Chrome 156 embeds them); JPEG bytes ride through as `DCTDecode`.
 fn write_xobject(chunk: &mut Chunk, id: Ref, image: &RasterImage, smask: Option<Ref>) {
     let (data, filter) = stream_data(image);
-    let mut xobj = chunk.image_xobject(id, data);
+    let mut xobj = chunk.image_xobject(id, &data);
     xobj.width(image.width as i32);
     xobj.height(image.height as i32);
-    if let Some(f) = filter {
-        xobj.filter(f);
-    }
+    xobj.filter(filter);
     set_color_space(&mut xobj, image.color());
     xobj.bits_per_component(8);
     if let Some(s) = smask {
@@ -181,12 +181,18 @@ fn write_xobject(chunk: &mut Chunk, id: Ref, image: &RasterImage, smask: Option<
     xobj.finish();
 }
 
-/// The encoded stream bytes and optional filter for an image's color payload.
-fn stream_data(image: &RasterImage) -> (&[u8], Option<Filter>) {
+/// The encoded stream bytes and filter for an image's color payload.
+fn stream_data(image: &RasterImage) -> (Cow<'_, [u8]>, Filter) {
     match &image.payload {
-        Payload::Raw { samples, .. } => (samples, None),
-        Payload::Jpeg { bytes, .. } => (bytes, Some(Filter::DctDecode)),
+        Payload::Raw { samples, .. } => (Cow::Owned(deflate(samples)), Filter::FlateDecode),
+        Payload::Jpeg { bytes, .. } => (Cow::Borrowed(bytes), Filter::DctDecode),
     }
+}
+
+/// Zlib-compress raw samples for a `FlateDecode` stream. Deterministic: a fixed
+/// level over the same bytes always yields the same output (AC-7.6).
+fn deflate(raw: &[u8]) -> Vec<u8> {
+    miniz_oxide::deflate::compress_to_vec_zlib(raw, 6)
 }
 
 fn set_color_space(xobj: &mut pdf_writer::writers::ImageXObject, color: ColorSpace) {
@@ -196,12 +202,14 @@ fn set_color_space(xobj: &mut pdf_writer::writers::ImageXObject, color: ColorSpa
     }
 }
 
-/// Write the alpha plane as a `DeviceGray`, 8-bit image XObject that the color
+/// Write the alpha plane as a Flate-compressed `DeviceGray`, 8-bit image XObject that the color
 /// image references through `/SMask` (§7.4 AC-7.4).
 fn write_smask(chunk: &mut Chunk, id: Ref, image: &RasterImage, alpha: &[u8]) {
-    let mut mask = chunk.image_xobject(id, alpha);
+    let packed = deflate(alpha);
+    let mut mask = chunk.image_xobject(id, &packed);
     mask.width(image.width as i32);
     mask.height(image.height as i32);
+    mask.filter(Filter::FlateDecode);
     mask.color_space().device_gray();
     mask.bits_per_component(8);
     mask.finish();
@@ -235,7 +243,69 @@ pub fn paint_image(
     // bottom edge.
     let y = flip_y(frag.y + frag.height, page_height_pt);
     content.save_state();
-    content.transform([w, 0.0, 0.0, h, x, y]);
+    content.transform(placement_matrix(placement.orientation, x, y, w, h));
     content.x_object(Name(resource.as_bytes()));
     content.restore_state();
+}
+
+/// The `cm` matrix that draws the image XObject's unit square (stored pixels; row 0 at
+/// the top, `v = 1`) into the box `(x, y, w, h)` (PDF points, `y` = the box bottom) as
+/// DISPLAYED under its EXIF `orientation` (miaskiewicz/turbo-html2pdf#30;
+/// `image-orientation: from-image`): the identity orientation is the plain
+/// `[w 0 0 h x y]`, the others flip and/or quarter-turn the square so the stored
+/// image's displayed top-left lands at the box's top-left.
+fn placement_matrix(orientation: Orientation, x: f32, y: f32, w: f32, h: f32) -> [f32; 6] {
+    match orientation.exif() {
+        2 => [-w, 0.0, 0.0, h, x + w, y],
+        3 => [-w, 0.0, 0.0, -h, x + w, y + h],
+        4 => [w, 0.0, 0.0, -h, x, y + h],
+        5 => [0.0, -h, -w, 0.0, x + w, y + h],
+        6 => [0.0, -h, w, 0.0, x, y + h],
+        7 => [0.0, h, w, 0.0, x, y],
+        8 => [0.0, h, -w, 0.0, x + w, y],
+        _ => [w, 0.0, 0.0, h, x, y],
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::placement_matrix;
+    use crate::image::Orientation;
+
+    /// Map the stored image's unit-square corner `(u, v)` through `m`.
+    fn map(m: [f32; 6], (u, v): (f32, f32)) -> (f32, f32) {
+        (m[0] * u + m[2] * v + m[4], m[1] * u + m[3] * v + m[5])
+    }
+
+    #[test]
+    fn each_orientation_puts_the_displayed_corners_on_the_box() {
+        // Box (10, 20) 30 wide, 40 tall (PDF y-up: top edge at 60). The stored image's
+        // top-left corner is unit-square (0, 1); where it lands names the transform.
+        let (x, y, w, h) = (10.0, 20.0, 30.0, 40.0);
+        let (left, right, bottom, top) = (x, x + w, y, y + h);
+        let stored_top_left = (0.0, 1.0);
+        let stored_top_right = (1.0, 1.0);
+        for (o, tl, tr) in [
+            (1, (left, top), (right, top)),
+            (2, (right, top), (left, top)),
+            (3, (right, bottom), (left, bottom)),
+            (4, (left, bottom), (right, bottom)),
+            (5, (left, top), (left, bottom)),
+            (6, (right, top), (right, bottom)),
+            (7, (right, bottom), (right, top)),
+            (8, (left, bottom), (left, top)),
+        ] {
+            let m = placement_matrix(Orientation::from_exif(o), x, y, w, h);
+            assert_eq!(
+                map(m, stored_top_left),
+                tl,
+                "orientation {o}: stored top-left"
+            );
+            assert_eq!(
+                map(m, stored_top_right),
+                tr,
+                "orientation {o}: stored top-right"
+            );
+        }
+    }
 }

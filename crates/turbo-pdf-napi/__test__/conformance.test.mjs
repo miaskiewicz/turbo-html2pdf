@@ -9,8 +9,8 @@
 //                     with the password when qpdf is present).
 //   * appendPdfs / appendPdf -> page count grows by the appended document.
 //
-// Fonts come from crates/turbo-html2pdf-core/assets/fonts. The suite is SKIPPED (not
-// failed) when the native addon is not built.
+// Fonts come from turbo-dom-layout's assets/fonts (located through cargo). The suite
+// is SKIPPED (not failed) when the native addon is not built.
 
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
@@ -20,11 +20,11 @@ import { dirname, join } from "node:path";
 import { test } from "node:test";
 import { fileURLToPath } from "node:url";
 import { createRequire } from "node:module";
+import { layoutFontsDir } from "../../../scripts/layout-crate-dir.mjs";
 
 const require = createRequire(import.meta.url);
 const here = dirname(fileURLToPath(import.meta.url));
 const root = join(here, "..");
-const repoRoot = join(root, "..", "..");
 
 function tryLoad() {
   try {
@@ -35,7 +35,7 @@ function tryLoad() {
 }
 
 const lib = tryLoad();
-const FONT = join(repoRoot, "crates", "turbo-html2pdf-core", "assets", "fonts", "Go-Regular.ttf");
+const FONT = join(layoutFontsDir(), "Go-Regular.ttf");
 const CSS = "@page { size: 200px 200px; margin: 10px } p { font-size: 12px }";
 
 function qpdfAvailable() {

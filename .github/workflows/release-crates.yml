@@ -9,6 +9,13 @@
 # Order matters: the mcp crate depends on turbo-html2pdf-core from the registry, so
 # core must land first. `cargo publish` blocks until the just-published crate is
 # available in the index before returning, so the sequential publish resolves.
+# Core itself depends on turbo-dom-layout + turbo-dom (turbo-dom workspace, released
+# first from its own v* tag): the job waits for the Cargo.lock versions of both
+# (0.6.0) to be on the crates.io index before packaging core.
+#
+# The tag-only `release-guard` job (scripts/release-guard.sh) fails the run while the
+# pre-publish `[patch.crates-io]` section or a git source in Cargo.lock remains, or a
+# versioned manifest disagrees with the tag (PUBLISHING.md: drop the patch, re-lock).
 #
 # The napi / py / wasm bindings are cdylibs shipped to npm/PyPI — not useful as
 # crates — and are NOT published here.
@@ -29,8 +36,22 @@ permissions:
   contents: read
 
 jobs:
+  release-guard:
+    name: release guard (no [patch], no git sources, versions == tag)
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/v')
+    steps:
+      - uses: actions/checkout@v4
+      - run: sh scripts/release-guard.sh "$GITHUB_REF_NAME"
+
+  gate:
+    name: gate (full CI)
+    needs: [release-guard]
+    uses: ./.github/workflows/ci.yml
+
   publish:
     name: publish crates to crates.io
+    needs: [release-guard, gate]
     runs-on: ubuntu-latest
     if: startsWith(github.ref, 'refs/tags/v')
     steps:
@@ -38,13 +59,19 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
 
+      # turbo-html2pdf-core resolves turbo-dom-layout and turbo-dom from crates.io:
+      # wait (bounded) for the locked versions to be on the index, so a tag pushed
+      # right after the turbo-dom release does not fail its package verify.
+      - name: Wait for turbo-dom-layout + turbo-dom on crates.io
+        run: sh scripts/wait-crates-index.sh turbo-dom-layout turbo-dom
+
       # Verify the core crate packages + verify-builds cleanly BEFORE touching
       # the token — a bad package fails here, not half-way through publishing.
       # The mcp crate can NOT be packaged here: it depends on turbo-html2pdf-core from
       # the registry, which is not published until the step below. `cargo publish`
       # runs its own verify build for mcp, by then core is live in the index.
       - name: Package core (dry-run verify)
-        run: cargo package -p turbo-html2pdf-core
+        run: cargo package -p turbo-html2pdf-core --locked
 
       - name: Guard on CARGO_REGISTRY_TOKEN
         id: guard

@@ -27,17 +27,15 @@ exclude-files = [
     # own protocol surface is unit-tested in-crate; it carries no core logic, so
     # it is kept out of the default coverage gate.
     "crates/turbo-html2pdf-mcp/*",
-    # Opt-in hot-path instrumentation (the `perf` feature); off in normal builds
-    # and covered functionally by the `--features perf` tests in tests/perf.rs.
-    "crates/turbo-html2pdf-core/src/perf.rs",
     # Opt-in `endnotes` feature (Phase 15); off in normal builds — not compiled
     # under default features, so it is not in the default coverage surface (the
-    # same way perf.rs is). Covered by the `--features endnotes` tests in
+    # same way turbo-dom-layout's perf.rs is). Covered by the `--features endnotes` tests in
     # tests/endnotes.rs. Listed here defensively so a stray tarpaulin cfg quirk
     # cannot flag the gated-out module. (The other Phase 15 gated code —
-    # `print-color` in emit/color.rs and layout/value.rs — lives in files that
-    # carry real default coverage, so it cannot be file-excluded; its gated lines
-    # simply are not compiled by default and so never enter the report.)
+    # `print-color` in emit/color.rs — lives in a file that carries real default
+    # coverage, so it cannot be file-excluded; its gated lines simply are not
+    # compiled by default and so never enter the report. turbo-dom-layout's cmyk
+    # parsing is a runtime option there since S2.)
     "crates/turbo-html2pdf-core/src/endnotes.rs",
     # Opt-in `append` feature: off in normal builds — not compiled under default
     # features (its `lopdf` dep is `optional`), so its lines never enter the
@@ -45,35 +43,20 @@ exclude-files = [
     # Covered by the `--features append` tests in tests/append.rs. Listed here
     # defensively so a stray tarpaulin cfg quirk cannot flag the gated-out module.
     "crates/turbo-html2pdf-core/src/append.rs",
-    # Opt-in `svg` feature (Phase 15b); off in normal builds — `resvg`/`usvg` are
-    # not even a dependency without `--features svg`, so this module is not
-    # compiled under default features and is not in the default coverage surface
-    # (the same way perf.rs / endnotes.rs are). Covered by the `--features svg`
-    # tests in tests/svg.rs. Listed here defensively so a stray tarpaulin cfg
-    # quirk cannot flag the gated-out module.
-    "crates/turbo-html2pdf-core/src/svg.rs",
     # Opt-in `xref` feature (Phase 15b, AC-3.25): internal links & cross-refs.
     # `emit/xref.rs` is wholly behind `#[cfg(feature = "xref")]` and the module is
     # only declared under that gate, so it is not compiled in the default build —
-    # exactly like perf.rs / endnotes.rs. A tarpaulin source-mapping quirk still
+    # exactly like endnotes.rs. A tarpaulin source-mapping quirk still
     # flags its (uncompiled) lines, so it is excluded here; covered functionally
     # by the `--features xref` tests in tests/xref.rs. The other `xref` gated
-    # code (in fragment.rs, boxgen.rs, block.rs, emit/document.rs) lives in files
-    # with real default coverage, so it cannot be file-excluded; its gated lines
-    # simply are not compiled by default and never enter the report.
+    # code (in emit/document.rs and render.rs) lives in files with real default
+    # coverage, so it cannot be file-excluded; its gated lines simply are not
+    # compiled by default and never enter the report.
     "crates/turbo-html2pdf-core/src/emit/xref.rs",
-    # `xref` box-generation helpers (anchor names + internal link hrefs) live in
-    # this gated-only sibling of boxgen.rs (declared `#[cfg(feature = "xref")]
-    # #[path = "boxgen_xref.rs"] mod xref;`), so the default build does not compile
-    # it — same as emit/xref.rs above. boxgen.rs itself carries real default
-    # coverage; only these gated branches were relocated here so a tarpaulin cfg
-    # quirk cannot flag their (uncompiled) let-else arms. Exercised by the
-    # `--features xref` tests in tests/xref.rs.
-    "crates/turbo-html2pdf-core/src/layout/boxgen_xref.rs",
     # Opt-in `pdf-a` feature (Phase 15b, AC-11.2: PDF/A-2b archival conformance);
     # off in normal builds — the whole module is behind `#[cfg(feature =
     # "pdf-a")]`, so it is not compiled under default features and never enters
-    # the default coverage surface (same as endnotes.rs / perf.rs). Covered by
+    # the default coverage surface (same as endnotes.rs). Covered by
     # the `--features pdf-a` tests in tests/pdf_a.rs, which validate the output
     # with veraPDF `--flavour 2b`. Listed here defensively. (The small gated
     # branches the feature adds in emit/document.rs, emit/meta.rs and
@@ -85,23 +68,28 @@ exclude-files = [
     # is a gated-only file, not compiled under default
     # features (like endnotes.rs). Covered by the `--features pdf-ua` tests in
     # tests/pdf_ua.rs (which include a veraPDF `--flavour ua1` compliance check).
-    # Listed defensively. (The cross-cutting gated lines elsewhere — fragment.rs,
-    # boxgen.rs, block.rs, table.rs, value.rs, text/font.rs and emit/{document,
-    # page,fonts}.rs — live in files with real default coverage, so they cannot be
-    # file-excluded; they are simply not compiled by default and never enter the
-    # report.)
+    # Listed defensively. (The cross-cutting gated lines elsewhere — emit/{document,
+    # page,fonts}.rs, render.rs, semantics.rs — live in files with real default
+    # coverage, so they cannot be file-excluded; they are simply not compiled by
+    # default and never enter the report.)
     "crates/turbo-html2pdf-core/src/emit/ua.rs",
-    # `pdf-ua` role derivation from the semantic HTML tag lives in this gated-only
-    # sibling of boxgen.rs (declared `#[cfg(feature = "pdf-ua")] #[path =
-    # "boxgen_ua.rs"] mod ua;`), so the default build does not compile it — same as
-    # emit/ua.rs above. boxgen.rs itself carries real default coverage; only this
-    # gated `role_of` branch was relocated here so a tarpaulin cfg quirk cannot
-    # flag its (uncompiled) let-else arm. Exercised by the `--features pdf-ua`
-    # tests in tests/pdf_ua.rs.
-    "crates/turbo-html2pdf-core/src/layout/boxgen_ua.rs",
+    # The `pdf-ua`/`xref` semantics derivation (structure roles, alt text, links
+    # and anchors derived from the layout's recorded box sources): a gated-only
+    # file declared `#[cfg(any(feature = "pdf-ua", feature = "xref"))]`, not
+    # compiled under default features (like ua.rs / xref.rs). Covered by the
+    # `--features pdf-ua` / `--features xref` tests (tests/pdf_ua.rs, tests/xref.rs,
+    # tests/conformance_flags.rs) and the corpus' pdfUa/xref renders.
+    "crates/turbo-html2pdf-core/src/semantics_derive.rs",
+    # The default build's (`not(any(pdf-ua, xref))`) layout strategy of the render
+    # orchestrator: the workspace coverage build unifies the bindings' capability
+    # features onto core, so this gated-only sibling of render.rs is not compiled
+    # there (its `pdf-ua`/`xref` twin, render_semantics.rs, is, and is covered).
+    # Exercised by every default-feature render test (`cargo test -p
+    # turbo-html2pdf-core`).
+    "crates/turbo-html2pdf-core/src/render_plain.rs",
     # Opt-in `encrypt` feature (Phase 15b): AES-256 PDF password protection. Off
     # in normal builds — the module and its crypto deps are not compiled under
-    # default features (same as perf.rs / endnotes.rs), so it is not in the
+    # default features (same as endnotes.rs), so it is not in the
     # default coverage surface. Covered by the `--features encrypt` tests in
     # tests/encrypt.rs (a real qpdf round-trip when qpdf is on PATH). Listed
     # defensively so a stray tarpaulin cfg quirk cannot flag the gated-out module.

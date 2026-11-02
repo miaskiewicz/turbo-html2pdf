@@ -1,11 +1,15 @@
 //! Phase 15 `print-color` feature tests (AC-7.x print colour). Only compiled with
 //! `--features print-color`. Asserts the emitter writes DeviceCMYK fills (`k`
 //! operator) instead of DeviceRGB (`rg`), and that `cmyk(...)` colours parse.
+//!
+//! Split at the S1 relocation: the layout-only cases moved to turbo-dom-layout's
+//! `tests/print_color.rs`; the ones here need TKind directives, templating or the PDF
+//! emitter.
 
 #![cfg(feature = "print-color")]
 
 use turbo_html2pdf_core::layout::fragment::{Fragment, FragmentContent, NodeId};
-use turbo_html2pdf_core::layout::value::{parse_color, BorderEdges, Rgba};
+use turbo_html2pdf_core::layout::value::{BorderEdges, Rgba};
 use turbo_html2pdf_core::paginate::{Page, PageGeometry};
 use turbo_html2pdf_core::{emit_pdf, EmitOptions, PageKind};
 
@@ -37,6 +41,8 @@ fn page_with(body: Vec<Fragment>) -> Page {
         header: Vec::new(),
         footer: Vec::new(),
         footnotes: Vec::new(),
+        semantics: Default::default(),
+        canvas: None,
     }
 }
 
@@ -114,47 +120,48 @@ fn cmyk_false_is_byte_identical_device_rgb_under_print_color_build() {
     assert!(contains(&pdf, b"1 0 0 rg"), "red -> 1 0 0 DeviceRGB");
 }
 
-#[test]
-fn cmyk_function_parses_percentages_and_fractions() {
-    // Pure cyan ink: cmyk(100%,0,0,0) -> rgb(0,255,255).
-    assert_eq!(
-        parse_color("cmyk(100%, 0, 0, 0)"),
-        Some(Rgba::new(0, 255, 255, 255))
-    );
-    // Fractional form, key ink only.
-    assert_eq!(
-        parse_color("cmyk(0, 0, 0, 1)"),
-        Some(Rgba::new(0, 0, 0, 255))
-    );
-    // Slash-separated, magenta.
-    assert_eq!(
-        parse_color("cmyk(0 / 1 / 0 / 0)"),
-        Some(Rgba::new(255, 0, 255, 255))
-    );
-    // No ink at all -> white.
-    assert_eq!(
-        parse_color("cmyk(0,0,0,0)"),
-        Some(Rgba::new(255, 255, 255, 255))
-    );
+mod common;
+
+/// The text-line colours and box backgrounds of the rendered pages' bodies.
+fn painted(frags: &[Fragment], out: &mut Vec<Rgba>) {
+    for f in frags {
+        match &f.content {
+            FragmentContent::TextLine { color, .. } => out.push(*color),
+            FragmentContent::Box {
+                background: Some(c),
+                ..
+            } => out.push(*c),
+            _ => {}
+        }
+        painted(&f.children, out);
+    }
 }
 
 #[test]
-fn cmyk_function_rejects_malformed_input() {
-    assert_eq!(parse_color("cmyk(1, 2, 3)"), None); // too few components
-    assert_eq!(parse_color("cmyk(1, 2, 3, x)"), None); // non-numeric
-    assert_eq!(parse_color("cmyk 1,0,0,0"), None); // no parens
-}
-
-#[test]
-fn cmyk_components_clamp_out_of_range() {
-    // Over-range components clamp to [0,1]: 200% -> 1.0 (full ink).
+fn a_rendered_document_accepts_cmyk_colours() {
+    use turbo_html2pdf_core::style::TokenSet;
+    use turbo_html2pdf_core::{
+        build_cascade, compile, render_pages, CompileOptions, Diagnostics, RenderInputs,
+    };
+    let template = r#"<!DOCTYPE html><html><head><style>.c{color:cmyk(0,1,1,0)}</style></head><body><p class="c">x</p><div style="height:10px;background:cmyk(1,0,1,0)"></div></body></html>"#;
+    let (program, _) = compile(template, &CompileOptions::default()).expect("compile");
+    let cascade = build_cascade("", "", TokenSet::default());
+    let fonts = common::registry();
+    let data = serde_json::Value::Null;
+    let inputs = RenderInputs {
+        program: &program,
+        data: &data,
+        cascade: &cascade,
+        at_rules: &[],
+        fonts: &fonts,
+        images: &turbo_html2pdf_core::NoImages,
+        now: Some(0),
+    };
+    let pages = render_pages(&inputs, &mut Diagnostics::default()).expect("render");
+    let mut colours = Vec::new();
+    painted(&pages[0].body, &mut colours);
     assert_eq!(
-        parse_color("cmyk(200%, 0, 0, 0)"),
-        Some(Rgba::new(0, 255, 255, 255))
-    );
-    // Negative key clamps to 0 (no key ink).
-    assert_eq!(
-        parse_color("cmyk(0, 0, 0, -1)"),
-        Some(Rgba::new(255, 255, 255, 255))
+        colours,
+        [Rgba::new(255, 0, 0, 255), Rgba::new(0, 255, 0, 255)]
     );
 }

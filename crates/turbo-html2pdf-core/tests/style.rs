@@ -1,14 +1,19 @@
 //! Style-system tests (§4): CSS parsing, selector matching + specificity,
 //! tokens, node-style injection, the 6-level cascade, and inheritance.
+//!
+//! Split at the S1 relocation: the layout-only cases moved to turbo-dom-layout's
+//! `tests/style.rs`; the ones here need TKind directives, templating or the PDF
+//! emitter.
+
+mod common;
 
 use serde_json::json;
 use turbo_html2pdf_core::style::{
-    build_cascade, parse_stylesheet, style_tree, Declaration, StyleToken, StyledElement,
-    StyledNode, TokenSet,
+    build_cascade, Declaration, StyleToken, StyledElement, StyledNode, TokenSet,
 };
 use turbo_html2pdf_core::{compile, CompileOptions};
 
-fn render_nodes(tpl: &str) -> Vec<turbo_html2pdf_core::Node> {
+fn render_nodes(tpl: &str) -> turbo_html2pdf_core::Flow {
     let (program, _) = compile(tpl, &CompileOptions::default()).expect("compile");
     program.render_nodes(&json!({}), None).expect("render").0
 }
@@ -16,7 +21,7 @@ fn render_nodes(tpl: &str) -> Vec<turbo_html2pdf_core::Node> {
 fn styled_with(tpl: &str, css: &str, node_css: &str, tokens: TokenSet) -> Vec<StyledNode> {
     let nodes = render_nodes(tpl);
     let cascade = build_cascade(css, node_css, tokens);
-    style_tree(&nodes, &cascade)
+    common::style_flow(&nodes, &cascade)
 }
 
 fn styled(tpl: &str, css: &str) -> Vec<StyledNode> {
@@ -64,52 +69,6 @@ fn token(extends: &[&str], decls: &[(&str, &str)]) -> StyleToken {
         extends: extends.iter().map(|s| s.to_string()).collect(),
         declarations: decls.iter().map(|(p, v)| decl(p, v)).collect(),
     }
-}
-
-// --------------------------------------------------------------------------
-// parser
-// --------------------------------------------------------------------------
-
-#[test]
-fn parses_rules_comments_and_at_rules() {
-    let sheet = parse_stylesheet(
-        "/* c */ .a { color: red; font-weight: 700 !important } @page { size: A4 }",
-    );
-    assert_eq!(sheet.rules.len(), 1);
-    assert_eq!(sheet.rules[0].declarations.len(), 2);
-    assert!(sheet.rules[0].declarations[1].important);
-    assert_eq!(sheet.at_rules.len(), 1);
-    assert_eq!(sheet.at_rules[0].name, "page");
-    assert_eq!(sheet.at_rules[0].body, "size: A4");
-}
-
-#[test]
-fn malformed_declarations_are_skipped() {
-    let sheet = parse_stylesheet(".a { ; color: red; novalue: ; :bad ; width: 10px }");
-    assert_eq!(sheet.rules[0].declarations.len(), 2);
-    let empty = parse_stylesheet("{ color: red }");
-    assert!(empty.rules.is_empty());
-}
-
-#[test]
-fn unterminated_comment_consumes_rest() {
-    let sheet = parse_stylesheet(".a { color: red } /* dangling");
-    assert_eq!(sheet.rules.len(), 1);
-}
-
-#[test]
-fn nested_braces_in_at_rule_stay_intact() {
-    let sheet = parse_stylesheet("@media print { .a { color: red } }");
-    assert_eq!(sheet.rules.len(), 0);
-    assert_eq!(sheet.at_rules.len(), 1);
-    assert_eq!(sheet.at_rules[0].name, "media");
-    assert!(sheet.at_rules[0].body.contains(".a"));
-}
-
-#[test]
-fn empty_selector_list_produces_no_rule() {
-    let sheet = parse_stylesheet(", { color: red }");
-    assert!(sheet.rules.is_empty());
 }
 
 // --------------------------------------------------------------------------
@@ -209,13 +168,15 @@ fn universal_selector_matches_all() {
 
 #[test]
 fn unknown_pseudo_class_is_ignored() {
-    // A genuinely unknown pseudo-class is dropped, and the rest of the compound
-    // still matches (lenient parsing).
+    // changed@S3b: a genuinely unknown pseudo-class makes the whole rule invalid, as in
+    // Chrome (it used to be dropped from the compound, so `a` matched). Chrome-156
+    // control: turbo-dom crates/turbo-dom/tests/fixtures/cascade_selectors_chrome156.json,
+    // cascade case "unknown-pseudo-class".
     let tree = styled(
         r#"<a id="e">x</a><p id="p">y</p>"#,
-        "a:totallyunknown { color: red }",
+        "a:totallyunknown { color: red } a:totallyunknown, p { color: blue }",
     );
-    assert_eq!(prop(&tree, "e", "color").as_deref(), Some("red"));
+    assert_eq!(prop(&tree, "e", "color").as_deref(), Some("#0000ee"));
     assert_eq!(prop(&tree, "p", "color"), None);
 }
 
@@ -448,7 +409,7 @@ fn styled_at_width(tpl: &str, css: &str, width: f32) -> Vec<StyledNode> {
     use turbo_html2pdf_core::build_cascade_with_width;
     let nodes = render_nodes(tpl);
     let cascade = build_cascade_with_width(css, "", TokenSet::new(), width);
-    style_tree(&nodes, &cascade)
+    common::style_flow(&nodes, &cascade)
 }
 
 #[test]
@@ -483,7 +444,7 @@ fn media_height_gates_rules() {
         set_media_viewport_height(vh);
         let cascade = build_cascade_with_width(css, "", TokenSet::new(), 1280.0);
         let nodes = render_nodes("<div>x</div>");
-        style_tree(&nodes, &cascade)
+        common::style_flow(&nodes, &cascade)
     };
     // Short viewport: the `max-height:575px` rule applies → hidden.
     let short = styled(500.0);
@@ -898,25 +859,6 @@ fn of_type_pseudos_count_per_tag() {
 }
 
 #[test]
-fn root_pseudo_matches_html_element() {
-    // `:root` (cascade.rs Root → ctx.tag == Some("html")). The compiler strips the
-    // `<html>` wrapper before render, so build a tree with a top-level html element
-    // by hand and style it directly.
-    use turbo_html2pdf_core::{Attr, Element, Node, Tag};
-    let html = Node::Element(Element {
-        tag: Tag::Html("html".to_string()),
-        attrs: vec![Attr {
-            name: "id".to_string(),
-            value: "r".to_string(),
-        }],
-        children: vec![Node::Text("x".to_string())],
-    });
-    let cascade = build_cascade(":root { color: teal }", "", TokenSet::new());
-    let styled = style_tree(&[html], &cascade);
-    assert_eq!(prop(&styled, "r", "color").as_deref(), Some("teal"));
-}
-
-#[test]
 fn empty_pseudo_matches_childless_element() {
     // `:empty` (cascade.rs Empty → ctx.empty).
     let css = "div:empty { color: red }";
@@ -1034,12 +976,13 @@ fn supports_not_negates() {
 }
 
 #[test]
-fn supports_unmatched_paren_group_is_treated_as_supported() {
-    // A group whose first paren does not close at the end (strip_group returns None
-    // via its depth-0 close arm) is treated as a bare/unrecognised → supported.
-    let css = "@supports (color: red) (display: grid) { div { color: green } }";
+fn supports_juxtaposed_groups_are_invalid_and_dropped() {
+    // Two condition groups with no `and`/`or` between them are not valid
+    // `<supports-condition>` grammar: Chrome 156 drops the whole rule (computed color
+    // stays the initial black), and so does turbo-dom's shared @supports evaluator.
+    let css = "div { color: red } @supports (color: red) (display: grid) { div { color: green } }";
     let n = styled("<div id='e'>x</div>", css);
-    assert_eq!(prop(&n, "e", "color").as_deref(), Some("green"));
+    assert_eq!(prop(&n, "e", "color").as_deref(), Some("red"));
 }
 
 // -------------------------------------------------- @media calc() breakpoint

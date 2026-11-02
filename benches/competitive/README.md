@@ -41,8 +41,8 @@ Every public perf claim must cite one of these ids (AC-10.13):
 
 Content is generated deterministically from a pinned seed and a fixed date
 (`src/workloads/data.ts`) so reruns are byte-stable (spec §0 determinism). Fonts are
-the engine crate's bundled Evolventa faces under
-`crates/turbo-html2pdf-core/assets/fonts/` (referenced by relative path, never copied).
+the layout engine crate's Evolventa faces under turbo-dom-layout's `assets/fonts/`
+(located through `cargo metadata`, `scripts/layout-crate-dir.mjs`; never copied).
 
 ## Engines
 

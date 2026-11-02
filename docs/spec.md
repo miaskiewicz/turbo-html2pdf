@@ -450,7 +450,7 @@ The differentiator, and the component that makes pagination automatic (§3.0). I
 - Text: emit text-showing ops with shaped glyph ids and positions; embed subset fonts (`subsetter` crate or equivalent). (AC-7.2: a doc using 10 glyphs of a 3000-glyph font embeds a subset under ~10% of full size.)
 - Color: device RGB v1; CMYK + ICC behind `feature = "print-color"`. (AC-7.3: RGB colors round-trip to expected values.)
 - Images: raster (PNG/JPEG) as image XObjects; JPEG passed through as DCTDecode where possible. SVG support behind `feature = "svg"` (rasterize via `resvg`, or emit vector — vector is v2). (AC-7.4: a PNG with alpha emits with SMask; visual fixture matches.)
-- Links: `<a href>` → link annotations; internal `t:anchor` → GoTo destinations (with `feature=xref`). (AC-7.5.)
+- Links: `<a href>` → link annotations (`#name` → GoTo, absolute URL → URI); `t:anchor` and element `id` → named destinations (with `feature=xref`). (AC-7.5.)
 - Metadata: title/author/subject/keywords/creation date from a `meta` input; XMP packet. Determinism: creation date defaults to a fixed sentinel unless caller sets it, so byte-identical output is achievable. (AC-7.6: two renders with identical inputs + pinned date → identical bytes.)
 - PDF version target: 1.7 default; PDF/A-2b behind `feature = "pdf-a"`. (AC-7.7: with `pdf-a`, veraPDF validation passes for the conformance fixtures.)
 

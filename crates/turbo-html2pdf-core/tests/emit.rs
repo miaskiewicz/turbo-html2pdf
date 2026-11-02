@@ -13,8 +13,8 @@ use turbo_html2pdf_core::layout::value::{BorderEdges, BorderSide, Edges, Rgba};
 use turbo_html2pdf_core::paginate::{paginate, Page, PageGeometry};
 use turbo_html2pdf_core::style::TokenSet;
 use turbo_html2pdf_core::{
-    build_cascade, compile, emit_pdf, layout, style_tree, CompileOptions, Diagnostics, EmitOptions,
-    FontFace, StyledNode,
+    build_cascade, compile, emit_pdf, layout, CompileOptions, Diagnostics, EmitOptions, FontFace,
+    StyledNode,
 };
 
 const FIXTURES: &[&str] = &["invoice", "report", "legal", "mixed"];
@@ -45,12 +45,12 @@ fn paginate_fixture(name: &str) -> Vec<Page> {
 
     let (program, _) = compile(&template, &CompileOptions::default())
         .unwrap_or_else(|e| panic!("compile {name}: {:?}", e.code));
-    let (nodes, _) = program
+    let (flow, _) = program
         .render_nodes(&data, Some(0))
         .unwrap_or_else(|e| panic!("render {name}: {:?}", e.code));
 
     let cascade = build_cascade(&css, "", TokenSet::default());
-    let styled: Vec<StyledNode> = style_tree(&nodes, &cascade);
+    let styled: Vec<StyledNode> = common::style_flow(&flow, &cascade);
 
     let mut diags = Diagnostics::default();
     let galley = layout(&styled, 540.0, &common::registry(), &mut diags);
@@ -154,6 +154,8 @@ fn text_fragment(face: FontFace, glyph_ids: &[u16]) -> Fragment {
             glyph_id,
             x: i as f32 * 10.0,
             y: 12.0,
+            text_start: 0,
+            text_end: 0,
         })
         .collect();
     Fragment::new(
@@ -165,6 +167,7 @@ fn text_fragment(face: FontFace, glyph_ids: &[u16]) -> Fragment {
         FragmentContent::TextLine {
             glyphs,
             face,
+            text: String::new(),
             font_size: 12.0,
             color: Rgba::new(20, 40, 60, 255),
         },
@@ -199,6 +202,8 @@ fn page_with(body: Vec<Fragment>) -> Page {
         header: Vec::new(),
         footer: Vec::new(),
         footnotes: Vec::new(),
+        semantics: Default::default(),
+        canvas: None,
     }
 }
 
@@ -261,7 +266,7 @@ fn directive_fragments_and_empty_bands_are_skipped() {
         0.0,
         10.0,
         10.0,
-        FragmentContent::Directive(turbo_html2pdf_core::TKind::Page),
+        FragmentContent::Marker(turbo_html2pdf_core::TKind::Page.marker()),
     );
     let pdf = emit_pdf(&[page_with(vec![directive])], &EmitOptions::default());
     assert!(pdf.starts_with(b"%PDF-1.7"));
@@ -357,7 +362,7 @@ fn geometry_uses_edges_margins() {
 fn ordinary_pdf_fonts_have_unicode_maps_and_extract_original_text() {
     let html = "<p>Hello World 1234567890 TEST!! @#$%&amp;</p><p><b>Relatório de Auditoria e Diagnóstico CFTV</b></p><p style=\"font-family: Go\">192.168.1.107</p>";
     let (program, _) = compile(html, &CompileOptions::default()).unwrap();
-    let (nodes, _) = program
+    let (flow, _) = program
         .render_nodes(&serde_json::json!({}), Some(0))
         .unwrap();
     let cascade = build_cascade(
@@ -365,7 +370,7 @@ fn ordinary_pdf_fonts_have_unicode_maps_and_extract_original_text() {
         "",
         TokenSet::default(),
     );
-    let styled = style_tree(&nodes, &cascade);
+    let styled = common::style_flow(&flow, &cascade);
     let mut diags = Diagnostics::default();
     let galley = layout(&styled, 540.0, &common::registry(), &mut diags);
     let pages = paginate(&galley, &[], &mut diags).unwrap();
@@ -420,7 +425,7 @@ fn check_text_extraction(pdf: &[u8], expected: &str) {
 fn bundled_cff_and_truetype_text_is_extractable_without_pdf_ua() {
     let html = "<p>Hello World 1234567890 TEST!! @#$%&amp;</p><p style=\"font-family: monospace\">192.168.1.107</p>";
     let (program, _) = compile(html, &CompileOptions::default()).unwrap();
-    let (nodes, _) = program
+    let (flow, _) = program
         .render_nodes(&serde_json::json!({}), Some(0))
         .unwrap();
     let cascade = build_cascade(
@@ -428,7 +433,7 @@ fn bundled_cff_and_truetype_text_is_extractable_without_pdf_ua() {
         "",
         TokenSet::default(),
     );
-    let styled = style_tree(&nodes, &cascade);
+    let styled = common::style_flow(&flow, &cascade);
     let mut diags = Diagnostics::default();
     let galley = layout(
         &styled,
@@ -441,4 +446,51 @@ fn bundled_cff_and_truetype_text_is_extractable_without_pdf_ua() {
     assert!(contains(&pdf, b"/Subtype /CIDFontType0"));
     assert!(contains(&pdf, b"/Subtype /CIDFontType2"));
     assert_extractable_pdf(&pages, "Hello World 1234567890 TEST!! @#$%& 192.168.1.107");
+}
+
+/// Where `needle` first occurs in `hay`.
+fn position(hay: &[u8], needle: &[u8]) -> usize {
+    hay.windows(needle.len())
+        .position(|w| w == needle)
+        .expect("painted")
+}
+
+/// A box filled with `c`, positioned at `z` (`None` = in flow).
+fn layer(c: Rgba, z: Option<Option<i32>>) -> Fragment {
+    let mut f = box_fragment(Some(c), BorderEdges::default());
+    if let Some(z) = z {
+        (f.is_positioned, f.z_index) = (true, z);
+    }
+    f
+}
+
+#[test]
+fn fragments_paint_in_stacking_order() {
+    // miaskiewicz/turbo-html2pdf#35: within a page's body and within a parent, a
+    // positioned box paints over the in-flow boxes after it, a negative z-index under
+    // them, a positive z-index over z auto (Fragment::paint_order), as Chrome paints.
+    let (red, green, blue) = (
+        Rgba::new(255, 0, 0, 255),
+        Rgba::new(0, 255, 0, 255),
+        Rgba::new(0, 0, 255, 255),
+    );
+    let (yellow, cyan) = (Rgba::new(255, 255, 0, 255), Rgba::new(0, 255, 255, 255));
+    let mut parent = layer(cyan, None);
+    parent.children = vec![layer(yellow, Some(Some(2))), layer(red, Some(None))];
+    let body = vec![
+        layer(red, Some(None)),
+        layer(green, None),
+        layer(blue, Some(Some(-1))),
+        parent,
+    ];
+    let pdf = emit_pdf(&[page_with(body)], &EmitOptions::default());
+    let at = |c: &[u8]| position(&pdf, c);
+    // Top level: blue (z -1), green, cyan parent (in flow), then red (z auto).
+    assert!(at(b"0 0 1 rg") < at(b"0 1 0 rg"));
+    assert!(at(b"0 1 0 rg") < at(b"0 1 1 rg"));
+    // In the parent: red (z auto) before yellow (z 2); the top-level red comes last.
+    let after_parent = &pdf[at(b"0 1 1 rg")..];
+    let inner = |c: &[u8]| position(after_parent, c);
+    assert!(inner(b"1 0 0 rg") < inner(b"1 1 0 rg"));
+    assert!(position(&after_parent[inner(b"1 1 0 rg")..], b"1 0 0 rg") > 0);
 }

@@ -30,10 +30,10 @@ path = "src/main.rs"
 # so documents render with no caller-supplied faces. Only `svg` is omitted, to
 # match the standard `turbo-html2pdf` npm package.
 # `version` (not just `path`) is REQUIRED for crates.io: the published mcp crate
-# resolves turbo-html2pdf-core from the registry. `"0.3"` (^0.3) tracks any 0.3.x core
+# resolves turbo-html2pdf-core from the registry. `"0.6"` (^0.6) tracks any 0.6.x core
 # so it only needs touching on a minor bump, not every patch. Keep core published
 # FIRST (the release-crates.yml job order) so this resolves.
-turbo-html2pdf-core = { path = "../turbo-html2pdf-core", version = "0.3", features = [
+turbo-html2pdf-core = { path = "../turbo-html2pdf-core", version = "0.6", features = [
     "endnotes",
     "xref",
     "pdf-a",

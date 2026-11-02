@@ -19,11 +19,11 @@ use std::process::Command;
 
 use turbo_html2pdf_core::layout::fragment::{Fragment, FragmentContent, NodeId};
 use turbo_html2pdf_core::layout::value::{BorderEdges, Rgba};
-use turbo_html2pdf_core::paginate::{paginate, Page, PageGeometry};
+use turbo_html2pdf_core::paginate::{Page, PageGeometry};
 use turbo_html2pdf_core::style::TokenSet;
 use turbo_html2pdf_core::{
-    build_cascade, compile, emit_pdf, layout, style_tree, CompileOptions, Diagnostics, EmitOptions,
-    PageKind, StyledNode,
+    build_cascade, compile, emit_pdf, render_pages, CompileOptions, Diagnostics, EmitOptions,
+    PageKind, RenderInputs,
 };
 
 /// A semantic template with a heading, a paragraph, an anchor and an internal
@@ -40,14 +40,19 @@ const CSS: &str = "body { font-family: Evolventa; font-size: 12px; } h1 { font-s
 
 fn pages() -> Vec<Page> {
     let (program, _) = compile(TEMPLATE, &CompileOptions::default()).expect("compile");
-    let (nodes, _) = program
-        .render_nodes(&serde_json::json!({}), Some(0))
-        .expect("render");
     let cascade = build_cascade(CSS, "", TokenSet::default());
-    let styled: Vec<StyledNode> = style_tree(&nodes, &cascade);
-    let mut diags = Diagnostics::default();
-    let galley = layout(&styled, 540.0, &common::registry(), &mut diags);
-    paginate(&galley, &[], &mut diags).expect("paginate")
+    let fonts = common::registry();
+    let inputs = RenderInputs {
+        program: &program,
+        data: &serde_json::json!({}),
+        cascade: &cascade,
+        at_rules: &[],
+        fonts: &fonts,
+        images: &turbo_html2pdf_core::NoImages,
+        now: Some(0),
+    };
+    // The full pipeline: it derives the structure roles and links the toggles emit.
+    render_pages(&inputs, &mut Diagnostics::default()).expect("render pages")
 }
 
 fn contains(haystack: &[u8], needle: &[u8]) -> bool {
@@ -173,6 +178,8 @@ fn red_box_page() -> Page {
         header: Vec::new(),
         footer: Vec::new(),
         footnotes: Vec::new(),
+        semantics: Default::default(),
+        canvas: None,
     }
 }
 

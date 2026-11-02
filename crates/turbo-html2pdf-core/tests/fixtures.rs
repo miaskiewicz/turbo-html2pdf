@@ -1,8 +1,8 @@
 //! Realistic test corpus (§14). Each fixture is a directory under
 //! `tests/fixtures/<name>/` holding a `template.html`, an optional `style.css`,
 //! and a `data.json`. This test drives every fixture through the *existing*
-//! pipeline — template string → `compile` → `render_nodes` → `build_cascade` +
-//! `style_tree` → `layout` — and asserts the produced galley actually carries
+//! pipeline — template string → `compile` → `render_nodes` (a `Flow`) →
+//! `build_cascade` + `Flow::style` → `layout` — and asserts the produced galley actually carries
 //! laid-out text. It exists so the Phase 9 emitter's golden/e2e tests have a
 //! vetted, render-clean corpus to consume.
 //!
@@ -14,7 +14,7 @@ mod common;
 use turbo_html2pdf_core::layout::fragment::{Fragment, FragmentContent};
 use turbo_html2pdf_core::style::TokenSet;
 use turbo_html2pdf_core::{
-    build_cascade, compile, layout, style_tree, CompileOptions, Diagnostics, StyledNode,
+    build_cascade, compile, layout, CompileOptions, Diagnostics, StyledNode,
 };
 
 /// The four fixtures that make up the corpus.
@@ -65,15 +65,15 @@ fn lay_out_fixture(name: &str) -> Fragment {
     assert!(diags.is_empty(), "{name}: compile diagnostics: {diags:?}");
 
     // 3. Render to the node tree with the clock pinned for determinism.
-    let (nodes, rdiags) = program
+    let (flow, rdiags) = program
         .render_nodes(&data, Some(0))
         .unwrap_or_else(|e| panic!("render {name}: {:?}", e.code));
     assert!(rdiags.is_empty(), "{name}: render diagnostics: {rdiags:?}");
-    assert!(!nodes.is_empty(), "{name}: rendered an empty node tree");
+    assert!(!flow.roots().is_empty(), "{name}: rendered an empty flow");
 
     // 4. Cascade the author CSS over the UA defaults into a styled tree.
     let cascade = build_cascade(&css, "", TokenSet::default());
-    let styled: Vec<StyledNode> = style_tree(&nodes, &cascade);
+    let styled: Vec<StyledNode> = common::style_flow(&flow, &cascade);
     assert!(!styled.is_empty(), "{name}: styled tree is empty");
 
     // 5. Lay the styled tree out into the galley at a fixed content width.

@@ -487,7 +487,15 @@ fn write_page_object(
     if plan.pdf_ua {
         obj.struct_parents(page_idx as i32);
     }
-    write_resources(&mut obj, plan, opts);
+    let opacities = if pdf_a_on(opts) {
+        std::collections::BTreeSet::new()
+    } else {
+        super::page::opacity_keys(page)
+    };
+    if !opacities.is_empty() {
+        obj.group().transparency();
+    }
+    write_resources(&mut obj, plan, opts, &opacities);
     write_page_annots(&mut obj, plan, page_idx);
     obj.finish();
 }
@@ -507,32 +515,53 @@ fn write_page_annots(obj: &mut pdf_writer::writers::Page, plan: &Plan, page_idx:
 fn write_page_annots(_obj: &mut pdf_writer::writers::Page, _plan: &Plan, _page_idx: usize) {}
 
 /// Write the page's resource dictionary: fonts, image XObjects, then the
-/// watermark fade `ExtGState` when a watermark is present. The font and image
+/// `ExtGState`s: the watermark fade when a watermark is present and one per CSS
+/// opacity the page paints with (`opacities`, in thousandths). The font and image
 /// dictionaries are written even when empty, which conformant viewers accept.
-fn write_resources(obj: &mut pdf_writer::writers::Page, plan: &Plan, opts: &EmitOptions) {
+fn write_resources(
+    obj: &mut pdf_writer::writers::Page,
+    plan: &Plan,
+    opts: &EmitOptions,
+    opacities: &std::collections::BTreeSet<u16>,
+) {
     let mut resources = obj.resources();
     write_font_dict(&mut resources, &plan.font_refs);
     write_image_dict(&mut resources, &plan.image_refs);
     // PDF/A-2b forbids transparency, so a PDF/A render omits the watermark's
     // `/ca` fade `ExtGState` (the mark prints at full opacity instead). A
     // non-PDF/A render emits it exactly as before.
-    if !pdf_a_on(opts) {
-        if let Some(mark) = &opts.watermark {
-            write_fade_gs(&mut resources, watermark::opacity(mark));
-        }
+    let fade = opts.watermark.as_ref().filter(|_| !pdf_a_on(opts));
+    if fade.is_none() && opacities.is_empty() {
+        return;
     }
+    let mut states = resources.ext_g_states();
+    if let Some(mark) = fade {
+        write_fade_gs(&mut states, watermark::opacity(mark));
+    }
+    for &key in opacities {
+        write_opacity_gs(&mut states, key);
+    }
+    states.finish();
 }
 
 /// Write the watermark's `/GSwm` fade `ExtGState` inline (a simple `/ca` dict
 /// needs no indirect object), referenced by the content stream's `gs` operator.
 /// Skipped for a PDF/A render, which forbids the `/ca` transparency entirely.
-fn write_fade_gs(resources: &mut pdf_writer::writers::Resources, opacity: f32) {
-    let mut states = resources.ext_g_states();
+fn write_fade_gs(states: &mut pdf_writer::Dict, opacity: f32) {
     states
         .insert(Name(watermark::FADE_GS_NAME.as_bytes()))
         .start::<pdf_writer::writers::ExtGraphicsState>()
         .non_stroking_alpha(opacity);
-    states.finish();
+}
+
+/// Write a CSS opacity's `ExtGState` (`/GSo500`: `/ca` and `/CA` 0.5).
+fn write_opacity_gs(states: &mut pdf_writer::Dict, key: u16) {
+    let alpha = f32::from(key) / 1000.0;
+    states
+        .insert(Name(super::page::opacity_gs_name(key).as_bytes()))
+        .start::<pdf_writer::writers::ExtGraphicsState>()
+        .non_stroking_alpha(alpha)
+        .stroking_alpha(alpha);
 }
 
 /// Map each font resource name (`F0`, …) to its Type0 font object.

@@ -99,7 +99,7 @@ through `pnpm` instead of turbo-dom's `npm`):
 
 - Triggers only on a tag: `if: startsWith(github.ref, 'refs/tags/v')`.
 - `needs: [build-napi, gate]` (turbo-dom's publish `needs: [build, test]`; our
-  `gate` is the Rust fmt/clippy/test equivalent — see §5).
+  `gate` calls the whole `ci.yml` as a reusable workflow — see §5).
 - `actions/setup-node@v4` with `registry-url: https://registry.npmjs.org`.
 - `actions/download-artifact@v4` → `find artifacts -name '*.node' -exec cp {}
   crates/turbo-pdf-napi/ \;` to drop every binary into the package root.
@@ -181,9 +181,9 @@ The native package must be on the registry before the TS packages that depend on
 it resolve. Within the tagged release:
 
 1. **`build-napi`** — the five-leg matrix produces every `*.node` (parallel).
-2. **`gate`** — Rust fmt/clippy/test. We do **not** edit the live `ci.yml`; the
-   gate re-runs the minimal Rust check inline (mirrors turbo-dom's publish
-   `needs: [build, test]` intent).
+2. **`gate`** — calls `ci.yml` (`workflow_call`), so fmt, clippy, every core
+   feature test variant, cc <= 5 and the coverage floor all block a publish
+   (mirrors turbo-dom's publish `needs: [build, test]` intent).
 3. **`publish-napi`** — download artifacts, bundle `*.node` into the package
    root, `npm publish --access public --ignore-scripts`. Gated on the tag.
 4. **`publish-frontends`** — `needs: [publish-napi]`; `tsup` build then `pnpm

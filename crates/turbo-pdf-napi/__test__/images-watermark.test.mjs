@@ -10,8 +10,8 @@
 //      with a watermark fade ExtGState (`/GSwm`) present.
 //
 // The PNG is generated in-process (no external files); fonts come from
-// crates/turbo-html2pdf-core/assets/fonts. The suite is SKIPPED (not failed) when the
-// native addon is not built.
+// turbo-dom-layout's assets/fonts (located through cargo). The suite is SKIPPED
+// (not failed) when the native addon is not built.
 
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
@@ -21,12 +21,12 @@ import { dirname, join } from "node:path";
 import { test } from "node:test";
 import { fileURLToPath } from "node:url";
 import { createRequire } from "node:module";
+import { layoutFontsDir } from "../../../scripts/layout-crate-dir.mjs";
 import { deflateSync } from "node:zlib";
 
 const require = createRequire(import.meta.url);
 const here = dirname(fileURLToPath(import.meta.url));
 const root = join(here, "..");
-const repoRoot = join(root, "..", "..");
 
 function tryLoad() {
   try {
@@ -37,7 +37,7 @@ function tryLoad() {
 }
 
 const lib = tryLoad();
-const FONT = join(repoRoot, "crates", "turbo-html2pdf-core", "assets", "fonts", "Go-Regular.ttf");
+const FONT = join(layoutFontsDir(), "Go-Regular.ttf");
 
 function qpdfAvailable() {
   try {

@@ -14,32 +14,10 @@
 
 use serde_json::{json, Value};
 
-/// The Evolventa + Go fonts loaded from the in-repo `assets/fonts/` directory
-/// (never a system path), mirroring `tests/common/mod.rs`.
+/// The Evolventa + Go fonts, read from turbo-dom-layout's `assets/fonts/` through its
+/// `test-support` fixtures (never a system path) — the registry the tests use.
 pub fn registry() -> turbo_html2pdf_core::text::FontRegistry {
-    use turbo_html2pdf_core::text::FontRegistry;
-    use turbo_html2pdf_core::FontFace;
-
-    fn font_bytes(name: &str) -> Vec<u8> {
-        let path = format!("{}/assets/fonts/{name}", env!("CARGO_MANIFEST_DIR"));
-        std::fs::read(&path).unwrap_or_else(|_| panic!("font fixture {path}"))
-    }
-
-    let mut reg = FontRegistry::new();
-    reg.add(
-        FontFace::from_bytes(font_bytes("Evolventa-zLXL.ttf"), "Evolventa", 400, false).unwrap(),
-    );
-    reg.add(
-        FontFace::from_bytes(
-            font_bytes("EvolventaBold-55Xv.ttf"),
-            "Evolventa",
-            700,
-            false,
-        )
-        .unwrap(),
-    );
-    reg.add(FontFace::from_bytes(font_bytes("Go-Regular.ttf"), "Go", 400, false).unwrap());
-    reg
+    turbo_dom_layout::test_support::registry()
 }
 
 /// A named template + the JSON data to render it against.

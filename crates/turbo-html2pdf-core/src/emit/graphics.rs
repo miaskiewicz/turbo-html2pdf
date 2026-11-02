@@ -35,6 +35,24 @@ pub fn paint_box(
     paint_borders(content, frag, border, page_height_pt, cmyk);
 }
 
+/// Fill the galley-space rect `(x, y, w, h)` (px, y-down) with a solid colour — the
+/// page's canvas fill (see `page::paint_canvas`).
+pub fn fill_area(
+    content: &mut Content,
+    (x, y, w, h): (f32, f32, f32, f32),
+    color: Rgba,
+    page_height_pt: f32,
+    cmyk: bool,
+) {
+    let rect = PdfRect {
+        x: px_to_pt(x),
+        y: flip_y(y + h, page_height_pt),
+        w: px_to_pt(w),
+        h: px_to_pt(h),
+    };
+    fill_rect(content, &rect, color, cmyk);
+}
+
 /// Fill one rectangle with a solid color.
 fn fill_rect(content: &mut Content, r: &PdfRect, color: Rgba, cmyk: bool) {
     set_fill(content, color, cmyk);
