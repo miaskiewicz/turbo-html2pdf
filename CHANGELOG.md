@@ -28,7 +28,7 @@ turbo-test, turbo-html2pdf, turbo-surf) releases on one version line.
   60 KB of PDF). Image-bearing PDFs therefore differ in bytes from 0.3.9; JPEGs still ride
   through as `DCTDecode`.
 - **Changed (turbo-dom pin)**: `turbo-dom-layout` + `turbo-dom` are pinned to the final
-  turbo-dom consolidation head (223c4c8; via 03a856d, c9f991c, 0189e4d, f0fb306, d660013 and 443f4d8, was f860fea). Render changes, each checked
+  turbo-dom consolidation head (d6da581; via 223c4c8, 03a856d, c9f991c, 0189e4d, f0fb306, d660013 and 443f4d8, was f860fea). Render changes, each checked
   against Chrome 156 `page.pdf()`: `pre`, `pre-wrap` and `pre-line` break at newlines and
   `pre-wrap` keeps its spaces (turbo-dom#120/#121/#122/#166); an inline-block sits on its
   last line's baseline (turbo-dom#142); `@supports` with two condition groups and no
@@ -39,7 +39,10 @@ turbo-test, turbo-html2pdf, turbo-surf) releases on one version line.
   panic fixes turbo-dom#183/#184 (a crate html2pdf does not link). The 03a856d repin
   brings forced left/right/recto breaks (turbo-dom#204, now matching Chrome's page
   counts), glyph cluster text (turbo-dom#205) and `Fragment::opacity` (turbo-dom#206); 223c4c8
-  is a browser-env-only fix (no render change).
+  is a browser-env-only fix (no render change); d6da581 brings turbo-dom's later layout
+  fixes (overflow-wrap/word-break, soft hyphens, Greek uppercase, inline sticky,
+  form-control box-sizing, span break opportunities), with no output change on the render
+  parity corpus (html2pdf, html2pdf-svg, html2pdf-extra byte-identical to 223c4c8).
 - **Fixed (turbo-html2pdf#54)**: `/ToUnicode` maps each glyph to the source text of the
   cluster it was shaped from, so `pdftotext` of curly quotes (Inter) and Fira Code's
   `->` / `!=` / `=>` matches Chrome 156 `page.pdf()`.
