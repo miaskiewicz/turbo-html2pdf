@@ -105,9 +105,12 @@ jobs:
     runs-on: ubuntu-latest
     if: startsWith(github.ref, 'refs/tags/pyv')
     steps:
+      # Only the wheel/sdist artifacts: other jobs in this run upload coverage
+      # (cobertura.xml), which maturin cannot upload.
       - uses: actions/download-artifact@v4
         with:
           path: dist
+          pattern: '{wheels-*,sdist}'
           merge-multiple: true
 
       - name: Guard on PYPI_TOKEN
@@ -129,4 +132,4 @@ jobs:
           MATURIN_PYPI_TOKEN: ${{ secrets.PYPI_TOKEN }}
         with:
           command: upload
-          args: --non-interactive --skip-existing dist/*
+          args: --non-interactive --skip-existing dist/*.whl dist/*.tar.gz
