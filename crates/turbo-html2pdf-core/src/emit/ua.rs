@@ -518,12 +518,6 @@ impl TreeBuilder {
             }
             (None, None) => self.synthetic_paragraph(page),
         };
-        eprintln!(
-            "DBG content {:?} holder={holder:?} role={:?} up={:?}",
-            frag.node_id,
-            holder.map(|h| self.nodes[h].role),
-            self.semantics.up(frag.node_id)
-        );
         let id = self.order[&std::ptr::from_ref(frag)];
         *mcid += 1;
         self.nodes[owner].mcids.push((page, id));
