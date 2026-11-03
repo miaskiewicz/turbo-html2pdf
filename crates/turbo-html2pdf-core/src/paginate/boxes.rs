@@ -73,8 +73,16 @@ pub(super) fn leading_margin(boxes: &FlowBoxes, f: &Fragment) -> Option<f32> {
 }
 
 /// The index of the last in-flow child of `children` (out-of-flow boxes and repeated
-/// table headers are not content of the flow).
+/// table headers are not content of the flow; in a block of text lines, its last line).
 pub(super) fn last_content(boxes: &FlowBoxes, children: &[Fragment]) -> Option<usize> {
+    // In a block of text lines, its last line: a list item's outside `::marker` box sits
+    // beside its first line, after the lines (miaskiewicz/turbo-html2pdf#62).
+    if let Some(line) = children
+        .iter()
+        .rposition(|c| matches!(c.content, FragmentContent::TextLine { .. }))
+    {
+        return Some(line);
+    }
     children.iter().rposition(|c| {
         let out = boxes
             .get(c.node_id)

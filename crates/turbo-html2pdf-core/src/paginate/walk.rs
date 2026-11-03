@@ -609,7 +609,12 @@ impl<'a> Walker<'a> {
 
     /// Whether cell `c` can split between its children ([`Self::splits_in_parallel`]).
     fn parallel_cell(&self, c: &Fragment) -> bool {
-        self.plain(c) && stacked(&c.children) && c.children.iter().all(|g| self.parallel_piece(g))
+        // A cell is a box: a block whose children are text lines (a list item's own text
+        // beside its `::marker` box) breaks between its lines (miaskiewicz/turbo-html2pdf#62).
+        matches!(c.content, FragmentContent::Box { .. })
+            && self.plain(c)
+            && stacked(&c.children)
+            && c.children.iter().all(|g| self.parallel_piece(g))
     }
 
     /// Whether `g` is placed whole by a parallel split: in flow, no forced break, and
