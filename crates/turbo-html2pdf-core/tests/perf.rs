@@ -38,7 +38,10 @@ fn table_shape_count(label: &str, cell: impl Fn(usize, usize) -> String) -> u64 
 /// measurement, once for line layout. The shape cache is bounded (128 entries per face,
 /// turbo-dom-layout `text::font`), so with 3000 distinct runs the second pass misses;
 /// the old `< 5000` budget predates that bound and was never run in CI
-/// (miaskiewicz/turbo-html2pdf#28: 6096 on every platform).
+/// (miaskiewicz/turbo-html2pdf#28: 6096 on every platform). Since turbo-dom 0.7 (whose
+/// max-content pass works on the paragraph's words, miaskiewicz/turbo-dom#241) a two-word
+/// `Item {i}` cell can cost one more shape: those 1000 cells add 222 (6358 in all), while
+/// 3000 single-word cells still take 3024. The budget allows one extra shape per two-word cell.
 #[test]
 fn report_hot_path_breakdown() {
     let distinct = table_shape_count("report-1k", |i, c| match c {
@@ -46,7 +49,7 @@ fn report_hot_path_breakdown() {
         1 => i.to_string(),
         _ => format!("{i}.50"),
     });
-    assert!(distinct <= 2 * 3000 + 100, "font.shape {distinct}");
+    assert!(distinct <= 2 * 3000 + 1000 + 100, "font.shape {distinct}");
 }
 
 /// Repeated cells: the cache collapses them — one shape per distinct run (the regression
