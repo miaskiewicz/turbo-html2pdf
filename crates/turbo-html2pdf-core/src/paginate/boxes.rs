@@ -6,7 +6,7 @@
 //! `crate::flow_boxes`); a box without an entry is an in-flow box whose margins are
 //! unknown, and the fragmenter keeps the galley gaps around it, as before.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use crate::layout::fragment::{Fragment, FragmentContent, NodeId, RepeatKind};
 use crate::layout::value::{LengthPct, Position};
@@ -42,12 +42,25 @@ impl BoxFacts {
 #[derive(Debug, Clone, Default)]
 pub struct FlowBoxes {
     boxes: HashMap<NodeId, BoxFacts>,
+    /// The list items' `::marker` boxes (miaskiewicz/turbo-dom#128): placed beside their
+    /// item's first line, never its last content.
+    markers: HashSet<NodeId>,
 }
 
 impl FlowBoxes {
     /// Record the facts of box `id`.
     pub fn insert(&mut self, id: NodeId, facts: BoxFacts) {
         self.boxes.insert(id, facts);
+    }
+
+    /// Record box `id` as a list item's `::marker` box.
+    pub fn insert_marker(&mut self, id: NodeId) {
+        self.markers.insert(id);
+    }
+
+    /// Whether box `id` is a list item's `::marker` box.
+    pub fn is_marker(&self, id: NodeId) -> bool {
+        self.markers.contains(&id)
     }
 
     /// The facts recorded for box `id`.
@@ -72,23 +85,26 @@ pub(super) fn leading_margin(boxes: &FlowBoxes, f: &Fragment) -> Option<f32> {
     Some(collapse(facts.margin_top, inner.unwrap_or(0.0)))
 }
 
-/// The index of the last in-flow child of `children` (out-of-flow boxes and repeated
-/// table headers are not content of the flow; in a block of text lines, its last line).
+/// The index of the last content of `children`: the in-flow child whose bottom edge is
+/// lowest (the later one on a tie). Out-of-flow boxes, repeated table headers and list
+/// markers (beside their item's first line, miaskiewicz/turbo-html2pdf#62) are not
+/// content of the flow.
 pub(super) fn last_content(boxes: &FlowBoxes, children: &[Fragment]) -> Option<usize> {
-    // In a block of text lines, its last line: a list item's outside `::marker` box sits
-    // beside its first line, after the lines (miaskiewicz/turbo-html2pdf#62).
-    if let Some(line) = children
-        .iter()
-        .rposition(|c| matches!(c.content, FragmentContent::TextLine { .. }))
-    {
-        return Some(line);
-    }
-    children.iter().rposition(|c| {
+    let content = |c: &Fragment| {
         let out = boxes
             .get(c.node_id)
             .is_some_and(|f| f.position.is_out_of_flow());
-        !out && c.break_meta.repeatable != Some(RepeatKind::Header)
-    })
+        !out && !boxes.is_marker(c.node_id) && c.break_meta.repeatable != Some(RepeatKind::Header)
+    };
+    children
+        .iter()
+        .enumerate()
+        .filter(|(_, c)| content(c))
+        .fold(None, |best: Option<(usize, f32)>, (i, c)| match best {
+            Some((_, b)) if b > c.bottom() => best,
+            _ => Some((i, c.bottom())),
+        })
+        .map(|(i, _)| i)
 }
 
 /// What must follow `last`, the last content of `parent`, on the same page: `parent`'s

@@ -38,6 +38,9 @@ pub(crate) fn flow_boxes(
         sources,
     };
     lookup.visit(galley, width, &mut boxes);
+    for &marker in sources.list_markers.keys() {
+        boxes.insert_marker(marker);
+    }
     boxes
 }
 
