@@ -671,3 +671,153 @@ fn rows_of_a_table_split_across_pages_stay_in_a_table() {
     );
     assert_rows_in_tables(&ua_pdf(&html, ""), "turbo_pdf_ua_table_split.pdf");
 }
+
+// --- Multi-page structure (round-2 review of #59): a split block's own box becomes an
+// id-0 slice, so its continuation pages must rebuild its Table / L / LI / TR.
+
+/// The elements with role `role`.
+fn of_role(elems: &std::collections::BTreeMap<u32, (String, u32)>, role: &str) -> Vec<u32> {
+    elems
+        .iter()
+        .filter(|(_, (r, _))| r == role)
+        .map(|(&n, _)| n)
+        .collect()
+}
+
+/// The nearest `role` ancestor of element `n`, if any.
+fn ancestor(
+    elems: &std::collections::BTreeMap<u32, (String, u32)>,
+    mut n: u32,
+    role: &str,
+) -> Option<u32> {
+    while let Some((_, p)) = elems.get(&n) {
+        if elems.get(p).is_some_and(|(r, _)| r == role) {
+            return Some(*p);
+        }
+        n = *p;
+    }
+    None
+}
+
+/// `n` words of filler text.
+fn words(n: usize) -> String {
+    (0..n).map(|i| format!("word{i} ")).collect()
+}
+
+/// Rows `from..to` of a two-column table body.
+fn rows(from: usize, to: usize) -> String {
+    (from..to)
+        .map(|i| format!("<tr><td>Row {i}</td><td>{i}</td></tr>"))
+        .collect()
+}
+
+/// Every TD/TH is in a TR, every TR in a row group of a Table.
+fn assert_cells_in_rows(elems: &std::collections::BTreeMap<u32, (String, u32)>) {
+    for (role, parent) in elems.values() {
+        if role == "TD" || role == "TH" {
+            assert_eq!(elems[parent].0, "TR", "{role} parent: {elems:?}");
+        }
+    }
+}
+
+#[test]
+fn two_split_tables_on_one_page_stay_two_tables() {
+    let head = "<thead><tr><th>Name</th><th>Value</th></tr></thead>";
+    for between in ["", "<p>Between the tables.</p>"] {
+        let html = format!(
+            "<table>{head}<tbody>{}</tbody></table>{between}<table>{head}<tbody>{}</tbody></table>",
+            rows(0, 70),
+            rows(70, 140)
+        );
+        let pdf = ua_pdf(&html, "");
+        assert_rows_in_tables(&pdf, "turbo_pdf_ua_two_split_tables.pdf");
+        let elems = struct_elems(&pdf);
+        assert_cells_in_rows(&elems);
+        assert_eq!(of_role(&elems, "Table").len(), 2, "{between:?}: {elems:?}");
+        assert_eq!(of_role(&elems, "TR").len(), 142, "{elems:?}");
+        // Each table's rows stay in it: the first table holds rows 0..70 (+ its head).
+        let tables = of_role(&elems, "Table");
+        let in_first = of_role(&elems, "TR")
+            .into_iter()
+            .filter(|&r| ancestor(&elems, r, "Table") == Some(tables[0]))
+            .count();
+        assert_eq!(in_first, 71, "{elems:?}");
+    }
+}
+
+#[test]
+fn a_repeated_table_header_is_tagged_once() {
+    let html = format!(
+        "<table><thead><tr><th>Name</th><th>Value</th></tr></thead><tbody>{}</tbody></table>",
+        rows(0, 200)
+    );
+    let pdf = ua_pdf(&html, "");
+    assert_rows_in_tables(&pdf, "turbo_pdf_ua_repeated_head.pdf");
+    let elems = struct_elems(&pdf);
+    assert_eq!(of_role(&elems, "Table").len(), 1, "{elems:?}");
+    assert_eq!(of_role(&elems, "THead").len(), 1, "{elems:?}");
+    assert_eq!(of_role(&elems, "TH").len(), 2, "{elems:?}");
+    assert_eq!(of_role(&elems, "TR").len(), 201, "{elems:?}");
+}
+
+#[test]
+fn a_split_tables_caption_is_its_tables_first_child() {
+    let html = format!(
+        "<p>{}</p><table><caption>Quarterly revenue</caption><tbody>{}</tbody></table>",
+        words(500),
+        rows(0, 60)
+    );
+    let pdf = ua_pdf(&html, "");
+    assert_rows_in_tables(&pdf, "turbo_pdf_ua_split_caption.pdf");
+    let elems = struct_elems(&pdf);
+    let tables = of_role(&elems, "Table");
+    assert_eq!(tables.len(), 1, "{elems:?}");
+    let caption = of_role(&elems, "Caption");
+    assert_eq!(caption.len(), 1, "{elems:?}");
+    assert_eq!(elems[&caption[0]].1, tables[0], "{elems:?}");
+    assert_eq!(kids_of(&elems, tables[0])[0], "Caption", "{elems:?}");
+}
+
+#[test]
+fn a_row_taller_than_a_page_keeps_its_tr() {
+    let html = format!(
+        "<table><tr><td>A</td><td>B</td></tr><tr><td>{}</td><td>x</td></tr>\
+         <tr><td>C</td><td>D</td></tr></table>",
+        words(2500)
+    );
+    let pdf = ua_pdf(&html, "");
+    assert_rows_in_tables(&pdf, "turbo_pdf_ua_tall_row.pdf");
+    let elems = struct_elems(&pdf);
+    assert_cells_in_rows(&elems);
+    assert_eq!(of_role(&elems, "Table").len(), 1, "{elems:?}");
+    assert_eq!(of_role(&elems, "TR").len(), 3, "{elems:?}");
+    assert_eq!(of_role(&elems, "TD").len(), 6, "{elems:?}");
+}
+
+#[test]
+fn a_list_longer_than_a_page_is_one_list() {
+    let items: String = (0..150).map(|i| format!("<li>Item {i}</li>")).collect();
+    let pdf = ua_pdf(&format!("<ul>{items}</ul>"), "");
+    assert_list_items(&pdf, "turbo_pdf_ua_long_list.pdf", 150, &["Lbl", "LBody"]);
+    let elems = struct_elems(&pdf);
+    assert_eq!(of_role(&elems, "L").len(), 1, "{elems:?}");
+    for li in of_role(&elems, "LI") {
+        assert_eq!(elems[&elems[&li].1].0, "L", "{elems:?}");
+    }
+}
+
+#[test]
+fn a_list_item_taller_than_a_page_is_one_item() {
+    let html = format!(
+        "<ul><li>First</li><li>{}</li><li>Last</li></ul>",
+        words(2500)
+    );
+    let pdf = ua_pdf(&html, "");
+    assert_list_items(&pdf, "turbo_pdf_ua_tall_item.pdf", 3, &["Lbl", "LBody"]);
+    let elems = struct_elems(&pdf);
+    assert_eq!(of_role(&elems, "L").len(), 1, "{elems:?}");
+    assert!(
+        of_role(&elems, "P").is_empty(),
+        "no loose paragraphs: {elems:?}"
+    );
+}
