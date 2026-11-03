@@ -453,3 +453,25 @@ fn text_carried_onto_the_previous_page_is_an_artifact() {
         );
     }
 }
+
+#[test]
+fn tags_list_markers_as_the_items_label() {
+    // turbo-dom 0.7 lays out list markers (`::marker`, miaskiewicz/turbo-dom#128). PDF/UA-1
+    // 7.2-20: an `LI` holds only `Lbl` / `LBody` structure, so each item's marker is its
+    // `Lbl`, not an anonymous `P`.
+    let elems = struct_elems(&build_pdf());
+    let items: Vec<u32> = elems
+        .iter()
+        .filter(|(_, (r, _))| r == "LI")
+        .map(|(&n, _)| n)
+        .collect();
+    assert_eq!(items.len(), 3, "{elems:?}");
+    for item in items {
+        let kids: Vec<&str> = elems
+            .values()
+            .filter(|(_, p)| *p == item)
+            .map(|(r, _)| r.as_str())
+            .collect();
+        assert_eq!(kids, ["Lbl"], "LI {item}: {elems:?}");
+    }
+}
