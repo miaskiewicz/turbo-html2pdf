@@ -104,7 +104,8 @@ impl ImageResolver for MapResolver {
 }
 
 /// Build a [`FontRegistry`] from caller-supplied faces. Each face is parsed via
-/// [`FontFace::from_bytes`] and tagged with its `family`/`weight`/`italic`, so
+/// [`FontFace::from_web_font_bytes`] (Chrome 156 web-font kerning, turbo-dom#240)
+/// and tagged with its `family`/`weight`/`italic`, so
 /// author CSS `font-family`/bold selects the right face via the cascade.
 ///
 /// Unparseable blobs are skipped (the registry simply has fewer faces); the
@@ -114,7 +115,9 @@ pub fn build_registry(fonts: Vec<JsFont>) -> FontRegistry {
     for font in fonts {
         let weight = font.weight.unwrap_or(400);
         let italic = font.italic.unwrap_or(false);
-        if let Some(face) = FontFace::from_bytes(font.data.to_vec(), font.family, weight, italic) {
+        if let Some(face) =
+            FontFace::from_web_font_bytes(font.data.to_vec(), font.family, weight, italic)
+        {
             reg.add(face);
         }
     }

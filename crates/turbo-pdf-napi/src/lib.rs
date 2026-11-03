@@ -454,11 +454,10 @@ fn build_stamp_watermark(w: JsStampWatermark) -> napi::Result<StampWatermark> {
 /// render-time mark (`FontRegistry::new().select(&[], 400, false)`).
 fn resolve_stamp_face(font: Option<Buffer>) -> napi::Result<FontFace> {
     match font {
-        Some(bytes) => {
-            FontFace::from_bytes(bytes.to_vec(), "watermark", 400, false).ok_or_else(|| {
+        Some(bytes) => FontFace::from_web_font_bytes(bytes.to_vec(), "watermark", 400, false)
+            .ok_or_else(|| {
                 errors::from_invalid_font("stamp watermark font: not a valid TrueType/OTF font")
-            })
-        }
+            }),
         None => Ok(FontRegistry::new()
             .select(&[], 400, false)
             .expect("bundled sans face")

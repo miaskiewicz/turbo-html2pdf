@@ -261,7 +261,7 @@ fn font_face(spec: &Value) -> Result<Option<FontFace>, String> {
     let family = req_str(spec, "family")?;
     let weight = spec.get("weight").and_then(Value::as_u64).unwrap_or(400) as u16;
     let italic = spec.get("italic").and_then(Value::as_bool).unwrap_or(false);
-    Ok(FontFace::from_bytes(data, family, weight, italic))
+    Ok(FontFace::from_web_font_bytes(data, family, weight, italic))
 }
 
 /// A name-keyed [`ImageResolver`] built from caller-supplied rasters.
