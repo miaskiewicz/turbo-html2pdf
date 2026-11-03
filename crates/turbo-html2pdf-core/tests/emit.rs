@@ -170,6 +170,8 @@ fn text_fragment(face: FontFace, glyph_ids: &[u16]) -> Fragment {
             text: String::new(),
             font_size: 12.0,
             color: Rgba::new(20, 40, 60, 255),
+            upright: false,
+            vertical: false,
         },
     )
 }

@@ -48,6 +48,8 @@ fn line(y: f32, h: f32) -> Fragment {
             face: common::evolventa(),
             font_size: h,
             color: Rgba::BLACK,
+            upright: false,
+            vertical: false,
         },
     )
 }

@@ -9,12 +9,12 @@ members = [
 ]
 
 [workspace.package]
-version = "0.6.0"
+version = "0.7.0"
 edition = "2021"
 license = "MIT"
 repository = "https://github.com/miaskiewicz/turbo-html2pdf"
 authors = ["turbo-pdf contributors"]
-# Real workspace floor: turbo-dom-layout / turbo-dom 0.6 declare rust-version 1.89
+# Real workspace floor: turbo-dom-layout / turbo-dom 0.7 declare rust-version 1.89
 # (smol_str 0.3.6 sets it), above `napi-build` (1.88) and the core engine's
 # font-subset stack (`subsetter`/`skrifa`/`write-fonts`, 1.85). So 1.89 is the MSRV.
 rust-version = "1.89"
@@ -31,3 +31,12 @@ wasm-bindgen = "0.2"
 opt-level = 3
 lto = "thin"
 codegen-units = 1
+
+# Pre-publish only: turbo-dom-layout 0.7.0 and turbo-dom 0.7.0 come from turbo-dom's
+# 0.7.0 release branch (miaskiewicz/turbo-dom#232, ci/ubuntu-2204-glibc-guard) until they
+# are on crates.io. Remove this block and re-lock
+# (`cargo update -p turbo-dom-layout -p turbo-dom`) before tagging (see PUBLISHING.md);
+# the tag-only `release-guard` job fails while it is present.
+[patch.crates-io]
+turbo-dom-layout = { git = "https://github.com/miaskiewicz/turbo-dom", rev = "a1d04df2137f83adac626c2daf8253904d6e9d3f" }
+turbo-dom = { git = "https://github.com/miaskiewicz/turbo-dom", rev = "a1d04df2137f83adac626c2daf8253904d6e9d3f" }

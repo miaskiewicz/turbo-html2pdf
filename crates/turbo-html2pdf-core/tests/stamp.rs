@@ -70,6 +70,8 @@ fn body_text(face: FontFace) -> Fragment {
             text: String::new(),
             font_size: 12.0,
             color: Rgba::new(0, 0, 0, 255),
+            upright: false,
+            vertical: false,
         },
     )
 }

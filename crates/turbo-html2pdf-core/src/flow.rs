@@ -17,11 +17,15 @@ pub(crate) fn style_options() -> StyleOptions {
 
 /// The layout-time switches of this build (`xref`: atomic internal links;
 /// `print-color`: `cmyk(...)` colours), starting the box ids at `first_node_id`.
+/// Inline elements stay flattened into their text runs (turbo-dom 0.7's
+/// `flatten_inline_elements`, miaskiewicz/turbo-dom#245): the link annotations and
+/// PDF/UA tags assume no inline-box fragments (turbo-dom#210).
 pub(crate) fn layout_options(first_node_id: u32) -> LayoutOptions {
     LayoutOptions {
         atomic_internal_links: cfg!(feature = "xref"),
         accept_cmyk: cfg!(feature = "print-color"),
         first_node_id,
+        flatten_inline_elements: true,
     }
 }
 
