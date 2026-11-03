@@ -95,7 +95,13 @@ pub fn build(pages: &[Page], opts: &EmitOptions, resolver: &dyn ImageResolver) -
     // actually emits tagged PDF (`opts.pdf_ua`); otherwise the plan reserves no
     // struct-tree ids and the catalog/pages take their untagged path.
     #[cfg(feature = "pdf-ua")]
-    let ua = pdf_ua_on(opts).then(|| ua::UaPlan::build(pages, plan.next_free_id()).0);
+    let ua = pdf_ua_on(opts).then(|| {
+        #[cfg(feature = "xref")]
+        let links = xref.link_elems();
+        #[cfg(not(feature = "xref"))]
+        let links = Vec::new();
+        ua::UaPlan::build(pages, plan.next_free_id(), &links).0
+    });
     let mut pdf = Pdf::new();
     pdf.set_version(1, 7);
     write_catalog(
@@ -120,14 +126,14 @@ pub fn build(pages: &[Page], opts: &EmitOptions, resolver: &dyn ImageResolver) -
     images.write(&mut pdf, &mut plan.image_alloc());
     write_info(&mut pdf, plan.info, opts);
     #[cfg(feature = "xref")]
-    write_xref(&mut pdf, &plan, &xref);
+    write_xref(&mut pdf, &plan, &xref, pages.len());
     #[cfg(feature = "pdf-a")]
     if pdf_a_on(opts) {
         write_pdfa_objects(&mut pdf, &plan, opts);
     }
     #[cfg(feature = "pdf-ua")]
     if let Some(ua) = &ua {
-        ua.write(&mut pdf, &plan.page_refs, opts);
+        ua.write(&mut pdf, &plan.page_refs, annot_refs(&plan), opts);
     }
     finish(pdf, opts)
 }
@@ -154,11 +160,30 @@ fn finish(pdf: pdf_writer::Pdf, _opts: &EmitOptions) -> Vec<u8> {
 /// Write the cross-reference objects (`xref` feature): the `/Dests` dictionary
 /// (when any anchor exists) and the per-page Link annotation objects.
 #[cfg(feature = "xref")]
-fn write_xref(pdf: &mut Pdf, plan: &Plan, xref: &Xref) {
+fn write_xref(pdf: &mut Pdf, plan: &Plan, xref: &Xref, page_count: usize) {
     if xref.has_dests() {
         xref.write_dests(pdf, plan.dests, &plan.page_refs);
     }
-    xref.write_links(pdf, &plan.link_refs);
+    // A tagged render keys each annotation's `/StructParent` after the pages' keys.
+    #[cfg(feature = "pdf-ua")]
+    let keys = plan.pdf_ua.then_some(page_count as i32);
+    #[cfg(not(feature = "pdf-ua"))]
+    let keys = {
+        let _ = page_count;
+        None
+    };
+    xref.write_links(pdf, &plan.link_refs, keys);
+}
+
+/// The Link annotation refs in document order (none without `xref`).
+#[cfg(all(feature = "pdf-ua", feature = "xref"))]
+fn annot_refs(plan: &Plan) -> &[Ref] {
+    &plan.link_refs
+}
+
+#[cfg(all(feature = "pdf-ua", not(feature = "xref")))]
+fn annot_refs(_plan: &Plan) -> &[Ref] {
+    &[]
 }
 
 /// The fixed reference layout for one build.
@@ -486,6 +511,11 @@ fn write_page_object(
     #[cfg(feature = "pdf-ua")]
     if plan.pdf_ua {
         obj.struct_parents(page_idx as i32);
+        // Annotations follow the structure order (PDF/UA-1 7.18.3).
+        #[cfg(feature = "xref")]
+        if !plan.page_annot_refs[page_idx].is_empty() {
+            obj.tab_order(pdf_writer::types::TabOrder::StructureOrder);
+        }
     }
     let opacities = if pdf_a_on(opts) {
         std::collections::BTreeSet::new()

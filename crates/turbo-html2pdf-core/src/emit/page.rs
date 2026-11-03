@@ -202,12 +202,14 @@ fn paint_bands(
 ) {
     for (index, band) in bands(page).into_iter().enumerate() {
         for frag in painted(band) {
+            // A table header row repeated on this page paints as an artifact.
+            let repeat = index == 0 && marker.as_deref().is_some_and(|m| m.repeats(frag));
             paint_fragment(
                 content,
                 frag,
                 ctx,
                 marker.as_deref_mut(),
-                is_artifact_band(index),
+                is_artifact_band(index) || repeat,
             );
         }
     }

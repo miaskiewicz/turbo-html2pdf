@@ -863,58 +863,48 @@ enum Kid {
     Objr(u32),
 }
 
+/// The `/K` value of struct element `body`, without its brackets.
+fn k_value(body: &str) -> String {
+    let Some(k) = body.split("/K ").nth(1).map(str::trim_start) else {
+        return String::new();
+    };
+    let Some(rest) = k.strip_prefix('[') else {
+        return k.lines().next().unwrap_or("").to_string();
+    };
+    // The closing `]` of the array (MCR / OBJR dicts hold no brackets).
+    rest[..rest.find(']').unwrap_or(rest.len())].to_string()
+}
+
+/// One `<< ... >>` kid: an `OBJR` or an `MCR` (its `/Pg`, else the element's `pg`).
+fn dict_kid(dict: &str, pg: Option<u32>) -> Kid {
+    if dict.contains("/OBJR") {
+        return Kid::Objr(int_after(dict, "/Obj ").expect("OBJR /Obj"));
+    }
+    let page = int_after(dict, "/Pg ").or(pg).expect("MCR page");
+    Kid::Mcid(page, int_after(dict, "/MCID ").expect("MCR MCID"))
+}
+
 /// The `/K` kids of struct element `body` (bare MCIDs belong to its `/Pg`).
 fn kids(body: &str) -> Vec<Kid> {
-    let Some(k) = body.split("/K ").nth(1) else {
-        return Vec::new();
-    };
-    let k = k.trim_start();
-    let inner = if let Some(rest) = k.strip_prefix('[') {
-        let mut depth = 0i32;
-        let end = rest
-            .char_indices()
-            .find(|&(i, c)| {
-                if rest[i..].starts_with("<<") {
-                    depth += 1;
-                } else if rest[i..].starts_with(">>") {
-                    depth -= 1;
-                }
-                c == ']' && depth <= 0
-            })
-            .map_or(rest.len(), |(i, _)| i);
-        rest[..end].to_string()
-    } else {
-        k.lines().next().unwrap_or("").to_string()
-    };
     let pg = int_after(body, "/Pg ");
+    let k = k_value(body).replace("<<", " << ").replace(">>", " >> ");
+    let toks: Vec<&str> = k.split_whitespace().collect();
     let mut out = Vec::new();
-    let mut rest = inner.as_str();
-    while !rest.trim().is_empty() {
-        rest = rest.trim_start();
-        if let Some(d) = rest.strip_prefix("<<") {
-            let end = d.find(">>").expect("dict end");
-            let dict = &d[..end];
-            if dict.contains("/OBJR") {
-                out.push(Kid::Objr(int_after(dict, "/Obj ").expect("OBJR /Obj")));
-            } else {
-                let page = int_after(dict, "/Pg ").or(pg).expect("MCR page");
-                out.push(Kid::Mcid(
-                    page,
-                    int_after(dict, "/MCID ").expect("MCR MCID"),
-                ));
-            }
-            rest = &d[end + 2..];
-            continue;
-        }
-        let mut toks = rest.splitn(4, char::is_whitespace);
-        let n: u32 = toks.next().unwrap().parse().expect("kid number");
-        let tail: Vec<&str> = rest.split_whitespace().take(3).collect();
-        if tail.len() == 3 && tail[2] == "R" {
-            out.push(Kid::Elem(n));
-            rest = rest.splitn(4, char::is_whitespace).nth(3).unwrap_or("");
+    let mut i = 0;
+    while i < toks.len() {
+        if toks[i] == "<<" {
+            let end = i + toks[i..].iter().position(|t| *t == ">>").expect("dict end");
+            out.push(dict_kid(&toks[i + 1..end].join(" "), pg));
+            i = end + 1;
+        } else if toks.get(i + 2) == Some(&"R") {
+            out.push(Kid::Elem(toks[i].parse().expect("ref")));
+            i += 3;
         } else {
-            out.push(Kid::Mcid(pg.expect("bare MCID needs /Pg"), n));
-            rest = rest.split_once(char::is_whitespace).map_or("", |(_, r)| r);
+            out.push(Kid::Mcid(
+                pg.expect("bare MCID needs /Pg"),
+                toks[i].parse().expect("MCID"),
+            ));
+            i += 1;
         }
     }
     out
@@ -932,6 +922,73 @@ fn refs(body: &str) -> Vec<u32> {
         .collect()
 }
 
+type Objs = std::collections::BTreeMap<u32, String>;
+type Pairs = std::collections::BTreeMap<(u32, u32), u32>;
+/// Every page's (page, MCID) marks and each page's (page, `/StructParents` key).
+type Marks = (std::collections::BTreeSet<(u32, u32)>, Vec<(u32, u32)>);
+
+/// Every page's content-stream (page, MCID) pairs (no duplicates) and `/StructParents`
+/// key.
+fn page_marks(objs: &Objs) -> Marks {
+    let mut marks = std::collections::BTreeSet::new();
+    let mut keys = Vec::new();
+    for (&n, body) in objs.iter().filter(|(_, b)| b.contains("/Type /Page\n")) {
+        let stream = &objs[&int_after(body, "/Contents ").expect("page contents")];
+        for m in stream.split("/MCID ").skip(1) {
+            let mcid: u32 = m.split_whitespace().next().unwrap().parse().unwrap();
+            assert!(marks.insert((n, mcid)), "MCID {mcid} twice on page {n}");
+        }
+        keys.push((
+            n,
+            int_after(body, "/StructParents ").expect("StructParents"),
+        ));
+    }
+    (marks, keys)
+}
+
+/// The owner of each (page, MCID) and of each `OBJR` annotation; each `LI` starts with
+/// its `Lbl`.
+fn kid_owners(objs: &Objs) -> (Pairs, std::collections::BTreeMap<u32, u32>) {
+    let (mut owner, mut objr) = (Pairs::new(), std::collections::BTreeMap::new());
+    for (&n, body) in objs.iter().filter(|(_, b)| b.contains("/Type /StructElem")) {
+        let ks = kids(body);
+        for k in &ks {
+            let dup = match *k {
+                Kid::Mcid(p, m) => owner.insert((p, m), n).is_some(),
+                Kid::Objr(a) => objr.insert(a, n).is_some(),
+                Kid::Elem(_) => false,
+            };
+            assert!(!dup, "{k:?} owned twice");
+        }
+        assert_label_first(objs, n, body, &ks);
+    }
+    (owner, objr)
+}
+
+/// An `LI` holding an `Lbl` has it as kids[0].
+fn assert_label_first(objs: &Objs, n: u32, body: &str, ks: &[Kid]) {
+    let is_lbl = |k: &Kid| matches!(k, Kid::Elem(e) if objs[e].contains("/S /Lbl\n"));
+    if body.contains("/S /LI\n") && ks.iter().any(is_lbl) {
+        assert!(is_lbl(&ks[0]), "LI {n}: kids[0] is not its Lbl");
+    }
+}
+
+/// The ParentTree's `/Nums`: key -> object.
+fn parent_tree(objs: &Objs) -> std::collections::BTreeMap<u32, u32> {
+    let root = objs
+        .values()
+        .find(|b| b.contains("/Type /StructTreeRoot"))
+        .expect("root");
+    let nums = root.split("/Nums").nth(1).expect("Nums");
+    let toks: Vec<&str> = nums[..nums.find(']').unwrap()]
+        .split(|c: char| c.is_whitespace() || c == '[')
+        .filter(|t| !t.is_empty())
+        .collect();
+    toks.chunks(4)
+        .map(|e| (e[0].parse().unwrap(), e[1].parse().unwrap()))
+        .collect()
+}
+
 /// Check the tagged PDF's structure tree against its pages:
 /// - every (page, MCID) of the content streams is owned by exactly one struct element
 ///   kid, and every kid's MCID is in its `/Pg`'s content stream (no duplicates either side);
@@ -939,92 +996,19 @@ fn refs(body: &str) -> Vec<u32> {
 ///   annotation's `/StructParent` to the element holding it;
 /// - an `LI`'s first kid is its `Lbl` (when it has one).
 fn assert_struct_tree(pdf: &[u8]) {
-    use std::collections::{BTreeMap, BTreeSet};
     let objs = objects(pdf);
-    // Pages: object -> (content stream MCIDs, StructParents key).
-    let mut page_mcids: BTreeSet<(u32, u32)> = BTreeSet::new();
-    let mut page_keys: BTreeMap<u32, u32> = BTreeMap::new();
-    for (&n, body) in &objs {
-        if !body.contains("/Type /Page\n") {
-            continue;
-        }
-        let stream = &objs[&int_after(body, "/Contents ").expect("page contents")];
-        for m in stream.split("/MCID ").skip(1) {
-            let mcid: u32 = m.split_whitespace().next().unwrap().parse().unwrap();
-            assert!(
-                page_mcids.insert((n, mcid)),
-                "MCID {mcid} twice on page {n}"
-            );
-        }
-        page_keys.insert(
-            n,
-            int_after(body, "/StructParents ").expect("StructParents"),
-        );
-    }
-    // Struct elements: who owns each (page, MCID), each OBJR.
-    let mut owner: BTreeMap<(u32, u32), u32> = BTreeMap::new();
-    let mut objr: BTreeMap<u32, u32> = BTreeMap::new();
-    for (&n, body) in objs.iter().filter(|(_, b)| b.contains("/Type /StructElem")) {
-        let ks = kids(body);
-        for k in &ks {
-            match *k {
-                Kid::Mcid(p, m) => {
-                    assert!(
-                        owner.insert((p, m), n).is_none(),
-                        "MCID {m} of page {p} owned twice"
-                    );
-                }
-                Kid::Objr(a) => {
-                    assert!(
-                        objr.insert(a, n).is_none(),
-                        "annotation {a} in two elements"
-                    );
-                }
-                Kid::Elem(_) => {}
-            }
-        }
-        if body.contains("/S /LI\n") {
-            if let Some(Kid::Elem(first)) = ks.first() {
-                let lbl = ks
-                    .iter()
-                    .any(|k| matches!(k, Kid::Elem(e) if objs[e].contains("/S /Lbl\n")));
-                if lbl {
-                    assert!(
-                        objs[first].contains("/S /Lbl\n"),
-                        "LI {n}: kids[0] is not its Lbl"
-                    );
-                }
-            }
-        }
-    }
-    let owned: BTreeSet<(u32, u32)> = owner.keys().copied().collect();
-    assert_eq!(owned, page_mcids, "struct MCIDs vs content-stream MCIDs");
-    // ParentTree.
-    let root = objs
-        .values()
-        .find(|b| b.contains("/Type /StructTreeRoot"))
-        .expect("root");
-    let nums = root.split("/Nums").nth(1).expect("Nums");
-    let nums = &nums[..nums.find(']').unwrap()];
-    let toks: Vec<&str> = nums
-        .split(|c: char| c.is_whitespace() || c == '[')
-        .filter(|t| !t.is_empty())
-        .collect();
-    let mut tree: BTreeMap<u32, u32> = BTreeMap::new();
-    for e in toks.chunks(4) {
-        tree.insert(e[0].parse().unwrap(), e[1].parse().unwrap());
-    }
-    for (&page, &key) in &page_keys {
+    let (marks, page_keys) = page_marks(&objs);
+    let (owner, objr) = kid_owners(&objs);
+    let owned: std::collections::BTreeSet<(u32, u32)> = owner.keys().copied().collect();
+    assert_eq!(owned, marks, "struct MCIDs vs content-stream MCIDs");
+    let tree = parent_tree(&objs);
+    for (page, key) in page_keys {
         let arr = refs(&objs[&tree[&key]]);
-        for (mcid, el) in arr.iter().enumerate() {
-            if let Some(&o) = owner.get(&(page, mcid as u32)) {
-                assert_eq!(*el, o, "ParentTree page {page} MCID {mcid}");
-            }
-        }
-        let count = page_mcids.iter().filter(|(p, _)| *p == page).count();
-        assert_eq!(arr.len(), count, "ParentTree array length of page {page}");
+        let want: Vec<u32> = (0..arr.len() as u32).map(|m| owner[&(page, m)]).collect();
+        assert_eq!(arr, want, "ParentTree of page {page}");
+        assert_eq!(arr.len(), marks.iter().filter(|(p, _)| *p == page).count());
     }
-    for (&annot, &el) in &objr {
+    for (annot, el) in objr {
         let key = int_after(&objs[&annot], "/StructParent ").expect("annotation StructParent");
         assert_eq!(
             tree.get(&key),
@@ -1035,6 +1019,7 @@ fn assert_struct_tree(pdf: &[u8]) {
 }
 
 /// The page objects in page order (`/Kids` of the page tree).
+#[cfg(feature = "xref")]
 fn page_objects(pdf: &[u8]) -> Vec<u32> {
     let objs = objects(pdf);
     let tree = objs

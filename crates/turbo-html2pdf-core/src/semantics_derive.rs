@@ -69,6 +69,9 @@ pub enum UaRole {
     TableBody,
     /// A table's footer row group (`<tfoot>`).
     TableFoot,
+    /// A link (`<a href>` with a link target, the `xref` feature): holds its Link
+    /// annotations as `OBJR` kids (PDF/UA-1 7.18.5).
+    Link,
     /// A figure (`<img>`); carries `/Alt` from the `alt` attribute.
     Figure,
     /// A run of inline text (`<span>`, `<a>`, anonymous inline boxes).
@@ -237,7 +240,10 @@ fn node_info(view: &TreeView, h: turbo_dom::Handle) -> NodeInfo {
         marker,
         img,
         #[cfg(feature = "pdf-ua")]
-        role: marker.map_or_else(|| role_for_tag(local), |_| None),
+        role: marker.map_or_else(
+            || link_role(view, h, local).or_else(|| role_for_tag(local)),
+            |_| None,
+        ),
         #[cfg(feature = "pdf-ua")]
         alt: img.then(|| view.attr(h, "alt").unwrap_or("").to_string()),
         #[cfg(feature = "pdf-ua")]
@@ -255,6 +261,19 @@ fn node_info(view: &TreeView, h: turbo_dom::Handle) -> NodeInfo {
             .filter(|id| !id.is_empty())
             .map(str::to_string),
     }
+}
+
+/// `Link` for an `<a>` whose `href` makes a link annotation (the `xref` feature).
+#[cfg(all(feature = "pdf-ua", feature = "xref"))]
+fn link_role(view: &TreeView, h: turbo_dom::Handle, local: &str) -> Option<UaRole> {
+    let linked = local == "a" && view.attr(h, "href").and_then(link_target).is_some();
+    linked.then_some(UaRole::Link)
+}
+
+/// Without the `xref` feature no `<a>` makes a link annotation.
+#[cfg(all(feature = "pdf-ua", not(feature = "xref")))]
+fn link_role(_view: &TreeView, _h: turbo_dom::Handle, _local: &str) -> Option<UaRole> {
+    None
 }
 
 /// Map a lowercase HTML tag name to its structure role.

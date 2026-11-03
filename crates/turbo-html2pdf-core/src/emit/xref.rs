@@ -44,6 +44,9 @@ enum Action {
 /// (pt) for the y-flip.
 struct Link {
     action: Action,
+    /// The link's source element box (its PDF/UA `Link` element).
+    #[cfg_attr(not(feature = "pdf-ua"), allow(dead_code))]
+    elem: crate::layout::fragment::NodeId,
     x: f32,
     y: f32,
     width: f32,
@@ -114,14 +117,28 @@ impl Xref {
         dict.finish();
     }
 
+    /// Each link annotation in document order: (0-based page, link element box).
+    #[cfg(feature = "pdf-ua")]
+    pub(crate) fn link_elems(&self) -> Vec<(usize, crate::layout::fragment::NodeId)> {
+        self.links
+            .iter()
+            .enumerate()
+            .flat_map(|(p, links)| links.iter().map(move |l| (p, l.elem)))
+            .collect()
+    }
+
     /// Write one Link annotation object per link (page then document order), each
-    /// a `GoTo` action to its named destination over the fragment's rectangle.
-    pub(crate) fn write_links(&self, pdf: &mut Pdf, link_refs: &[Ref]) {
+    /// a `GoTo` action to its named destination over the fragment's rectangle. A tagged
+    /// render (`struct_keys`: the first annotation `/StructParent` key) also gives each
+    /// its parent-tree key and its target as `/Contents` (PDF/UA-1 7.18.1, 7.18.5).
+    pub(crate) fn write_links(&self, pdf: &mut Pdf, link_refs: &[Ref], struct_keys: Option<i32>) {
         let mut refs = link_refs.iter();
+        let mut k = 0;
         for page in &self.links {
             for link in page {
                 let id = *refs.next().expect("one ref per link");
-                write_link(pdf, id, link);
+                write_link(pdf, id, link, struct_keys.map(|base| base + k));
+                k += 1;
             }
         }
     }
@@ -159,6 +176,7 @@ fn walk(
     if let Some(action) = action {
         links.push(Link {
             action,
+            elem: frag.node_id,
             x: frag.x,
             y: frag.y,
             width: frag.width,
@@ -173,11 +191,19 @@ fn walk(
 
 /// Write a single Link annotation: its rectangle plus a `GoTo` action to the
 /// named destination or a `URI` action, with no visible border.
-fn write_link(pdf: &mut Pdf, id: Ref, link: &Link) {
+fn write_link(pdf: &mut Pdf, id: Ref, link: &Link, struct_key: Option<i32>) {
     let mut annot = pdf.annotation(id);
     annot.subtype(pdf_writer::types::AnnotationType::Link);
     annot.rect(link_rect(link));
     annot.border(0.0, 0.0, 0.0, None);
+    if let Some(key) = struct_key {
+        annot.struct_parent(key);
+        let target = match &link.action {
+            Action::GoTo(name) => name,
+            Action::Uri(uri) => uri,
+        };
+        annot.contents(pdf_writer::TextStr(target));
+    }
     let mut action = annot.action();
     match &link.action {
         Action::GoTo(name) => {

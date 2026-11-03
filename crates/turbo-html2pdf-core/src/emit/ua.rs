@@ -19,14 +19,14 @@
 //! walks document order (the reading order) and gives each content fragment the
 //! MCID of its paint position ([`paint_mcids`]).
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use pdf_writer::types::StructRole;
 use pdf_writer::{Content, Finish, Name, Pdf, Ref, TextStr};
 
-use crate::layout::fragment::{Fragment, FragmentContent, NodeId};
+use crate::layout::fragment::{Fragment, FragmentContent, NodeId, RepeatKind};
 use crate::layout::value::BorderEdges;
-use crate::paginate::{Page, CARRIED, REPEATED};
+use crate::paginate::{Page, CARRIED};
 use crate::semantics::{Semantics, UaRole};
 
 use super::EmitOptions;
@@ -60,7 +60,7 @@ pub(super) fn wrap_kind(frag: &Fragment, artifact_band: bool) -> WrapKind {
 /// onto a neighbouring page ([`CARRIED`]) is an artifact: its own page tags the content
 /// (miaskiewicz/turbo-html2pdf#44).
 fn content_band_kind(frag: &Fragment) -> WrapKind {
-    if frag.node_id == CARRIED || frag.node_id == REPEATED {
+    if frag.node_id == CARRIED {
         return artifact_or_none(frag);
     }
     match &frag.content {
@@ -138,6 +138,8 @@ pub(super) fn begin_mcid(content: &mut Content, mcid: i32) {
 pub(super) struct Marker {
     next: i32,
     count: i32,
+    /// The repeated table header rows of this page ([`repeated_headers`]).
+    repeated: HashSet<NodeId>,
 }
 
 impl Marker {
@@ -145,7 +147,14 @@ impl Marker {
         Marker {
             next: 0,
             count: tags.mcid_count,
+            repeated: tags.repeated.clone(),
         }
+    }
+
+    /// Whether body fragment `frag` is a table header row repeated on this page: it
+    /// paints as an artifact (the original row carries its content).
+    pub(super) fn repeats(&self, frag: &Fragment) -> bool {
+        is_repeat(frag, &self.repeated)
     }
 
     /// The next MCID for this page. Never exceeds the planned count: the painter
@@ -163,6 +172,32 @@ impl Marker {
 /// in the same paint order).
 pub(super) struct PageTags {
     pub(super) mcid_count: i32,
+    /// The page's repeated table header rows ([`repeated_headers`]).
+    pub(super) repeated: HashSet<NodeId>,
+}
+
+/// Whether `frag` is one of the `repeated` header rows.
+fn is_repeat(frag: &Fragment, repeated: &HashSet<NodeId>) -> bool {
+    frag.break_meta.repeatable == Some(RepeatKind::Header) && repeated.contains(&frag.node_id)
+}
+
+/// Per page, the table header rows re-emitted there (AC-6.3): a body row repeatable as a
+/// header whose id an earlier page already shows. They keep the original's id (so a link
+/// in one still resolves) but are tagged as artifacts; the first one shown is the
+/// original, whatever cut the table's first page.
+fn repeated_headers(pages: &[Page]) -> Vec<HashSet<NodeId>> {
+    let mut seen = HashSet::new();
+    pages
+        .iter()
+        .map(|page| {
+            page.body
+                .iter()
+                .filter(|f| f.break_meta.repeatable == Some(RepeatKind::Header))
+                .filter(|f| !seen.insert(f.node_id))
+                .map(|f| f.node_id)
+                .collect()
+        })
+        .collect()
 }
 
 // --------------------------------------------------------------------------
@@ -182,6 +217,9 @@ struct StructNode {
     /// page other than `page` (an element split across pages) is a marked-content
     /// reference with its own `/Pg`.
     mcids: Vec<(usize, i32)>,
+    /// Link annotations (0-based page, document-order link index) this element holds
+    /// as `OBJR` kids (PDF/UA-1 7.18.5).
+    objrs: Vec<(usize, usize)>,
 }
 
 /// The whole tagged-PDF plan: the struct tree plus the object refs it needs.
@@ -201,14 +239,27 @@ pub(super) struct UaPlan {
     metadata_ref: Ref,
     /// Content MCID count per page, for the painter.
     mcid_counts: Vec<i32>,
+    /// Each page's repeated table header rows, for the painter.
+    repeated: Vec<HashSet<NodeId>>,
+    /// The struct node holding each link annotation (document order).
+    link_owners: Vec<usize>,
 }
 
 impl UaPlan {
     /// Build the structure tree from the paginated pages, allocating every object
     /// ref it needs starting at `first`. Returns the plan and the next free id.
-    pub(super) fn build(pages: &[Page], first: i32) -> (UaPlan, i32) {
-        let mut builder = TreeBuilder::default();
+    /// `links` are the document's link annotations in order: (0-based page, link element).
+    pub(super) fn build(pages: &[Page], first: i32, links: &[(usize, NodeId)]) -> (UaPlan, i32) {
+        let mut builder = TreeBuilder {
+            repeated: repeated_headers(pages),
+            ..TreeBuilder::default()
+        };
         builder.run(pages);
+        builder.link_owners = links
+            .iter()
+            .enumerate()
+            .map(|(k, &(page, elem))| builder.link_node(elem, page, k))
+            .collect();
         UaPlan::allocate(builder, pages.len(), first)
     }
 
@@ -244,6 +295,8 @@ impl UaPlan {
             parent_tree_refs,
             metadata_ref,
             mcid_counts: builder.mcid_counts,
+            repeated: builder.repeated,
+            link_owners: builder.link_owners,
         };
         (plan, next)
     }
@@ -262,6 +315,7 @@ impl UaPlan {
     pub(super) fn page_tags(&self, i: usize) -> PageTags {
         PageTags {
             mcid_count: self.mcid_counts[i],
+            repeated: self.repeated[i].clone(),
         }
     }
 }
@@ -287,6 +341,10 @@ struct TreeBuilder {
     elems: HashMap<NodeId, usize>,
     /// The row-group nodes of each `Table` node, by kind.
     groups: HashMap<(usize, StructRole), usize>,
+    /// Each page's repeated table header rows: artifacts, not walked.
+    repeated: Vec<HashSet<NodeId>>,
+    /// The struct node holding each link annotation (document order).
+    link_owners: Vec<usize>,
 }
 
 impl TreeBuilder {
@@ -294,9 +352,16 @@ impl TreeBuilder {
     fn run(&mut self, pages: &[Page]) {
         for (page, frags) in pages.iter().enumerate() {
             self.semantics = frags.semantics.clone();
-            self.order = paint_mcids([&frags.body, &frags.footnotes]);
+            let repeated = self.repeated[page].clone();
+            let body: Vec<Fragment> = frags
+                .body
+                .iter()
+                .filter(|f| !is_repeat(f, &repeated))
+                .cloned()
+                .collect();
+            self.order = paint_mcids([&body, &frags.footnotes]);
             let mut mcid = 0i32;
-            self.walk_band(&frags.body, page, None, &mut mcid);
+            self.walk_band(&body, page, None, &mut mcid);
             self.walk_band(&frags.footnotes, page, None, &mut mcid);
             self.mcid_counts.push(mcid);
         }
@@ -473,7 +538,11 @@ impl TreeBuilder {
                 Some(self.group_of(t, group, page))
             }
             (
-                UaRole::TableData | UaRole::TableHeader | UaRole::Caption | UaRole::ListItem,
+                UaRole::TableData
+                | UaRole::TableHeader
+                | UaRole::Caption
+                | UaRole::ListItem
+                | UaRole::Link,
                 Some(u),
             ) => Some(self.ensure(u, page, holder)),
             _ => holder,
@@ -523,6 +592,15 @@ impl TreeBuilder {
         self.nodes[owner].mcids.push((page, id));
     }
 
+    /// The `Link` element of link element `elem` (opened on first use, under its source
+    /// parent), now holding link annotation `k` on `page` as an `OBJR` kid: a link
+    /// repeated with its table header is a second annotation of the one element.
+    fn link_node(&mut self, elem: NodeId, page: usize, k: usize) -> usize {
+        let n = self.open(elem, UaRole::Link, None, page, None);
+        self.nodes[n].objrs.push((page, k));
+        n
+    }
+
     /// A fresh top-level `P` element to own stray content (a split block whose
     /// wrapper landed on another page).
     fn synthetic_paragraph(&mut self, page: usize) -> usize {
@@ -540,6 +618,7 @@ impl TreeBuilder {
             page,
             children: Vec::new(),
             mcids: Vec::new(),
+            objrs: Vec::new(),
         });
         idx
     }
@@ -572,7 +651,7 @@ fn is_content(frag: &Fragment) -> bool {
         frag.content,
         FragmentContent::TextLine { .. } | FragmentContent::Image(_)
     );
-    real && frag.node_id != CARRIED && frag.node_id != REPEATED
+    real && frag.node_id != CARRIED
 }
 
 /// Map a layout [`UaRole`] to a `pdf_writer` structure role.
@@ -593,6 +672,7 @@ fn map_role(role: UaRole) -> StructRole {
         UaRole::TableHead => StructRole::THead,
         UaRole::TableBody => StructRole::TBody,
         UaRole::TableFoot => StructRole::TFoot,
+        UaRole::Link => StructRole::Link,
         UaRole::Figure => StructRole::Figure,
         UaRole::Span => StructRole::Span,
         // Artifacts never reach the tree (filtered in `open_element`).
@@ -620,10 +700,16 @@ impl UaPlan {
     /// Write every object the tagged-PDF plan owns: the struct-tree root, the
     /// `Document` element, every struct element, the per-page parent trees and
     /// the XMP metadata stream.
-    pub(super) fn write(&self, pdf: &mut Pdf, page_refs: &[(Ref, Ref)], opts: &EmitOptions) {
+    pub(super) fn write(
+        &self,
+        pdf: &mut Pdf,
+        page_refs: &[(Ref, Ref)],
+        annot_refs: &[Ref],
+        opts: &EmitOptions,
+    ) {
         self.write_root(pdf);
         self.write_document(pdf, page_refs);
-        self.write_nodes(pdf, page_refs);
+        self.write_nodes(pdf, page_refs, annot_refs);
         self.write_parent_trees(pdf);
         self.write_metadata(pdf, opts);
     }
@@ -641,9 +727,14 @@ impl UaPlan {
         for (page, arr_ref) in self.parent_tree_refs.iter().enumerate() {
             nums.insert(page as i32, *arr_ref);
         }
+        // Each link annotation's `/StructParent` key (after the pages') -> its element.
+        let pages = self.parent_tree_refs.len();
+        for (k, &owner) in self.link_owners.iter().enumerate() {
+            nums.insert((pages + k) as i32, self.node_refs[owner]);
+        }
         nums.finish();
         pt.finish();
-        root.parent_tree_next_key(self.parent_tree_refs.len() as i32);
+        root.parent_tree_next_key((pages + self.link_owners.len()) as i32);
     }
 
     /// The `Document` element: every top-level page element is its child.
@@ -661,15 +752,20 @@ impl UaPlan {
     }
 
     /// Write one `StructElem` object per node.
-    fn write_nodes(&self, pdf: &mut Pdf, page_refs: &[(Ref, Ref)]) {
+    fn write_nodes(&self, pdf: &mut Pdf, page_refs: &[(Ref, Ref)], annot_refs: &[Ref]) {
         for i in 0..self.nodes.len() {
-            self.write_node(pdf, i, page_refs);
+            self.write_node(pdf, i, (page_refs, annot_refs));
         }
     }
 
     /// Write one struct element: its role, parent, page, optional alt, then its
     /// children (sub-elements followed by its own marked content ids).
-    fn write_node(&self, pdf: &mut Pdf, i: usize, page_refs: &[(Ref, Ref)]) {
+    fn write_node(
+        &self,
+        pdf: &mut Pdf,
+        i: usize,
+        (page_refs, annot_refs): (&[(Ref, Ref)], &[Ref]),
+    ) {
         let node = &self.nodes[i];
         let mut el = pdf.struct_element(self.node_refs[i]);
         el.kind(node.role);
@@ -679,7 +775,7 @@ impl UaPlan {
             el.alt(TextStr(alt));
         }
         write_scope(&mut el, node.role);
-        write_kids(&mut el, node, &self.node_refs, page_refs);
+        write_kids(&mut el, node, &self.node_refs, (page_refs, annot_refs));
     }
 
     /// The parent object of node `i`: its enclosing element, or the `Document`.
@@ -750,7 +846,7 @@ fn write_kids(
     el: &mut pdf_writer::writers::StructElement,
     node: &StructNode,
     refs: &[Ref],
-    page_refs: &[(Ref, Ref)],
+    (page_refs, annot_refs): (&[(Ref, Ref)], &[Ref]),
 ) {
     let mut kids = el.children();
     for &c in &node.children {
@@ -764,6 +860,11 @@ fn write_kids(
                 .marked_content_id(mcid)
                 .page(page_refs[page].0);
         }
+    }
+    for &(page, k) in &node.objrs {
+        kids.object_ref()
+            .object(annot_refs[k])
+            .page(page_refs[page].0);
     }
     kids.finish();
 }

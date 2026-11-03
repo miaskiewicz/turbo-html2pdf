@@ -18,11 +18,6 @@ use super::walk::PageSpan;
 /// artifact — not tagged, not extracted as text (miaskiewicz/turbo-html2pdf#44).
 pub const CARRIED: NodeId = NodeId(u32::MAX);
 
-/// The node id of a repeated table header row re-emitted at the top of a continuation
-/// page (AC-6.3): it paints and extracts like the original, but the original row on the
-/// table's first page carries its semantics, so PDF/UA tags the copy as an artifact.
-pub const REPEATED: NodeId = NodeId(u32::MAX - 1);
-
 /// Far enough past any page edge to stand for an unbounded clip side (px).
 const FAR: f32 = 1.0e4;
 
@@ -72,18 +67,6 @@ fn piece_on(f: &Fragment, dy: f32, (lo, hi): (f32, f32), keep: bool) -> Option<F
         }
         piece
     })
-}
-
-/// A copy of `f` with it and its subtree marked [`REPEATED`].
-pub(super) fn repeated(f: &Fragment) -> Fragment {
-    let mut f = f.clone();
-    mark(&mut f, REPEATED);
-    f
-}
-
-fn mark(f: &mut Fragment, id: NodeId) {
-    f.node_id = id;
-    f.children.iter_mut().for_each(|c| mark(c, id));
 }
 
 /// Mark `f` and its subtree as [`CARRIED`].

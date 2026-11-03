@@ -48,16 +48,20 @@ PyPI and crates.io packages move to 0.7.0 with turbo-dom, turbo-test and turbo-s
   `Table` there; they were loose in the `Document`, which veraPDF rejects.
 - **Fixed (paginate)**: a list item whose own text runs past a page kept none of its lines
   (#62). Its outside `::marker` box sits beside the first line, so the item read as a row of
-  side-by-side cells and was split in parallel. Now only boxes are cells, and in a block of text
-  lines its last line is its last content.
+  side-by-side cells and was split in parallel. Now only boxes are cells, and a block's last
+  content is its in-flow child with the lowest bottom edge, list markers aside.
 - **Fixed (`pdf-ua`)**: blocks split across pages keep their structure. Each element is one
   structure element for the whole document (a struct element may span pages; its content on a
   later page is a marked-content reference with its own `/Pg`). A continuation page reopens a
   cell's `TR`, a row's `Table` and row group, a caption's `Table` (as its first child), an
   item's `L`, and a split item's `LI` with its `Lbl` and `LBody`. Two split tables on one page
-  stay two tables. A table header repeated on a continuation page is an `/Artifact` (new
-  `REPEATED` node id); the original row is tagged once. Struct element objects are numbered in
-  reading order.
+  stay two tables. A table header repeated on a continuation page keeps its ids, so its
+  links stay clickable on every page, and is tagged as an `/Artifact`; the original row is
+  tagged once. Struct element objects are numbered in reading order.
+- **Fixed (`pdf-ua` + `xref`)**: links are tagged (PDF/UA-1 7.18): an `<a href>` is a `Link`
+  element holding each of its Link annotations as an `OBJR` kid (a link in a repeated header
+  is one element with an annotation per page). Each annotation has a `/StructParent` key in
+  the ParentTree and its target as `/Contents`, and a page with annotations has `/Tabs /S`.
 - **Tests**: `report_hot_path_breakdown`'s budget is the measured 6358 shapes plus 100 (was
   6096: turbo-dom 0.7's max-content pass works on a paragraph's words, #241).
 
