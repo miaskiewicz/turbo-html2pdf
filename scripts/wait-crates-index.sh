@@ -1,7 +1,7 @@
 #!/bin/sh
 # Wait until each named crate, at the version Cargo.lock resolves it to, is listed in
 # the crates.io sparse index (release-crates.yml runs this before packaging core:
-# turbo-html2pdf-core needs turbo-dom-layout + turbo-dom 0.6.0 on crates.io).
+# turbo-html2pdf-core needs turbo-dom-layout + turbo-dom 0.7.0 on crates.io).
 #
 # Usage: scripts/wait-crates-index.sh CRATE...
 #   WAIT_SECS (default 1800) bounds the wait; polls every 30 s.

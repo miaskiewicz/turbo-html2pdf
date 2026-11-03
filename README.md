@@ -50,7 +50,7 @@ string* — they pair with a render package (`turbo-html2pdf` on Node, a
 PDF. The Rust engine lives in
 [`crates/turbo-html2pdf-core`](https://github.com/miaskiewicz/turbo-html2pdf/tree/main/crates/turbo-html2pdf-core).
 
-> Release version: **`v0.6.0`**. See [CHANGELOG.md](./CHANGELOG.md) and
+> Release version: **`v0.7.0`**. See [CHANGELOG.md](./CHANGELOG.md) and
 > [publishing and registry verification](./PUBLISHING.md).
 
 ## 🌐 Bonus: the same engine runs *inside* a web browser
@@ -137,8 +137,8 @@ call, not an IPC round-trip to Chrome — so the common "render one document" pa
 
 ### Benchmarks — pending re-run
 
-0.6.0 has not been re-benchmarked. The layout engine moved into the shared turbo-dom
-crates in this release, so the earlier numbers no longer describe the shipped code; a
+0.6.0 and 0.7.0 have not been re-benchmarked. The layout engine moved into the shared
+turbo-dom crates in 0.6.0, so the earlier numbers no longer describe the shipped code; a
 re-run of all four turbo-* repos together is planned after the release. The last
 measured (pre-consolidation, 0.1–0.2) numbers, with their machine and date, are kept in
 [`docs/BENCHMARKS-history.md`](docs/BENCHMARKS-history.md). Harness:
@@ -463,11 +463,11 @@ lint run as separate jobs. macOS and Windows builds run only in the release work
 
 ## Status
 
-**`v0.6.0`** is the release version for npm, PyPI and crates.io; the
+**`v0.7.0`** is the release version for npm, PyPI and crates.io; the
 [release procedure](./PUBLISHING.md) records the tag triggers and registry checks.
-The turbo-dom crates (0.6.0) come from crates.io. Bindings: Node (N-API), WebAssembly (lean + fonts), Python (PyO3),
+The turbo-dom crates are 0.7.0 (pinned to a git rev of turbo-dom#232 until they are on crates.io). Bindings: Node (N-API), WebAssembly (lean + fonts), Python (PyO3),
 MCP. See [`docs/`](docs/) for the full guide and [`CHANGELOG.md`](CHANGELOG.md) for
-what changed in 0.6.0.
+what changed in 0.7.0.
 
 ## License
 

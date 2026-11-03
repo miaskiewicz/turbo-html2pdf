@@ -20,8 +20,9 @@ copy of `assets/fonts` — tests and benches read them through turbo-dom-layout'
 `t:`-directive / paged / PDF ones (tree-literal inputs come from turbo-dom-layout's
 `test_support::literal`; the S2 legacy-vs-Tree equivalence gate was retired at S5 with
 the legacy input).
-`turbo-dom-layout` and `turbo-dom` 0.6.0 come from crates.io (a local `[patch.crates-io]`
-path only while iterating, never committed).
+`turbo-dom-layout` and `turbo-dom` 0.7.0 are pinned to a git rev of turbo-dom#232
+(`[patch.crates-io]` in the root Cargo.toml) until they are on crates.io; `release-guard`
+fails a tag while the pin is there.
 
 ## Release runbook
 
@@ -39,7 +40,7 @@ Required GitHub repo secrets: **`NPM_TOKEN`** (npm token with public-package pub
 package, uploads nothing).
 
 The `turbo-html2pdf-mcp` crate depends on `turbo-html2pdf-core` with an explicit
-`version = "0.6"` (^0.6) alongside its `path` — crates.io requires a version on
+`version = "0.7"` (^0.7) alongside its `path` — crates.io requires a version on
 the dep. It only needs bumping on a **minor** (0.x) change, not every patch;
 keep it in sync with the workspace major.minor when you cross a minor boundary.
 

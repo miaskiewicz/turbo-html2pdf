@@ -4,6 +4,33 @@ All notable changes to turbo-html2pdf are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/); versions follow SemVer. The npm,
 PyPI, and crates.io packages release in lockstep from a `v*` tag (PyPI on `pyv*`).
 
+## [0.7.0] — turbo-dom 0.7.0
+
+Rebuilt on turbo-dom 0.7.0 (`turbo-dom-layout` + `turbo-dom` 0.7). Until those crates are on
+crates.io the root `Cargo.toml` pins them to a git rev of turbo-dom#232 through
+`[patch.crates-io]`; the pin is dropped before the tag (see PUBLISHING.md). The npm,
+PyPI and crates.io packages move to 0.7.0 with turbo-dom, turbo-test and turbo-surf.
+
+- **Changed (render, turbo-dom 0.7.0)**: layout fixes in turbo-dom 0.7.0, each checked
+  against Chrome 156 `page.pdf()` in turbo-dom's parity corpora: Chrome's line box model on
+  the PDF path (turbo-dom#245; inline elements stay flattened into their text runs, below),
+  text advances summed in 1/64 px (#246), no line-height floor (#178), `<img>` is inline by
+  default and an unloaded or src-less `<img>` keeps Chrome's box (#241/#242/#243),
+  background-size / -position / -repeat / -origin / -clip tile like Chrome (#248), list
+  markers (`::marker`, #128), `hyphens: auto` for English (#213), bidi and `dir` (#190/#238)
+  and web-font kerning (#240).
+- **Changed (API)**: html2pdf sets turbo-dom 0.7's new `flatten_inline_elements` on its
+  `LayoutOptions` / `HtmlOptions`: the link annotations and PDF/UA tags assume no inline-box
+  fragments (turbo-dom#210), so inline elements keep the pre-0.7 PDF inline model.
+- **Fixed (fonts)**: caller-supplied fonts (Node, WASM, Python, MCP and the watermark font)
+  load as web fonts (`FontFace::from_web_font_bytes`), as Chrome loads them through
+  `@font-face`: a CFF font's or Apple v1.0 legacy `kern` table is ignored (turbo-dom#240).
+- **Fixed (`pdf-ua`)**: a list item's marker is tagged as its `Lbl` (new `UaRole::ListLabel`,
+  from turbo-dom 0.7's `NodeSources::list_markers`); it was an anonymous `P` inside `LI`,
+  which fails PDF/UA-1 7.2-20.
+- **Tests**: `report_hot_path_breakdown` allows one extra shape per two-word cell (turbo-dom
+  0.7's max-content pass works on a paragraph's words, #241: 6358 shapes, was 6096).
+
 ## [0.6.0] — 2026-10-26 — turbo-dom consolidation
 
 The engine is now built on the turbo-dom workspace crates instead of carrying its own
