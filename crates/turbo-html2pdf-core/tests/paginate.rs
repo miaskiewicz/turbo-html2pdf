@@ -18,7 +18,7 @@ fn box_content() -> FragmentContent {
     FragmentContent::Box {
         background: None,
         border: BorderEdges::default(),
-        border_radius: 0.0,
+        border_radius: turbo_dom_layout::BorderRadii::ZERO,
         shadow: None,
         gradient: None,
         transform: None,

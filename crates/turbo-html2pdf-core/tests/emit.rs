@@ -186,7 +186,7 @@ fn box_fragment(background: Option<Rgba>, border: BorderEdges) -> Fragment {
         FragmentContent::Box {
             background,
             border,
-            border_radius: 0.0,
+            border_radius: turbo_dom_layout::BorderRadii::ZERO,
             shadow: None,
             gradient: None,
             transform: None,

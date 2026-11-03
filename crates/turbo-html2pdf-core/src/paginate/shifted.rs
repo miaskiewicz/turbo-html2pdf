@@ -93,6 +93,7 @@ pub(super) fn window(piece: &Fragment, lo: f32, hi: f32) -> ClipRect {
         y: lo - piece.y,
         width: 2.0 * FAR,
         height: hi - lo,
+        radii: turbo_dom_layout::BorderRadii::ZERO,
     };
     piece.clip.map_or(rows, |own| intersect(own, rows))
 }
@@ -109,6 +110,8 @@ fn intersect(a: ClipRect, b: ClipRect) -> ClipRect {
         y: y0,
         width: (x1 - x0).max(0.0),
         height: (y1 - y0).max(0.0),
+        // The page window only cuts rows; a rounded own clip keeps its corners.
+        radii: a.radii,
     }
 }
 
@@ -122,7 +125,7 @@ mod tests {
         let content = FragmentContent::Box {
             background: None,
             border: BorderEdges::default(),
-            border_radius: 0.0,
+            border_radius: turbo_dom_layout::BorderRadii::ZERO,
             shadow: None,
             gradient: None,
             transform: None,
@@ -261,6 +264,7 @@ mod tests {
             y: 10.0,
             width: 30.0,
             height: 40.0,
+            radii: turbo_dom_layout::BorderRadii::ZERO,
         });
         let got = pieces(&f, 1, (0, 1), &spans(&[320.0, 320.0]));
         // Page 2: own clip rows -10..30 within -1..: -1..30; page 1: 310..350 within ..320.
@@ -278,6 +282,7 @@ mod tests {
                 y: 100.0,
                 width: 1.0,
                 height: 1.0,
+                radii: turbo_dom_layout::BorderRadii::ZERO,
             },
         );
         assert_eq!((none.width, none.height), (0.0, 0.0));

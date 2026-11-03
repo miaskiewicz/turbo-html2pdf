@@ -317,7 +317,7 @@ fn separator_rule() -> Fragment {
         FragmentContent::Box {
             background: Some(Rgba::BLACK),
             border: crate::layout::value::BorderEdges::default(),
-            border_radius: 0.0,
+            border_radius: turbo_dom_layout::BorderRadii::ZERO,
             shadow: None,
             gradient: None,
             transform: None,

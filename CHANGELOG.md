@@ -22,6 +22,11 @@ PyPI and crates.io packages move to 0.7.0 with turbo-dom, turbo-test and turbo-s
 - **Changed (API)**: html2pdf sets turbo-dom 0.7's new `flatten_inline_elements` on its
   `LayoutOptions` / `HtmlOptions`: the link annotations and PDF/UA tags assume no inline-box
   fragments (turbo-dom#210), so inline elements keep the pre-0.7 PDF inline model.
+- **Changed (API, turbo-dom 0.7.0)**: `FragmentContent::Box.border_radius` is a per-corner
+  `BorderRadii` and `ClipRect` gains `radii` (turbo-dom#248/#253). The PDF emitter paints no
+  corner radii or `overflow` clips (as before), so PDFs do not change: the html2pdf corpora
+  are byte-identical between turbo-dom e425311 and f201429 (#253's per-corner radii and
+  overflow clipping). Chrome rounds those corners; html2pdf still does not (pre-existing).
 - **Fixed (fonts)**: caller-supplied fonts (Node, WASM, Python, MCP and the watermark font)
   load as web fonts (`FontFace::from_web_font_bytes`), as Chrome loads them through
   `@font-face`: a CFF font's or Apple v1.0 legacy `kern` table is ignored (turbo-dom#240).

@@ -327,7 +327,7 @@ fn image_frag(name: &str) -> turbo_html2pdf_core::Fragment {
         FragmentContent::Box {
             background: None,
             border: Default::default(),
-            border_radius: 0.0,
+            border_radius: turbo_dom_layout::BorderRadii::ZERO,
             shadow: None,
             gradient: None,
             transform: None,
