@@ -26,6 +26,7 @@ pub(crate) fn layout_options(first_node_id: u32) -> LayoutOptions {
         accept_cmyk: cfg!(feature = "print-color"),
         first_node_id,
         flatten_inline_elements: true,
+        uncapped_images: false,
     }
 }
 

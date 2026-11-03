@@ -14,7 +14,7 @@ use std::collections::BTreeSet;
 
 use pdf_writer::{Content, Name, TextStr};
 
-use crate::layout::fragment::{Fragment, FragmentContent};
+use crate::layout::fragment::{Fragment, FragmentContent, TilePattern};
 use crate::paginate::{Page, CARRIED};
 
 use super::fonts::FontStore;
@@ -515,6 +515,17 @@ fn paint_content(content: &mut Content, frag: &Fragment, ctx: &PaintCtx) {
         FragmentContent::Image(placement) => {
             paint_image(content, frag, placement, ctx.images, ctx.page_height_pt);
         }
+        FragmentContent::Tiles(pattern) => paint_tiles(content, frag, pattern, ctx),
         FragmentContent::Marker(_) => {}
+    }
+}
+
+/// Paint a background pattern: its tile at each snapped tile rectangle meeting the
+/// pattern fragment (the painting area; the layer container clips the rest).
+fn paint_tiles(content: &mut Content, frag: &Fragment, pattern: &TilePattern, ctx: &PaintCtx) {
+    let region = (frag.x, frag.y, frag.width, frag.height);
+    for (x, y, width, height) in pattern.tiles(region) {
+        let tile = Fragment::new(frag.node_id, x, y, width, height, (*pattern.tile).clone());
+        paint_content(content, &tile, ctx);
     }
 }

@@ -68,6 +68,7 @@ fn content_band_kind(frag: &Fragment) -> WrapKind {
         FragmentContent::Box {
             background, border, ..
         } => box_wrap(*background, border),
+        FragmentContent::Tiles(_) => artifact_or_none(frag),
         FragmentContent::Marker(_) => WrapKind::None,
     }
 }
@@ -94,11 +95,18 @@ fn artifact_or_none(frag: &Fragment) -> WrapKind {
 /// Whether a fragment emits any paint operators at all (so a marked-content
 /// bracket would wrap real bytes).
 fn paints(frag: &Fragment) -> bool {
-    match &frag.content {
+    content_paints(&frag.content)
+}
+
+/// Whether a fragment content emits paint operators: a background pattern paints
+/// when its tile does.
+fn content_paints(content: &FragmentContent) -> bool {
+    match content {
         FragmentContent::TextLine { .. } | FragmentContent::Image(_) => true,
         FragmentContent::Box {
             background, border, ..
         } => background.is_some() || border.any_visible(),
+        FragmentContent::Tiles(pattern) => content_paints(&pattern.tile),
         FragmentContent::Marker(_) => false,
     }
 }

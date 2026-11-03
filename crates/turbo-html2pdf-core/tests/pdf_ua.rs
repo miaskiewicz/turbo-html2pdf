@@ -1103,3 +1103,69 @@ fn a_repeated_header_whose_original_is_cut_or_stranded() {
         assert_eq!(of_role(&elems, "THead").len(), 1, "{name}: {elems:?}");
     }
 }
+
+/// A 4x4 opaque red PNG.
+fn red_png() -> Vec<u8> {
+    let mut out = Vec::new();
+    let mut enc = png::Encoder::new(&mut out, 4, 4);
+    enc.set_color(png::ColorType::Rgb);
+    enc.set_depth(png::BitDepth::Eight);
+    let mut w = enc.write_header().expect("png header");
+    w.write_image_data(&[255, 0, 0].repeat(16))
+        .expect("png data");
+    w.finish().expect("png finish");
+    out
+}
+
+/// Resolves `red.png` only.
+struct RedPng(Vec<u8>);
+
+impl turbo_html2pdf_core::ImageResolver for RedPng {
+    fn resolve(&self, name: &str) -> Option<&[u8]> {
+        (name == "red.png").then_some(self.0.as_slice())
+    }
+}
+
+/// A tagged render of `html`, resolving `red.png`.
+fn tagged_with_red_png(html: &str) -> String {
+    let images = RedPng(red_png());
+    let (program, _) = compile(html, &CompileOptions::default()).expect("compile");
+    let cascade = build_cascade("", "", TokenSet::default());
+    let fonts = common::registry();
+    let inputs = RenderInputs {
+        program: &program,
+        data: &serde_json::Value::Null,
+        cascade: &cascade,
+        at_rules: &[],
+        fonts: &fonts,
+        images: &images,
+        now: Some(0),
+    };
+    let pages = render_pages(&inputs, &mut Diagnostics::default()).expect("render pages");
+    let pdf = turbo_html2pdf_core::emit_pdf_with_images(&pages, &opts(), &images);
+    String::from_utf8_lossy(&pdf).into_owned()
+}
+
+/// A tiled background image (turbo-dom 0.7's `FragmentContent::Tiles`) is decoration:
+/// every tile paints inside one `/Artifact` bracket and none gets an MCID.
+#[test]
+fn a_tiled_background_image_is_an_artifact() {
+    let text = tagged_with_red_png(
+        "<div style=\"width:100px;height:50px;background:url('red.png') 0 0/25px 25px\"></div>",
+    );
+    let artifact = text.find("/Artifact BMC").expect("an artifact bracket");
+    let end = artifact + text[artifact..].find("EMC").expect("the bracket closes");
+    assert_eq!(text[artifact..end].matches(" Do").count(), 8, "4x2 tiles");
+    assert!(!text.contains("/MCID"), "no tile is tagged content");
+}
+
+/// A gradient-tiled background paints nothing in this engine (no gradients), so its
+/// pattern needs no artifact bracket.
+#[test]
+fn a_tiled_gradient_background_has_no_artifact_bracket() {
+    let text = tagged_with_red_png(
+        "<div style=\"width:100px;height:50px;\
+         background:linear-gradient(red, blue) 0 0/25px 25px\"></div>",
+    );
+    assert!(!text.contains("/Artifact BMC"), "nothing paints");
+}

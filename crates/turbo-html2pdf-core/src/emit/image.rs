@@ -51,11 +51,18 @@ impl ImageStore {
     }
 
     fn collect_fragment(&mut self, frag: &Fragment, resolver: &dyn ImageResolver) {
-        if let FragmentContent::Image(placement) = &frag.content {
-            self.record(&placement.name, resolver);
-        }
+        self.collect_content(&frag.content, resolver);
         for child in &frag.children {
             self.collect_fragment(child, resolver);
+        }
+    }
+
+    /// Record an image content, or a background pattern's image tile.
+    fn collect_content(&mut self, content: &FragmentContent, resolver: &dyn ImageResolver) {
+        match content {
+            FragmentContent::Image(placement) => self.record(&placement.name, resolver),
+            FragmentContent::Tiles(pattern) => self.collect_content(&pattern.tile, resolver),
+            _ => {}
         }
     }
 

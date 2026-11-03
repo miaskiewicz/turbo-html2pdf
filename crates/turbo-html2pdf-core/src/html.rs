@@ -22,6 +22,7 @@ fn options() -> HtmlOptions<'static> {
         accept_cmyk: cfg!(feature = "print-color"),
         linked_css: "",
         flatten_inline_elements: true,
+        uncapped_images: false,
     }
 }
 
