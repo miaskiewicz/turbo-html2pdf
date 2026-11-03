@@ -147,7 +147,8 @@ impl Derived {
         self.roots.insert(sources.root);
         self.rows.extend(sources.table_rows.iter().copied());
         self.grids.extend(sources.table_grids.iter().copied());
-        self.list_markers.extend(sources.list_markers.keys().copied());
+        self.list_markers
+            .extend(sources.list_markers.keys().copied());
         for (&id, &h) in &sources.elements {
             self.nodes.insert(id, node_info(view, h));
         }
