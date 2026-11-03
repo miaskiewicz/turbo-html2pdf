@@ -9,6 +9,7 @@
 //! bottom edge (the shift paints into the page margins there, as before).
 
 use crate::layout::fragment::{ClipRect, Fragment, NodeId};
+use turbo_dom_layout::{BorderRadii, CornerRadii};
 
 use super::walk::PageSpan;
 
@@ -110,9 +111,24 @@ fn intersect(a: ClipRect, b: ClipRect) -> ClipRect {
         y: y0,
         width: (x1 - x0).max(0.0),
         height: (y1 - y0).max(0.0),
-        // The page window only cuts rows; a rounded own clip keeps its corners.
-        radii: a.radii,
+        // The page window only cuts rows: a rounded own clip keeps the corners of an
+        // edge the window leaves whole and squares those of a cut edge (as
+        // `decorate::slice` squares a split box's).
+        radii: cut_corners(a.radii, y0 > a.y, y1 < a.y + a.height),
     }
+}
+
+/// `radii` with the top corners squared when the top edge is cut, the bottom ones when
+/// the bottom edge is.
+fn cut_corners(radii: BorderRadii, top: bool, bottom: bool) -> BorderRadii {
+    let [tl, tr, br, bl] = radii.corners();
+    let keep = |c: CornerRadii, cut: bool| if cut { CornerRadii::default() } else { c };
+    BorderRadii::from_corners([
+        keep(tl, top),
+        keep(tr, top),
+        keep(br, bottom),
+        keep(bl, bottom),
+    ])
 }
 
 #[cfg(test)]

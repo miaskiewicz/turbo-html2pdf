@@ -10,7 +10,7 @@
 //! |---|---|---|---|---|
 //! | box of the flow root | `Group` | — | — | — |
 //! | box of an anonymous (unsourced) block | `Paragraph` | — | — | — |
-//! | `::marker` box of a list item | `ListLabel` | — | — | — |
+//! | `::marker` box (or inside text line) of a list item | `ListLabel` | — | — | — |
 //! | box of an element (incl. a table row) | by tag | — | `href` (not for rows) | `id` |
 //! | the anonymous grid box of a captioned table | — | — | — | — |
 //! | block marker box | — | — | `href` | — |
@@ -135,8 +135,9 @@ pub(crate) struct Derived {
     /// The anonymous grid boxes of captioned tables: no structure of their own, so the
     /// rows they hold are the table's children (miaskiewicz/turbo-dom#51).
     grids: HashSet<NodeId>,
-    /// List items' `::marker` boxes: unsourced, but the item's label, not a paragraph.
-    list_markers: HashSet<NodeId>,
+    /// List items' `::marker` boxes and text -> the item's box: unsourced, but the
+    /// item's label, not a paragraph.
+    list_markers: HashMap<NodeId, NodeId>,
     nodes: HashMap<NodeId, NodeInfo>,
 }
 
@@ -147,8 +148,7 @@ impl Derived {
         self.roots.insert(sources.root);
         self.rows.extend(sources.table_rows.iter().copied());
         self.grids.extend(sources.table_grids.iter().copied());
-        self.list_markers
-            .extend(sources.list_markers.keys().copied());
+        self.list_markers.extend(&sources.list_markers);
         for (&id, &h) in &sources.elements {
             self.nodes.insert(id, node_info(view, h));
         }
@@ -255,7 +255,11 @@ impl super::Semantics {
         match &frag.content {
             FragmentContent::Box { .. } if d.roots.contains(&frag.node_id) => Some(UaRole::Group),
             FragmentContent::Box { .. } if d.grids.contains(&frag.node_id) => None,
-            FragmentContent::Box { .. } if d.list_markers.contains(&frag.node_id) => {
+            // An inside text marker (`1.` of `ol { list-style-position: inside }`) is a
+            // bare text line with the marker's id.
+            FragmentContent::Box { .. } | FragmentContent::TextLine { .. }
+                if d.list_markers.contains_key(&frag.node_id) =>
+            {
                 Some(UaRole::ListLabel)
             }
             FragmentContent::Box { .. } => match d.nodes.get(&frag.node_id) {
@@ -265,6 +269,13 @@ impl super::Semantics {
             FragmentContent::Image(_) => d.replaced_img(frag).and_then(|info| info.role),
             _ => None,
         }
+    }
+
+    /// The list item box whose `::marker` `frag` belongs to (`None`: not a marker). Every
+    /// box and text line of one marker shares it, so they form one `Lbl`.
+    #[cfg(feature = "pdf-ua")]
+    pub fn marker_owner(&self, frag: &Fragment) -> Option<NodeId> {
+        self.derived.list_markers.get(&frag.node_id).copied()
     }
 
     /// The `/Alt` text of a replaced-image fragment.

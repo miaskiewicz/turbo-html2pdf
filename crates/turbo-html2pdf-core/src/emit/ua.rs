@@ -24,7 +24,7 @@ use std::collections::HashMap;
 use pdf_writer::types::StructRole;
 use pdf_writer::{Content, Finish, Name, Pdf, Ref, TextStr};
 
-use crate::layout::fragment::{Fragment, FragmentContent};
+use crate::layout::fragment::{Fragment, FragmentContent, NodeId};
 use crate::layout::value::BorderEdges;
 use crate::paginate::{Page, CARRIED};
 use crate::semantics::{Semantics, UaRole};
@@ -265,6 +265,9 @@ struct TreeBuilder {
     /// The MCID of each content fragment of the page being walked (by address: the
     /// pages are borrowed for the whole walk).
     order: HashMap<*const Fragment, i32>,
+    /// The `Lbl` node of each list item (by its box id) on the page being walked, so
+    /// every box and text line of its marker joins that one label.
+    labels: HashMap<NodeId, usize>,
 }
 
 impl TreeBuilder {
@@ -273,6 +276,7 @@ impl TreeBuilder {
         for (page, frags) in pages.iter().enumerate() {
             self.semantics = frags.semantics.clone();
             self.order = paint_mcids([&frags.body, &frags.footnotes]);
+            self.labels.clear();
             let mut mcid = 0i32;
             self.walk_band(&frags.body, page, None, &mut mcid);
             self.walk_band(&frags.footnotes, page, None, &mut mcid);
@@ -302,8 +306,50 @@ impl TreeBuilder {
         }
         let holder = self.open_element(frag, page, parent);
         self.attach_content(frag, page, holder, mcid);
-        for child in &frag.children {
-            self.walk(child, page, holder, mcid);
+        match holder.filter(|_| self.semantics.role(frag) == Some(UaRole::ListItem)) {
+            Some(item) => self.walk_item(&frag.children, page, item, mcid),
+            None => {
+                for child in &frag.children {
+                    self.walk(child, page, holder, mcid);
+                }
+            }
+        }
+    }
+
+    /// A list item's children (PDF/UA-1 7.2-20: an `LI` holds only `Lbl` and `LBody`):
+    /// one `Lbl` per marker (an outside marker is a child box, an inside one sits in the
+    /// item's first line), opened first, and everything else in one synthetic `LBody`.
+    fn walk_item(&mut self, children: &[Fragment], page: usize, item: usize, mcid: &mut i32) {
+        let mut markers = Vec::new();
+        self.collect_markers(children, &mut markers);
+        for marker in markers {
+            if !self.labels.contains_key(&marker) {
+                let label = self.push_node(StructRole::Lbl, None, page);
+                self.nodes[item].children.push(label);
+                self.labels.insert(marker, label);
+            }
+        }
+        let is_label = |f: &Fragment| self.semantics.role(f) == Some(UaRole::ListLabel);
+        let parent = if children.iter().all(is_label) {
+            item
+        } else {
+            let body = self.push_node(StructRole::LBody, None, page);
+            self.nodes[item].children.push(body);
+            body
+        };
+        for child in children {
+            self.walk(child, page, Some(parent), mcid);
+        }
+    }
+
+    /// The marker ids under `frags` in walk order, not descending into a nested item.
+    fn collect_markers(&self, frags: &[Fragment], out: &mut Vec<NodeId>) {
+        for f in frags {
+            match self.semantics.role(f) {
+                Some(UaRole::ListLabel) => out.extend(self.semantics.marker_owner(f)),
+                Some(UaRole::ListItem) => {}
+                _ => self.collect_markers(&f.children, out),
+            }
         }
     }
 
@@ -317,11 +363,17 @@ impl TreeBuilder {
     ) -> Option<usize> {
         let role = match self.semantics.role(frag) {
             Some(UaRole::Artifact) | None => return parent,
-            // A marker's own inner box (the same marker id) belongs to its `Lbl`.
-            Some(UaRole::ListLabel)
-                if parent.is_some_and(|p| self.nodes[p].role == StructRole::Lbl) =>
-            {
-                return parent
+            // Every box and text line of a marker (keyed by its owning item) belongs to
+            // the one `Lbl` its item opened for it.
+            Some(UaRole::ListLabel) => {
+                if let Some(&label) = self
+                    .semantics
+                    .marker_owner(frag)
+                    .and_then(|o| self.labels.get(&o))
+                {
+                    return Some(label);
+                }
+                UaRole::ListLabel
             }
             Some(r) => r,
         };

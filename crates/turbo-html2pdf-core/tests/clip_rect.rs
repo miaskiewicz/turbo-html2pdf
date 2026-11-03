@@ -21,6 +21,10 @@ const CLIPPED: &str = "<div style=\"position:relative;height:100px\"><div style=
     left:0;top:0;width:50px;height:50px;background:#ff0000;clip:rect(10px,40px,40px,10px)\"></div></div>";
 
 fn pages(html: &str) -> Vec<Page> {
+    pages_with(html, &turbo_html2pdf_core::NoImages)
+}
+
+fn pages_with(html: &str, images: &dyn turbo_html2pdf_core::ImageResolver) -> Vec<Page> {
     let (program, _) = compile(html, &CompileOptions::default()).expect("compile");
     let cascade = build_cascade("", "", TokenSet::default());
     let fonts = common::registry();
@@ -30,7 +34,7 @@ fn pages(html: &str) -> Vec<Page> {
         cascade: &cascade,
         at_rules: &[],
         fonts: &fonts,
-        images: &turbo_html2pdf_core::NoImages,
+        images,
         now: Some(0),
     };
     render_pages(&inputs, &mut Diagnostics::default()).expect("render_pages")
@@ -62,8 +66,8 @@ fn have_pdftoppm() -> bool {
 }
 
 /// The emitted page rasterized at 96 dpi by `pdftoppm`: its width and RGB bytes.
-fn raster(pdf: &[u8]) -> (usize, Vec<u8>) {
-    let dir = std::env::temp_dir().join(format!("turbo_clip_rect_{}", std::process::id()));
+fn raster(pdf: &[u8], name: &str) -> (usize, Vec<u8>) {
+    let dir = std::env::temp_dir().join(format!("turbo_clip_rect_{name}_{}", std::process::id()));
     std::fs::create_dir_all(&dir).expect("temp dir");
     let input = dir.join("clip.pdf");
     std::fs::write(&input, pdf).expect("write pdf");
@@ -102,7 +106,7 @@ fn a_partially_clipped_box_rasterizes_like_chrome_156() {
         eprintln!("pdftoppm not on PATH; skipping the raster probe");
         return;
     }
-    let (width, rgb) = raster(&pdf);
+    let (width, rgb) = raster(&pdf, "partial");
     // The containing block (the relative `<div>`), in page coordinates.
     let cb = &pages[0].body[0];
     let red = |x: f32, y: f32| {
@@ -119,16 +123,39 @@ fn a_partially_clipped_box_rasterizes_like_chrome_156() {
     }
 }
 
-/// A rounded box whose background is tiled (here a 25px gradient tile): turbo-dom 0.7
+/// A rounded box whose background is tiled (here a red PNG at 25px): turbo-dom 0.7
 /// puts the tiles in a container clipped to the rounded box (miaskiewicz/turbo-dom#248,
 /// #253). Chrome 156 (`TILED_ROUNDED`, headless screenshot) leaves the corners white.
 const TILED_ROUNDED: &str = "<div style=\"width:100px;height:100px;border-radius:40px;\
-    background:linear-gradient(#ff0000,#ff0000) 0 0/25px 25px\"></div>";
+    background:url('red.png') 0 0/25px 25px\"></div>";
+
+/// A 4x4 opaque red PNG.
+fn red_png() -> Vec<u8> {
+    let mut out = Vec::new();
+    let mut enc = png::Encoder::new(&mut out, 4, 4);
+    enc.set_color(png::ColorType::Rgb);
+    enc.set_depth(png::BitDepth::Eight);
+    let mut w = enc.write_header().expect("png header");
+    w.write_image_data(&[255, 0, 0].repeat(16))
+        .expect("png data");
+    w.finish().expect("png finish");
+    out
+}
+
+/// Resolves `red.png` only.
+struct RedPng(Vec<u8>);
+
+impl turbo_html2pdf_core::ImageResolver for RedPng {
+    fn resolve(&self, name: &str) -> Option<&[u8]> {
+        (name == "red.png").then_some(self.0.as_slice())
+    }
+}
 
 #[test]
 fn a_tiled_background_keeps_inside_its_rounded_corners() {
-    let pages = pages(TILED_ROUNDED);
-    let pdf = emit_pdf(&pages, &EmitOptions::default());
+    let images = RedPng(red_png());
+    let pages = pages_with(TILED_ROUNDED, &images);
+    let pdf = turbo_html2pdf_core::emit_pdf_with_images(&pages, &EmitOptions::default(), &images);
     // The rounded clip is a curved path (`c`), not a rectangle.
     let text = String::from_utf8_lossy(&pdf);
     let clip = text.find("W\nn").expect("a clipping path");
@@ -137,7 +164,7 @@ fn a_tiled_background_keeps_inside_its_rounded_corners() {
         eprintln!("pdftoppm not on PATH; skipping the raster probe");
         return;
     }
-    let (width, rgb) = raster(&pdf);
+    let (width, rgb) = raster(&pdf, "tiled");
     let b = &pages[0].body[0];
     let red = |x: f32, y: f32| {
         let (px, py) = ((b.x + x) as usize, (b.y + y) as usize);

@@ -527,16 +527,22 @@ fn assert_list_items(pdf: &[u8], name: &str, items: usize, want: &[&str]) {
             assert_eq!(elems[parent].0, "LI", "{role} parent: {elems:?}");
         }
     }
-    if have("verapdf") {
-        let path = write_temp(pdf, name);
-        let out = Command::new("verapdf")
-            .args(["--flavour", "ua1"])
-            .arg(&path)
-            .output()
-            .expect("run verapdf");
-        let stdout = String::from_utf8_lossy(&out.stdout);
-        assert!(stdout.contains("isCompliant=\"true\""), "{name}:\n{stdout}");
+    assert_verapdf_ua1(pdf, name);
+}
+
+/// The PDF passes `verapdf --flavour ua1` (skipped when veraPDF is not on `PATH`).
+fn assert_verapdf_ua1(pdf: &[u8], name: &str) {
+    if !have("verapdf") {
+        return;
     }
+    let path = write_temp(pdf, name);
+    let out = Command::new("verapdf")
+        .args(["--flavour", "ua1"])
+        .arg(&path)
+        .output()
+        .expect("run verapdf");
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    assert!(stdout.contains("isCompliant=\"true\""), "{name}:\n{stdout}");
 }
 
 #[test]

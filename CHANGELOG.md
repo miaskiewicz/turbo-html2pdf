@@ -23,18 +23,27 @@ PyPI and crates.io packages move to 0.7.0 with turbo-dom, turbo-test and turbo-s
   `LayoutOptions` / `HtmlOptions`: the link annotations and PDF/UA tags assume no inline-box
   fragments (turbo-dom#210), so inline elements keep the pre-0.7 PDF inline model.
 - **Changed (API, turbo-dom 0.7.0)**: `FragmentContent::Box.border_radius` is a per-corner
-  `BorderRadii` and `ClipRect` gains `radii` (turbo-dom#248/#253). The PDF emitter paints no
-  corner radii or `overflow` clips (as before), so PDFs do not change: the html2pdf corpora
-  are byte-identical between turbo-dom e425311 and f201429 (#253's per-corner radii and
-  overflow clipping). Chrome rounds those corners; html2pdf still does not (pre-existing).
-- **Fixed (fonts)**: caller-supplied fonts (Node, WASM, Python, MCP and the watermark font)
+  `BorderRadii` and `ClipRect` gains `radii` (turbo-dom#248/#253). The emitter still paints
+  box borders and backgrounds with square corners (pre-existing; Chrome rounds them).
+- **Fixed (render)**: a clip region with corner radii is painted as a rounded clipping path.
+  turbo-dom 0.7 clips a rounded box's tiled background (`background-image` with
+  `background-size`/`-repeat`) to the box's rounded corners; html2pdf clipped those tiles to a
+  rectangle, so they spilled past the corners. Now they stay inside, as in Chrome 156. When a
+  page break cuts such a clip, the corners on the cut edge are square, as a split box's are.
+  turbo-dom 0.7.0 is pinned at turbo-dom#232 `cb1b799`; at that pin, before this fix, the
+  html2pdf, -svg and -extra parity corpora are byte-identical to `b-0.7.0`.
+- **Changed (fonts)**: caller-supplied fonts (Node, WASM, Python, MCP and the watermark font)
   load as web fonts (`FontFace::from_web_font_bytes`), as Chrome loads them through
-  `@font-face`: a CFF font's or Apple v1.0 legacy `kern` table is ignored (turbo-dom#240).
-- **Fixed (`pdf-ua`)**: a list item's marker is tagged as its `Lbl` (new `UaRole::ListLabel`,
-  from turbo-dom 0.7's `NodeSources::list_markers`); it was an anonymous `P` inside `LI`,
-  which fails PDF/UA-1 7.2-20.
-- **Tests**: `report_hot_path_breakdown` allows one extra shape per two-word cell (turbo-dom
-  0.7's max-content pass works on a paragraph's words, #241: 6358 shapes, was 6096).
+  `@font-face` (turbo-dom#240). A CFF font, or one whose legacy `kern` table is not version 0
+  (e.g. Apple v1.0), loses that legacy kerning, so its text widths can shift.
+- **Fixed (`pdf-ua`)**: list items follow PDF/UA-1 7.2-20: an `LI` holds only its `Lbl` (the
+  marker, new `UaRole::ListLabel` from turbo-dom 0.7's `NodeSources::list_markers`) and an
+  `LBody` with the item's content. Before, the marker was an anonymous `P` and the content sat
+  loose in the `LI`. Every box and text line of one marker forms one `Lbl`, including
+  `list-style-position: inside` markers and `ol` numbers; `list-style: none` items have only an
+  `LBody`.
+- **Tests**: `report_hot_path_breakdown`'s budget is the measured 6358 shapes plus 100 (was
+  6096: turbo-dom 0.7's max-content pass works on a paragraph's words, #241).
 
 ## [0.6.0] — 2026-10-26 — turbo-dom consolidation
 
