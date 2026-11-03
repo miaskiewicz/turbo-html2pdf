@@ -516,6 +516,7 @@ fn kids_of(elems: &std::collections::BTreeMap<u32, (String, u32)>, node: u32) ->
 /// PDF/UA-1 7.2-20 shape of every list item: `LI` holds exactly `want`, every `Lbl` and
 /// `LBody` sits directly in an `LI`, and the PDF passes veraPDF (when on `PATH`).
 fn assert_list_items(pdf: &[u8], name: &str, items: usize, want: &[&str]) {
+    assert_struct_tree(pdf);
     let elems = struct_elems(pdf);
     let lis: Vec<u32> = elems
         .iter()
@@ -612,6 +613,7 @@ fn an_ordered_lists_markers_are_one_label_each() {
 
 /// A table's rows sit in `Table` or its row groups, never loose (PDF/UA-1 7.2-4).
 fn assert_rows_in_tables(pdf: &[u8], name: &str) {
+    assert_struct_tree(pdf);
     let elems = struct_elems(pdf);
     for (role, parent) in elems.values() {
         if role == "TR" {
@@ -820,4 +822,299 @@ fn a_list_item_taller_than_a_page_is_one_item() {
         of_role(&elems, "P").is_empty(),
         "no loose paragraphs: {elems:?}"
     );
+}
+
+// --- Struct-tree integrity (round-3 review of #59) ---------------------------------
+
+/// The objects of an (uncompressed-object) PDF: number -> body text.
+fn objects(pdf: &[u8]) -> std::collections::BTreeMap<u32, String> {
+    let text = String::from_utf8_lossy(pdf);
+    let mut out = std::collections::BTreeMap::new();
+    for (at, _) in text.match_indices(" 0 obj") {
+        let num: u32 = text[..at]
+            .rsplit(|c: char| !c.is_ascii_digit())
+            .next()
+            .and_then(|n| n.parse().ok())
+            .unwrap_or(0);
+        let end = text[at..].find("endobj").unwrap_or(0);
+        out.insert(num, text[at + 6..at + end].to_string());
+    }
+    out
+}
+
+/// The integer after `key` in `body` (`/Pg 3 0 R` -> 3).
+fn int_after(body: &str, key: &str) -> Option<u32> {
+    body.split(key)
+        .nth(1)?
+        .split_whitespace()
+        .next()?
+        .trim_end_matches(['>', ']'])
+        .parse()
+        .ok()
+}
+
+/// One `/K` kid of a struct element.
+#[derive(Debug, PartialEq)]
+enum Kid {
+    Elem(u32),
+    /// (page object, MCID).
+    Mcid(u32, u32),
+    /// The annotation object of an `OBJR`.
+    Objr(u32),
+}
+
+/// The `/K` kids of struct element `body` (bare MCIDs belong to its `/Pg`).
+fn kids(body: &str) -> Vec<Kid> {
+    let Some(k) = body.split("/K ").nth(1) else {
+        return Vec::new();
+    };
+    let k = k.trim_start();
+    let inner = if let Some(rest) = k.strip_prefix('[') {
+        let mut depth = 0i32;
+        let end = rest
+            .char_indices()
+            .find(|&(i, c)| {
+                if rest[i..].starts_with("<<") {
+                    depth += 1;
+                } else if rest[i..].starts_with(">>") {
+                    depth -= 1;
+                }
+                c == ']' && depth <= 0
+            })
+            .map_or(rest.len(), |(i, _)| i);
+        rest[..end].to_string()
+    } else {
+        k.lines().next().unwrap_or("").to_string()
+    };
+    let pg = int_after(body, "/Pg ");
+    let mut out = Vec::new();
+    let mut rest = inner.as_str();
+    while !rest.trim().is_empty() {
+        rest = rest.trim_start();
+        if let Some(d) = rest.strip_prefix("<<") {
+            let end = d.find(">>").expect("dict end");
+            let dict = &d[..end];
+            if dict.contains("/OBJR") {
+                out.push(Kid::Objr(int_after(dict, "/Obj ").expect("OBJR /Obj")));
+            } else {
+                let page = int_after(dict, "/Pg ").or(pg).expect("MCR page");
+                out.push(Kid::Mcid(
+                    page,
+                    int_after(dict, "/MCID ").expect("MCR MCID"),
+                ));
+            }
+            rest = &d[end + 2..];
+            continue;
+        }
+        let mut toks = rest.splitn(4, char::is_whitespace);
+        let n: u32 = toks.next().unwrap().parse().expect("kid number");
+        let tail: Vec<&str> = rest.split_whitespace().take(3).collect();
+        if tail.len() == 3 && tail[2] == "R" {
+            out.push(Kid::Elem(n));
+            rest = rest.splitn(4, char::is_whitespace).nth(3).unwrap_or("");
+        } else {
+            out.push(Kid::Mcid(pg.expect("bare MCID needs /Pg"), n));
+            rest = rest.split_once(char::is_whitespace).map_or("", |(_, r)| r);
+        }
+    }
+    out
+}
+
+/// The object numbers in an array body (`[3 0 R 7 0 R]`).
+fn refs(body: &str) -> Vec<u32> {
+    let toks: Vec<&str> = body
+        .split(|c: char| c.is_whitespace() || c == '[' || c == ']')
+        .filter(|t| !t.is_empty())
+        .collect();
+    toks.windows(3)
+        .filter(|w| w[2] == "R")
+        .filter_map(|w| w[0].parse().ok())
+        .collect()
+}
+
+/// Check the tagged PDF's structure tree against its pages:
+/// - every (page, MCID) of the content streams is owned by exactly one struct element
+///   kid, and every kid's MCID is in its `/Pg`'s content stream (no duplicates either side);
+/// - the ParentTree maps each page's MCID to its owning element, and each `OBJR`
+///   annotation's `/StructParent` to the element holding it;
+/// - an `LI`'s first kid is its `Lbl` (when it has one).
+fn assert_struct_tree(pdf: &[u8]) {
+    use std::collections::{BTreeMap, BTreeSet};
+    let objs = objects(pdf);
+    // Pages: object -> (content stream MCIDs, StructParents key).
+    let mut page_mcids: BTreeSet<(u32, u32)> = BTreeSet::new();
+    let mut page_keys: BTreeMap<u32, u32> = BTreeMap::new();
+    for (&n, body) in &objs {
+        if !body.contains("/Type /Page\n") {
+            continue;
+        }
+        let stream = &objs[&int_after(body, "/Contents ").expect("page contents")];
+        for m in stream.split("/MCID ").skip(1) {
+            let mcid: u32 = m.split_whitespace().next().unwrap().parse().unwrap();
+            assert!(
+                page_mcids.insert((n, mcid)),
+                "MCID {mcid} twice on page {n}"
+            );
+        }
+        page_keys.insert(
+            n,
+            int_after(body, "/StructParents ").expect("StructParents"),
+        );
+    }
+    // Struct elements: who owns each (page, MCID), each OBJR.
+    let mut owner: BTreeMap<(u32, u32), u32> = BTreeMap::new();
+    let mut objr: BTreeMap<u32, u32> = BTreeMap::new();
+    for (&n, body) in objs.iter().filter(|(_, b)| b.contains("/Type /StructElem")) {
+        let ks = kids(body);
+        for k in &ks {
+            match *k {
+                Kid::Mcid(p, m) => {
+                    assert!(
+                        owner.insert((p, m), n).is_none(),
+                        "MCID {m} of page {p} owned twice"
+                    );
+                }
+                Kid::Objr(a) => {
+                    assert!(
+                        objr.insert(a, n).is_none(),
+                        "annotation {a} in two elements"
+                    );
+                }
+                Kid::Elem(_) => {}
+            }
+        }
+        if body.contains("/S /LI\n") {
+            if let Some(Kid::Elem(first)) = ks.first() {
+                let lbl = ks
+                    .iter()
+                    .any(|k| matches!(k, Kid::Elem(e) if objs[e].contains("/S /Lbl\n")));
+                if lbl {
+                    assert!(
+                        objs[first].contains("/S /Lbl\n"),
+                        "LI {n}: kids[0] is not its Lbl"
+                    );
+                }
+            }
+        }
+    }
+    let owned: BTreeSet<(u32, u32)> = owner.keys().copied().collect();
+    assert_eq!(owned, page_mcids, "struct MCIDs vs content-stream MCIDs");
+    // ParentTree.
+    let root = objs
+        .values()
+        .find(|b| b.contains("/Type /StructTreeRoot"))
+        .expect("root");
+    let nums = root.split("/Nums").nth(1).expect("Nums");
+    let nums = &nums[..nums.find(']').unwrap()];
+    let toks: Vec<&str> = nums
+        .split(|c: char| c.is_whitespace() || c == '[')
+        .filter(|t| !t.is_empty())
+        .collect();
+    let mut tree: BTreeMap<u32, u32> = BTreeMap::new();
+    for e in toks.chunks(4) {
+        tree.insert(e[0].parse().unwrap(), e[1].parse().unwrap());
+    }
+    for (&page, &key) in &page_keys {
+        let arr = refs(&objs[&tree[&key]]);
+        for (mcid, el) in arr.iter().enumerate() {
+            if let Some(&o) = owner.get(&(page, mcid as u32)) {
+                assert_eq!(*el, o, "ParentTree page {page} MCID {mcid}");
+            }
+        }
+        let count = page_mcids.iter().filter(|(p, _)| *p == page).count();
+        assert_eq!(arr.len(), count, "ParentTree array length of page {page}");
+    }
+    for (&annot, &el) in &objr {
+        let key = int_after(&objs[&annot], "/StructParent ").expect("annotation StructParent");
+        assert_eq!(
+            tree.get(&key),
+            Some(&el),
+            "ParentTree of annotation {annot}"
+        );
+    }
+}
+
+/// The page objects in page order (`/Kids` of the page tree).
+fn page_objects(pdf: &[u8]) -> Vec<u32> {
+    let objs = objects(pdf);
+    let tree = objs
+        .values()
+        .find(|b| b.contains("/Type /Pages"))
+        .expect("page tree");
+    refs(tree.split("/Kids").nth(1).expect("Kids"))
+}
+
+/// A `<thead>` holding a link, repeated on every page of a 3+ page table: each page has a
+/// clickable Link annotation, the copies are artifacts but their annotations are kids
+/// (`OBJR`) of the one `Link` element (PDF/UA-1 7.18.5), the anchor is one destination.
+#[cfg(feature = "xref")]
+#[test]
+fn a_link_in_a_repeated_header_is_on_every_page() {
+    let html = format!(
+        "<table><thead><tr><th><a href=\"#end\">Go to the end</a></th><th>Value</th></tr></thead>\
+         <tbody>{}</tbody></table><p id=\"end\">The end.</p>",
+        rows(0, 200)
+    );
+    let pdf = ua_pdf(&html, "");
+    assert_rows_in_tables(&pdf, "turbo_pdf_ua_repeated_link.pdf");
+    let objs = objects(&pdf);
+    let pages = page_objects(&pdf);
+    assert!(pages.len() >= 3, "{} pages", pages.len());
+    for p in &pages[..pages.len() - 1] {
+        let annots = objs[p]
+            .split("/Annots")
+            .nth(1)
+            .map(refs)
+            .unwrap_or_default();
+        let links = annots
+            .iter()
+            .filter(|a| objs[a].contains("/Subtype /Link"))
+            .count();
+        assert!(links >= 1, "page {p} has its header link");
+    }
+    let elems = struct_elems(&pdf);
+    let link_elems = of_role(&elems, "Link");
+    assert_eq!(link_elems.len(), 1, "{elems:?}");
+    let objr = kids(&objs[&link_elems[0]])
+        .into_iter()
+        .filter(|k| matches!(k, Kid::Objr(_)))
+        .count();
+    assert!(
+        objr >= pages.len() - 1,
+        "{objr} OBJRs for {} pages",
+        pages.len()
+    );
+    assert_eq!(
+        of_role(&elems, "TH").len(),
+        2,
+        "the header is tagged once: {elems:?}"
+    );
+    let dests = objs.values().filter(|b| b.contains("/end [")).count();
+    assert_eq!(dests, 1, "one named destination");
+}
+
+/// A repeated header whose original is cut away: a header row taller than a page is
+/// sliced (its original's paint is cut at the page end), and a header placed alone at a
+/// page bottom repeats on the next page. Both stay tagged once and pass veraPDF.
+#[test]
+fn a_repeated_header_whose_original_is_cut_or_stranded() {
+    let tall = format!(
+        "<table><thead><tr><th style=\"height:1400px\">Tall</th><th>V</th></tr></thead><tbody>{}</tbody></table>",
+        rows(0, 60)
+    );
+    let stranded = format!(
+        "<p style=\"height:1000px\">Top</p><table><thead><tr><th>H</th><th>V</th></tr></thead>\
+         <tbody>{}</tbody></table>",
+        rows(0, 80)
+    );
+    for (html, name, ths) in [
+        (tall, "turbo_pdf_ua_tall_head.pdf", 2),
+        (stranded, "turbo_pdf_ua_stranded_head.pdf", 2),
+    ] {
+        let pdf = ua_pdf(&html, "");
+        assert_rows_in_tables(&pdf, name);
+        let elems = struct_elems(&pdf);
+        assert_eq!(of_role(&elems, "TH").len(), ths, "{name}: {elems:?}");
+        assert_eq!(of_role(&elems, "THead").len(), 1, "{name}: {elems:?}");
+    }
 }
