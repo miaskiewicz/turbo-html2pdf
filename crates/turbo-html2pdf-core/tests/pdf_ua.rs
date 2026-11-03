@@ -605,3 +605,65 @@ fn an_ordered_lists_markers_are_one_label_each() {
     let pdf = ua_pdf("<ol><li>One</li><li>Two</li><li>Three</li></ol>", "");
     assert_list_items(&pdf, "turbo_pdf_ua_ol.pdf", 3, &["Lbl", "LBody"]);
 }
+
+/// A table's rows sit in `Table` or its row groups, never loose (PDF/UA-1 7.2-4).
+fn assert_rows_in_tables(pdf: &[u8], name: &str) {
+    let elems = struct_elems(pdf);
+    for (role, parent) in elems.values() {
+        if role == "TR" {
+            let up = elems[parent].0.as_str();
+            assert!(
+                matches!(up, "Table" | "THead" | "TBody" | "TFoot"),
+                "TR in {up}: {elems:?}"
+            );
+        }
+        if matches!(role.as_str(), "THead" | "TBody" | "TFoot") {
+            assert_eq!(elems[parent].0, "Table", "{role} parent: {elems:?}");
+        }
+    }
+    assert_verapdf_ua1(pdf, name);
+}
+
+#[test]
+fn table_rows_are_in_their_row_groups() {
+    let row = |c: &str| format!("<tr><td>{c}</td><td>1</td></tr>");
+    let cases = [
+        (
+            format!("<table>{}{}</table>", row("a"), row("b")),
+            "turbo_pdf_ua_table_plain.pdf",
+        ),
+        (
+            format!(
+                "<table><thead><tr><th>H</th><th>V</th></tr></thead><tbody>{}</tbody>\
+                 <tfoot>{}</tfoot></table>",
+                row("a"),
+                row("f")
+            ),
+            "turbo_pdf_ua_table_groups.pdf",
+        ),
+    ];
+    for (html, name) in cases {
+        let pdf = ua_pdf(&html, "");
+        assert_rows_in_tables(&pdf, name);
+        let elems = struct_elems(&pdf);
+        if html.contains("<thead>") {
+            for group in ["THead", "TBody", "TFoot"] {
+                assert!(
+                    elems.values().any(|(r, _)| r == group),
+                    "{group}: {elems:?}"
+                );
+            }
+        }
+    }
+}
+
+#[test]
+fn rows_of_a_table_split_across_pages_stay_in_a_table() {
+    let rows: String = (0..120)
+        .map(|i| format!("<tr><td>Row {i}</td><td>{i}</td></tr>"))
+        .collect();
+    let html = format!(
+        "<table><thead><tr><th>Name</th><th>Value</th></tr></thead><tbody>{rows}</tbody></table>"
+    );
+    assert_rows_in_tables(&ua_pdf(&html, ""), "turbo_pdf_ua_table_split.pdf");
+}
