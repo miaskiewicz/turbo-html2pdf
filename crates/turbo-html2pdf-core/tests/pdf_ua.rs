@@ -458,7 +458,7 @@ fn text_carried_onto_the_previous_page_is_an_artifact() {
 fn tags_list_markers_as_the_items_label() {
     // turbo-dom 0.7 lays out list markers (`::marker`, miaskiewicz/turbo-dom#128). PDF/UA-1
     // 7.2-20: an `LI` holds only `Lbl` / `LBody` structure, so each item's marker is its
-    // `Lbl`, not an anonymous `P`.
+    // `Lbl`, and its content is the item's `LBody`.
     let elems = struct_elems(&build_pdf());
     let items: Vec<u32> = elems
         .iter()
@@ -472,7 +472,7 @@ fn tags_list_markers_as_the_items_label() {
             .filter(|(_, p)| *p == item)
             .map(|(r, _)| r.as_str())
             .collect();
-        assert_eq!(kids, ["Lbl"], "LI {item}: {elems:?}");
+        assert_eq!(kids, ["Lbl", "LBody"], "LI {item}: {elems:?}");
     }
     // A marker's inner box (same marker id) is part of its Lbl, not a nested Lbl.
     for (role, parent) in elems.values() {
@@ -480,4 +480,122 @@ fn tags_list_markers_as_the_items_label() {
             assert_eq!(elems[parent].0, "LI", "{elems:?}");
         }
     }
+}
+
+/// Render `html` (with the suite CSS plus `css`) to a tagged PDF.
+fn ua_pdf(html: &str, css: &str) -> Vec<u8> {
+    let (program, _) = compile(html, &CompileOptions::default()).expect("compile");
+    let cascade = build_cascade(&format!("{CSS} {css}"), "", TokenSet::default());
+    let fonts = common::registry();
+    let inputs = RenderInputs {
+        program: &program,
+        data: &serde_json::json!({}),
+        cascade: &cascade,
+        at_rules: &[],
+        fonts: &fonts,
+        images: &turbo_html2pdf_core::NoImages,
+        now: Some(0),
+    };
+    let mut diags = Diagnostics::default();
+    emit_pdf(&render_pages(&inputs, &mut diags).expect("render"), &opts())
+}
+
+/// The roles of `node`'s structure children, in object order.
+fn kids_of(elems: &std::collections::BTreeMap<u32, (String, u32)>, node: u32) -> Vec<&str> {
+    elems
+        .values()
+        .filter(|(_, p)| *p == node)
+        .map(|(r, _)| r.as_str())
+        .collect()
+}
+
+/// PDF/UA-1 7.2-20 shape of every list item: `LI` holds exactly `want`, every `Lbl` and
+/// `LBody` sits directly in an `LI`, and the PDF passes veraPDF (when on `PATH`).
+fn assert_list_items(pdf: &[u8], name: &str, items: usize, want: &[&str]) {
+    let elems = struct_elems(pdf);
+    let lis: Vec<u32> = elems
+        .iter()
+        .filter(|(_, (r, _))| r == "LI")
+        .map(|(&n, _)| n)
+        .collect();
+    assert_eq!(lis.len(), items, "{elems:?}");
+    for li in lis {
+        assert_eq!(kids_of(&elems, li), want, "LI {li}: {elems:?}");
+    }
+    for (role, parent) in elems.values() {
+        if role == "Lbl" || role == "LBody" {
+            assert_eq!(elems[parent].0, "LI", "{role} parent: {elems:?}");
+        }
+    }
+    if have("verapdf") {
+        let path = write_temp(pdf, name);
+        let out = Command::new("verapdf")
+            .args(["--flavour", "ua1"])
+            .arg(&path)
+            .output()
+            .expect("run verapdf");
+        let stdout = String::from_utf8_lossy(&out.stdout);
+        assert!(stdout.contains("isCompliant=\"true\""), "{name}:\n{stdout}");
+    }
+}
+
+#[test]
+fn a_paragraph_in_a_list_item_is_in_its_lbody() {
+    let pdf = ua_pdf("<ul><li><p>One</p></li><li><p>Two</p></li></ul>", "");
+    assert_list_items(&pdf, "turbo_pdf_ua_li_p.pdf", 2, &["Lbl", "LBody"]);
+    let elems = struct_elems(&pdf);
+    for (role, parent) in elems.values() {
+        if role == "P" {
+            assert_eq!(elems[parent].0, "LBody", "{elems:?}");
+        }
+    }
+}
+
+#[test]
+fn a_list_nested_in_an_ordered_list_item_is_in_its_lbody() {
+    let pdf = ua_pdf(
+        "<ol><li>Outer<ul><li>Inner a</li><li>Inner b</li></ul></li><li>Last</li></ol>",
+        "",
+    );
+    assert_list_items(&pdf, "turbo_pdf_ua_nested.pdf", 4, &["Lbl", "LBody"]);
+    let elems = struct_elems(&pdf);
+    let lists: Vec<&u32> = elems
+        .iter()
+        .filter(|(_, (r, _))| r == "L")
+        .map(|(_, (_, p))| p)
+        .collect();
+    assert_eq!(lists.len(), 2, "{elems:?}");
+    assert!(lists.iter().any(|p| elems[p].0 == "LBody"), "{elems:?}");
+}
+
+#[test]
+fn an_unmarked_list_item_has_only_an_lbody() {
+    let pdf = ua_pdf(
+        "<ul><li>One</li><li>Two</li></ul>",
+        "li { list-style: none; }",
+    );
+    assert_list_items(&pdf, "turbo_pdf_ua_none.pdf", 2, &["LBody"]);
+}
+
+#[test]
+fn an_inside_marker_is_the_items_label() {
+    let css = "li { list-style-position: inside; }";
+    for (html, name) in [
+        (
+            "<ul><li>One</li><li>Two</li></ul>",
+            "turbo_pdf_ua_inside_ul.pdf",
+        ),
+        (
+            "<ol><li>One</li><li>Two</li></ol>",
+            "turbo_pdf_ua_inside_ol.pdf",
+        ),
+    ] {
+        assert_list_items(&ua_pdf(html, css), name, 2, &["Lbl", "LBody"]);
+    }
+}
+
+#[test]
+fn an_ordered_lists_markers_are_one_label_each() {
+    let pdf = ua_pdf("<ol><li>One</li><li>Two</li><li>Three</li></ol>", "");
+    assert_list_items(&pdf, "turbo_pdf_ua_ol.pdf", 3, &["Lbl", "LBody"]);
 }

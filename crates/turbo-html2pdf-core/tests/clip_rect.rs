@@ -118,3 +118,42 @@ fn a_partially_clipped_box_rasterizes_like_chrome_156() {
         assert!(!red(x, y), "({x},{y}) is clipped away");
     }
 }
+
+/// A rounded box whose background is tiled (here a 25px gradient tile): turbo-dom 0.7
+/// puts the tiles in a container clipped to the rounded box (miaskiewicz/turbo-dom#248,
+/// #253). Chrome 156 (`TILED_ROUNDED`, headless screenshot) leaves the corners white.
+const TILED_ROUNDED: &str = "<div style=\"width:100px;height:100px;border-radius:40px;\
+    background:linear-gradient(#ff0000,#ff0000) 0 0/25px 25px\"></div>";
+
+#[test]
+fn a_tiled_background_keeps_inside_its_rounded_corners() {
+    let pages = pages(TILED_ROUNDED);
+    let pdf = emit_pdf(&pages, &EmitOptions::default());
+    // The rounded clip is a curved path (`c`), not a rectangle.
+    let text = String::from_utf8_lossy(&pdf);
+    let clip = text.find("W\nn").expect("a clipping path");
+    assert!(text[..clip].contains(" c\n"), "the clip path has curves");
+    if !have_pdftoppm() {
+        eprintln!("pdftoppm not on PATH; skipping the raster probe");
+        return;
+    }
+    let (width, rgb) = raster(&pdf);
+    let b = &pages[0].body[0];
+    let red = |x: f32, y: f32| {
+        let (px, py) = ((b.x + x) as usize, (b.y + y) as usize);
+        let p = &rgb[(py * width + px) * 3..][..3];
+        p[0] > 160 && p[1] < 96 && p[2] < 96
+    };
+    for (x, y) in [
+        (50.0, 50.0),
+        (50.0, 2.0),
+        (2.0, 50.0),
+        (97.0, 50.0),
+        (50.0, 97.0),
+    ] {
+        assert!(red(x, y), "({x},{y}) is red");
+    }
+    for (x, y) in [(3.0, 3.0), (96.0, 3.0), (96.0, 96.0), (3.0, 96.0)] {
+        assert!(!red(x, y), "corner ({x},{y}) is clipped away");
+    }
+}

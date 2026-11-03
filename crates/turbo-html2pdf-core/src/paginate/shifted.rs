@@ -287,4 +287,36 @@ mod tests {
         );
         assert_eq!((none.width, none.height), (0.0, 0.0));
     }
+
+    #[test]
+    fn a_page_cut_squares_the_clips_corners_on_the_cut_edges() {
+        use turbo_dom_layout::{BorderRadii, CornerRadii};
+        let own = ClipRect {
+            x: 0.0,
+            y: 0.0,
+            width: 100.0,
+            height: 100.0,
+            radii: BorderRadii::uniform(8.0),
+        };
+        let rows = |y: f32, height: f32| ClipRect {
+            x: -FAR,
+            y,
+            width: 2.0 * FAR,
+            height,
+            radii: BorderRadii::ZERO,
+        };
+        let [tl, tr, br, bl] = intersect(own, rows(-10.0, 50.0)).radii.corners();
+        let round = CornerRadii::circle(8.0);
+        assert_eq!(
+            [tl, tr, br, bl],
+            [round, round, CornerRadii::default(), CornerRadii::default()]
+        );
+        let [tl, tr, br, bl] = intersect(own, rows(40.0, 100.0)).radii.corners();
+        assert_eq!(
+            [tl, tr, br, bl],
+            [CornerRadii::default(), CornerRadii::default(), round, round]
+        );
+        // A window that holds the whole clip keeps every corner.
+        assert_eq!(intersect(own, rows(-1.0, 200.0)).radii, own.radii);
+    }
 }
