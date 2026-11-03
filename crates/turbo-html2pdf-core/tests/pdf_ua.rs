@@ -474,4 +474,10 @@ fn tags_list_markers_as_the_items_label() {
             .collect();
         assert_eq!(kids, ["Lbl"], "LI {item}: {elems:?}");
     }
+    // A marker's inner box (same marker id) is part of its Lbl, not a nested Lbl.
+    for (role, parent) in elems.values() {
+        if role == "Lbl" {
+            assert_eq!(elems[parent].0, "LI", "{elems:?}");
+        }
+    }
 }

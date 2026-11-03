@@ -317,6 +317,12 @@ impl TreeBuilder {
     ) -> Option<usize> {
         let role = match self.semantics.role(frag) {
             Some(UaRole::Artifact) | None => return parent,
+            // A marker's own inner box (the same marker id) belongs to its `Lbl`.
+            Some(UaRole::ListLabel)
+                if parent.is_some_and(|p| self.nodes[p].role == StructRole::Lbl) =>
+            {
+                return parent
+            }
             Some(r) => r,
         };
         let alt = self.semantics.alt(frag).map(str::to_string);
@@ -407,6 +413,7 @@ fn map_role(role: UaRole) -> StructRole {
         UaRole::List => StructRole::L,
         UaRole::ListItem => StructRole::LI,
         UaRole::ListBody => StructRole::LBody,
+        UaRole::ListLabel => StructRole::Lbl,
         UaRole::Table => StructRole::Table,
         UaRole::Caption => StructRole::Caption,
         UaRole::TableRow => StructRole::TR,

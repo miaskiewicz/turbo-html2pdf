@@ -10,6 +10,7 @@
 //! |---|---|---|---|---|
 //! | box of the flow root | `Group` | — | — | — |
 //! | box of an anonymous (unsourced) block | `Paragraph` | — | — | — |
+//! | `::marker` box of a list item | `ListLabel` | — | — | — |
 //! | box of an element (incl. a table row) | by tag | — | `href` (not for rows) | `id` |
 //! | the anonymous grid box of a captioned table | — | — | — | — |
 //! | block marker box | — | — | `href` | — |
@@ -50,6 +51,8 @@ pub enum UaRole {
     ListItem,
     /// A list item's body (the content of an `<li>`).
     ListBody,
+    /// A list item's label: its `::marker` box (miaskiewicz/turbo-dom#128).
+    ListLabel,
     /// A table (`<table>`).
     Table,
     /// A table caption (`<caption>`), a child of its `Table`.
@@ -132,6 +135,8 @@ pub(crate) struct Derived {
     /// The anonymous grid boxes of captioned tables: no structure of their own, so the
     /// rows they hold are the table's children (miaskiewicz/turbo-dom#51).
     grids: HashSet<NodeId>,
+    /// List items' `::marker` boxes: unsourced, but the item's label, not a paragraph.
+    list_markers: HashSet<NodeId>,
     nodes: HashMap<NodeId, NodeInfo>,
 }
 
@@ -142,6 +147,7 @@ impl Derived {
         self.roots.insert(sources.root);
         self.rows.extend(sources.table_rows.iter().copied());
         self.grids.extend(sources.table_grids.iter().copied());
+        self.list_markers.extend(sources.list_markers.keys().copied());
         for (&id, &h) in &sources.elements {
             self.nodes.insert(id, node_info(view, h));
         }
@@ -248,6 +254,9 @@ impl super::Semantics {
         match &frag.content {
             FragmentContent::Box { .. } if d.roots.contains(&frag.node_id) => Some(UaRole::Group),
             FragmentContent::Box { .. } if d.grids.contains(&frag.node_id) => None,
+            FragmentContent::Box { .. } if d.list_markers.contains(&frag.node_id) => {
+                Some(UaRole::ListLabel)
+            }
             FragmentContent::Box { .. } => match d.nodes.get(&frag.node_id) {
                 Some(info) => info.role,
                 None => d.in_range(frag.node_id).then_some(UaRole::Paragraph),
