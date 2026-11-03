@@ -26,7 +26,7 @@ use pdf_writer::{Content, Finish, Name, Pdf, Ref, TextStr};
 
 use crate::layout::fragment::{Fragment, FragmentContent, NodeId};
 use crate::layout::value::BorderEdges;
-use crate::paginate::{Page, CARRIED};
+use crate::paginate::{Page, CARRIED, REPEATED};
 use crate::semantics::{Semantics, UaRole};
 
 use super::EmitOptions;
@@ -60,7 +60,7 @@ pub(super) fn wrap_kind(frag: &Fragment, artifact_band: bool) -> WrapKind {
 /// onto a neighbouring page ([`CARRIED`]) is an artifact: its own page tags the content
 /// (miaskiewicz/turbo-html2pdf#44).
 fn content_band_kind(frag: &Fragment) -> WrapKind {
-    if frag.node_id == CARRIED {
+    if frag.node_id == CARRIED || frag.node_id == REPEATED {
         return artifact_or_none(frag);
     }
     match &frag.content {
@@ -178,8 +178,10 @@ struct StructNode {
     page: usize,
     /// Indices of child struct nodes, in reading order.
     children: Vec<usize>,
-    /// MCIDs of this element's own marked content, on its page, in order.
-    mcids: Vec<i32>,
+    /// This element's own marked content, in order: (0-based page, MCID). Content on a
+    /// page other than `page` (an element split across pages) is a marked-content
+    /// reference with its own `/Pg`.
+    mcids: Vec<(usize, i32)>,
 }
 
 /// The whole tagged-PDF plan: the struct tree plus the object refs it needs.
@@ -220,7 +222,17 @@ impl UaPlan {
         };
         let root_ref = take();
         let doc_ref = take();
-        let node_refs: Vec<Ref> = builder.nodes.iter().map(|_| take()).collect();
+        // Object numbers follow reading order (a depth-first walk of the tree).
+        let mut order = vec![None; builder.nodes.len()];
+        let mut stack: Vec<usize> = builder.roots.iter().rev().copied().collect();
+        while let Some(i) = stack.pop() {
+            order[i] = Some(take());
+            stack.extend(builder.nodes[i].children.iter().rev());
+        }
+        let node_refs: Vec<Ref> = order
+            .into_iter()
+            .map(|r| r.expect("every node is in the tree"))
+            .collect();
         let parent_tree_refs: Vec<Ref> = (0..page_count).map(|_| take()).collect();
         let metadata_ref = take();
         let plan = UaPlan {
@@ -265,12 +277,16 @@ struct TreeBuilder {
     /// The MCID of each content fragment of the page being walked (by address: the
     /// pages are borrowed for the whole walk).
     order: HashMap<*const Fragment, i32>,
-    /// The `Lbl` node of each list item (by its box id) on the page being walked, so
-    /// every box and text line of its marker joins that one label.
+    /// The `Lbl` node of each list item (by its box id), so every box and text line of
+    /// its marker joins that one label.
     labels: HashMap<NodeId, usize>,
-    /// The synthetic `Table` of each parent on the page being walked, for the rows of a
-    /// table whose `Table` box is on an earlier page.
-    split_tables: HashMap<Option<usize>, usize>,
+    /// The `LBody` node of each `LI` node.
+    bodies: HashMap<usize, usize>,
+    /// The node of each element (by its box id): one per document, so a block split
+    /// across pages is one structure element (a struct element may span pages).
+    elems: HashMap<NodeId, usize>,
+    /// The row-group nodes of each `Table` node, by kind.
+    groups: HashMap<(usize, StructRole), usize>,
 }
 
 impl TreeBuilder {
@@ -279,8 +295,6 @@ impl TreeBuilder {
         for (page, frags) in pages.iter().enumerate() {
             self.semantics = frags.semantics.clone();
             self.order = paint_mcids([&frags.body, &frags.footnotes]);
-            self.labels.clear();
-            self.split_tables.clear();
             let mut mcid = 0i32;
             self.walk_band(&frags.body, page, None, &mut mcid);
             self.walk_band(&frags.footnotes, page, None, &mut mcid);
@@ -322,66 +336,49 @@ impl TreeBuilder {
 
     /// A list item's children (PDF/UA-1 7.2-20: an `LI` holds only `Lbl` and `LBody`):
     /// one `Lbl` per marker (an outside marker is a child box, an inside one sits in the
-    /// item's first line), opened first, and everything else in one synthetic `LBody`.
+    /// item's first line), opened first, and everything else in the item's `LBody`.
     fn walk_item(&mut self, children: &[Fragment], page: usize, item: usize, mcid: &mut i32) {
         let mut markers = Vec::new();
         self.collect_markers(children, &mut markers);
-        for marker in markers {
-            if !self.labels.contains_key(&marker) {
-                let label = self.push_node(StructRole::Lbl, None, page);
-                self.nodes[item].children.push(label);
-                self.labels.insert(marker, label);
-            }
+        for owner in markers {
+            self.label_of(item, owner, page);
         }
         let is_label = |f: &Fragment| self.semantics.role(f) == Some(UaRole::ListLabel);
         let parent = if children.iter().all(is_label) {
             item
         } else {
-            let body = self.push_node(StructRole::LBody, None, page);
-            self.nodes[item].children.push(body);
-            body
+            self.body_of(item, page)
         };
         for child in children {
             self.walk(child, page, Some(parent), mcid);
         }
     }
 
-    /// The node a table row of `group` attaches to (PDF/UA-1 7.2-4: a `TR` is in a
-    /// `THead`/`TBody`/`TFoot` of a `Table`). Under a `Table` it is that table's last
-    /// group when it is the same kind, else a new one. Elsewhere (the rows of a table
-    /// split across pages, whose `Table` box is on the first page) the rows get a
-    /// synthetic `Table`, one per page and parent.
-    fn row_parent(&mut self, parent: Option<usize>, group: UaRole, page: usize) -> usize {
-        let table = self.row_table(parent, page);
-        let role = map_role(group);
-        let last = self.nodes[table].children.last().copied();
-        if let Some(last) = last.filter(|&l| self.nodes[l].role == role) {
-            return last;
+    /// The `Lbl` of list item node `item` (marker owner `owner`), opened on first use.
+    fn label_of(&mut self, item: usize, owner: NodeId, page: usize) -> usize {
+        if let Some(&l) = self.labels.get(&owner) {
+            return l;
         }
-        let g = self.push_node(role, None, page);
-        self.nodes[table].children.push(g);
-        g
+        let l = self.push_node(StructRole::Lbl, None, page);
+        // The label comes first in its item (its content may be placed before it).
+        self.nodes[item].children.insert(0, l);
+        self.labels.insert(owner, l);
+        l
     }
 
-    /// The `Table` a row under `parent` belongs to: `parent` itself, or the page's
-    /// synthetic `Table` there (opened on first use).
-    fn row_table(&mut self, parent: Option<usize>, page: usize) -> usize {
-        if let Some(p) = parent.filter(|&p| self.nodes[p].role == StructRole::Table) {
-            return p;
+    /// The `LBody` of list item node `item`, opened on first use: one per item, across
+    /// pages.
+    fn body_of(&mut self, item: usize, page: usize) -> usize {
+        if let Some(&b) = self.bodies.get(&item) {
+            return b;
         }
-        if let Some(&t) = self.split_tables.get(&parent) {
-            return t;
-        }
-        let t = self.push_node(StructRole::Table, None, page);
-        match parent {
-            Some(p) => self.nodes[p].children.push(t),
-            None => self.roots.push(t),
-        }
-        self.split_tables.insert(parent, t);
-        t
+        let b = self.push_node(StructRole::LBody, None, page);
+        self.nodes[item].children.push(b);
+        self.bodies.insert(item, b);
+        b
     }
 
-    /// The marker ids under `frags` in walk order, not descending into a nested item.
+    /// The marker owners under `frags` in walk order, not descending into a nested item.
     fn collect_markers(&self, frags: &[Fragment], out: &mut Vec<NodeId>) {
         for f in frags {
             match self.semantics.role(f) {
@@ -393,44 +390,112 @@ impl TreeBuilder {
     }
 
     /// Create this fragment's struct element if it carries a role, returning the
-    /// node to which its (and its descendants') content attaches.
+    /// node to which its (and its descendants') content attaches. An element's node is
+    /// one per document: a fragment of an element already open (a later fragment of a
+    /// split block) joins it.
     fn open_element(
         &mut self,
         frag: &Fragment,
         page: usize,
         parent: Option<usize>,
     ) -> Option<usize> {
-        let role = match self.semantics.role(frag) {
-            Some(UaRole::Artifact) | None => return parent,
-            // Every box and text line of a marker (keyed by its owning item) belongs to
-            // the one `Lbl` its item opened for it.
-            Some(UaRole::ListLabel) => {
-                if let Some(&label) = self
-                    .semantics
-                    .marker_owner(frag)
-                    .and_then(|o| self.labels.get(&o))
-                {
-                    return Some(label);
-                }
-                UaRole::ListLabel
+        match self.semantics.role(frag) {
+            Some(UaRole::Artifact) | None => parent,
+            Some(UaRole::ListLabel) => self.open_label(frag, page, parent),
+            Some(role) => {
+                let alt = self.semantics.alt(frag).map(str::to_string);
+                Some(self.open(frag.node_id, role, alt, page, parent))
             }
-            Some(r) => r,
-        };
-        let parent = match self.semantics.row_group(frag) {
-            Some(group) => Some(self.row_parent(parent, group, page)),
-            None => parent,
-        };
-        let alt = self.semantics.alt(frag).map(str::to_string);
-        let idx = self.push_node(map_role(role), alt, page);
-        match parent {
-            Some(p) => self.nodes[p].children.push(idx),
-            None => self.roots.push(idx),
         }
-        Some(idx)
+    }
+
+    /// Every box and text line of a marker (keyed by its owning item) belongs to its
+    /// item's one `Lbl`; an item whose box is on another page is reopened for it.
+    fn open_label(&mut self, frag: &Fragment, page: usize, parent: Option<usize>) -> Option<usize> {
+        let Some(owner) = self.semantics.marker_owner(frag) else {
+            return parent;
+        };
+        let item = self.ensure(owner, page, parent);
+        Some(self.label_of(item, owner, page))
+    }
+
+    /// The node of element `id` (role `role`), opened under its structural parent on
+    /// first use.
+    fn open(
+        &mut self,
+        id: NodeId,
+        role: UaRole,
+        alt: Option<String>,
+        page: usize,
+        holder: Option<usize>,
+    ) -> usize {
+        if let Some(&n) = self.elems.get(&id) {
+            return n;
+        }
+        let at = self.attach_point(id, role, page, holder);
+        let n = self.push_node(map_role(role), alt, page);
+        match (at, role) {
+            // A caption is its table's first child (PDF/UA-1 7.2-4).
+            (Some(p), UaRole::Caption) => self.nodes[p].children.insert(0, n),
+            (Some(p), _) => self.nodes[p].children.push(n),
+            (None, _) => self.roots.push(n),
+        }
+        if self.semantics.element_role(id).is_some() {
+            self.elems.insert(id, n);
+        }
+        n
+    }
+
+    /// The node of element `id`, reopened (with its structural parents) when its own
+    /// box is not on this page: a split block's continuation is an unsourced slice.
+    fn ensure(&mut self, id: NodeId, page: usize, holder: Option<usize>) -> usize {
+        match self.semantics.element_role(id) {
+            Some(role) => self.open(id, role, None, page, holder),
+            None => holder.unwrap_or_else(|| self.synthetic_paragraph(page)),
+        }
+    }
+
+    /// Where a new element of `role` attaches. A cell, row, caption or list item goes
+    /// in its source parent's node (reopened when that box is on another page; PDF/UA-1
+    /// 7.2-4/7.2-20), a row in its table's row group; anything else in `holder`.
+    fn attach_point(
+        &mut self,
+        id: NodeId,
+        role: UaRole,
+        page: usize,
+        holder: Option<usize>,
+    ) -> Option<usize> {
+        let up = self.semantics.up(id);
+        match (role, up) {
+            (UaRole::TableRow, Some(table)) => {
+                let t = self.ensure(table, page, holder);
+                let group = self.semantics.row_group_of(id).unwrap_or(UaRole::TableBody);
+                Some(self.group_of(t, group, page))
+            }
+            (
+                UaRole::TableData | UaRole::TableHeader | UaRole::Caption | UaRole::ListItem,
+                Some(u),
+            ) => Some(self.ensure(u, page, holder)),
+            _ => holder,
+        }
+    }
+
+    /// The `THead`/`TBody`/`TFoot` of table node `table`, opened on first use (one per
+    /// kind per table, across pages).
+    fn group_of(&mut self, table: usize, group: UaRole, page: usize) -> usize {
+        if let Some(&g) = self.groups.get(&(table, map_role(group))) {
+            return g;
+        }
+        let g = self.push_node(map_role(group), None, page);
+        self.nodes[table].children.push(g);
+        self.groups.insert((table, map_role(group)), g);
+        g
     }
 
     /// Attach this fragment's own content MCID (if it paints real content in a
-    /// content band) to its holder, conjuring a paragraph holder if there is none.
+    /// content band) to its holder. Content with no holder (a split block's lines on a
+    /// continuation page) goes to its source element's node, reopened as needed (a list
+    /// item's into its `LBody`), else to a synthetic paragraph.
     fn attach_content(
         &mut self,
         frag: &Fragment,
@@ -441,10 +506,27 @@ impl TreeBuilder {
         if !is_content(frag) {
             return;
         }
-        let owner = holder.unwrap_or_else(|| self.synthetic_paragraph(page));
+        let owner = match (holder, self.semantics.up(frag.node_id)) {
+            (Some(h), _) => h,
+            (None, Some(up)) => {
+                let n = self.ensure(up, page, None);
+                if self.nodes[n].role == StructRole::LI {
+                    self.body_of(n, page)
+                } else {
+                    n
+                }
+            }
+            (None, None) => self.synthetic_paragraph(page),
+        };
+        eprintln!(
+            "DBG content {:?} holder={holder:?} role={:?} up={:?}",
+            frag.node_id,
+            holder.map(|h| self.nodes[h].role),
+            self.semantics.up(frag.node_id)
+        );
         let id = self.order[&std::ptr::from_ref(frag)];
         *mcid += 1;
-        self.nodes[owner].mcids.push(id);
+        self.nodes[owner].mcids.push((page, id));
     }
 
     /// A fresh top-level `P` element to own stray content (a split block whose
@@ -496,7 +578,7 @@ fn is_content(frag: &Fragment) -> bool {
         frag.content,
         FragmentContent::TextLine { .. } | FragmentContent::Image(_)
     );
-    real && frag.node_id != CARRIED
+    real && frag.node_id != CARRIED && frag.node_id != REPEATED
 }
 
 /// Map a layout [`UaRole`] to a `pdf_writer` structure role.
@@ -603,7 +685,7 @@ impl UaPlan {
             el.alt(TextStr(alt));
         }
         write_scope(&mut el, node.role);
-        write_kids(&mut el, node, &self.node_refs);
+        write_kids(&mut el, node, &self.node_refs, page_refs);
     }
 
     /// The parent object of node `i`: its enclosing element, or the `Document`.
@@ -639,8 +721,8 @@ impl UaPlan {
         let count = self.mcid_counts[page] as usize;
         let mut owners = vec![self.doc_ref; count];
         for (i, node) in self.nodes.iter().enumerate() {
-            if node.page == page {
-                for &mcid in &node.mcids {
+            for &(p, mcid) in &node.mcids {
+                if p == page {
                     owners[mcid as usize] = self.node_refs[i];
                 }
             }
@@ -670,13 +752,24 @@ fn write_scope(el: &mut pdf_writer::writers::StructElement, role: StructRole) {
 }
 
 /// Write a struct element's `/K` children: nested elements then own MCIDs.
-fn write_kids(el: &mut pdf_writer::writers::StructElement, node: &StructNode, refs: &[Ref]) {
+fn write_kids(
+    el: &mut pdf_writer::writers::StructElement,
+    node: &StructNode,
+    refs: &[Ref],
+    page_refs: &[(Ref, Ref)],
+) {
     let mut kids = el.children();
     for &c in &node.children {
         kids.struct_element(refs[c]);
     }
-    for &mcid in &node.mcids {
-        kids.marked_content_id(mcid);
+    for &(page, mcid) in &node.mcids {
+        if page == node.page {
+            kids.marked_content_id(mcid);
+        } else {
+            kids.marked_content_ref()
+                .marked_content_id(mcid)
+                .page(page_refs[page].0);
+        }
     }
     kids.finish();
 }

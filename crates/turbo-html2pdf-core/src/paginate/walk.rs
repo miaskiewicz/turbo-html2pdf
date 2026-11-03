@@ -307,7 +307,7 @@ impl<'a> Walker<'a> {
         self.prev_bottom = None;
         self.start = PageStart::Unforced;
         for h in headers {
-            self.emit(h);
+            self.emit(&super::shifted::repeated(h));
         }
         // The content after repeated headers starts right below them: the gap before it
         // is the page start's, not its galley distance from the header's original place

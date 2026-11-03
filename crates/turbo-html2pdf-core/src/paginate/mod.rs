@@ -31,7 +31,7 @@ use crate::style::AtRule;
 pub use boxes::{BoxFacts, FlowBoxes};
 pub use footnotes::{FootnoteBand, Note};
 pub use geometry::{resolve_geometry, PageGeometry};
-pub use shifted::CARRIED;
+pub use shifted::{CARRIED, REPEATED};
 
 /// Which master/variant a page resolves to (§3). In this phase the kind is
 /// derived from the page number; `Blank` and explicit master variants arrive

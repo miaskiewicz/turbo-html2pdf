@@ -46,6 +46,18 @@ PyPI and crates.io packages move to 0.7.0 with turbo-dom, turbo-test and turbo-s
   `TBody` or `TFoot` (from its `<thead>`/`<tbody>`/`<tfoot>`; a table without row groups gets a
   `TBody`) inside its `Table`. The rows of a table continued onto a later page get a synthetic
   `Table` there; they were loose in the `Document`, which veraPDF rejects.
+- **Fixed (paginate)**: a list item whose own text runs past a page kept none of its lines
+  (#62). Its outside `::marker` box sits beside the first line, so the item read as a row of
+  side-by-side cells and was split in parallel. Now only boxes are cells, and in a block of text
+  lines its last line is its last content.
+- **Fixed (`pdf-ua`)**: blocks split across pages keep their structure. Each element is one
+  structure element for the whole document (a struct element may span pages; its content on a
+  later page is a marked-content reference with its own `/Pg`). A continuation page reopens a
+  cell's `TR`, a row's `Table` and row group, a caption's `Table` (as its first child), an
+  item's `L`, and a split item's `LI` with its `Lbl` and `LBody`. Two split tables on one page
+  stay two tables. A table header repeated on a continuation page is an `/Artifact` (new
+  `REPEATED` node id); the original row is tagged once. Struct element objects are numbered in
+  reading order.
 - **Tests**: `report_hot_path_breakdown`'s budget is the measured 6358 shapes plus 100 (was
   6096: turbo-dom 0.7's max-content pass works on a paragraph's words, #241).
 

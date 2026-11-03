@@ -148,6 +148,11 @@ pub(crate) struct Derived {
     /// item's label, not a paragraph.
     list_markers: HashMap<NodeId, NodeId>,
     nodes: HashMap<NodeId, NodeInfo>,
+    /// Each element box's and text run's nearest ancestor element that carries a role
+    /// (by its box id): what a split block's continuation pages, whose own box is an
+    /// unsourced slice, rebuild their structure from.
+    #[cfg(feature = "pdf-ua")]
+    ups: HashMap<NodeId, NodeId>,
 }
 
 impl Derived {
@@ -161,6 +166,38 @@ impl Derived {
         for (&id, &h) in &sources.elements {
             self.nodes.insert(id, node_info(view, h));
         }
+        #[cfg(feature = "pdf-ua")]
+        self.record_ups(view, sources);
+    }
+
+    /// Record [`Self::ups`] for one flow's element boxes and text runs.
+    #[cfg(feature = "pdf-ua")]
+    fn record_ups(&mut self, view: &TreeView, sources: &NodeSources) {
+        let boxes = self.role_boxes(sources);
+        let tree = view.tree();
+        let up = |h: turbo_dom::Handle| {
+            std::iter::successors(tree.parent(h), |&p| tree.parent(p))
+                .find_map(|p| boxes.get(&p).copied())
+        };
+        for (&id, &h) in sources.elements.iter().chain(&sources.texts) {
+            if let Some(u) = up(h) {
+                self.ups.insert(id, u);
+            }
+        }
+    }
+
+    /// The (first) box id of each source element of a flow that carries a role.
+    #[cfg(feature = "pdf-ua")]
+    fn role_boxes(&self, sources: &NodeSources) -> HashMap<turbo_dom::Handle, NodeId> {
+        let mut boxes: HashMap<turbo_dom::Handle, NodeId> = HashMap::new();
+        for (&id, &h) in &sources.elements {
+            if self.nodes[&id].role.is_none() {
+                continue;
+            }
+            let e = boxes.entry(h).or_insert(id);
+            e.0 = e.0.min(id.0);
+        }
+        boxes
     }
 
     fn in_range(&self, id: NodeId) -> bool {
@@ -303,13 +340,23 @@ impl super::Semantics {
         self.derived.list_markers.get(&frag.node_id).copied()
     }
 
-    /// The row group (`TableHead`/`TableBody`/`TableFoot`) of a table-row box fragment.
+    /// The nearest role-carrying ancestor element (its box id) of the element box or
+    /// text run `id`.
     #[cfg(feature = "pdf-ua")]
-    pub fn row_group(&self, frag: &Fragment) -> Option<UaRole> {
-        match &frag.content {
-            FragmentContent::Box { .. } => self.derived.nodes.get(&frag.node_id)?.row_group,
-            _ => None,
-        }
+    pub fn up(&self, id: NodeId) -> Option<NodeId> {
+        self.derived.ups.get(&id).copied()
+    }
+
+    /// The role of the element whose box id is `id`.
+    #[cfg(feature = "pdf-ua")]
+    pub fn element_role(&self, id: NodeId) -> Option<UaRole> {
+        self.derived.nodes.get(&id)?.role
+    }
+
+    /// The row group of the table-row element whose box id is `id`.
+    #[cfg(feature = "pdf-ua")]
+    pub fn row_group_of(&self, id: NodeId) -> Option<UaRole> {
+        self.derived.nodes.get(&id)?.row_group
     }
 
     /// The `/Alt` text of a replaced-image fragment.
