@@ -268,6 +268,9 @@ struct TreeBuilder {
     /// The `Lbl` node of each list item (by its box id) on the page being walked, so
     /// every box and text line of its marker joins that one label.
     labels: HashMap<NodeId, usize>,
+    /// The synthetic `Table` of each parent on the page being walked, for the rows of a
+    /// table whose `Table` box is on an earlier page.
+    split_tables: HashMap<Option<usize>, usize>,
 }
 
 impl TreeBuilder {
@@ -277,6 +280,7 @@ impl TreeBuilder {
             self.semantics = frags.semantics.clone();
             self.order = paint_mcids([&frags.body, &frags.footnotes]);
             self.labels.clear();
+            self.split_tables.clear();
             let mut mcid = 0i32;
             self.walk_band(&frags.body, page, None, &mut mcid);
             self.walk_band(&frags.footnotes, page, None, &mut mcid);
@@ -342,6 +346,41 @@ impl TreeBuilder {
         }
     }
 
+    /// The node a table row of `group` attaches to (PDF/UA-1 7.2-4: a `TR` is in a
+    /// `THead`/`TBody`/`TFoot` of a `Table`). Under a `Table` it is that table's last
+    /// group when it is the same kind, else a new one. Elsewhere (the rows of a table
+    /// split across pages, whose `Table` box is on the first page) the rows get a
+    /// synthetic `Table`, one per page and parent.
+    fn row_parent(&mut self, parent: Option<usize>, group: UaRole, page: usize) -> usize {
+        let table = self.row_table(parent, page);
+        let role = map_role(group);
+        let last = self.nodes[table].children.last().copied();
+        if let Some(last) = last.filter(|&l| self.nodes[l].role == role) {
+            return last;
+        }
+        let g = self.push_node(role, None, page);
+        self.nodes[table].children.push(g);
+        g
+    }
+
+    /// The `Table` a row under `parent` belongs to: `parent` itself, or the page's
+    /// synthetic `Table` there (opened on first use).
+    fn row_table(&mut self, parent: Option<usize>, page: usize) -> usize {
+        if let Some(p) = parent.filter(|&p| self.nodes[p].role == StructRole::Table) {
+            return p;
+        }
+        if let Some(&t) = self.split_tables.get(&parent) {
+            return t;
+        }
+        let t = self.push_node(StructRole::Table, None, page);
+        match parent {
+            Some(p) => self.nodes[p].children.push(t),
+            None => self.roots.push(t),
+        }
+        self.split_tables.insert(parent, t);
+        t
+    }
+
     /// The marker ids under `frags` in walk order, not descending into a nested item.
     fn collect_markers(&self, frags: &[Fragment], out: &mut Vec<NodeId>) {
         for f in frags {
@@ -376,6 +415,10 @@ impl TreeBuilder {
                 UaRole::ListLabel
             }
             Some(r) => r,
+        };
+        let parent = match self.semantics.row_group(frag) {
+            Some(group) => Some(self.row_parent(parent, group, page)),
+            None => parent,
         };
         let alt = self.semantics.alt(frag).map(str::to_string);
         let idx = self.push_node(map_role(role), alt, page);
@@ -471,6 +514,9 @@ fn map_role(role: UaRole) -> StructRole {
         UaRole::TableRow => StructRole::TR,
         UaRole::TableHeader => StructRole::TH,
         UaRole::TableData => StructRole::TD,
+        UaRole::TableHead => StructRole::THead,
+        UaRole::TableBody => StructRole::TBody,
+        UaRole::TableFoot => StructRole::TFoot,
         UaRole::Figure => StructRole::Figure,
         UaRole::Span => StructRole::Span,
         // Artifacts never reach the tree (filtered in `open_element`).

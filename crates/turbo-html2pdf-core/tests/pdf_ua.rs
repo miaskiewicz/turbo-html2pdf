@@ -374,10 +374,14 @@ fn tags_a_table_caption_as_the_tables_caption() {
     );
     let rows = of("TR");
     assert_eq!(rows.len(), 2, "{elems:?}");
+    // The rows are in the table's TBody (PDF/UA-1 7.2-4, #60).
+    let bodies = of("TBody");
+    assert_eq!(bodies.len(), 1, "{elems:?}");
+    assert_eq!(elems[&bodies[0]].1, tables[0], "{elems:?}");
     for row in rows {
         assert_eq!(
-            elems[&row].1, tables[0],
-            "a TR's parent is the Table: {elems:?}"
+            elems[&row].1, bodies[0],
+            "a TR's parent is the TBody: {elems:?}"
         );
     }
 }

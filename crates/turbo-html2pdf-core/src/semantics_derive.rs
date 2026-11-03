@@ -63,6 +63,12 @@ pub enum UaRole {
     TableHeader,
     /// A table data cell (`<td>`).
     TableData,
+    /// A table's header row group (`<thead>`), around its `TableRow`s.
+    TableHead,
+    /// A table's body row group (`<tbody>`, or the rows of a table without one).
+    TableBody,
+    /// A table's footer row group (`<tfoot>`).
+    TableFoot,
     /// A figure (`<img>`); carries `/Alt` from the `alt` attribute.
     Figure,
     /// A run of inline text (`<span>`, `<a>`, anonymous inline boxes).
@@ -83,6 +89,9 @@ struct NodeInfo {
     role: Option<UaRole>,
     #[cfg(feature = "pdf-ua")]
     alt: Option<String>,
+    /// A table row's group (`TableHead`/`TableBody`/`TableFoot`), from its parent element.
+    #[cfg(feature = "pdf-ua")]
+    row_group: Option<UaRole>,
     #[cfg(feature = "xref")]
     link: Option<LinkTarget>,
     #[cfg(feature = "xref")]
@@ -194,6 +203,8 @@ fn node_info(view: &TreeView, h: turbo_dom::Handle) -> NodeInfo {
         role: marker.map_or_else(|| role_for_tag(local), |_| None),
         #[cfg(feature = "pdf-ua")]
         alt: img.then(|| view.attr(h, "alt").unwrap_or("").to_string()),
+        #[cfg(feature = "pdf-ua")]
+        row_group: (local == "tr").then(|| row_group(view, h)),
         #[cfg(feature = "xref")]
         link: view.attr(h, "href").and_then(link_target),
         #[cfg(feature = "xref")]
@@ -231,6 +242,20 @@ fn role_for_tag(name: &str) -> Option<UaRole> {
         }
         _ => return None,
     })
+}
+
+/// The row group of the `<tr>` at `h`: its parent `<thead>`/`<tfoot>`, else the body.
+#[cfg(feature = "pdf-ua")]
+fn row_group(view: &TreeView, h: turbo_dom::Handle) -> UaRole {
+    let parent = view
+        .tree()
+        .parent(h)
+        .and_then(|p| view.tree().local_name(p));
+    match parent.unwrap_or_default() {
+        "thead" => UaRole::TableHead,
+        "tfoot" => UaRole::TableFoot,
+        _ => UaRole::TableBody,
+    }
 }
 
 /// The 1-based heading level of `h1`..`h6`, or `None`.
@@ -276,6 +301,15 @@ impl super::Semantics {
     #[cfg(feature = "pdf-ua")]
     pub fn marker_owner(&self, frag: &Fragment) -> Option<NodeId> {
         self.derived.list_markers.get(&frag.node_id).copied()
+    }
+
+    /// The row group (`TableHead`/`TableBody`/`TableFoot`) of a table-row box fragment.
+    #[cfg(feature = "pdf-ua")]
+    pub fn row_group(&self, frag: &Fragment) -> Option<UaRole> {
+        match &frag.content {
+            FragmentContent::Box { .. } => self.derived.nodes.get(&frag.node_id)?.row_group,
+            _ => None,
+        }
     }
 
     /// The `/Alt` text of a replaced-image fragment.

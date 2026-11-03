@@ -42,6 +42,10 @@ PyPI and crates.io packages move to 0.7.0 with turbo-dom, turbo-test and turbo-s
   loose in the `LI`. Every box and text line of one marker forms one `Lbl`, including
   `list-style-position: inside` markers and `ol` numbers; `list-style: none` items have only an
   `LBody`.
+- **Fixed (`pdf-ua`)**: table rows follow PDF/UA-1 7.2-4 (#60): each `TR` sits in a `THead`,
+  `TBody` or `TFoot` (from its `<thead>`/`<tbody>`/`<tfoot>`; a table without row groups gets a
+  `TBody`) inside its `Table`. The rows of a table continued onto a later page get a synthetic
+  `Table` there; they were loose in the `Document`, which veraPDF rejects.
 - **Tests**: `report_hot_path_breakdown`'s budget is the measured 6358 shapes plus 100 (was
   6096: turbo-dom 0.7's max-content pass works on a paragraph's words, #241).
 
