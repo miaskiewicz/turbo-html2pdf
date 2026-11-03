@@ -12,6 +12,12 @@ env:
   CARGO_TERM_COLOR: always
   RUSTFLAGS: "-D warnings"
 
+# A newer push to the same PR cancels its superseded run; push, tag and release
+# (workflow_call) runs are never cancelled.
+concurrency:
+  group: ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   rust:
     name: Rust (fmt, clippy, test, coverage)
