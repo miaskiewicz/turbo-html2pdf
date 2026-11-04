@@ -67,7 +67,7 @@ pub fn content_stream(
     };
     let mut content = Content::new();
     #[cfg(feature = "pdf-ua")]
-    let mut marker = tags.map(super::ua::Marker::new);
+    let mut marker = tags.map(|t| super::ua::Marker::new(t, &page.semantics));
     paint_canvas(
         &mut content,
         page,
@@ -464,7 +464,7 @@ fn paint_one(
         paint_content(content, frag, ctx);
         return;
     };
-    match super::ua::wrap_kind(frag, artifact_band) {
+    match marker.wrap(frag, artifact_band) {
         super::ua::WrapKind::None => paint_content(content, frag, ctx),
         super::ua::WrapKind::Artifact => {
             super::ua::begin_artifact(content);

@@ -1169,3 +1169,185 @@ fn a_tiled_gradient_background_has_no_artifact_bracket() {
     );
     assert!(!text.contains("/Artifact BMC"), "nothing paints");
 }
+
+// --- turbo-html2pdf#61: figures, table spans, heading nesting -----------------------
+
+/// A tagged render of `html` resolving `red.png`, as bytes.
+fn ua_pdf_with_red_png(html: &str) -> Vec<u8> {
+    let images = RedPng(red_png());
+    let (program, _) = compile(html, &CompileOptions::default()).expect("compile");
+    let cascade = build_cascade(CSS, "", TokenSet::default());
+    let fonts = common::registry();
+    let inputs = RenderInputs {
+        program: &program,
+        data: &serde_json::Value::Null,
+        cascade: &cascade,
+        at_rules: &[],
+        fonts: &fonts,
+        images: &images,
+        now: Some(0),
+    };
+    let pages = render_pages(&inputs, &mut Diagnostics::default()).expect("render pages");
+    turbo_html2pdf_core::emit_pdf_with_images(&pages, &opts(), &images)
+}
+
+/// The bodies of the struct elements of role `role`, in object order.
+fn bodies_of(pdf: &[u8], role: &str) -> Vec<String> {
+    let objs = objects(pdf);
+    of_role(&struct_elems(pdf), role)
+        .into_iter()
+        .map(|n| objs[&n].clone())
+        .collect()
+}
+
+/// PDF/UA-1 7.3-1: an image with a text alternative is a `Figure` carrying it as `/Alt`
+/// (`alt`, else `aria-label`, else `title`); the image is the Figure's content.
+#[test]
+fn an_image_with_a_text_alternative_is_a_figure_with_alt() {
+    for (img, alt) in [
+        ("<img alt=\"Red square\" src=\"red.png\">", "Red square"),
+        (
+            "<img aria-label=\"Labelled\" title=\"Titled\" src=\"red.png\">",
+            "Labelled",
+        ),
+        ("<img title=\"Titled\" src=\"red.png\">", "Titled"),
+        (
+            "<img alt=\"Alt wins\" aria-label=\"Labelled\" src=\"red.png\">",
+            "Alt wins",
+        ),
+    ] {
+        let pdf = ua_pdf_with_red_png(&format!("<p>Before</p>{img}"));
+        assert_struct_tree(&pdf);
+        let figures = bodies_of(&pdf, "Figure");
+        assert_eq!(figures.len(), 1, "{img}: {figures:?}");
+        assert!(
+            figures[0].contains(&format!("/Alt ({alt})")),
+            "{img}: {figures:?}"
+        );
+        let text = String::from_utf8_lossy(&pdf);
+        assert!(
+            !text.contains("/Artifact BMC"),
+            "{img}: the image is content"
+        );
+        assert_verapdf_ua1(&pdf, "turbo_pdf_ua_figure_alt.pdf");
+    }
+}
+
+/// PDF/UA-1 7.3-1: an image with an empty `alt` is decorative, and one with no text
+/// alternative at all is tagged like Chrome tags it: an artifact, with no `Figure`.
+#[test]
+fn an_image_without_a_text_alternative_is_an_artifact() {
+    for img in [
+        "<img alt=\"\" src=\"red.png\">",
+        "<img src=\"red.png\">",
+        "<img alt=\"\" title=\"Ignored\" src=\"red.png\">",
+        "<img title=\"\" aria-label=\"\" src=\"red.png\">",
+    ] {
+        let pdf = ua_pdf_with_red_png(&format!("<p>Before</p>{img}"));
+        assert_struct_tree(&pdf);
+        assert!(bodies_of(&pdf, "Figure").is_empty(), "{img}");
+        let text = String::from_utf8_lossy(&pdf);
+        let artifact = text.find("/Artifact BMC").expect("an artifact bracket");
+        let end = artifact + text[artifact..].find("EMC").expect("closed");
+        assert_eq!(text[artifact..end].matches(" Do").count(), 1, "{img}");
+        assert_eq!(
+            text.matches("/MCID").count(),
+            1,
+            "{img}: only the paragraph"
+        );
+        assert_verapdf_ua1(&pdf, "turbo_pdf_ua_figure_artifact.pdf");
+    }
+}
+
+/// An image that fails to load shows its `alt` text (as Chrome does): the text is the
+/// content of the image's `Figure`, which carries that alt.
+#[test]
+fn a_broken_image_shows_its_alt_in_a_figure_with_alt() {
+    let pdf = ua_pdf(
+        "<p>Before <img alt=\"dot\" src=\"missing.png\"> after</p>",
+        "",
+    );
+    assert_struct_tree(&pdf);
+    let figures = bodies_of(&pdf, "Figure");
+    assert_eq!(figures.len(), 1, "{figures:?}");
+    assert!(figures[0].contains("/Alt (dot)"), "{figures:?}");
+    assert_verapdf_ua1(&pdf, "turbo_pdf_ua_broken_figure.pdf");
+}
+
+/// PDF/UA-1 7.2-42/43: a spanning cell carries `/ColSpan`/`/RowSpan`, so every row spans
+/// the same number of columns; a `TH` keeps its `/Scope`.
+#[test]
+fn spanning_cells_carry_their_spans() {
+    let html = "<table><tr><th colspan=\"2\">Head</th><th>H3</th></tr>\
+        <tr><td rowspan=\"2\">Tall</td><td>b</td><td>c</td></tr>\
+        <tr><td>e</td><td>f</td></tr>\
+        <tr><td colspan=\"3\">Wide</td></tr></table>";
+    let pdf = ua_pdf(html, "");
+    assert_struct_tree(&pdf);
+    let ths = bodies_of(&pdf, "TH");
+    assert_eq!(ths.len(), 2, "{ths:?}");
+    assert!(ths[0].contains("/ColSpan 2"), "{ths:?}");
+    assert!(ths.iter().all(|b| b.contains("/Scope /Column")), "{ths:?}");
+    assert!(!ths[1].contains("Span"), "{ths:?}");
+    let tds = bodies_of(&pdf, "TD");
+    assert_eq!(tds.len(), 6, "{tds:?}");
+    assert!(
+        tds[0].contains("/RowSpan 2") && !tds[0].contains("/ColSpan"),
+        "{tds:?}"
+    );
+    assert!(
+        tds[5].contains("/ColSpan 3") && !tds[5].contains("/RowSpan"),
+        "{tds:?}"
+    );
+    for plain in &tds[1..5] {
+        assert!(!plain.contains("Span"), "{tds:?}");
+    }
+    assert_verapdf_ua1(&pdf, "turbo_pdf_ua_spans.pdf");
+}
+
+/// A `colspan` of 0, empty or junk parses as 1 (HTML's rules, as in Chrome): no span.
+#[test]
+fn degenerate_spans_are_one_column() {
+    let html = "<table><tr><td colspan=\"0\">a</td><td colspan=\"x\">b</td>\
+        <td colspan=\"\">c</td></tr><tr><td>d</td><td>e</td><td>f</td></tr></table>";
+    let pdf = ua_pdf(html, "");
+    let tds = bodies_of(&pdf, "TD");
+    assert_eq!(tds.len(), 6, "{tds:?}");
+    assert!(tds.iter().all(|b| !b.contains("Span")), "{tds:?}");
+    assert_verapdf_ua1(&pdf, "turbo_pdf_ua_degenerate_spans.pdf");
+}
+
+/// PDF/UA-1 7.4.2-1: heading levels are renumbered in reading order so the first is
+/// `H1` and a deeper heading is one level below the heading it nests in (no skipped
+/// level); a heading returns to the level of the earlier heading of its rank.
+#[test]
+fn heading_levels_never_skip() {
+    let html = "<h2>a</h2><h4>b</h4><h3>c</h3><h6>d</h6><h2>e</h2><h5>f</h5><h1>g</h1><h3>h</h3>";
+    let pdf = ua_pdf(html, "");
+    assert_struct_tree(&pdf);
+    let elems = struct_elems(&pdf);
+    let heads: Vec<&str> = elems
+        .values()
+        .map(|(r, _)| r.as_str())
+        .filter(|r| r.starts_with('H') && r.len() == 2)
+        .collect();
+    assert_eq!(
+        heads,
+        ["H1", "H2", "H2", "H3", "H1", "H2", "H1", "H2"],
+        "{elems:?}"
+    );
+    assert_verapdf_ua1(&pdf, "turbo_pdf_ua_headings.pdf");
+}
+
+/// A well-nested outline keeps its levels.
+#[test]
+fn well_nested_headings_keep_their_levels() {
+    let pdf = ua_pdf("<h1>a</h1><h2>b</h2><h3>c</h3><h2>d</h2><h1>e</h1>", "");
+    let elems = struct_elems(&pdf);
+    let heads: Vec<&str> = elems
+        .values()
+        .map(|(r, _)| r.as_str())
+        .filter(|r| r.starts_with('H') && r.len() == 2)
+        .collect();
+    assert_eq!(heads, ["H1", "H2", "H3", "H2", "H1"], "{elems:?}");
+}

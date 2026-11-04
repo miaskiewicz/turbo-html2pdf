@@ -148,15 +148,27 @@ pub(super) struct Marker {
     count: i32,
     /// The repeated table header rows of this page ([`repeated_headers`]).
     repeated: HashSet<NodeId>,
+    /// The page's fragment semantics: which images are decorative.
+    semantics: Semantics,
 }
 
 impl Marker {
-    pub(super) fn new(tags: &PageTags) -> Marker {
+    pub(super) fn new(tags: &PageTags, semantics: &Semantics) -> Marker {
         Marker {
             next: 0,
             count: tags.mcid_count,
             repeated: tags.repeated.clone(),
+            semantics: semantics.clone(),
         }
+    }
+
+    /// How `frag` is wrapped ([`wrap_kind`]); an `<img>` with no text alternative is
+    /// an artifact (PDF/UA-1 7.3-1), as [`is_content`] plans it.
+    pub(super) fn wrap(&self, frag: &Fragment, artifact_band: bool) -> WrapKind {
+        if self.semantics.decorative(frag) {
+            return WrapKind::Artifact;
+        }
+        wrap_kind(frag, artifact_band)
     }
 
     /// Whether body fragment `frag` is a table header row repeated on this page: it
@@ -217,6 +229,8 @@ struct StructNode {
     role: StructRole,
     /// `/Alt` text for a figure, else `None`.
     alt: Option<String>,
+    /// A table cell's (`colspan`, `rowspan`), written as `/ColSpan`/`/RowSpan` when > 1.
+    span: (u32, u32),
     /// The 0-based page this element's content lives on (its `/Pg`).
     page: usize,
     /// Indices of child struct nodes, in reading order.
@@ -353,6 +367,8 @@ struct TreeBuilder {
     repeated: Vec<HashSet<NodeId>>,
     /// The struct node holding each link annotation (document order).
     link_owners: Vec<usize>,
+    /// The open headings in reading order: (HTML level, tagged level), nesting inward.
+    headings: Vec<(u8, u8)>,
 }
 
 impl TreeBuilder {
@@ -367,7 +383,7 @@ impl TreeBuilder {
                 .filter(|f| !is_repeat(f, &repeated))
                 .cloned()
                 .collect();
-            self.order = paint_mcids([&body, &frags.footnotes]);
+            self.order = paint_mcids([&body, &frags.footnotes], &self.semantics);
             let mut mcid = 0i32;
             self.walk_band(&body, page, None, &mut mcid);
             self.walk_band(&frags.footnotes, page, None, &mut mcid);
@@ -506,7 +522,14 @@ impl TreeBuilder {
             return n;
         }
         let at = self.attach_point(id, role, page, holder);
+        let role = match role {
+            UaRole::Heading(level) => UaRole::Heading(self.heading_level(level)),
+            _ => role,
+        };
         let n = self.push_node(map_role(role), alt, page);
+        if matches!(role, UaRole::TableData | UaRole::TableHeader) {
+            self.nodes[n].span = self.semantics.cell_span(id);
+        }
         match (at, role) {
             // A caption is its table's first child (PDF/UA-1 7.2-4).
             (Some(p), UaRole::Caption) => self.nodes[p].children.insert(0, n),
@@ -557,6 +580,19 @@ impl TreeBuilder {
         }
     }
 
+    /// The tagged level of the next heading, of HTML level `level` (PDF/UA-1 7.4.2-1):
+    /// one below the nearest open heading of a lower HTML level, else 1. Headings of
+    /// this level or deeper are closed. So the first heading is `H1` and no level is
+    /// skipped (`h2 h4 h3` tags `H1 H2 H2`).
+    fn heading_level(&mut self, level: u8) -> u8 {
+        while self.headings.last().is_some_and(|&(open, _)| open >= level) {
+            self.headings.pop();
+        }
+        let tagged = self.headings.last().map_or(1, |&(_, t)| t + 1);
+        self.headings.push((level, tagged));
+        tagged
+    }
+
     /// The `THead`/`TBody`/`TFoot` of table node `table`, opened on first use (one per
     /// kind per table, across pages).
     fn group_of(&mut self, table: usize, group: UaRole, page: usize) -> usize {
@@ -580,7 +616,7 @@ impl TreeBuilder {
         holder: Option<usize>,
         mcid: &mut i32,
     ) {
-        if !is_content(frag) {
+        if !is_content(frag, &self.semantics) {
             return;
         }
         let owner = match (holder, self.semantics.up(frag.node_id)) {
@@ -623,6 +659,7 @@ impl TreeBuilder {
         self.nodes.push(StructNode {
             role,
             alt,
+            span: (1, 1),
             page,
             children: Vec::new(),
             mcids: Vec::new(),
@@ -634,32 +671,36 @@ impl TreeBuilder {
 
 /// Each content fragment of a page's content bands (body, then footnotes) by its MCID:
 /// its position in paint order, as the painter numbers them.
-fn paint_mcids(bands: [&[Fragment]; 2]) -> HashMap<*const Fragment, i32> {
+fn paint_mcids(bands: [&[Fragment]; 2], semantics: &Semantics) -> HashMap<*const Fragment, i32> {
     let mut order = HashMap::new();
     for band in bands {
-        number_in_paint_order(&super::page::painted(band), &mut order);
+        number_in_paint_order(&super::page::painted(band), semantics, &mut order);
     }
     order
 }
 
-fn number_in_paint_order(frags: &[&Fragment], order: &mut HashMap<*const Fragment, i32>) {
+fn number_in_paint_order(
+    frags: &[&Fragment],
+    semantics: &Semantics,
+    order: &mut HashMap<*const Fragment, i32>,
+) {
     for &frag in frags.iter().filter(|f| !super::page::invisible(f)) {
-        if is_content(frag) {
+        if is_content(frag, semantics) {
             let next = order.len() as i32;
             order.insert(std::ptr::from_ref(frag), next);
         }
-        number_in_paint_order(&super::page::painted(&frag.children), order);
+        number_in_paint_order(&super::page::painted(&frag.children), semantics, order);
     }
 }
 
 /// Whether a fragment contributes a content MCID in a content band (matches the
-/// painter's [`wrap_kind`] `Content` arm).
-fn is_content(frag: &Fragment) -> bool {
+/// painter's [`Marker::wrap`] `Content` arm): not a decorative image.
+fn is_content(frag: &Fragment, semantics: &Semantics) -> bool {
     let real = matches!(
         frag.content,
         FragmentContent::TextLine { .. } | FragmentContent::Image(_)
     );
-    real && frag.node_id != CARRIED
+    real && frag.node_id != CARRIED && !semantics.decorative(frag)
 }
 
 /// Map a layout [`UaRole`] to a `pdf_writer` structure role.
@@ -782,7 +823,7 @@ impl UaPlan {
         if let Some(alt) = &node.alt {
             el.alt(TextStr(alt));
         }
-        write_scope(&mut el, node.role);
+        write_table_attributes(&mut el, node);
         write_kids(&mut el, node, &self.node_refs, (page_refs, annot_refs));
     }
 
@@ -835,17 +876,30 @@ impl UaPlan {
     }
 }
 
-/// Give a `TH` cell a `/Scope /Column` table attribute so a screen reader can
-/// associate it with its column (ISO 14289-1 §7.5). Column scope is the right
-/// default for the single header row this engine produces (`<th>` in the first
-/// `<tr>`); other roles get no attribute.
-fn write_scope(el: &mut pdf_writer::writers::StructElement, role: StructRole) {
+/// A table cell's table attributes. A `TH` gets `/Scope /Column` so a screen reader can
+/// associate it with its column (ISO 14289-1 §7.5; column scope is the right default
+/// for the header rows this engine produces). A cell spanning columns or rows gets
+/// `/ColSpan`/`/RowSpan`, so every row spans the same number of columns (PDF/UA-1
+/// 7.2-42/43). Other elements get no attribute.
+fn write_table_attributes(el: &mut pdf_writer::writers::StructElement, node: &StructNode) {
     use pdf_writer::types::TableHeaderScope;
-    if role != StructRole::TH {
+    let th = node.role == StructRole::TH;
+    let (cols, rows) = node.span;
+    if !th && cols == 1 && rows == 1 {
         return;
     }
     let mut attrs = el.attributes();
-    attrs.push().table().scope(TableHeaderScope::Column);
+    let mut table = attrs.push().table();
+    if th {
+        table.scope(TableHeaderScope::Column);
+    }
+    if cols > 1 {
+        table.col_span(cols as i32);
+    }
+    if rows > 1 {
+        table.row_span(rows as i32);
+    }
+    table.finish();
     attrs.finish();
 }
 
