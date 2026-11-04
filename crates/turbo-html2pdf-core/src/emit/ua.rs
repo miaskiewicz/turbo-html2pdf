@@ -522,24 +522,39 @@ impl TreeBuilder {
             return n;
         }
         let at = self.attach_point(id, role, page, holder);
-        let role = match role {
+        let role = self.renumbered(role);
+        let n = self.push_node(map_role(role), alt, page);
+        self.set_cell_span(n, id, role);
+        self.attach(n, at, role);
+        if self.semantics.element_role(id).is_some() {
+            self.elems.insert(id, n);
+        }
+        n
+    }
+
+    /// `role` with a heading's level renumbered in reading order (PDF/UA-1 7.4.2-1).
+    fn renumbered(&mut self, role: UaRole) -> UaRole {
+        match role {
             UaRole::Heading(level) => UaRole::Heading(self.heading_level(level)),
             _ => role,
-        };
-        let n = self.push_node(map_role(role), alt, page);
+        }
+    }
+
+    /// A table cell node's `(colspan, rowspan)` (PDF/UA-1 7.2-42/43).
+    fn set_cell_span(&mut self, n: usize, id: NodeId, role: UaRole) {
         if matches!(role, UaRole::TableData | UaRole::TableHeader) {
             self.nodes[n].span = self.semantics.cell_span(id);
         }
+    }
+
+    /// Link node `n` under `at`, or as a root.
+    fn attach(&mut self, n: usize, at: Option<usize>, role: UaRole) {
         match (at, role) {
             // A caption is its table's first child (PDF/UA-1 7.2-4).
             (Some(p), UaRole::Caption) => self.nodes[p].children.insert(0, n),
             (Some(p), _) => self.nodes[p].children.push(n),
             (None, _) => self.roots.push(n),
         }
-        if self.semantics.element_role(id).is_some() {
-            self.elems.insert(id, n);
-        }
-        n
     }
 
     /// The node of element `id`, reopened (with its structural parents) when its own
@@ -893,14 +908,19 @@ fn write_table_attributes(el: &mut pdf_writer::writers::StructElement, node: &St
     if th {
         table.scope(TableHeaderScope::Column);
     }
+    write_spans(&mut table, cols, rows);
+    table.finish();
+    attrs.finish();
+}
+
+/// `/ColSpan` and `/RowSpan` for a cell spanning more than one column or row.
+fn write_spans(table: &mut pdf_writer::writers::TableAttributes, cols: u32, rows: u32) {
     if cols > 1 {
         table.col_span(cols as i32);
     }
     if rows > 1 {
         table.row_span(rows as i32);
     }
-    table.finish();
-    attrs.finish();
 }
 
 /// Write a struct element's `/K` children: nested elements then own MCIDs.
