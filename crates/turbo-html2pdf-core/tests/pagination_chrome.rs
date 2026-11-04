@@ -477,3 +477,42 @@ fn a_page_holding_only_carried_padding_is_not_empty_for_the_next_paragraph() {
     assert_eq!(pages.len(), 5);
     assert!(pages[1].body.is_empty(), "{:?}", pages[1].body);
 }
+
+/// The text lines of `frags` and everything inside them.
+fn text_lines(frags: &[Fragment]) -> usize {
+    frags
+        .iter()
+        .map(|f| {
+            usize::from(matches!(f.content, FragmentContent::TextLine { .. }))
+                + text_lines(&f.children)
+        })
+        .sum()
+}
+
+/// `inner` in 16px Evolventa with 20px lines, on a 600px-wide page `height` px tall.
+fn text_doc(height: u32, inner: &str) -> String {
+    format!("<!DOCTYPE html><html><head><style>@page{{size:600px {height}px;margin:40px}}body{{margin:0;font-family:Evolventa;font-size:16px;line-height:20px}}p{{margin:0}}</style></head><body>{inner}</body></html>")
+}
+
+#[test]
+fn a_list_item_whose_text_runs_past_a_page_keeps_every_line() {
+    // miaskiewicz/turbo-html2pdf#62: the item's outside `::marker` box overlapped its first
+    // line, so the item split as side-by-side cells and lost all its lines. The same text
+    // as a paragraph, a div, or a paragraph in the item splits the same way.
+    let text: Vec<String> = (0..400).map(|i| format!("word{i}")).collect();
+    let text = text.join(" ");
+    let item = [15, 16, 16, 16, 1];
+    let block = [16, 16, 16, 8];
+    for (inner, want) in [
+        (format!("<ul><li>{text}</li></ul>"), &item[..]),
+        (format!("<ul><li><p>{text}</p></li></ul>"), &item[..]),
+        (format!("<p>{text}</p>"), &block[..]),
+        (format!("<div>{text}</div>"), &block[..]),
+    ] {
+        let per_page: Vec<usize> = pages(&text_doc(400, &inner))
+            .iter()
+            .map(|p| text_lines(&p.body))
+            .collect();
+        assert_eq!(per_page, want, "{inner:.30}");
+    }
+}
