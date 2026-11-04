@@ -4,6 +4,19 @@ All notable changes to turbo-html2pdf are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/); versions follow SemVer. The npm,
 PyPI, and crates.io packages release in lockstep from a `v*` tag (PyPI on `pyv*`).
 
+## [0.7.1]
+
+- **Fixed (PDF/UA, #61)**: the remaining veraPDF `--flavour ua1` failures of the parity corpus.
+  - 7.3-1: an `<img>` is a `Figure` whose `/Alt` is its non-empty `alt`, else `aria-label`,
+    else `title`. An empty `alt` (decorative) or no text alternative paints the image as an
+    `/Artifact`, as Chrome's tagged PDF export does. A broken image's alt text is the
+    content of a `Figure` that carries the alt.
+  - 7.2-42/43: a `<td>`/`<th>` with `colspan`/`rowspan` writes `/ColSpan`/`/RowSpan`, so
+    every row spans the same number of columns.
+  - 7.4.2-1: heading levels are renumbered in reading order. The first heading is `H1`, and
+    a deeper heading is one level below the heading it nests in, so no level is skipped
+    (`h2 h4 h3` tags `H1 H2 H2`).
+
 ## [0.7.0] — turbo-dom 0.7.0
 
 Rebuilt on turbo-dom 0.7.0 (`turbo-dom-layout` + `turbo-dom` 0.7). Until those crates are on
