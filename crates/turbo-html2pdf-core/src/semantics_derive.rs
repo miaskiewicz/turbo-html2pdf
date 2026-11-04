@@ -15,7 +15,7 @@
 //! | the anonymous grid box of a captioned table | — | — | — | — |
 //! | block marker box | — | — | `href` | — |
 //! | inline marker | — | — | — | `<t:anchor name>` (else `id`) |
-//! | replaced `<img>` image | by tag (`Figure`) | `alt` (or "") | — | — |
+//! | replaced `<img>` image (and its box) | `Figure`, or `Artifact` with no text alternative | `alt`, else `aria-label`, else `title` (non-empty) | — | — |
 //! | background / mask image, text line | — | — | — | — |
 //!
 //! A link `href` is internal (`#name`, a GoTo to the named destination) or external
@@ -92,6 +92,9 @@ struct NodeInfo {
     role: Option<UaRole>,
     #[cfg(feature = "pdf-ua")]
     alt: Option<String>,
+    /// A table cell's (`colspan`, `rowspan`), as HTML parses them (1 when absent).
+    #[cfg(feature = "pdf-ua")]
+    span: (u32, u32),
     /// A table row's group (`TableHead`/`TableBody`/`TableFoot`), from its parent element.
     #[cfg(feature = "pdf-ua")]
     row_group: Option<UaRole>,
@@ -194,7 +197,7 @@ impl Derived {
     fn role_boxes(&self, sources: &NodeSources) -> HashMap<turbo_dom::Handle, NodeId> {
         let mut boxes: HashMap<turbo_dom::Handle, NodeId> = HashMap::new();
         for (&id, &h) in &sources.elements {
-            if self.nodes[&id].role.is_none() {
+            if matches!(self.nodes[&id].role, None | Some(UaRole::Artifact)) {
                 continue;
             }
             let e = boxes.entry(h).or_insert(id);
@@ -236,16 +239,21 @@ fn node_info(view: &TreeView, h: turbo_dom::Handle) -> NodeInfo {
     let local = view.tree().local_name(h).unwrap_or_default();
     let marker = view.marker(h).and_then(TKind::from_marker);
     let img = marker.is_none() && local == "img";
+    #[cfg(feature = "pdf-ua")]
+    let alt = img.then(|| text_alternative(view, h)).flatten();
     NodeInfo {
         marker,
         img,
         #[cfg(feature = "pdf-ua")]
-        role: marker.map_or_else(
-            || link_role(view, h, local).or_else(|| role_for_tag(local)),
-            |_| None,
-        ),
+        role: match (marker, img) {
+            (Some(_), _) => None,
+            (None, true) if alt.is_none() => Some(UaRole::Artifact),
+            (None, _) => link_role(view, h, local).or_else(|| role_for_tag(local)),
+        },
         #[cfg(feature = "pdf-ua")]
-        alt: img.then(|| view.attr(h, "alt").unwrap_or("").to_string()),
+        alt,
+        #[cfg(feature = "pdf-ua")]
+        span: cell_span(view, h, local),
         #[cfg(feature = "pdf-ua")]
         row_group: (local == "tr").then(|| row_group(view, h)),
         #[cfg(feature = "xref")]
@@ -298,6 +306,46 @@ fn role_for_tag(name: &str) -> Option<UaRole> {
         }
         _ => return None,
     })
+}
+
+/// The text alternative of the `<img>` at `h` (PDF/UA-1 7.3-1): a non-empty `alt`;
+/// an empty `alt` marks it decorative (`None`); with no `alt`, a non-empty `aria-label`,
+/// else `title` (the accessible-name order); else `None`, an artifact as in Chrome's
+/// tagged PDF export.
+#[cfg(feature = "pdf-ua")]
+fn text_alternative(view: &TreeView, h: turbo_dom::Handle) -> Option<String> {
+    if let Some(alt) = view.attr(h, "alt") {
+        return (!alt.is_empty()).then(|| alt.to_string());
+    }
+    ["aria-label", "title"]
+        .into_iter()
+        .filter_map(|name| view.attr(h, name))
+        .find(|v| !v.trim().is_empty())
+        .map(str::to_string)
+}
+
+/// The (`colspan`, `rowspan`) of a `<td>`/`<th>` (`(1, 1)` for anything else).
+#[cfg(feature = "pdf-ua")]
+fn cell_span(view: &TreeView, h: turbo_dom::Handle, local: &str) -> (u32, u32) {
+    if local != "td" && local != "th" {
+        return (1, 1);
+    }
+    let span = |name: &str, max: u32| span_value(view.attr(h, name), max);
+    (span("colspan", 1000), span("rowspan", 65534))
+}
+
+/// HTML's span parse: the leading digits of a non-negative integer, clamped to
+/// `1..=max` (0, empty or junk is 1). A `rowspan` of 0 ("to the end of the group") is
+/// taken as 1.
+#[cfg(feature = "pdf-ua")]
+fn span_value(attr: Option<&str>, max: u32) -> u32 {
+    let digits: String = attr
+        .unwrap_or("")
+        .trim_start()
+        .chars()
+        .take_while(char::is_ascii_digit)
+        .collect();
+    digits.parse::<u32>().map_or(1, |n| n.clamp(1, max))
 }
 
 /// The row group of the `<tr>` at `h`: its parent `<thead>`/`<tfoot>`, else the body.
@@ -378,10 +426,25 @@ impl super::Semantics {
         self.derived.nodes.get(&id)?.row_group
     }
 
-    /// The `/Alt` text of a replaced-image fragment.
+    /// The `/Alt` text of an `<img>`'s fragment: its replaced image, or the box that
+    /// shows its alt text when it failed to load.
     #[cfg(feature = "pdf-ua")]
     pub fn alt(&self, frag: &Fragment) -> Option<&str> {
-        self.derived.replaced_img(frag)?.alt.as_deref()
+        self.derived.nodes.get(&frag.node_id)?.alt.as_deref()
+    }
+
+    /// Whether `frag` is the replaced image of an `<img>` with no text alternative:
+    /// painted as an artifact, not tagged content (PDF/UA-1 7.3-1).
+    #[cfg(feature = "pdf-ua")]
+    pub fn decorative(&self, frag: &Fragment) -> bool {
+        matches!(frag.content, FragmentContent::Image(_))
+            && self.role(frag) == Some(UaRole::Artifact)
+    }
+
+    /// The (`colspan`, `rowspan`) of the table-cell element whose box id is `id`.
+    #[cfg(feature = "pdf-ua")]
+    pub fn cell_span(&self, id: NodeId) -> (u32, u32) {
+        self.derived.nodes.get(&id).map_or((1, 1), |info| info.span)
     }
 
     /// The bare `#name` target of an internal-link box fragment.

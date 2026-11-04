@@ -1203,7 +1203,6 @@ fn bodies_of(pdf: &[u8], role: &str) -> Vec<String> {
 /// PDF/UA-1 7.3-1: an image with a text alternative is a `Figure` carrying it as `/Alt`
 /// (`alt`, else `aria-label`, else `title`); the image is the Figure's content.
 #[test]
-#[ignore = "turbo-html2pdf#61: fails until the fix"]
 fn an_image_with_a_text_alternative_is_a_figure_with_alt() {
     for (img, alt) in [
         ("<img alt=\"Red square\" src=\"red.png\">", "Red square"),
@@ -1237,7 +1236,6 @@ fn an_image_with_a_text_alternative_is_a_figure_with_alt() {
 /// PDF/UA-1 7.3-1: an image with an empty `alt` is decorative, and one with no text
 /// alternative at all is tagged like Chrome tags it: an artifact, with no `Figure`.
 #[test]
-#[ignore = "turbo-html2pdf#61: fails until the fix"]
 fn an_image_without_a_text_alternative_is_an_artifact() {
     for img in [
         "<img alt=\"\" src=\"red.png\">",
@@ -1264,7 +1262,6 @@ fn an_image_without_a_text_alternative_is_an_artifact() {
 /// An image that fails to load shows its `alt` text (as Chrome does): the text is the
 /// content of the image's `Figure`, which carries that alt.
 #[test]
-#[ignore = "turbo-html2pdf#61: fails until the fix"]
 fn a_broken_image_shows_its_alt_in_a_figure_with_alt() {
     let pdf = ua_pdf(
         "<p>Before <img alt=\"dot\" src=\"missing.png\"> after</p>",
@@ -1280,7 +1277,6 @@ fn a_broken_image_shows_its_alt_in_a_figure_with_alt() {
 /// PDF/UA-1 7.2-42/43: a spanning cell carries `/ColSpan`/`/RowSpan`, so every row spans
 /// the same number of columns; a `TH` keeps its `/Scope`.
 #[test]
-#[ignore = "turbo-html2pdf#61: fails until the fix"]
 fn spanning_cells_carry_their_spans() {
     let html = "<table><tr><th colspan=\"2\">Head</th><th>H3</th></tr>\
         <tr><td rowspan=\"2\">Tall</td><td>b</td><td>c</td></tr>\
@@ -1325,7 +1321,6 @@ fn degenerate_spans_are_one_column() {
 /// `H1` and a deeper heading is one level below the heading it nests in (no skipped
 /// level); a heading returns to the level of the earlier heading of its rank.
 #[test]
-#[ignore = "turbo-html2pdf#61: fails until the fix"]
 fn heading_levels_never_skip() {
     let html = "<h2>a</h2><h4>b</h4><h3>c</h3><h6>d</h6><h2>e</h2><h5>f</h5><h1>g</h1><h3>h</h3>";
     let pdf = ua_pdf(html, "");
