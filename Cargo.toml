@@ -32,11 +32,3 @@ opt-level = 3
 lto = "thin"
 codegen-units = 1
 
-# Pre-publish only: turbo-dom-layout 0.7.0 and turbo-dom 0.7.0 come from turbo-dom's
-# 0.7.0 release branch (miaskiewicz/turbo-dom#232, ci/ubuntu-2204-glibc-guard) until they
-# are on crates.io. Remove this block and re-lock
-# (`cargo update -p turbo-dom-layout -p turbo-dom`) before tagging (see PUBLISHING.md);
-# the tag-only `release-guard` job fails while it is present.
-[patch.crates-io]
-turbo-dom-layout = { git = "https://github.com/miaskiewicz/turbo-dom", rev = "ba359bc6b352952821204f2e8348a78dbc85903c" }
-turbo-dom = { git = "https://github.com/miaskiewicz/turbo-dom", rev = "ba359bc6b352952821204f2e8348a78dbc85903c" }
