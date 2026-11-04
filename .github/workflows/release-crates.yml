@@ -11,7 +11,7 @@
 # available in the index before returning, so the sequential publish resolves.
 # Core itself depends on turbo-dom-layout + turbo-dom (turbo-dom workspace, released
 # first from its own v* tag): the job waits for the Cargo.lock versions of both
-# (0.6.0) to be on the crates.io index before packaging core.
+# (0.7.0) to be on the crates.io index before packaging core.
 #
 # The tag-only `release-guard` job (scripts/release-guard.sh) fails the run while the
 # pre-publish `[patch.crates-io]` section or a git source in Cargo.lock remains, or a

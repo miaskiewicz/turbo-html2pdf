@@ -156,7 +156,9 @@ fn slice(w: &Fragment, start: f32, end: f32, first: bool, last: bool) -> Fragmen
     {
         border.top.width *= u16::from(first);
         border.bottom.width *= u16::from(last);
-        *border_radius *= f32::from(u8::from(first && last));
+        if !(first && last) {
+            *border_radius = turbo_dom_layout::BorderRadii::ZERO;
+        }
     }
     f
 }
@@ -171,7 +173,7 @@ mod tests {
         let content = FragmentContent::Box {
             background: None,
             border,
-            border_radius: radius,
+            border_radius: turbo_dom_layout::BorderRadii::uniform(radius),
             shadow: None,
             gradient: None,
             transform: None,
@@ -190,7 +192,9 @@ mod tests {
 
     fn radius(f: &Fragment) -> f32 {
         match &f.content {
-            FragmentContent::Box { border_radius, .. } => *border_radius,
+            FragmentContent::Box { border_radius, .. } => {
+                border_radius.as_uniform().expect("uniform corners")
+            }
             _ => unreachable!("a box"),
         }
     }

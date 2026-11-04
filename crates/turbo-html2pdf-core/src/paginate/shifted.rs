@@ -9,6 +9,7 @@
 //! bottom edge (the shift paints into the page margins there, as before).
 
 use crate::layout::fragment::{ClipRect, Fragment, NodeId};
+use turbo_dom_layout::{BorderRadii, CornerRadii};
 
 use super::walk::PageSpan;
 
@@ -93,6 +94,7 @@ pub(super) fn window(piece: &Fragment, lo: f32, hi: f32) -> ClipRect {
         y: lo - piece.y,
         width: 2.0 * FAR,
         height: hi - lo,
+        radii: turbo_dom_layout::BorderRadii::ZERO,
     };
     piece.clip.map_or(rows, |own| intersect(own, rows))
 }
@@ -109,7 +111,24 @@ fn intersect(a: ClipRect, b: ClipRect) -> ClipRect {
         y: y0,
         width: (x1 - x0).max(0.0),
         height: (y1 - y0).max(0.0),
+        // The page window only cuts rows: a rounded own clip keeps the corners of an
+        // edge the window leaves whole and squares those of a cut edge (as
+        // `decorate::slice` squares a split box's).
+        radii: cut_corners(a.radii, y0 > a.y, y1 < a.y + a.height),
     }
+}
+
+/// `radii` with the top corners squared when the top edge is cut, the bottom ones when
+/// the bottom edge is.
+fn cut_corners(radii: BorderRadii, top: bool, bottom: bool) -> BorderRadii {
+    let [tl, tr, br, bl] = radii.corners();
+    let keep = |c: CornerRadii, cut: bool| if cut { CornerRadii::default() } else { c };
+    BorderRadii::from_corners([
+        keep(tl, top),
+        keep(tr, top),
+        keep(br, bottom),
+        keep(bl, bottom),
+    ])
 }
 
 #[cfg(test)]
@@ -122,7 +141,7 @@ mod tests {
         let content = FragmentContent::Box {
             background: None,
             border: BorderEdges::default(),
-            border_radius: 0.0,
+            border_radius: turbo_dom_layout::BorderRadii::ZERO,
             shadow: None,
             gradient: None,
             transform: None,
@@ -261,6 +280,7 @@ mod tests {
             y: 10.0,
             width: 30.0,
             height: 40.0,
+            radii: turbo_dom_layout::BorderRadii::ZERO,
         });
         let got = pieces(&f, 1, (0, 1), &spans(&[320.0, 320.0]));
         // Page 2: own clip rows -10..30 within -1..: -1..30; page 1: 310..350 within ..320.
@@ -278,8 +298,41 @@ mod tests {
                 y: 100.0,
                 width: 1.0,
                 height: 1.0,
+                radii: turbo_dom_layout::BorderRadii::ZERO,
             },
         );
         assert_eq!((none.width, none.height), (0.0, 0.0));
+    }
+
+    #[test]
+    fn a_page_cut_squares_the_clips_corners_on_the_cut_edges() {
+        use turbo_dom_layout::{BorderRadii, CornerRadii};
+        let own = ClipRect {
+            x: 0.0,
+            y: 0.0,
+            width: 100.0,
+            height: 100.0,
+            radii: BorderRadii::uniform(8.0),
+        };
+        let rows = |y: f32, height: f32| ClipRect {
+            x: -FAR,
+            y,
+            width: 2.0 * FAR,
+            height,
+            radii: BorderRadii::ZERO,
+        };
+        let [tl, tr, br, bl] = intersect(own, rows(-10.0, 50.0)).radii.corners();
+        let round = CornerRadii::circle(8.0);
+        assert_eq!(
+            [tl, tr, br, bl],
+            [round, round, CornerRadii::default(), CornerRadii::default()]
+        );
+        let [tl, tr, br, bl] = intersect(own, rows(40.0, 100.0)).radii.corners();
+        assert_eq!(
+            [tl, tr, br, bl],
+            [CornerRadii::default(), CornerRadii::default(), round, round]
+        );
+        // A window that holds the whole clip keeps every corner.
+        assert_eq!(intersect(own, rows(-1.0, 200.0)).radii, own.radii);
     }
 }

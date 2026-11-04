@@ -75,13 +75,13 @@ authorization. Merging an ordinary PR does not publish a version.
 
 ## Pre-tag: drop the pre-publish patch
 
-For 0.6.0 (and any release made while `[patch.crates-io]` is present), on the release
-PR head, after turbo-dom's `v0.6.0` publish finished:
+For 0.7.0 (and any release made while `[patch.crates-io]` is present), on the release
+PR head, after turbo-dom's `v0.7.0` publish finished:
 
 ```sh
-# 1. turbo-dom-layout 0.6.0 and turbo-dom 0.6.0 must be on crates.io.
+# 1. turbo-dom-layout 0.7.0 and turbo-dom 0.7.0 must be on crates.io.
 for c in turbo-dom turbo-dom-layout; do
-  curl -fsSL "https://index.crates.io/tu/rb/$c" | grep -q '"vers":"0.6.0"' && echo "$c 0.6.0 ok"
+  curl -fsSL "https://index.crates.io/tu/rb/$c" | grep -q '"vers":"0.7.0"' && echo "$c 0.7.0 ok"
 done
 # 2. Delete the `[patch.crates-io]` section (and its comment) from the root Cargo.toml.
 # 3. Re-lock ONLY those two crates from crates.io (no unrelated lockfile churn).
@@ -89,7 +89,7 @@ cargo update -p turbo-dom-layout -p turbo-dom
 git diff --stat Cargo.lock                    # only the two entries (source + checksum)
 ! grep -n 'source = "git+' Cargo.lock         # no git sources left
 # 4. Guards and gates against the registry crates.
-sh scripts/release-guard.sh v0.6.0 && sh scripts/release-guard.sh pyv0.6.0
+sh scripts/release-guard.sh v0.7.0 && sh scripts/release-guard.sh pyv0.7.0
 cargo test --workspace
 cargo package -p turbo-html2pdf-core --locked # full verify now that deps are published
 node scripts/package-notices.mjs --check      # notices built from the registry crate
@@ -98,9 +98,9 @@ node scripts/package-notices.mjs --pack && (cd crates/turbo-pdf-napi && npm pack
 ```
 
 Then merge with a merge commit and tag that merge SHA (next section):
-`git tag -a v0.6.0 "$RELEASE_SHA" -m "Release v0.6.0"` and
-`git tag -a pyv0.6.0 "$RELEASE_SHA" -m "Python release v0.6.0"`, then
-`git push origin v0.6.0 pyv0.6.0`.
+`git tag -a v0.7.0 "$RELEASE_SHA" -m "Release v0.7.0"` and
+`git tag -a pyv0.7.0 "$RELEASE_SHA" -m "Python release v0.7.0"`, then
+`git push origin v0.7.0 pyv0.7.0`.
 
 ## Tag, monitor and verify
 

@@ -38,7 +38,7 @@ pub fn diagnostics_to_py<'py>(
 }
 
 /// Build a [`FontRegistry`] from caller-supplied font byte blobs. Each blob is
-/// parsed via [`FontFace::from_bytes`]; the family is a synthetic per-index tag
+/// parsed via [`FontFace::from_web_font_bytes`]; the family is a synthetic per-index tag
 /// so author CSS `font-family` still selects via the registry's fallback chain.
 /// Unparseable blobs are skipped (the registry simply has fewer faces).
 pub fn build_registry(fonts: &[Vec<u8>]) -> FontRegistry {
@@ -52,7 +52,7 @@ pub fn build_registry(fonts: &[Vec<u8>]) -> FontRegistry {
 /// Parse and register a single font blob, ignoring blobs that fail to parse.
 fn register_one(reg: &mut FontRegistry, bytes: &[u8], index: usize) {
     let family = font_family(index);
-    if let Some(face) = FontFace::from_bytes(bytes.to_vec(), family, 400, false) {
+    if let Some(face) = FontFace::from_web_font_bytes(bytes.to_vec(), family, 400, false) {
         reg.add(face);
     }
 }

@@ -4,6 +4,76 @@ All notable changes to turbo-html2pdf are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/); versions follow SemVer. The npm,
 PyPI, and crates.io packages release in lockstep from a `v*` tag (PyPI on `pyv*`).
 
+## [0.7.0] — turbo-dom 0.7.0
+
+Rebuilt on turbo-dom 0.7.0 (`turbo-dom-layout` + `turbo-dom` 0.7, from crates.io). The npm,
+PyPI and crates.io packages move to 0.7.0 with turbo-dom, turbo-test and turbo-surf.
+
+- **Changed (render, turbo-dom 0.7.0)**: layout fixes in turbo-dom 0.7.0, each checked
+  against Chrome 156 `page.pdf()` in turbo-dom's parity corpora: Chrome's line box model on
+  the PDF path (turbo-dom#245; inline elements stay flattened into their text runs, below),
+  text advances summed in 1/64 px (#246), no line-height floor (#178), `<img>` is inline by
+  default and an unloaded or src-less `<img>` keeps Chrome's box (#241/#242/#243),
+  background-size / -position / -repeat / -origin / -clip tile like Chrome (#248), list
+  markers (`::marker`, #128), `hyphens: auto` for English (#213), bidi and `dir` (#190/#238)
+  and web-font kerning (#240).
+- **Changed (API)**: html2pdf sets turbo-dom 0.7's new `flatten_inline_elements` on its
+  `LayoutOptions` / `HtmlOptions`: the link annotations and PDF/UA tags assume no inline-box
+  fragments (turbo-dom#210), so inline elements keep the pre-0.7 PDF inline model.
+- **Changed (API, turbo-dom 0.7.0)**: `FragmentContent::Box.border_radius` is a per-corner
+  `BorderRadii` and `ClipRect` gains `radii` (turbo-dom#248/#253). The emitter still paints
+  box borders and backgrounds with square corners (pre-existing; Chrome rounds them).
+- **Fixed (render)**: a clip region with corner radii is painted as a rounded clipping path.
+  turbo-dom 0.7 clips a rounded box's tiled background (`background-image` with
+  `background-size`/`-repeat`) to the box's rounded corners; html2pdf clipped those tiles to a
+  rectangle, so they spilled past the corners. Now they stay inside, as in Chrome 156. When a
+  page break cuts such a clip, the corners on the cut edge are square, as a split box's are.
+  turbo-dom 0.7.0 is pinned at turbo-dom#232 `cb1b799`; at that pin, before this fix, the
+  html2pdf, -svg and -extra parity corpora are byte-identical to `b-0.7.0`.
+- **Changed (fonts)**: caller-supplied fonts (Node, WASM, Python, MCP and the watermark font)
+  load as web fonts (`FontFace::from_web_font_bytes`), as Chrome loads them through
+  `@font-face` (turbo-dom#240). A CFF font, or one whose legacy `kern` table is not version 0
+  (e.g. Apple v1.0), loses that legacy kerning, so its text widths can shift.
+- **Fixed (`pdf-ua`)**: list items follow PDF/UA-1 7.2-20: an `LI` holds only its `Lbl` (the
+  marker, new `UaRole::ListLabel` from turbo-dom 0.7's `NodeSources::list_markers`) and an
+  `LBody` with the item's content. Before, the marker was an anonymous `P` and the content sat
+  loose in the `LI`. Every box and text line of one marker forms one `Lbl`, including
+  `list-style-position: inside` markers and `ol` numbers; `list-style: none` items have only an
+  `LBody`.
+- **Fixed (`pdf-ua`)**: table rows follow PDF/UA-1 7.2-4 (#60): each `TR` sits in a `THead`,
+  `TBody` or `TFoot` (from its `<thead>`/`<tbody>`/`<tfoot>`; a table without row groups gets a
+  `TBody`) inside its `Table`. The rows of a table continued onto a later page get a synthetic
+  `Table` there; they were loose in the `Document`, which veraPDF rejects.
+- **Fixed (paginate)**: a list item whose own text runs past a page kept none of its lines
+  (#62). Its outside `::marker` box sits beside the first line, so the item read as a row of
+  side-by-side cells and was split in parallel. Now only boxes are cells, and a block's last
+  content is its in-flow child with the lowest bottom edge, list markers aside.
+- **Fixed (`pdf-ua`)**: blocks split across pages keep their structure. Each element is one
+  structure element for the whole document (a struct element may span pages; its content on a
+  later page is a marked-content reference with its own `/Pg`). A continuation page reopens a
+  cell's `TR`, a row's `Table` and row group, a caption's `Table` (as its first child), an
+  item's `L`, and a split item's `LI` with its `Lbl` and `LBody`. Two split tables on one page
+  stay two tables. A table header repeated on a continuation page keeps its ids, so its
+  links stay clickable on every page, and is tagged as an `/Artifact`; the original row is
+  tagged once. Struct element objects are numbered in reading order.
+- **Fixed (`pdf-ua` + `xref`)**: links are tagged (PDF/UA-1 7.18): an `<a href>` is a `Link`
+  element holding each of its Link annotations as an `OBJR` kid (a link in a repeated header
+  is one element with an annotation per page). Each annotation has a `/StructParent` key in
+  the ParentTree and its target as `/Contents`, and a page with annotations has `/Tabs /S`.
+- **Tests**: `report_hot_path_breakdown`'s budget is the measured 6358 shapes plus 100 (was
+  6096: turbo-dom 0.7's max-content pass works on a paragraph's words, #241).
+
+- **Fixed (PDF/UA, #61)**: the remaining veraPDF `--flavour ua1` failures of the parity corpus.
+  - 7.3-1: an `<img>` is a `Figure` whose `/Alt` is its non-empty `alt`, else `aria-label`,
+    else `title`. An empty `alt` (decorative) or no text alternative paints the image as an
+    `/Artifact`, as Chrome's tagged PDF export does. A broken image's alt text is the
+    content of a `Figure` that carries the alt.
+  - 7.2-42/43: a `<td>`/`<th>` with `colspan`/`rowspan` writes `/ColSpan`/`/RowSpan`, so
+    every row spans the same number of columns.
+  - 7.4.2-1: heading levels are renumbered in reading order. The first heading is `H1`, and
+    a deeper heading is one level below the heading it nests in, so no level is skipped
+    (`h2 h4 h3` tags `H1 H2 H2`).
+
 ## [0.6.0] — 2026-10-26 — turbo-dom consolidation
 
 The engine is now built on the turbo-dom workspace crates instead of carrying its own

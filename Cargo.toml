@@ -9,12 +9,12 @@ members = [
 ]
 
 [workspace.package]
-version = "0.6.0"
+version = "0.7.0"
 edition = "2021"
 license = "MIT"
 repository = "https://github.com/miaskiewicz/turbo-html2pdf"
 authors = ["turbo-pdf contributors"]
-# Real workspace floor: turbo-dom-layout / turbo-dom 0.6 declare rust-version 1.89
+# Real workspace floor: turbo-dom-layout / turbo-dom 0.7 declare rust-version 1.89
 # (smol_str 0.3.6 sets it), above `napi-build` (1.88) and the core engine's
 # font-subset stack (`subsetter`/`skrifa`/`write-fonts`, 1.85). So 1.89 is the MSRV.
 rust-version = "1.89"
@@ -31,3 +31,4 @@ wasm-bindgen = "0.2"
 opt-level = 3
 lto = "thin"
 codegen-units = 1
+

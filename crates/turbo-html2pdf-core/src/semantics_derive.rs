@@ -10,11 +10,12 @@
 //! |---|---|---|---|---|
 //! | box of the flow root | `Group` | — | — | — |
 //! | box of an anonymous (unsourced) block | `Paragraph` | — | — | — |
+//! | `::marker` box (or inside text line) of a list item | `ListLabel` | — | — | — |
 //! | box of an element (incl. a table row) | by tag | — | `href` (not for rows) | `id` |
 //! | the anonymous grid box of a captioned table | — | — | — | — |
 //! | block marker box | — | — | `href` | — |
 //! | inline marker | — | — | — | `<t:anchor name>` (else `id`) |
-//! | replaced `<img>` image | by tag (`Figure`) | `alt` (or "") | — | — |
+//! | replaced `<img>` image (and its box) | `Figure`, or `Artifact` with no text alternative | `alt`, else `aria-label`, else `title` (non-empty) | — | — |
 //! | background / mask image, text line | — | — | — | — |
 //!
 //! A link `href` is internal (`#name`, a GoTo to the named destination) or external
@@ -50,6 +51,8 @@ pub enum UaRole {
     ListItem,
     /// A list item's body (the content of an `<li>`).
     ListBody,
+    /// A list item's label: its `::marker` box (miaskiewicz/turbo-dom#128).
+    ListLabel,
     /// A table (`<table>`).
     Table,
     /// A table caption (`<caption>`), a child of its `Table`.
@@ -60,6 +63,15 @@ pub enum UaRole {
     TableHeader,
     /// A table data cell (`<td>`).
     TableData,
+    /// A table's header row group (`<thead>`), around its `TableRow`s.
+    TableHead,
+    /// A table's body row group (`<tbody>`, or the rows of a table without one).
+    TableBody,
+    /// A table's footer row group (`<tfoot>`).
+    TableFoot,
+    /// A link (`<a href>` with a link target, the `xref` feature): holds its Link
+    /// annotations as `OBJR` kids (PDF/UA-1 7.18.5).
+    Link,
     /// A figure (`<img>`); carries `/Alt` from the `alt` attribute.
     Figure,
     /// A run of inline text (`<span>`, `<a>`, anonymous inline boxes).
@@ -80,6 +92,12 @@ struct NodeInfo {
     role: Option<UaRole>,
     #[cfg(feature = "pdf-ua")]
     alt: Option<String>,
+    /// A table cell's (`colspan`, `rowspan`), as HTML parses them (1 when absent).
+    #[cfg(feature = "pdf-ua")]
+    span: (u32, u32),
+    /// A table row's group (`TableHead`/`TableBody`/`TableFoot`), from its parent element.
+    #[cfg(feature = "pdf-ua")]
+    row_group: Option<UaRole>,
     #[cfg(feature = "xref")]
     link: Option<LinkTarget>,
     #[cfg(feature = "xref")]
@@ -132,7 +150,15 @@ pub(crate) struct Derived {
     /// The anonymous grid boxes of captioned tables: no structure of their own, so the
     /// rows they hold are the table's children (miaskiewicz/turbo-dom#51).
     grids: HashSet<NodeId>,
+    /// List items' `::marker` boxes and text -> the item's box: unsourced, but the
+    /// item's label, not a paragraph.
+    list_markers: HashMap<NodeId, NodeId>,
     nodes: HashMap<NodeId, NodeInfo>,
+    /// Each element box's and text run's nearest ancestor element that carries a role
+    /// (by its box id): what a split block's continuation pages, whose own box is an
+    /// unsourced slice, rebuild their structure from.
+    #[cfg(feature = "pdf-ua")]
+    ups: HashMap<NodeId, NodeId>,
 }
 
 impl Derived {
@@ -142,9 +168,42 @@ impl Derived {
         self.roots.insert(sources.root);
         self.rows.extend(sources.table_rows.iter().copied());
         self.grids.extend(sources.table_grids.iter().copied());
+        self.list_markers.extend(&sources.list_markers);
         for (&id, &h) in &sources.elements {
             self.nodes.insert(id, node_info(view, h));
         }
+        #[cfg(feature = "pdf-ua")]
+        self.record_ups(view, sources);
+    }
+
+    /// Record [`Self::ups`] for one flow's element boxes and text runs.
+    #[cfg(feature = "pdf-ua")]
+    fn record_ups(&mut self, view: &TreeView, sources: &NodeSources) {
+        let boxes = self.role_boxes(sources);
+        let tree = view.tree();
+        let up = |h: turbo_dom::Handle| {
+            std::iter::successors(tree.parent(h), |&p| tree.parent(p))
+                .find_map(|p| boxes.get(&p).copied())
+        };
+        for (&id, &h) in sources.elements.iter().chain(&sources.texts) {
+            if let Some(u) = up(h) {
+                self.ups.insert(id, u);
+            }
+        }
+    }
+
+    /// The (first) box id of each source element of a flow that carries a role.
+    #[cfg(feature = "pdf-ua")]
+    fn role_boxes(&self, sources: &NodeSources) -> HashMap<turbo_dom::Handle, NodeId> {
+        let mut boxes: HashMap<turbo_dom::Handle, NodeId> = HashMap::new();
+        for (&id, &h) in &sources.elements {
+            if matches!(self.nodes[&id].role, None | Some(UaRole::Artifact)) {
+                continue;
+            }
+            let e = boxes.entry(h).or_insert(id);
+            e.0 = e.0.min(id.0);
+        }
+        boxes
     }
 
     fn in_range(&self, id: NodeId) -> bool {
@@ -180,13 +239,23 @@ fn node_info(view: &TreeView, h: turbo_dom::Handle) -> NodeInfo {
     let local = view.tree().local_name(h).unwrap_or_default();
     let marker = view.marker(h).and_then(TKind::from_marker);
     let img = marker.is_none() && local == "img";
+    #[cfg(feature = "pdf-ua")]
+    let alt = img.then(|| text_alternative(view, h)).flatten();
     NodeInfo {
         marker,
         img,
         #[cfg(feature = "pdf-ua")]
-        role: marker.map_or_else(|| role_for_tag(local), |_| None),
+        role: match (marker, img) {
+            (Some(_), _) => None,
+            (None, true) if alt.is_none() => Some(UaRole::Artifact),
+            (None, _) => link_role(view, h, local).or_else(|| role_for_tag(local)),
+        },
         #[cfg(feature = "pdf-ua")]
-        alt: img.then(|| view.attr(h, "alt").unwrap_or("").to_string()),
+        alt,
+        #[cfg(feature = "pdf-ua")]
+        span: cell_span(view, h, local),
+        #[cfg(feature = "pdf-ua")]
+        row_group: (local == "tr").then(|| row_group(view, h)),
         #[cfg(feature = "xref")]
         link: view.attr(h, "href").and_then(link_target),
         #[cfg(feature = "xref")]
@@ -200,6 +269,19 @@ fn node_info(view: &TreeView, h: turbo_dom::Handle) -> NodeInfo {
             .filter(|id| !id.is_empty())
             .map(str::to_string),
     }
+}
+
+/// `Link` for an `<a>` whose `href` makes a link annotation (the `xref` feature).
+#[cfg(all(feature = "pdf-ua", feature = "xref"))]
+fn link_role(view: &TreeView, h: turbo_dom::Handle, local: &str) -> Option<UaRole> {
+    let linked = local == "a" && view.attr(h, "href").and_then(link_target).is_some();
+    linked.then_some(UaRole::Link)
+}
+
+/// Without the `xref` feature no `<a>` makes a link annotation.
+#[cfg(all(feature = "pdf-ua", not(feature = "xref")))]
+fn link_role(_view: &TreeView, _h: turbo_dom::Handle, _local: &str) -> Option<UaRole> {
+    None
 }
 
 /// Map a lowercase HTML tag name to its structure role.
@@ -226,6 +308,60 @@ fn role_for_tag(name: &str) -> Option<UaRole> {
     })
 }
 
+/// The text alternative of the `<img>` at `h` (PDF/UA-1 7.3-1): a non-empty `alt`;
+/// an empty `alt` marks it decorative (`None`); with no `alt`, a non-empty `aria-label`,
+/// else `title` (the accessible-name order); else `None`, an artifact as in Chrome's
+/// tagged PDF export.
+#[cfg(feature = "pdf-ua")]
+fn text_alternative(view: &TreeView, h: turbo_dom::Handle) -> Option<String> {
+    if let Some(alt) = view.attr(h, "alt") {
+        return (!alt.is_empty()).then(|| alt.to_string());
+    }
+    ["aria-label", "title"]
+        .into_iter()
+        .filter_map(|name| view.attr(h, name))
+        .find(|v| !v.trim().is_empty())
+        .map(str::to_string)
+}
+
+/// The (`colspan`, `rowspan`) of a `<td>`/`<th>` (`(1, 1)` for anything else).
+#[cfg(feature = "pdf-ua")]
+fn cell_span(view: &TreeView, h: turbo_dom::Handle, local: &str) -> (u32, u32) {
+    if local != "td" && local != "th" {
+        return (1, 1);
+    }
+    let span = |name: &str, max: u32| span_value(view.attr(h, name), max);
+    (span("colspan", 1000), span("rowspan", 65534))
+}
+
+/// HTML's span parse: the leading digits of a non-negative integer, clamped to
+/// `1..=max` (0, empty or junk is 1). A `rowspan` of 0 ("to the end of the group") is
+/// taken as 1.
+#[cfg(feature = "pdf-ua")]
+fn span_value(attr: Option<&str>, max: u32) -> u32 {
+    let digits: String = attr
+        .unwrap_or("")
+        .trim_start()
+        .chars()
+        .take_while(char::is_ascii_digit)
+        .collect();
+    digits.parse::<u32>().map_or(1, |n| n.clamp(1, max))
+}
+
+/// The row group of the `<tr>` at `h`: its parent `<thead>`/`<tfoot>`, else the body.
+#[cfg(feature = "pdf-ua")]
+fn row_group(view: &TreeView, h: turbo_dom::Handle) -> UaRole {
+    let parent = view
+        .tree()
+        .parent(h)
+        .and_then(|p| view.tree().local_name(p));
+    match parent.unwrap_or_default() {
+        "thead" => UaRole::TableHead,
+        "tfoot" => UaRole::TableFoot,
+        _ => UaRole::TableBody,
+    }
+}
+
 /// The 1-based heading level of `h1`..`h6`, or `None`.
 #[cfg(feature = "pdf-ua")]
 fn heading_level(name: &str) -> Option<u8> {
@@ -248,6 +384,13 @@ impl super::Semantics {
         match &frag.content {
             FragmentContent::Box { .. } if d.roots.contains(&frag.node_id) => Some(UaRole::Group),
             FragmentContent::Box { .. } if d.grids.contains(&frag.node_id) => None,
+            // An inside text marker (`1.` of `ol { list-style-position: inside }`) is a
+            // bare text line with the marker's id.
+            FragmentContent::Box { .. } | FragmentContent::TextLine { .. }
+                if d.list_markers.contains_key(&frag.node_id) =>
+            {
+                Some(UaRole::ListLabel)
+            }
             FragmentContent::Box { .. } => match d.nodes.get(&frag.node_id) {
                 Some(info) => info.role,
                 None => d.in_range(frag.node_id).then_some(UaRole::Paragraph),
@@ -257,10 +400,51 @@ impl super::Semantics {
         }
     }
 
-    /// The `/Alt` text of a replaced-image fragment.
+    /// The list item box whose `::marker` `frag` belongs to (`None`: not a marker). Every
+    /// box and text line of one marker shares it, so they form one `Lbl`.
+    #[cfg(feature = "pdf-ua")]
+    pub fn marker_owner(&self, frag: &Fragment) -> Option<NodeId> {
+        self.derived.list_markers.get(&frag.node_id).copied()
+    }
+
+    /// The nearest role-carrying ancestor element (its box id) of the element box or
+    /// text run `id`.
+    #[cfg(feature = "pdf-ua")]
+    pub fn up(&self, id: NodeId) -> Option<NodeId> {
+        self.derived.ups.get(&id).copied()
+    }
+
+    /// The role of the element whose box id is `id`.
+    #[cfg(feature = "pdf-ua")]
+    pub fn element_role(&self, id: NodeId) -> Option<UaRole> {
+        self.derived.nodes.get(&id)?.role
+    }
+
+    /// The row group of the table-row element whose box id is `id`.
+    #[cfg(feature = "pdf-ua")]
+    pub fn row_group_of(&self, id: NodeId) -> Option<UaRole> {
+        self.derived.nodes.get(&id)?.row_group
+    }
+
+    /// The `/Alt` text of an `<img>`'s fragment: its replaced image, or the box that
+    /// shows its alt text when it failed to load.
     #[cfg(feature = "pdf-ua")]
     pub fn alt(&self, frag: &Fragment) -> Option<&str> {
-        self.derived.replaced_img(frag)?.alt.as_deref()
+        self.derived.nodes.get(&frag.node_id)?.alt.as_deref()
+    }
+
+    /// Whether `frag` is the replaced image of an `<img>` with no text alternative:
+    /// painted as an artifact, not tagged content (PDF/UA-1 7.3-1).
+    #[cfg(feature = "pdf-ua")]
+    pub fn decorative(&self, frag: &Fragment) -> bool {
+        matches!(frag.content, FragmentContent::Image(_))
+            && self.role(frag) == Some(UaRole::Artifact)
+    }
+
+    /// The (`colspan`, `rowspan`) of the table-cell element whose box id is `id`.
+    #[cfg(feature = "pdf-ua")]
+    pub fn cell_span(&self, id: NodeId) -> (u32, u32) {
+        self.derived.nodes.get(&id).map_or((1, 1), |info| info.span)
     }
 
     /// The bare `#name` target of an internal-link box fragment.

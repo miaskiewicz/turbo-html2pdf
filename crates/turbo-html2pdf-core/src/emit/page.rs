@@ -14,7 +14,7 @@ use std::collections::BTreeSet;
 
 use pdf_writer::{Content, Name, TextStr};
 
-use crate::layout::fragment::{Fragment, FragmentContent};
+use crate::layout::fragment::{Fragment, FragmentContent, TilePattern};
 use crate::paginate::{Page, CARRIED};
 
 use super::fonts::FontStore;
@@ -67,7 +67,7 @@ pub fn content_stream(
     };
     let mut content = Content::new();
     #[cfg(feature = "pdf-ua")]
-    let mut marker = tags.map(super::ua::Marker::new);
+    let mut marker = tags.map(|t| super::ua::Marker::new(t, &page.semantics));
     paint_canvas(
         &mut content,
         page,
@@ -202,12 +202,14 @@ fn paint_bands(
 ) {
     for (index, band) in bands(page).into_iter().enumerate() {
         for frag in painted(band) {
+            // A table header row repeated on this page paints as an artifact.
+            let repeat = index == 0 && marker.as_deref().is_some_and(|m| m.repeats(frag));
             paint_fragment(
                 content,
                 frag,
                 ctx,
                 marker.as_deref_mut(),
-                is_artifact_band(index),
+                is_artifact_band(index) || repeat,
             );
         }
     }
@@ -317,7 +319,8 @@ fn collect_opacity(frag: &Fragment, outer: f32, keys: &mut BTreeSet<u16>) {
 
 /// Paint one fragment (its own content first, then its children atop it, in paint
 /// order), inside its `clip: rect()` region when it has one (miaskiewicz/turbo-dom#52): a
-/// saved graphics state with a rectangular clipping path. An empty region still paints
+/// saved graphics state with a rectangular clipping path, rounded when the region has
+/// corner radii. An empty region still paints
 /// (nothing shows), so tagged renders number their marked content the same as the
 /// structure walk.
 fn paint_clipped(
@@ -363,14 +366,81 @@ fn clip_to(
     clip: crate::layout::fragment::ClipRect,
     page_height_pt: f32,
 ) {
-    content.rect(
-        px_to_pt(frag.x + clip.x),
-        super::unit::flip_y(frag.y + clip.y + clip.height, page_height_pt),
-        px_to_pt(clip.width),
-        px_to_pt(clip.height),
-    );
+    if clip.radii.is_rounded() {
+        rounded_path(
+            content,
+            frag.x + clip.x,
+            frag.y + clip.y,
+            clip,
+            page_height_pt,
+        );
+    } else {
+        content.rect(
+            px_to_pt(frag.x + clip.x),
+            super::unit::flip_y(frag.y + clip.y + clip.height, page_height_pt),
+            px_to_pt(clip.width),
+            px_to_pt(clip.height),
+        );
+    }
     content.clip_nonzero();
     content.end_path();
+}
+
+/// The outline of `clip` placed at page px (`x`, `y`): a rounded rectangle whose
+/// elliptical corners (miaskiewicz/turbo-dom#248/#253, a rounded box's background tiles)
+/// are cubic Béziers, as Chrome clips the tiles to the box's rounded corners.
+fn rounded_path(
+    content: &mut Content,
+    x: f32,
+    y: f32,
+    clip: crate::layout::fragment::ClipRect,
+    page_height_pt: f32,
+) {
+    // The control-point distance of a quarter ellipse, as a fraction of its radius.
+    const K: f32 = 0.552_284_8;
+    let pt = |px: f32, py: f32| (px_to_pt(px), super::unit::flip_y(py, page_height_pt));
+    let (w, h) = (clip.width, clip.height);
+    let [tl, tr, br, bl] = clip.radii.corners();
+    let (r, b) = (x + w, y + h);
+    let start = pt(x + tl.h, y);
+    content.move_to(start.0, start.1);
+    let line = |content: &mut Content, px: f32, py: f32| {
+        let p = pt(px, py);
+        content.line_to(p.0, p.1);
+    };
+    let curve = |content: &mut Content, c1: (f32, f32), c2: (f32, f32), to: (f32, f32)| {
+        let (c1, c2, to) = (pt(c1.0, c1.1), pt(c2.0, c2.1), pt(to.0, to.1));
+        content.cubic_to(c1.0, c1.1, c2.0, c2.1, to.0, to.1);
+    };
+    line(content, r - tr.h, y);
+    curve(
+        content,
+        (r - tr.h * (1.0 - K), y),
+        (r, y + tr.v * (1.0 - K)),
+        (r, y + tr.v),
+    );
+    line(content, r, b - br.v);
+    curve(
+        content,
+        (r, b - br.v * (1.0 - K)),
+        (r - br.h * (1.0 - K), b),
+        (r - br.h, b),
+    );
+    line(content, x + bl.h, b);
+    curve(
+        content,
+        (x + bl.h * (1.0 - K), b),
+        (x, b - bl.v * (1.0 - K)),
+        (x, b - bl.v),
+    );
+    line(content, x, y + tl.v);
+    curve(
+        content,
+        (x, y + tl.v * (1.0 - K)),
+        (x + tl.h * (1.0 - K), y),
+        (x + tl.h, y),
+    );
+    content.close_path();
 }
 
 /// Paint a single fragment's own content (no marked content).
@@ -394,7 +464,7 @@ fn paint_one(
         paint_content(content, frag, ctx);
         return;
     };
-    match super::ua::wrap_kind(frag, artifact_band) {
+    match marker.wrap(frag, artifact_band) {
         super::ua::WrapKind::None => paint_content(content, frag, ctx),
         super::ua::WrapKind::Artifact => {
             super::ua::begin_artifact(content);
@@ -445,6 +515,17 @@ fn paint_content(content: &mut Content, frag: &Fragment, ctx: &PaintCtx) {
         FragmentContent::Image(placement) => {
             paint_image(content, frag, placement, ctx.images, ctx.page_height_pt);
         }
+        FragmentContent::Tiles(pattern) => paint_tiles(content, frag, pattern, ctx),
         FragmentContent::Marker(_) => {}
+    }
+}
+
+/// Paint a background pattern: its tile at each snapped tile rectangle meeting the
+/// pattern fragment (the painting area; the layer container clips the rest).
+fn paint_tiles(content: &mut Content, frag: &Fragment, pattern: &TilePattern, ctx: &PaintCtx) {
+    let region = (frag.x, frag.y, frag.width, frag.height);
+    for (x, y, width, height) in pattern.tiles(region) {
+        let tile = Fragment::new(frag.node_id, x, y, width, height, (*pattern.tile).clone());
+        paint_content(content, &tile, ctx);
     }
 }

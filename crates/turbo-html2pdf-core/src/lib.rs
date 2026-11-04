@@ -8,6 +8,12 @@
 //! pagination, and the PDF emitter follow. Public re-exports grow per phase.
 
 #![forbid(unsafe_code)]
+// No stray debug output from the library (round-3 review of #59): diagnostics go
+// through `Diagnostics`, never stdout/stderr.
+#![cfg_attr(
+    not(test),
+    deny(clippy::print_stdout, clippy::print_stderr, clippy::dbg_macro)
+)]
 
 #[cfg(feature = "append")]
 pub mod append;

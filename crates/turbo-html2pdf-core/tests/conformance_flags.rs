@@ -164,7 +164,7 @@ fn red_box_page() -> Page {
         FragmentContent::Box {
             background: Some(Rgba::new(255, 0, 0, 255)),
             border: BorderEdges::default(),
-            border_radius: 0.0,
+            border_radius: turbo_dom_layout::BorderRadii::ZERO,
             shadow: None,
             gradient: None,
             transform: None,

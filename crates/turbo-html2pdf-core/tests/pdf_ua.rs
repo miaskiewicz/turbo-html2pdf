@@ -374,10 +374,14 @@ fn tags_a_table_caption_as_the_tables_caption() {
     );
     let rows = of("TR");
     assert_eq!(rows.len(), 2, "{elems:?}");
+    // The rows are in the table's TBody (PDF/UA-1 7.2-4, #60).
+    let bodies = of("TBody");
+    assert_eq!(bodies.len(), 1, "{elems:?}");
+    assert_eq!(elems[&bodies[0]].1, tables[0], "{elems:?}");
     for row in rows {
         assert_eq!(
-            elems[&row].1, tables[0],
-            "a TR's parent is the Table: {elems:?}"
+            elems[&row].1, bodies[0],
+            "a TR's parent is the TBody: {elems:?}"
         );
     }
 }
@@ -452,4 +456,898 @@ fn text_carried_onto_the_previous_page_is_an_artifact() {
             "extracted once: {text:?}"
         );
     }
+}
+
+#[test]
+fn tags_list_markers_as_the_items_label() {
+    // turbo-dom 0.7 lays out list markers (`::marker`, miaskiewicz/turbo-dom#128). PDF/UA-1
+    // 7.2-20: an `LI` holds only `Lbl` / `LBody` structure, so each item's marker is its
+    // `Lbl`, and its content is the item's `LBody`.
+    let elems = struct_elems(&build_pdf());
+    let items: Vec<u32> = elems
+        .iter()
+        .filter(|(_, (r, _))| r == "LI")
+        .map(|(&n, _)| n)
+        .collect();
+    assert_eq!(items.len(), 3, "{elems:?}");
+    for item in items {
+        let kids: Vec<&str> = elems
+            .values()
+            .filter(|(_, p)| *p == item)
+            .map(|(r, _)| r.as_str())
+            .collect();
+        assert_eq!(kids, ["Lbl", "LBody"], "LI {item}: {elems:?}");
+    }
+    // A marker's inner box (same marker id) is part of its Lbl, not a nested Lbl.
+    for (role, parent) in elems.values() {
+        if role == "Lbl" {
+            assert_eq!(elems[parent].0, "LI", "{elems:?}");
+        }
+    }
+}
+
+/// Render `html` (with the suite CSS plus `css`) to a tagged PDF.
+fn ua_pdf(html: &str, css: &str) -> Vec<u8> {
+    let (program, _) = compile(html, &CompileOptions::default()).expect("compile");
+    let cascade = build_cascade(&format!("{CSS} {css}"), "", TokenSet::default());
+    let fonts = common::registry();
+    let inputs = RenderInputs {
+        program: &program,
+        data: &serde_json::json!({}),
+        cascade: &cascade,
+        at_rules: &[],
+        fonts: &fonts,
+        images: &turbo_html2pdf_core::NoImages,
+        now: Some(0),
+    };
+    let mut diags = Diagnostics::default();
+    emit_pdf(&render_pages(&inputs, &mut diags).expect("render"), &opts())
+}
+
+/// The roles of `node`'s structure children, in object order.
+fn kids_of(elems: &std::collections::BTreeMap<u32, (String, u32)>, node: u32) -> Vec<&str> {
+    elems
+        .values()
+        .filter(|(_, p)| *p == node)
+        .map(|(r, _)| r.as_str())
+        .collect()
+}
+
+/// PDF/UA-1 7.2-20 shape of every list item: `LI` holds exactly `want`, every `Lbl` and
+/// `LBody` sits directly in an `LI`, and the PDF passes veraPDF (when on `PATH`).
+fn assert_list_items(pdf: &[u8], name: &str, items: usize, want: &[&str]) {
+    assert_struct_tree(pdf);
+    let elems = struct_elems(pdf);
+    let lis: Vec<u32> = elems
+        .iter()
+        .filter(|(_, (r, _))| r == "LI")
+        .map(|(&n, _)| n)
+        .collect();
+    assert_eq!(lis.len(), items, "{elems:?}");
+    for li in lis {
+        assert_eq!(kids_of(&elems, li), want, "LI {li}: {elems:?}");
+    }
+    for (role, parent) in elems.values() {
+        if role == "Lbl" || role == "LBody" {
+            assert_eq!(elems[parent].0, "LI", "{role} parent: {elems:?}");
+        }
+    }
+    assert_verapdf_ua1(pdf, name);
+}
+
+/// The PDF passes `verapdf --flavour ua1` (skipped when veraPDF is not on `PATH`).
+fn assert_verapdf_ua1(pdf: &[u8], name: &str) {
+    if !have("verapdf") {
+        return;
+    }
+    let path = write_temp(pdf, name);
+    let out = Command::new("verapdf")
+        .args(["--flavour", "ua1"])
+        .arg(&path)
+        .output()
+        .expect("run verapdf");
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    assert!(stdout.contains("isCompliant=\"true\""), "{name}:\n{stdout}");
+}
+
+#[test]
+fn a_paragraph_in_a_list_item_is_in_its_lbody() {
+    let pdf = ua_pdf("<ul><li><p>One</p></li><li><p>Two</p></li></ul>", "");
+    assert_list_items(&pdf, "turbo_pdf_ua_li_p.pdf", 2, &["Lbl", "LBody"]);
+    let elems = struct_elems(&pdf);
+    for (role, parent) in elems.values() {
+        if role == "P" {
+            assert_eq!(elems[parent].0, "LBody", "{elems:?}");
+        }
+    }
+}
+
+#[test]
+fn a_list_nested_in_an_ordered_list_item_is_in_its_lbody() {
+    let pdf = ua_pdf(
+        "<ol><li>Outer<ul><li>Inner a</li><li>Inner b</li></ul></li><li>Last</li></ol>",
+        "",
+    );
+    assert_list_items(&pdf, "turbo_pdf_ua_nested.pdf", 4, &["Lbl", "LBody"]);
+    let elems = struct_elems(&pdf);
+    let lists: Vec<&u32> = elems
+        .iter()
+        .filter(|(_, (r, _))| r == "L")
+        .map(|(_, (_, p))| p)
+        .collect();
+    assert_eq!(lists.len(), 2, "{elems:?}");
+    assert!(lists.iter().any(|p| elems[p].0 == "LBody"), "{elems:?}");
+}
+
+#[test]
+fn an_unmarked_list_item_has_only_an_lbody() {
+    let pdf = ua_pdf(
+        "<ul><li>One</li><li>Two</li></ul>",
+        "li { list-style: none; }",
+    );
+    assert_list_items(&pdf, "turbo_pdf_ua_none.pdf", 2, &["LBody"]);
+}
+
+#[test]
+fn an_inside_marker_is_the_items_label() {
+    let css = "li { list-style-position: inside; }";
+    for (html, name) in [
+        (
+            "<ul><li>One</li><li>Two</li></ul>",
+            "turbo_pdf_ua_inside_ul.pdf",
+        ),
+        (
+            "<ol><li>One</li><li>Two</li></ol>",
+            "turbo_pdf_ua_inside_ol.pdf",
+        ),
+    ] {
+        assert_list_items(&ua_pdf(html, css), name, 2, &["Lbl", "LBody"]);
+    }
+}
+
+#[test]
+fn an_ordered_lists_markers_are_one_label_each() {
+    let pdf = ua_pdf("<ol><li>One</li><li>Two</li><li>Three</li></ol>", "");
+    assert_list_items(&pdf, "turbo_pdf_ua_ol.pdf", 3, &["Lbl", "LBody"]);
+}
+
+/// A table's rows sit in `Table` or its row groups, never loose (PDF/UA-1 7.2-4).
+fn assert_rows_in_tables(pdf: &[u8], name: &str) {
+    assert_struct_tree(pdf);
+    let elems = struct_elems(pdf);
+    for (role, parent) in elems.values() {
+        if role == "TR" {
+            let up = elems[parent].0.as_str();
+            assert!(
+                matches!(up, "Table" | "THead" | "TBody" | "TFoot"),
+                "TR in {up}: {elems:?}"
+            );
+        }
+        if matches!(role.as_str(), "THead" | "TBody" | "TFoot") {
+            assert_eq!(elems[parent].0, "Table", "{role} parent: {elems:?}");
+        }
+    }
+    assert_verapdf_ua1(pdf, name);
+}
+
+#[test]
+fn table_rows_are_in_their_row_groups() {
+    let row = |c: &str| format!("<tr><td>{c}</td><td>1</td></tr>");
+    let cases = [
+        (
+            format!("<table>{}{}</table>", row("a"), row("b")),
+            "turbo_pdf_ua_table_plain.pdf",
+        ),
+        (
+            format!(
+                "<table><thead><tr><th>H</th><th>V</th></tr></thead><tbody>{}</tbody>\
+                 <tfoot>{}</tfoot></table>",
+                row("a"),
+                row("f")
+            ),
+            "turbo_pdf_ua_table_groups.pdf",
+        ),
+    ];
+    for (html, name) in cases {
+        let pdf = ua_pdf(&html, "");
+        assert_rows_in_tables(&pdf, name);
+        let elems = struct_elems(&pdf);
+        if html.contains("<thead>") {
+            for group in ["THead", "TBody", "TFoot"] {
+                assert!(
+                    elems.values().any(|(r, _)| r == group),
+                    "{group}: {elems:?}"
+                );
+            }
+        }
+    }
+}
+
+#[test]
+fn rows_of_a_table_split_across_pages_stay_in_a_table() {
+    let rows: String = (0..120)
+        .map(|i| format!("<tr><td>Row {i}</td><td>{i}</td></tr>"))
+        .collect();
+    let html = format!(
+        "<table><thead><tr><th>Name</th><th>Value</th></tr></thead><tbody>{rows}</tbody></table>"
+    );
+    assert_rows_in_tables(&ua_pdf(&html, ""), "turbo_pdf_ua_table_split.pdf");
+}
+
+// --- Multi-page structure (round-2 review of #59): a split block's own box becomes an
+// id-0 slice, so its continuation pages must rebuild its Table / L / LI / TR.
+
+/// The elements with role `role`.
+fn of_role(elems: &std::collections::BTreeMap<u32, (String, u32)>, role: &str) -> Vec<u32> {
+    elems
+        .iter()
+        .filter(|(_, (r, _))| r == role)
+        .map(|(&n, _)| n)
+        .collect()
+}
+
+/// The nearest `role` ancestor of element `n`, if any.
+fn ancestor(
+    elems: &std::collections::BTreeMap<u32, (String, u32)>,
+    mut n: u32,
+    role: &str,
+) -> Option<u32> {
+    while let Some((_, p)) = elems.get(&n) {
+        if elems.get(p).is_some_and(|(r, _)| r == role) {
+            return Some(*p);
+        }
+        n = *p;
+    }
+    None
+}
+
+/// `n` words of filler text.
+fn words(n: usize) -> String {
+    (0..n).map(|i| format!("word{i} ")).collect()
+}
+
+/// Rows `from..to` of a two-column table body.
+fn rows(from: usize, to: usize) -> String {
+    (from..to)
+        .map(|i| format!("<tr><td>Row {i}</td><td>{i}</td></tr>"))
+        .collect()
+}
+
+/// Every TD/TH is in a TR, every TR in a row group of a Table.
+fn assert_cells_in_rows(elems: &std::collections::BTreeMap<u32, (String, u32)>) {
+    for (role, parent) in elems.values() {
+        if role == "TD" || role == "TH" {
+            assert_eq!(elems[parent].0, "TR", "{role} parent: {elems:?}");
+        }
+    }
+}
+
+#[test]
+fn two_split_tables_on_one_page_stay_two_tables() {
+    let head = "<thead><tr><th>Name</th><th>Value</th></tr></thead>";
+    for between in ["", "<p>Between the tables.</p>"] {
+        let html = format!(
+            "<table>{head}<tbody>{}</tbody></table>{between}<table>{head}<tbody>{}</tbody></table>",
+            rows(0, 70),
+            rows(70, 140)
+        );
+        let pdf = ua_pdf(&html, "");
+        assert_rows_in_tables(&pdf, "turbo_pdf_ua_two_split_tables.pdf");
+        let elems = struct_elems(&pdf);
+        assert_cells_in_rows(&elems);
+        assert_eq!(of_role(&elems, "Table").len(), 2, "{between:?}: {elems:?}");
+        assert_eq!(of_role(&elems, "TR").len(), 142, "{elems:?}");
+        // Each table's rows stay in it: the first table holds rows 0..70 (+ its head).
+        let tables = of_role(&elems, "Table");
+        let in_first = of_role(&elems, "TR")
+            .into_iter()
+            .filter(|&r| ancestor(&elems, r, "Table") == Some(tables[0]))
+            .count();
+        assert_eq!(in_first, 71, "{elems:?}");
+    }
+}
+
+#[test]
+fn a_repeated_table_header_is_tagged_once() {
+    let html = format!(
+        "<table><thead><tr><th>Name</th><th>Value</th></tr></thead><tbody>{}</tbody></table>",
+        rows(0, 200)
+    );
+    let pdf = ua_pdf(&html, "");
+    assert_rows_in_tables(&pdf, "turbo_pdf_ua_repeated_head.pdf");
+    let elems = struct_elems(&pdf);
+    assert_eq!(of_role(&elems, "Table").len(), 1, "{elems:?}");
+    assert_eq!(of_role(&elems, "THead").len(), 1, "{elems:?}");
+    assert_eq!(of_role(&elems, "TH").len(), 2, "{elems:?}");
+    assert_eq!(of_role(&elems, "TR").len(), 201, "{elems:?}");
+}
+
+#[test]
+fn a_split_tables_caption_is_its_tables_first_child() {
+    let html = format!(
+        "<p>{}</p><table><caption>Quarterly revenue</caption><tbody>{}</tbody></table>",
+        words(500),
+        rows(0, 60)
+    );
+    let pdf = ua_pdf(&html, "");
+    assert_rows_in_tables(&pdf, "turbo_pdf_ua_split_caption.pdf");
+    let elems = struct_elems(&pdf);
+    let tables = of_role(&elems, "Table");
+    assert_eq!(tables.len(), 1, "{elems:?}");
+    let caption = of_role(&elems, "Caption");
+    assert_eq!(caption.len(), 1, "{elems:?}");
+    assert_eq!(elems[&caption[0]].1, tables[0], "{elems:?}");
+    assert_eq!(kids_of(&elems, tables[0])[0], "Caption", "{elems:?}");
+}
+
+#[test]
+fn a_row_taller_than_a_page_keeps_its_tr() {
+    let html = format!(
+        "<table><tr><td>A</td><td>B</td></tr><tr><td>{}</td><td>x</td></tr>\
+         <tr><td>C</td><td>D</td></tr></table>",
+        words(2500)
+    );
+    let pdf = ua_pdf(&html, "");
+    assert_rows_in_tables(&pdf, "turbo_pdf_ua_tall_row.pdf");
+    let elems = struct_elems(&pdf);
+    assert_cells_in_rows(&elems);
+    assert_eq!(of_role(&elems, "Table").len(), 1, "{elems:?}");
+    assert_eq!(of_role(&elems, "TR").len(), 3, "{elems:?}");
+    assert_eq!(of_role(&elems, "TD").len(), 6, "{elems:?}");
+}
+
+#[test]
+fn a_list_longer_than_a_page_is_one_list() {
+    let items: String = (0..150).map(|i| format!("<li>Item {i}</li>")).collect();
+    let pdf = ua_pdf(&format!("<ul>{items}</ul>"), "");
+    assert_list_items(&pdf, "turbo_pdf_ua_long_list.pdf", 150, &["Lbl", "LBody"]);
+    let elems = struct_elems(&pdf);
+    assert_eq!(of_role(&elems, "L").len(), 1, "{elems:?}");
+    for li in of_role(&elems, "LI") {
+        assert_eq!(elems[&elems[&li].1].0, "L", "{elems:?}");
+    }
+}
+
+#[test]
+fn a_list_item_taller_than_a_page_is_one_item() {
+    let html = format!(
+        "<ul><li>First</li><li>{}</li><li>Last</li></ul>",
+        words(2500)
+    );
+    let pdf = ua_pdf(&html, "");
+    assert_list_items(&pdf, "turbo_pdf_ua_tall_item.pdf", 3, &["Lbl", "LBody"]);
+    let elems = struct_elems(&pdf);
+    assert_eq!(of_role(&elems, "L").len(), 1, "{elems:?}");
+    assert!(
+        of_role(&elems, "P").is_empty(),
+        "no loose paragraphs: {elems:?}"
+    );
+}
+
+// --- Struct-tree integrity (round-3 review of #59) ---------------------------------
+
+/// The objects of an (uncompressed-object) PDF: number -> body text.
+fn objects(pdf: &[u8]) -> std::collections::BTreeMap<u32, String> {
+    let text = String::from_utf8_lossy(pdf);
+    let mut out = std::collections::BTreeMap::new();
+    for (at, _) in text.match_indices(" 0 obj") {
+        let num: u32 = text[..at]
+            .rsplit(|c: char| !c.is_ascii_digit())
+            .next()
+            .and_then(|n| n.parse().ok())
+            .unwrap_or(0);
+        let end = text[at..].find("endobj").unwrap_or(0);
+        out.insert(num, text[at + 6..at + end].to_string());
+    }
+    out
+}
+
+/// The integer after `key` in `body` (`/Pg 3 0 R` -> 3).
+fn int_after(body: &str, key: &str) -> Option<u32> {
+    body.split(key)
+        .nth(1)?
+        .split_whitespace()
+        .next()?
+        .trim_end_matches(['>', ']'])
+        .parse()
+        .ok()
+}
+
+/// One `/K` kid of a struct element.
+#[derive(Debug, PartialEq)]
+enum Kid {
+    Elem(u32),
+    /// (page object, MCID).
+    Mcid(u32, u32),
+    /// The annotation object of an `OBJR`.
+    Objr(u32),
+}
+
+/// The `/K` value of struct element `body`, without its brackets.
+fn k_value(body: &str) -> String {
+    let Some(k) = body.split("/K ").nth(1).map(str::trim_start) else {
+        return String::new();
+    };
+    let Some(rest) = k.strip_prefix('[') else {
+        return k.lines().next().unwrap_or("").to_string();
+    };
+    // The closing `]` of the array (MCR / OBJR dicts hold no brackets).
+    rest[..rest.find(']').unwrap_or(rest.len())].to_string()
+}
+
+/// One `<< ... >>` kid: an `OBJR` or an `MCR` (its `/Pg`, else the element's `pg`).
+fn dict_kid(dict: &str, pg: Option<u32>) -> Kid {
+    if dict.contains("/OBJR") {
+        return Kid::Objr(int_after(dict, "/Obj ").expect("OBJR /Obj"));
+    }
+    let page = int_after(dict, "/Pg ").or(pg).expect("MCR page");
+    Kid::Mcid(page, int_after(dict, "/MCID ").expect("MCR MCID"))
+}
+
+/// The `/K` kids of struct element `body` (bare MCIDs belong to its `/Pg`).
+fn kids(body: &str) -> Vec<Kid> {
+    let pg = int_after(body, "/Pg ");
+    let k = k_value(body).replace("<<", " << ").replace(">>", " >> ");
+    let toks: Vec<&str> = k.split_whitespace().collect();
+    let mut out = Vec::new();
+    let mut i = 0;
+    while i < toks.len() {
+        if toks[i] == "<<" {
+            let end = i + toks[i..].iter().position(|t| *t == ">>").expect("dict end");
+            out.push(dict_kid(&toks[i + 1..end].join(" "), pg));
+            i = end + 1;
+        } else if toks.get(i + 2) == Some(&"R") {
+            out.push(Kid::Elem(toks[i].parse().expect("ref")));
+            i += 3;
+        } else {
+            out.push(Kid::Mcid(
+                pg.expect("bare MCID needs /Pg"),
+                toks[i].parse().expect("MCID"),
+            ));
+            i += 1;
+        }
+    }
+    out
+}
+
+/// The object numbers in an array body (`[3 0 R 7 0 R]`).
+fn refs(body: &str) -> Vec<u32> {
+    let toks: Vec<&str> = body
+        .split(|c: char| c.is_whitespace() || c == '[' || c == ']')
+        .filter(|t| !t.is_empty())
+        .collect();
+    toks.windows(3)
+        .filter(|w| w[2] == "R")
+        .filter_map(|w| w[0].parse().ok())
+        .collect()
+}
+
+type Objs = std::collections::BTreeMap<u32, String>;
+type Pairs = std::collections::BTreeMap<(u32, u32), u32>;
+/// Every page's (page, MCID) marks and each page's (page, `/StructParents` key).
+type Marks = (std::collections::BTreeSet<(u32, u32)>, Vec<(u32, u32)>);
+
+/// Every page's content-stream (page, MCID) pairs (no duplicates) and `/StructParents`
+/// key.
+fn page_marks(objs: &Objs) -> Marks {
+    let mut marks = std::collections::BTreeSet::new();
+    let mut keys = Vec::new();
+    for (&n, body) in objs.iter().filter(|(_, b)| b.contains("/Type /Page\n")) {
+        let stream = &objs[&int_after(body, "/Contents ").expect("page contents")];
+        for m in stream.split("/MCID ").skip(1) {
+            let mcid: u32 = m.split_whitespace().next().unwrap().parse().unwrap();
+            assert!(marks.insert((n, mcid)), "MCID {mcid} twice on page {n}");
+        }
+        keys.push((
+            n,
+            int_after(body, "/StructParents ").expect("StructParents"),
+        ));
+    }
+    (marks, keys)
+}
+
+/// The owner of each (page, MCID) and of each `OBJR` annotation; each `LI` starts with
+/// its `Lbl`.
+fn kid_owners(objs: &Objs) -> (Pairs, std::collections::BTreeMap<u32, u32>) {
+    let (mut owner, mut objr) = (Pairs::new(), std::collections::BTreeMap::new());
+    for (&n, body) in objs.iter().filter(|(_, b)| b.contains("/Type /StructElem")) {
+        let ks = kids(body);
+        for k in &ks {
+            let dup = match *k {
+                Kid::Mcid(p, m) => owner.insert((p, m), n).is_some(),
+                Kid::Objr(a) => objr.insert(a, n).is_some(),
+                Kid::Elem(_) => false,
+            };
+            assert!(!dup, "{k:?} owned twice");
+        }
+        assert_label_first(objs, n, body, &ks);
+    }
+    (owner, objr)
+}
+
+/// An `LI` holding an `Lbl` has it as kids[0].
+fn assert_label_first(objs: &Objs, n: u32, body: &str, ks: &[Kid]) {
+    let is_lbl = |k: &Kid| matches!(k, Kid::Elem(e) if objs[e].contains("/S /Lbl\n"));
+    if body.contains("/S /LI\n") && ks.iter().any(is_lbl) {
+        assert!(is_lbl(&ks[0]), "LI {n}: kids[0] is not its Lbl");
+    }
+}
+
+/// The ParentTree's `/Nums`: key -> object.
+fn parent_tree(objs: &Objs) -> std::collections::BTreeMap<u32, u32> {
+    let root = objs
+        .values()
+        .find(|b| b.contains("/Type /StructTreeRoot"))
+        .expect("root");
+    let nums = root.split("/Nums").nth(1).expect("Nums");
+    let toks: Vec<&str> = nums[..nums.find(']').unwrap()]
+        .split(|c: char| c.is_whitespace() || c == '[')
+        .filter(|t| !t.is_empty())
+        .collect();
+    toks.chunks(4)
+        .map(|e| (e[0].parse().unwrap(), e[1].parse().unwrap()))
+        .collect()
+}
+
+/// Check the tagged PDF's structure tree against its pages:
+/// - every (page, MCID) of the content streams is owned by exactly one struct element
+///   kid, and every kid's MCID is in its `/Pg`'s content stream (no duplicates either side);
+/// - the ParentTree maps each page's MCID to its owning element, and each `OBJR`
+///   annotation's `/StructParent` to the element holding it;
+/// - an `LI`'s first kid is its `Lbl` (when it has one).
+fn assert_struct_tree(pdf: &[u8]) {
+    let objs = objects(pdf);
+    let (marks, page_keys) = page_marks(&objs);
+    let (owner, objr) = kid_owners(&objs);
+    let owned: std::collections::BTreeSet<(u32, u32)> = owner.keys().copied().collect();
+    assert_eq!(owned, marks, "struct MCIDs vs content-stream MCIDs");
+    let tree = parent_tree(&objs);
+    for (page, key) in page_keys {
+        let arr = refs(&objs[&tree[&key]]);
+        let want: Vec<u32> = (0..arr.len() as u32).map(|m| owner[&(page, m)]).collect();
+        assert_eq!(arr, want, "ParentTree of page {page}");
+        assert_eq!(arr.len(), marks.iter().filter(|(p, _)| *p == page).count());
+    }
+    for (annot, el) in objr {
+        let key = int_after(&objs[&annot], "/StructParent ").expect("annotation StructParent");
+        assert_eq!(
+            tree.get(&key),
+            Some(&el),
+            "ParentTree of annotation {annot}"
+        );
+    }
+}
+
+/// The page objects in page order (`/Kids` of the page tree).
+#[cfg(feature = "xref")]
+fn page_objects(pdf: &[u8]) -> Vec<u32> {
+    let objs = objects(pdf);
+    let tree = objs
+        .values()
+        .find(|b| b.contains("/Type /Pages"))
+        .expect("page tree");
+    refs(tree.split("/Kids").nth(1).expect("Kids"))
+}
+
+/// A `<thead>` holding a link, repeated on every page of a 3+ page table: each page has a
+/// clickable Link annotation, the copies are artifacts but their annotations are kids
+/// (`OBJR`) of the one `Link` element (PDF/UA-1 7.18.5), the anchor is one destination.
+#[cfg(feature = "xref")]
+#[test]
+fn a_link_in_a_repeated_header_is_on_every_page() {
+    let html = format!(
+        "<table><thead><tr><th><a href=\"#end\">Go to the end</a></th><th>Value</th></tr></thead>\
+         <tbody>{}</tbody></table><p id=\"end\">The end.</p>",
+        rows(0, 200)
+    );
+    let pdf = ua_pdf(&html, "");
+    assert_rows_in_tables(&pdf, "turbo_pdf_ua_repeated_link.pdf");
+    let objs = objects(&pdf);
+    let pages = page_objects(&pdf);
+    assert!(pages.len() >= 3, "{} pages", pages.len());
+    for p in &pages[..pages.len() - 1] {
+        let annots = objs[p]
+            .split("/Annots")
+            .nth(1)
+            .map(refs)
+            .unwrap_or_default();
+        let links = annots
+            .iter()
+            .filter(|a| objs[a].contains("/Subtype /Link"))
+            .count();
+        assert!(links >= 1, "page {p} has its header link");
+    }
+    let elems = struct_elems(&pdf);
+    let link_elems = of_role(&elems, "Link");
+    assert_eq!(link_elems.len(), 1, "{elems:?}");
+    let objr = kids(&objs[&link_elems[0]])
+        .into_iter()
+        .filter(|k| matches!(k, Kid::Objr(_)))
+        .count();
+    assert!(
+        objr >= pages.len() - 1,
+        "{objr} OBJRs for {} pages",
+        pages.len()
+    );
+    assert_eq!(
+        of_role(&elems, "TH").len(),
+        2,
+        "the header is tagged once: {elems:?}"
+    );
+    let dests = objs.values().filter(|b| b.contains("/end [")).count();
+    assert_eq!(dests, 1, "one named destination");
+}
+
+/// A repeated header whose original is cut away: a header row taller than a page is
+/// sliced (its original's paint is cut at the page end), and a header placed alone at a
+/// page bottom repeats on the next page. Both stay tagged once and pass veraPDF.
+#[test]
+fn a_repeated_header_whose_original_is_cut_or_stranded() {
+    let tall = format!(
+        "<table><thead><tr><th style=\"height:1400px\">Tall</th><th>V</th></tr></thead><tbody>{}</tbody></table>",
+        rows(0, 60)
+    );
+    let stranded = format!(
+        "<p style=\"height:1000px\">Top</p><table><thead><tr><th>H</th><th>V</th></tr></thead>\
+         <tbody>{}</tbody></table>",
+        rows(0, 80)
+    );
+    for (html, name, ths) in [
+        (tall, "turbo_pdf_ua_tall_head.pdf", 2),
+        (stranded, "turbo_pdf_ua_stranded_head.pdf", 2),
+    ] {
+        let pdf = ua_pdf(&html, "");
+        assert_rows_in_tables(&pdf, name);
+        let elems = struct_elems(&pdf);
+        assert_eq!(of_role(&elems, "TH").len(), ths, "{name}: {elems:?}");
+        assert_eq!(of_role(&elems, "THead").len(), 1, "{name}: {elems:?}");
+    }
+}
+
+/// A 4x4 opaque red PNG.
+fn red_png() -> Vec<u8> {
+    let mut out = Vec::new();
+    let mut enc = png::Encoder::new(&mut out, 4, 4);
+    enc.set_color(png::ColorType::Rgb);
+    enc.set_depth(png::BitDepth::Eight);
+    let mut w = enc.write_header().expect("png header");
+    w.write_image_data(&[255, 0, 0].repeat(16))
+        .expect("png data");
+    w.finish().expect("png finish");
+    out
+}
+
+/// Resolves `red.png` only.
+struct RedPng(Vec<u8>);
+
+impl turbo_html2pdf_core::ImageResolver for RedPng {
+    fn resolve(&self, name: &str) -> Option<&[u8]> {
+        (name == "red.png").then_some(self.0.as_slice())
+    }
+}
+
+/// A tagged render of `html`, resolving `red.png`.
+fn tagged_with_red_png(html: &str) -> String {
+    let images = RedPng(red_png());
+    let (program, _) = compile(html, &CompileOptions::default()).expect("compile");
+    let cascade = build_cascade("", "", TokenSet::default());
+    let fonts = common::registry();
+    let inputs = RenderInputs {
+        program: &program,
+        data: &serde_json::Value::Null,
+        cascade: &cascade,
+        at_rules: &[],
+        fonts: &fonts,
+        images: &images,
+        now: Some(0),
+    };
+    let pages = render_pages(&inputs, &mut Diagnostics::default()).expect("render pages");
+    let pdf = turbo_html2pdf_core::emit_pdf_with_images(&pages, &opts(), &images);
+    String::from_utf8_lossy(&pdf).into_owned()
+}
+
+/// A tiled background image (turbo-dom 0.7's `FragmentContent::Tiles`) is decoration:
+/// every tile paints inside one `/Artifact` bracket and none gets an MCID.
+#[test]
+fn a_tiled_background_image_is_an_artifact() {
+    let text = tagged_with_red_png(
+        "<div style=\"width:100px;height:50px;background:url('red.png') 0 0/25px 25px\"></div>",
+    );
+    let artifact = text.find("/Artifact BMC").expect("an artifact bracket");
+    let end = artifact + text[artifact..].find("EMC").expect("the bracket closes");
+    assert_eq!(text[artifact..end].matches(" Do").count(), 8, "4x2 tiles");
+    assert!(!text.contains("/MCID"), "no tile is tagged content");
+}
+
+/// A gradient-tiled background paints nothing in this engine (no gradients), so its
+/// pattern needs no artifact bracket.
+#[test]
+fn a_tiled_gradient_background_has_no_artifact_bracket() {
+    let text = tagged_with_red_png(
+        "<div style=\"width:100px;height:50px;\
+         background:linear-gradient(red, blue) 0 0/25px 25px\"></div>",
+    );
+    assert!(!text.contains("/Artifact BMC"), "nothing paints");
+}
+
+// --- turbo-html2pdf#61: figures, table spans, heading nesting -----------------------
+
+/// A tagged render of `html` resolving `red.png`, as bytes.
+fn ua_pdf_with_red_png(html: &str) -> Vec<u8> {
+    let images = RedPng(red_png());
+    let (program, _) = compile(html, &CompileOptions::default()).expect("compile");
+    let cascade = build_cascade(CSS, "", TokenSet::default());
+    let fonts = common::registry();
+    let inputs = RenderInputs {
+        program: &program,
+        data: &serde_json::Value::Null,
+        cascade: &cascade,
+        at_rules: &[],
+        fonts: &fonts,
+        images: &images,
+        now: Some(0),
+    };
+    let pages = render_pages(&inputs, &mut Diagnostics::default()).expect("render pages");
+    turbo_html2pdf_core::emit_pdf_with_images(&pages, &opts(), &images)
+}
+
+/// The bodies of the struct elements of role `role`, in object order.
+fn bodies_of(pdf: &[u8], role: &str) -> Vec<String> {
+    let objs = objects(pdf);
+    of_role(&struct_elems(pdf), role)
+        .into_iter()
+        .map(|n| objs[&n].clone())
+        .collect()
+}
+
+/// PDF/UA-1 7.3-1: an image with a text alternative is a `Figure` carrying it as `/Alt`
+/// (`alt`, else `aria-label`, else `title`); the image is the Figure's content.
+#[test]
+fn an_image_with_a_text_alternative_is_a_figure_with_alt() {
+    for (img, alt) in [
+        ("<img alt=\"Red square\" src=\"red.png\">", "Red square"),
+        (
+            "<img aria-label=\"Labelled\" title=\"Titled\" src=\"red.png\">",
+            "Labelled",
+        ),
+        ("<img title=\"Titled\" src=\"red.png\">", "Titled"),
+        (
+            "<img alt=\"Alt wins\" aria-label=\"Labelled\" src=\"red.png\">",
+            "Alt wins",
+        ),
+    ] {
+        let pdf = ua_pdf_with_red_png(&format!("<p>Before</p>{img}"));
+        assert_struct_tree(&pdf);
+        let figures = bodies_of(&pdf, "Figure");
+        assert_eq!(figures.len(), 1, "{img}: {figures:?}");
+        assert!(
+            figures[0].contains(&format!("/Alt ({alt})")),
+            "{img}: {figures:?}"
+        );
+        let text = String::from_utf8_lossy(&pdf);
+        assert!(
+            !text.contains("/Artifact BMC"),
+            "{img}: the image is content"
+        );
+        assert_verapdf_ua1(&pdf, "turbo_pdf_ua_figure_alt.pdf");
+    }
+}
+
+/// PDF/UA-1 7.3-1: an image with an empty `alt` is decorative, and one with no text
+/// alternative at all is tagged like Chrome tags it: an artifact, with no `Figure`.
+#[test]
+fn an_image_without_a_text_alternative_is_an_artifact() {
+    for img in [
+        "<img alt=\"\" src=\"red.png\">",
+        "<img src=\"red.png\">",
+        "<img alt=\"\" title=\"Ignored\" src=\"red.png\">",
+        "<img title=\"\" aria-label=\"\" src=\"red.png\">",
+    ] {
+        let pdf = ua_pdf_with_red_png(&format!("<p>Before</p>{img}"));
+        assert_struct_tree(&pdf);
+        assert!(bodies_of(&pdf, "Figure").is_empty(), "{img}");
+        let text = String::from_utf8_lossy(&pdf);
+        let artifact = text.find("/Artifact BMC").expect("an artifact bracket");
+        let end = artifact + text[artifact..].find("EMC").expect("closed");
+        assert_eq!(text[artifact..end].matches(" Do").count(), 1, "{img}");
+        assert_eq!(
+            text.matches("/MCID").count(),
+            1,
+            "{img}: only the paragraph"
+        );
+        assert_verapdf_ua1(&pdf, "turbo_pdf_ua_figure_artifact.pdf");
+    }
+}
+
+/// An image that fails to load shows its `alt` text (as Chrome does): the text is the
+/// content of the image's `Figure`, which carries that alt.
+#[test]
+fn a_broken_image_shows_its_alt_in_a_figure_with_alt() {
+    let pdf = ua_pdf(
+        "<p>Before <img alt=\"dot\" src=\"missing.png\"> after</p>",
+        "",
+    );
+    assert_struct_tree(&pdf);
+    let figures = bodies_of(&pdf, "Figure");
+    assert_eq!(figures.len(), 1, "{figures:?}");
+    assert!(figures[0].contains("/Alt (dot)"), "{figures:?}");
+    assert_verapdf_ua1(&pdf, "turbo_pdf_ua_broken_figure.pdf");
+}
+
+/// PDF/UA-1 7.2-42/43: a spanning cell carries `/ColSpan`/`/RowSpan`, so every row spans
+/// the same number of columns; a `TH` keeps its `/Scope`.
+#[test]
+fn spanning_cells_carry_their_spans() {
+    let html = "<table><tr><th colspan=\"2\">Head</th><th>H3</th></tr>\
+        <tr><td rowspan=\"2\">Tall</td><td>b</td><td>c</td></tr>\
+        <tr><td>e</td><td>f</td></tr>\
+        <tr><td colspan=\"3\">Wide</td></tr></table>";
+    let pdf = ua_pdf(html, "");
+    assert_struct_tree(&pdf);
+    let ths = bodies_of(&pdf, "TH");
+    assert_eq!(ths.len(), 2, "{ths:?}");
+    assert!(ths[0].contains("/ColSpan 2"), "{ths:?}");
+    assert!(ths.iter().all(|b| b.contains("/Scope /Column")), "{ths:?}");
+    assert!(!ths[1].contains("Span"), "{ths:?}");
+    let tds = bodies_of(&pdf, "TD");
+    assert_eq!(tds.len(), 6, "{tds:?}");
+    assert!(
+        tds[0].contains("/RowSpan 2") && !tds[0].contains("/ColSpan"),
+        "{tds:?}"
+    );
+    assert!(
+        tds[5].contains("/ColSpan 3") && !tds[5].contains("/RowSpan"),
+        "{tds:?}"
+    );
+    for plain in &tds[1..5] {
+        assert!(!plain.contains("Span"), "{tds:?}");
+    }
+    assert_verapdf_ua1(&pdf, "turbo_pdf_ua_spans.pdf");
+}
+
+/// A `colspan` of 0, empty or junk parses as 1 (HTML's rules, as in Chrome): no span.
+#[test]
+fn degenerate_spans_are_one_column() {
+    let html = "<table><tr><td colspan=\"0\">a</td><td colspan=\"x\">b</td>\
+        <td colspan=\"\">c</td></tr><tr><td>d</td><td>e</td><td>f</td></tr></table>";
+    let pdf = ua_pdf(html, "");
+    let tds = bodies_of(&pdf, "TD");
+    assert_eq!(tds.len(), 6, "{tds:?}");
+    assert!(tds.iter().all(|b| !b.contains("Span")), "{tds:?}");
+    assert_verapdf_ua1(&pdf, "turbo_pdf_ua_degenerate_spans.pdf");
+}
+
+/// PDF/UA-1 7.4.2-1: heading levels are renumbered in reading order so the first is
+/// `H1` and a deeper heading is one level below the heading it nests in (no skipped
+/// level); a heading returns to the level of the earlier heading of its rank.
+#[test]
+fn heading_levels_never_skip() {
+    let html = "<h2>a</h2><h4>b</h4><h3>c</h3><h6>d</h6><h2>e</h2><h5>f</h5><h1>g</h1><h3>h</h3>";
+    let pdf = ua_pdf(html, "");
+    assert_struct_tree(&pdf);
+    let elems = struct_elems(&pdf);
+    let heads: Vec<&str> = elems
+        .values()
+        .map(|(r, _)| r.as_str())
+        .filter(|r| r.starts_with('H') && r.len() == 2)
+        .collect();
+    assert_eq!(
+        heads,
+        ["H1", "H2", "H2", "H3", "H1", "H2", "H1", "H2"],
+        "{elems:?}"
+    );
+    assert_verapdf_ua1(&pdf, "turbo_pdf_ua_headings.pdf");
+}
+
+/// A well-nested outline keeps its levels.
+#[test]
+fn well_nested_headings_keep_their_levels() {
+    let pdf = ua_pdf("<h1>a</h1><h2>b</h2><h3>c</h3><h2>d</h2><h1>e</h1>", "");
+    let elems = struct_elems(&pdf);
+    let heads: Vec<&str> = elems
+        .values()
+        .map(|(r, _)| r.as_str())
+        .filter(|r| r.starts_with('H') && r.len() == 2)
+        .collect();
+    assert_eq!(heads, ["H1", "H2", "H3", "H2", "H1"], "{elems:?}");
 }

@@ -260,7 +260,9 @@ impl JsConformance {
 pub fn build_registry(fonts: Vec<JsFont>) -> FontRegistry {
     let mut registry = FontRegistry::new();
     for font in fonts {
-        if let Some(face) = FontFace::from_bytes(font.data, font.family, font.weight, font.italic) {
+        if let Some(face) =
+            FontFace::from_web_font_bytes(font.data, font.family, font.weight, font.italic)
+        {
             registry.add(face);
         }
     }

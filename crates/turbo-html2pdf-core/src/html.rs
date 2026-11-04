@@ -13,13 +13,16 @@ use crate::layout::ImageCtx;
 use crate::template::markup;
 use crate::text::FontRegistry;
 
-/// This build's HTML-drive options: `t:` markers, plus `xref` / `print-color`.
+/// This build's HTML-drive options: `t:` markers, plus `xref` / `print-color`, with
+/// inline elements flattened as in a template render ([`crate::flow`]).
 fn options() -> HtmlOptions<'static> {
     HtmlOptions {
         markers: Some(&crate::markers::classify),
         atomic_internal_links: cfg!(feature = "xref"),
         accept_cmyk: cfg!(feature = "print-color"),
         linked_css: "",
+        flatten_inline_elements: true,
+        uncapped_images: false,
     }
 }
 
