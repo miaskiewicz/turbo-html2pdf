@@ -1351,3 +1351,37 @@ fn well_nested_headings_keep_their_levels() {
         .collect();
     assert_eq!(heads, ["H1", "H2", "H3", "H2", "H1"], "{elems:?}");
 }
+
+#[test]
+fn a_tagged_list_item_whose_text_runs_past_a_page_keeps_every_line() {
+    // miaskiewicz/turbo-html2pdf#62, tagged: every line of the item's own text is marked
+    // content, over two pages.
+    let words: Vec<String> = (0..400).map(|i| format!("word{i}")).collect();
+    let template = format!("<ul><li>{}</li></ul>", words.join(" "));
+    let (program, _) = compile(&template, &CompileOptions::default()).expect("compile");
+    let cascade = build_cascade(
+        "@page { size: 600px 400px; margin: 40px } body { margin: 0; font-family: Evolventa; font-size: 16px; line-height: 20px }",
+        "",
+        TokenSet::default(),
+    );
+    let fonts = common::registry();
+    let inputs = RenderInputs {
+        program: &program,
+        data: &serde_json::json!({}),
+        cascade: &cascade,
+        at_rules: &[],
+        fonts: &fonts,
+        images: &turbo_html2pdf_core::NoImages,
+        now: Some(0),
+    };
+    let pages = render_pages(&inputs, &mut Diagnostics::default()).expect("render pages");
+    let pdf = emit_pdf(&pages, &opts());
+    let text = String::from_utf8_lossy(&pdf);
+    assert_eq!(pages.len(), 2);
+    assert_eq!(text.matches("/S /LBody").count(), 1, "one tagged item body");
+    assert_eq!(
+        text.matches("/MCID").count(),
+        51,
+        "every line is marked content"
+    );
+}
