@@ -4,7 +4,19 @@ All notable changes to turbo-html2pdf are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/); versions follow SemVer. The npm,
 PyPI, and crates.io packages release in lockstep from a `v*` tag (PyPI on `pyv*`).
 
-## [0.7.0] — turbo-dom 0.7.0
+## [0.7.1] — 2026-11-05 — turbo-dom 0.7.1
+
+Rebuilt on turbo-dom 0.7.1 (`turbo-dom-layout` + `turbo-dom` 0.7.1, from crates.io). The npm,
+PyPI and crates.io packages move to 0.7.1 with turbo-dom, turbo-test and turbo-surf.
+
+- **Changed (render, turbo-dom 0.7.1)**: a border with no colour (`border: 1px solid`, or
+  `currentcolor` written out) now prints in the element's `color`. Chrome does the same; before,
+  the border was dropped (turbo-dom#303). `inset`/`outset` borders with `currentcolor` use Chrome's
+  fixed grey pair (#9a9a9a / #eeeeee).
+- **Tests**: regression coverage for a list item whose text runs across pages, in plain and
+  PDF/UA tagged output (#62, #64).
+
+## [0.7.0] — 2026-11-04 — turbo-dom 0.7.0
 
 Rebuilt on turbo-dom 0.7.0 (`turbo-dom-layout` + `turbo-dom` 0.7, from crates.io). The npm,
 PyPI and crates.io packages move to 0.7.0 with turbo-dom, turbo-test and turbo-surf.

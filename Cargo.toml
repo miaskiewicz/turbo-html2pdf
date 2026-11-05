@@ -9,7 +9,7 @@ members = [
 ]
 
 [workspace.package]
-version = "0.7.0"
+version = "0.7.1"
 edition = "2021"
 license = "MIT"
 repository = "https://github.com/miaskiewicz/turbo-html2pdf"
@@ -31,11 +31,3 @@ wasm-bindgen = "0.2"
 opt-level = 3
 lto = "thin"
 codegen-units = 1
-
-
-# Pre-publish only (turbo-dom 0.7.1): turbo-dom and turbo-dom-layout come from turbo-dom's
-# 0.7.1 release head (miaskiewicz/turbo-dom#298) until 0.7.1 is on crates.io. Remove this
-# section and re-lock before tagging (PUBLISHING.md); release-guard fails while it is here.
-[patch.crates-io]
-turbo-dom-layout = { git = "https://github.com/miaskiewicz/turbo-dom", rev = "a5e05113406292fc3471e44591397d1bb89943eb" }
-turbo-dom = { git = "https://github.com/miaskiewicz/turbo-dom", rev = "a5e05113406292fc3471e44591397d1bb89943eb" }
