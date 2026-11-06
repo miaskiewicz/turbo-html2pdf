@@ -28,6 +28,8 @@ and a **Python** wheel — one engine, every runtime.
 > The name says exactly what it does — HTML → PDF — and avoids clashing with the
 > unrelated "TurboPDF".
 
+> Contributing or running an agent against this repo? See [docs/AGENTS.md](docs/AGENTS.md) for one-command workflows (build, test, veraPDF corpus, Chrome parity, release prep).
+
 ## Packages
 
 One engine, shipped to every ecosystem. Pick the one for your runtime:
