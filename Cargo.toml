@@ -37,5 +37,5 @@ codegen-units = 1
 # 0.8.0 release head until 0.8.0 is on crates.io. Remove this section and re-lock before
 # tagging (PUBLISHING.md); release-guard fails while it is here.
 [patch.crates-io]
-turbo-dom-layout = { git = "https://github.com/miaskiewicz/turbo-dom", rev = "3d02b8db" }
-turbo-dom = { git = "https://github.com/miaskiewicz/turbo-dom", rev = "3d02b8db" }
+turbo-dom-layout = { git = "https://github.com/miaskiewicz/turbo-dom", rev = "00931568" }
+turbo-dom = { git = "https://github.com/miaskiewicz/turbo-dom", rev = "00931568" }
