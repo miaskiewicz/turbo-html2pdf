@@ -430,8 +430,12 @@ fn bundled_cff_and_truetype_text_is_extractable_without_pdf_ua() {
     let (flow, _) = program
         .render_nodes(&serde_json::json!({}), Some(0))
         .unwrap();
+    // `Flow::style` uses detached roots, so the `<p>`s have no `<body>` ancestor in the
+    // matching chain — scope the author rule to `p`. Chrome-aligned behaviour after
+    // turbo-dom#319: with no `font-family` declaration anywhere, the initial value is
+    // `serif`; the paragraph needs the rule directly to pick up `sans-serif` → Inter.
     let cascade = build_cascade(
-        "body { font-family: sans-serif; font-size: 12px; }",
+        "p { font-family: sans-serif; font-size: 12px; }",
         "",
         TokenSet::default(),
     );
