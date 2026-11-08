@@ -4,6 +4,20 @@ All notable changes to turbo-html2pdf are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/); versions follow SemVer. The npm,
 PyPI, and crates.io packages release in lockstep from a `v*` tag (PyPI on `pyv*`).
 
+## [0.8.0] — 2026-11-05 — turbo-dom 0.8.0
+
+Rebuilt on turbo-dom 0.8.0 (`turbo-dom-layout` + `turbo-dom` 0.8.0, from crates.io). The npm,
+PyPI and crates.io packages move to 0.8.0 with turbo-dom, turbo-test and turbo-surf.
+
+- **Changed (render, turbo-dom 0.8.0)**: parity fixes carried over from turbo-dom's
+  0.8.0 release: a border with no colour continues to print in the element's `color`
+  (0.7.1 landing); SVG `<img>` with only a `viewBox` sizes to the viewBox; table row spans
+  honour Chrome's row-growth rules; the quirks-mode default `form` margin matches Chrome.
+- **PDF/UA**: new structure roles for elements turbo-dom 0.8.0 now paints — the
+  indeterminate `<input type="checkbox">`, `<progress>` / `<meter>`, and the default
+  `<audio>` controls widget at its various measured sizes.
+- See turbo-dom's 0.8.0 CHANGELOG for the upstream engine changes this release carries.
+
 ## [0.7.1] — 2026-11-05 — turbo-dom 0.7.1
 
 Rebuilt on turbo-dom 0.7.1 (`turbo-dom-layout` + `turbo-dom` 0.7.1, from crates.io). The npm,
