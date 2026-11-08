@@ -123,13 +123,25 @@ fn intersect((ax, ay, aw, ah): Rect, (bx, by, bw, bh): Rect) -> Rect {
 }
 
 /// The opaque rectangles a `Box` fragment paints: its background, then its border sides.
+/// A `ColumnRule` fragment paints its rule (solid only in this harness; dotted / dashed /
+/// double are tested through the raster oracle and the emit-time painter in
+/// `crates/turbo-html2pdf-core/src/emit/graphics.rs`).
 fn box_paint(f: &Fragment) -> Vec<(Rect, Rgba)> {
-    let FragmentContent::Box {
-        background, border, ..
-    } = &f.content
-    else {
-        return Vec::new();
-    };
+    match &f.content {
+        FragmentContent::Box {
+            background, border, ..
+        } => box_sides(f, *background, border),
+        FragmentContent::ColumnRule { style, color } => column_rule_rect(f, *style, *color),
+        _ => Vec::new(),
+    }
+}
+
+/// The painted rects of a plain `Box`.
+fn box_sides(
+    f: &Fragment,
+    background: Option<Rgba>,
+    border: &turbo_html2pdf_core::layout::value::BorderEdges,
+) -> Vec<(Rect, Rgba)> {
     let (x, y, fw, fh) = (f.x, f.y, f.width, f.height);
     let (t, b) = (f32::from(border.top.width), f32::from(border.bottom.width));
     let (l, r) = (f32::from(border.left.width), f32::from(border.right.width));
@@ -148,6 +160,21 @@ fn box_paint(f: &Fragment) -> Vec<(Rect, Rgba)> {
         .chain(edges)
         .filter(|(_, c)| c.a == 255)
         .collect()
+}
+
+/// A multicol `ColumnRule` fragment's painted rect — for the solid case the rule fills
+/// its box. Dotted / dashed / double use the oracle in turbo-dom-raster
+/// (`multicol_rule_chrome156.json`) and the emit-time painter.
+fn column_rule_rect(
+    f: &Fragment,
+    style: turbo_html2pdf_core::layout::fragment::ColumnRuleStyle,
+    color: Rgba,
+) -> Vec<(Rect, Rgba)> {
+    use turbo_html2pdf_core::layout::fragment::ColumnRuleStyle;
+    if color.a != 255 || !matches!(style, ColumnRuleStyle::Solid) {
+        return Vec::new();
+    }
+    vec![((f.x, f.y, f.width, f.height), color)]
 }
 
 fn rgb(css: &str) -> [u8; 3] {
@@ -258,6 +285,15 @@ const KNOWN: &[(&str, usize, &str)] = &[
     ("tail-padding-grandparent", 3, "orange"),
     ("tail-padding-grandparent", 4, "orange"),
     ("tail-padding-grandparent", 5, "orange"),
+    // r3-multicol-with-rule page 2: Chrome 156 paints the column rule starting one
+    // device-pixel row above the page area (y=39 against the expected y=40) on the
+    // balanced last page of a paginated multicol — a Blink multicol-painter quirk
+    // visible only when columns balance below the page body (page 1, where columns
+    // fill to the page end, matches exactly). miaskiewicz/turbo-html2pdf#52's PR
+    // notes the quirk; the raster and emit painters both start the rule at
+    // y=content-top so a bare `column-rule` test against our own rendering stays
+    // byte-identical, and this entry pins the one-row offset against Chrome.
+    ("r3-multicol-with-rule", 2, "orange"),
 ];
 
 /// Cases whose page count does not match Chrome 156 yet (each must still differ; their

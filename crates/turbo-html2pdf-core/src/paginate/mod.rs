@@ -20,6 +20,7 @@ mod boxes;
 mod decorate;
 mod footnotes;
 mod geometry;
+mod multicol;
 mod out_of_flow;
 mod shifted;
 mod walk;

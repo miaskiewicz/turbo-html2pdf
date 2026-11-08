@@ -84,9 +84,10 @@ use crate::layout::value::BreakRule;
 
 use super::boxes::{
     bottom_frame, last_content, leading_margin, remaining_height, trailing, wrapper_tail, BoxFacts,
-    FlowBoxes,
+    FlowBoxes, MulticolFacts,
 };
 use super::decorate::{paints, slice_split_boxes, SplitBox};
+use super::multicol;
 use super::out_of_flow::{Anchors, Taken};
 use super::shifted::{carry, pieces, window};
 
@@ -514,7 +515,11 @@ impl<'a> Walker<'a> {
         }
     }
 
-    /// Place `f` where it fits, breaking or splitting as needed.
+    /// Place `f` where it fits, breaking or splitting as needed. A multicol
+    /// container ([`BoxFacts::multicol`], miaskiewicz/turbo-html2pdf#52) takes
+    /// its own path: the pre-layout balanced children are re-flowed across
+    /// pages against the paginator's capacity rather than split by the generic
+    /// block walk (which does not reconcile side-by-side column strips).
     fn place_fitting(
         &mut self,
         f: &Fragment,
@@ -522,6 +527,10 @@ impl<'a> Walker<'a> {
         tail: f32,
         diags: &mut Diagnostics,
     ) {
+        if let Some(facts) = self.boxes.get(f.node_id).and_then(|b| b.multicol) {
+            self.avoided_before = false;
+            return self.place_multicol(f, facts, headers);
+        }
         let placement = self.placement(f, headers, tail);
         self.avoided_before = false;
         match placement {
@@ -534,6 +543,99 @@ impl<'a> Walker<'a> {
             Placement::Slice => self.slice(f, headers),
             Placement::Parallel => self.split_parallel(f, headers),
         }
+    }
+
+    /// Paginate a multicol container (miaskiewicz/turbo-html2pdf#52): re-flow
+    /// its children into column strips of the paginator's capacity, then emit
+    /// one per-page copy of the container box (background/border) plus the
+    /// children whose slot lands on that page plus any column-rule fragments.
+    /// Advances the cursor past the last page's filled column so the next
+    /// block on that page starts below the multicol — Chrome 156's CSS Multicol
+    /// 1 §3 "The multi-column model" with `column-fill: auto` for every page
+    /// but the last.
+    fn place_multicol(&mut self, f: &Fragment, facts: MulticolFacts, headers: &[Fragment]) {
+        let (gap, origin) = self.multicol_origin(f);
+        let first_cap = (self.page_capacity() - origin).max(0.0);
+        let full_cap = self.capacity - (self.reserve)(self.pages.len());
+        let flow = multicol::flow_children(&f.children, facts, (first_cap, full_cap));
+        let last = flow.fill_heights.len().saturating_sub(1);
+        for (page, (&fill_h, &rule_h)) in
+            flow.fill_heights.iter().zip(&flow.rule_heights).enumerate()
+        {
+            let page_top = self.open_multicol_page(page == 0, headers, gap);
+            self.emit_multicol_page(f, facts, &flow, page as u32, (fill_h, rule_h), page_top);
+            if page < last {
+                self.close_multicol_page(f, page_top + fill_h);
+            } else {
+                self.advance_after_multicol(f, page_top + fill_h);
+            }
+        }
+    }
+
+    /// The galley gap kept above the multicol and the page-local top where its
+    /// box starts on page 1.
+    fn multicol_origin(&self, f: &Fragment) -> (f32, f32) {
+        let gap = self.gap_before(f);
+        (gap, self.cursor + gap)
+    }
+
+    /// Open a fresh page for the multicol's second-or-later strip, or return
+    /// the page-1 top. Anchors the leading gap once on page 1, then starts
+    /// every continuation page at its top.
+    fn open_multicol_page(&mut self, first: bool, headers: &[Fragment], gap: f32) -> f32 {
+        if first {
+            self.cursor + gap
+        } else {
+            self.new_page(headers);
+            self.cursor
+        }
+    }
+
+    /// Emit one page's container (as a box without children), its placed
+    /// children, and any column-rule fragments, all through `put` so the
+    /// walker's translation / anchoring / layering stay shared.
+    fn emit_multicol_page(
+        &mut self,
+        f: &Fragment,
+        facts: MulticolFacts,
+        flow: &multicol::Flow,
+        page: u32,
+        heights: (f32, f32),
+        top: f32,
+    ) {
+        let paint = multicol::page_paint(f, &f.children, facts, flow, page, heights, (f.x, f.y));
+        self.put(&paint.container, top);
+        for child in &paint.children {
+            self.put(child, top + (child.y - f.y));
+        }
+        for rule in &paint.rules {
+            self.put(rule, top);
+        }
+    }
+
+    /// Advance past a filled-but-not-last multicol page: record the
+    /// container's bottom so slicing / anchoring see a non-fresh page before
+    /// the next column opens on the next page.
+    fn close_multicol_page(&mut self, f: &Fragment, bottom: f32) {
+        self.cursor = bottom;
+        let page = self.pages.len() - 1;
+        self.placed.push((f.y + f.height, page, bottom));
+        self.fresh = false;
+        let span = self.spans.last_mut().expect("one span per page");
+        span.last = Some((f.y + f.height, bottom));
+    }
+
+    /// Multicol done: set `prev_bottom` to the container's galley bottom so
+    /// the next sibling's gap is measured from the container's end.
+    fn advance_after_multicol(&mut self, f: &Fragment, bottom: f32) {
+        self.cursor = bottom;
+        self.prev_bottom = Some(f.y + f.height);
+        self.fresh = false;
+        self.pending = None;
+        let page = self.pages.len() - 1;
+        self.placed.push((f.y + f.height, page, bottom));
+        let span = self.spans.last_mut().expect("one span per page");
+        span.last = Some((f.y + f.height, bottom));
     }
 
     /// Where `f` goes: here if it fits; else on the next page if it fits on an empty
