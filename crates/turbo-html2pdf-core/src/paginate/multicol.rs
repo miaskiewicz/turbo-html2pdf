@@ -147,9 +147,7 @@ impl FlowState {
             height: h,
         }));
         self.y_in_col += h;
-        if self.y_in_col > self.page_h {
-            self.page_h = self.y_in_col;
-        }
+        self.page_h = self.page_h.max(self.y_in_col);
     }
 
     /// Advance the cursor before placing a `h`-tall child: a child that
