@@ -529,7 +529,7 @@ impl<'a> Walker<'a> {
     ) {
         if let Some(facts) = self.boxes.get(f.node_id).and_then(|b| b.multicol) {
             self.avoided_before = false;
-            return self.place_multicol(f, facts, headers);
+            return self.place_multicol(f, facts, headers, diags);
         }
         let placement = self.placement(f, headers, tail);
         self.avoided_before = false;
@@ -552,11 +552,27 @@ impl<'a> Walker<'a> {
     /// Advances the cursor past the last page's filled column so the next
     /// block on that page starts below the multicol — Chrome 156's CSS Multicol
     /// 1 §3 "The multi-column model" with `column-fill: auto` for every page
-    /// but the last.
-    fn place_multicol(&mut self, f: &Fragment, facts: MulticolFacts, headers: &[Fragment]) {
+    /// but the last. An in-flow child whose height alone exceeds the page body
+    /// is placed anyway and flagged with [`LintCode::RegionOverflow`] (matching
+    /// the generic walker's `overflow_leaf`): the paginator never crashes on an
+    /// over-tall multicol child, it just reports the clipping.
+    fn place_multicol(
+        &mut self,
+        f: &Fragment,
+        facts: MulticolFacts,
+        headers: &[Fragment],
+        diags: &mut Diagnostics,
+    ) {
         let (gap, origin) = self.multicol_origin(f);
         let first_cap = (self.page_capacity() - origin).max(0.0);
         let full_cap = self.capacity - (self.reserve)(self.pages.len());
+        for _ in multicol::overflowing_children(&f.children, full_cap) {
+            diags.push(
+                LintCode::RegionOverflow,
+                "multicol child taller than the page body was clipped",
+                Span::default(),
+            );
+        }
         let flow = multicol::flow_children(&f.children, facts, (first_cap, full_cap));
         let last = flow.fill_heights.len().saturating_sub(1);
         for (page, (&fill_h, &rule_h)) in
@@ -627,6 +643,16 @@ impl<'a> Walker<'a> {
 
     /// Multicol done: set `prev_bottom` to the container's galley bottom so
     /// the next sibling's gap is measured from the container's end.
+    ///
+    /// Note (R1 MEDIUM-4, deferred): when the multicol has a definite height
+    /// larger than its last page's filled column, the galley bottom and the
+    /// visual bottom diverge. The next sibling's gap is still measured in
+    /// galley coordinates (`flow_top(sibling) - prev_bottom`) and the sibling
+    /// is placed at `cursor + gap` on the last page, so the arithmetic lands
+    /// at the same visual spot for an `auto`-height container; a definite-
+    /// height container whose declared height exceeds `sum(fill_heights)` is
+    /// not covered by a Chrome oracle yet, so the fix lives behind that
+    /// capture rather than guessing.
     fn advance_after_multicol(&mut self, f: &Fragment, bottom: f32) {
         self.cursor = bottom;
         self.prev_bottom = Some(f.y + f.height);

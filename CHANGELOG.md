@@ -24,7 +24,28 @@ PyPI and crates.io packages move to 0.8.1 with turbo-dom, turbo-test and turbo-s
   stream (the four [`ColumnRuleStyle`] variants that turbo-dom 0.8.1 PR-D
   emits — `Solid` / `Dotted` / `Dashed` / `Double`), mirroring
   turbo-dom-raster's `paint_column_rule` so a rule paints identically in the
-  PDF and the raster fallback.
+  PDF and the raster fallback. The dotted rule stamps Bezier-approximated
+  disks (not axis-aligned squares) so a PDF-level view of a dotted rule
+  matches Chrome's Blink `kDottedStroke` with cap-round, same perimeter as
+  the raster painter. Each `paint_column_rule` call sits inside a `q`/`Q`
+  save/restore so a future graphics-state change (dash pattern, CTM) cannot
+  leak to the next fragment; unit tests at
+  `crates/turbo-html2pdf-core/src/emit/graphics.rs` cover the four styles'
+  operator streams (dotted → Bezier curves + `f`, dashed → `re`/`f`, solid
+  → one `re`/`f`, double → two `re`/`f` bands plus the sub-3px fallback).
+- **Fixed (emit, UA)**: `content_paints` no longer brackets a zero-width or
+  zero-height `ColumnRule` fragment in an `/Artifact BDC … EMC` pair — the
+  predicate now matches `paint_column_rule`'s geometry short-circuit, so a
+  stray zero-sized rule from a future layout bug cannot emit a vacuous
+  marked-content sequence into the PDF/UA stream.
+- **Fixed (pagination, multicol)**: an empty multicol container
+  (`<div style="columns:2"></div>` with no in-flow children, or one whose
+  only emitted child is a `ColumnRule` fragment the paginator drops) still
+  produces one page so the walker can paint the container's own box and
+  advance past it. An in-flow multicol child whose height alone exceeds the
+  page body is placed anyway and flagged with
+  [`LintCode::RegionOverflow`] — matching the generic walker's
+  `overflow_leaf` behaviour — instead of silently bleeding past the page.
 - **Changed (render, turbo-dom 0.8.1)**: parity fixes carried over from
   turbo-dom's 0.8.1 release — see turbo-dom's 0.8.1 CHANGELOG for the upstream
   engine changes this release carries.

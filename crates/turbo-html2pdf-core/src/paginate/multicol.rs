@@ -12,21 +12,46 @@
 //! `<div style="columns:2">` whose balance height exceeds the page body
 //! produces multiple pages, each with up to `used_count` columns of content.
 //!
-//! The flow follows CSS Multicol 1 §3 "The multi-column model" with
-//! `column-fill: auto` semantics for every page but the last (fill columns
-//! top-to-bottom) — Chrome 156 paginates multicol this way: on each page
-//! `col_h = page_capacity`, so a child shorter than that fits one column strip
-//! per page row and a child with `break-inside: avoid` that would overrun the
-//! current column is pushed to a fresh one (CSS Fragmentation 3 §5.2).
-//! Pre-layout column-rule fragments are dropped here (their geometry belongs
-//! to the one-shot balanced tree, not the paginated one); the paginator re-
-//! emits them per page from the container's `MulticolFacts`.
+//! The flow currently implements `column-fill: auto` on every page, including
+//! the last (CSS Multicol 1 §3 "The multi-column model") — Chrome 156
+//! paginates multicol this way for the pages that saturate the body, while
+//! `column-fill: balance` on the last page balances content to the tallest
+//! filled column. This paginator does NOT re-balance the last page; the only
+//! balancing it applies is clipping the column *rule* to the tallest filled
+//! column so the rule shrinks on a short last page, matching the raster
+//! painter. A child with `break-inside: avoid` that would overrun the current
+//! column is pushed to a fresh one (CSS Fragmentation 3 §5.2). A child whose
+//! height exceeds the page body's capacity is flagged with
+//! [`LintCode::RegionOverflow`] and placed anyway (matching the generic
+//! walker's `overflow_leaf` behaviour); pre-layout column-rule fragments are
+//! dropped here (their geometry belongs to the one-shot balanced tree, not
+//! the paginated one) and the paginator re-emits them per page from the
+//! container's `MulticolFacts`.
+//!
+//! An empty multicol container (no in-flow children, only dropped column-rule
+//! fragments) still paints its own box: [`Flow::single_empty_page`] emits one
+//! page whose fill height is 0 so the generic walker advances past the
+//! container's own box.
 //!
 //! The entry [`place_multicol`] drives this walk through the shared
 //! [`Walker`]/[`PageOps`] interface so emit/new-page/advance semantics stay in
 //! lockstep with the rest of pagination (margins at page starts, footnote
 //! reservations, repeated headers, out-of-flow placement around the
 //! container).
+//!
+//! **Known limitations** (R1 review, deferred follow-ups):
+//! * `break-before: column` / `break-after: column` / `break-inside:
+//!   avoid-column` / `column-span: all` are honoured by turbo-dom-layout's
+//!   balancer but not re-honoured here when re-flowing across pages — the
+//!   paginator reads only the child's `height`. Separating these from
+//!   `break-{before,after}: page` would require either a new
+//!   `BreakRule::Column` variant in turbo-dom-layout (a turbo-dom change) or
+//!   per-child `ComputedStyle` lookup in `flow_boxes.rs`.
+//! * `position: absolute` / `position: fixed` descendants inside a multicol
+//!   container are placed as in-flow blocks (the `flow_boxes.rs::visit` early
+//!   return skips their `BoxFacts`).
+//! * Nested multicol: the inner container flows as a plain block instead of
+//!   re-entering `place_multicol`.
 
 use crate::layout::fragment::{ColumnRuleStyle, Fragment, FragmentContent, NodeId};
 use crate::layout::value::Rgba;
@@ -92,7 +117,9 @@ pub fn is_flowable(child: &Fragment) -> bool {
 /// the multicol starts on; may be less than a full page when prior content
 /// sits above it); `full_cap` is the body height of a fresh page. Returns a
 /// per-child [`Slot`] (None for a child dropped by [`is_flowable`]) and the
-/// filled column height of each page.
+/// filled column height of each page. An empty container (no in-flow
+/// children, only dropped column rules) produces one page with `fill_h = 0`
+/// so the walker can still emit the container's own box and advance past it.
 #[must_use]
 pub fn flow_children(children: &[Fragment], facts: MulticolFacts, caps: (f32, f32)) -> Flow {
     let mut state = FlowState::start(children.len(), caps);
@@ -172,10 +199,27 @@ impl FlowState {
     }
 
     fn finish(mut self) -> Flow {
-        if !self.slots.is_empty() {
+        // A multicol with ONLY non-flowable children (e.g. `<div
+        // style="columns:2"></div>` with no in-flow kids, or a container whose
+        // only emitted child was a `ColumnRule` fragment the paginator drops)
+        // still owns a container box to paint. Emit one zero-height page so
+        // `place_multicol` has somewhere to put the container's own frame and
+        // advance the cursor past it (MEDIUM-1).
+        let any_placed = self.slots.iter().any(Option::is_some);
+        if any_placed || self.slots.is_empty() {
             self.fill_heights.push(self.page_h);
             self.page_caps.push(self.cap);
+        } else {
+            // All slots are `None` (every child was a dropped column rule) —
+            // still a container-paint opportunity.
+            self.fill_heights.push(0.0);
+            self.page_caps.push(self.cap);
         }
+        debug_assert_eq!(
+            self.fill_heights.len(),
+            self.page_caps.len(),
+            "fill_heights / page_caps lengths diverge; `rule_heights_from` zip would mis-pair pages",
+        );
         let rule_heights = rule_heights_from(&self.fill_heights, &self.page_caps);
         Flow {
             slots: self.slots,
@@ -300,7 +344,9 @@ fn rule_visible(facts: MulticolFacts, rule: (ColumnRuleStyle, Rgba, f32), col_h:
 /// Build one column rule's fragment: `k` is the gap index (`0..used_count-1`),
 /// the rule is centered in the `k`-th gap at `(origin.x + (k+1) * used_width +
 /// (k+0.5) * gap, origin.y)`, `clamped.width` wide (clamped to the gap by the
-/// caller) and `col_h` tall.
+/// caller) and `col_h` tall. `clamped <= facts.gap` holds by construction
+/// ([`column_rule_fragments`] clamps `rule_w` to the gap), so the fragment
+/// never crosses the far edge of the last gap and no outer fence is needed.
 fn one_rule(
     node_id: NodeId,
     (cx, cy): (f32, f32),
@@ -312,15 +358,32 @@ fn one_rule(
     let (style, color, clamped) = rule;
     let k_f = k as f32;
     let gap_center = cx + (k_f + 1.0) * facts.used_width + (k_f + 0.5) * facts.gap;
-    let stride = facts.used_width + facts.gap;
     Fragment::new(
         node_id,
-        (gap_center - clamped / 2.0).min(cx + facts.used_count as f32 * stride),
+        gap_center - clamped / 2.0,
         cy,
         clamped,
         col_h,
         FragmentContent::ColumnRule { style, color },
     )
+}
+
+/// The galley node ids of the multicol children that would overflow the given
+/// page capacity if placed as the first child in a fresh column (their height
+/// alone exceeds `full_cap`). The caller lints each one as
+/// [`crate::error::LintCode::RegionOverflow`]: the paginator still places them
+/// (matching the generic walker's `overflow_leaf`), it just flags that the
+/// clipped content exists.
+#[must_use]
+pub fn overflowing_children(children: &[Fragment], full_cap: f32) -> Vec<NodeId> {
+    if full_cap <= 0.0 {
+        return Vec::new();
+    }
+    children
+        .iter()
+        .filter(|c| is_flowable(c) && c.height > full_cap)
+        .map(|c| c.node_id)
+        .collect()
 }
 
 #[cfg(test)]
@@ -515,6 +578,59 @@ mod tests {
         let r = (ColumnRuleStyle::Solid, Rgba::BLACK, 4.0);
         assert!(column_rule_fragments(NodeId(1), (0.0, 0.0), two, r, 100.0).is_empty());
         assert!(column_rule_fragments(NodeId(1), (0.0, 0.0), one, r, 100.0).is_empty());
+    }
+
+    #[test]
+    fn an_empty_multicol_still_emits_one_container_page() {
+        // R1 MEDIUM-1: `<div style="columns:2"></div>` must produce one page so
+        // the walker can paint the container's own box and advance past it.
+        let flow = flow_children(&[], facts2(300.0, 0.0), (320.0, 320.0));
+        assert_eq!(flow.fill_heights, vec![0.0]);
+        assert_eq!(flow.rule_heights, vec![0.0]);
+        assert!(flow.slots.is_empty());
+    }
+
+    #[test]
+    fn a_container_whose_only_children_are_dropped_rules_still_emits_one_page() {
+        // R1 MEDIUM-1: a multicol that holds only a `ColumnRule` fragment the
+        // paginator drops leaves `slots` all-None but still needs one page so
+        // the container box gets painted.
+        let mut rule = block(99, 0.0, 300.0);
+        rule.content = FragmentContent::ColumnRule {
+            style: ColumnRuleStyle::Solid,
+            color: Rgba::BLACK,
+        };
+        rule.width = 4.0;
+        let flow = flow_children(&[rule], facts2(260.0, 16.0), (320.0, 320.0));
+        assert_eq!(flow.slots.len(), 1);
+        assert!(flow.slots[0].is_none());
+        assert_eq!(flow.fill_heights, vec![0.0]);
+    }
+
+    #[test]
+    fn overflowing_children_flags_only_oversize_in_flow_kids() {
+        // R1 MEDIUM-3: a multicol child that overruns the page body is listed
+        // for a `LintCode::RegionOverflow` lint; column-rule fragments and
+        // children that fit are skipped.
+        let (style, color) = (ColumnRuleStyle::Solid, Rgba::BLACK);
+        let mut rule = block(99, 0.0, 900.0);
+        rule.content = FragmentContent::ColumnRule { style, color };
+        rule.width = 4.0;
+        let kids = vec![
+            block(1, 0.0, 200.0), // fits a 320 cap
+            block(2, 0.0, 500.0), // exceeds 320 → listed
+            rule.clone(),         // non-flowable, always skipped
+            block(3, 0.0, 321.0), // exceeds 320 → listed
+        ];
+        let flagged = overflowing_children(&kids, 320.0);
+        assert_eq!(flagged, vec![NodeId(2), NodeId(3)]);
+    }
+
+    #[test]
+    fn overflowing_children_short_circuits_on_a_non_positive_cap() {
+        let kids = vec![block(1, 0.0, 10.0)];
+        assert!(overflowing_children(&kids, 0.0).is_empty());
+        assert!(overflowing_children(&kids, -5.0).is_empty());
     }
 
     #[test]

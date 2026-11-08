@@ -95,7 +95,17 @@ fn artifact_or_none(frag: &Fragment) -> WrapKind {
 /// Whether a fragment emits any paint operators at all (so a marked-content
 /// bracket would wrap real bytes).
 fn paints(frag: &Fragment) -> bool {
-    content_paints(&frag.content)
+    match &frag.content {
+        // A column-rule paint is also geometry-guarded in the painter
+        // (`emit/graphics.rs::paint_column_rule` short-circuits on zero width /
+        // zero height), so a planner that ignores the geometry would bracket an
+        // empty `/Artifact BDC … EMC` pair around nothing — noise in the stream
+        // and a validator warning on some strict PDF/UA builds.
+        FragmentContent::ColumnRule { color, .. } => {
+            color.a > 0 && frag.width > 0.0 && frag.height > 0.0
+        }
+        other => content_paints(other),
+    }
 }
 
 /// Whether a fragment content emits paint operators: a background pattern paints
@@ -110,7 +120,9 @@ fn content_paints(content: &FragmentContent) -> bool {
         // A multi-column `column-rule-*` fragment paints a filled band / dot /
         // dash pattern in `color` when the rule is visible — a non-`none` style
         // with a positive width and a non-transparent colour (the multicol
-        // layout emits one only then; miaskiewicz/turbo-dom#398 PR-D).
+        // layout emits one only then; miaskiewicz/turbo-dom#398 PR-D). The
+        // geometry check at `paints` additionally rejects a zero-width or
+        // zero-height fragment, matching the painter.
         FragmentContent::ColumnRule { color, .. } => color.a > 0,
         FragmentContent::Marker(_) => false,
     }
