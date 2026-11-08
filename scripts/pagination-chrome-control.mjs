@@ -1034,6 +1034,41 @@ const CASES = [
     ),
     colors: ["red", "green", "blue", "yellow", "magenta", "cyan"],
   },
+  {
+    // Three-column multi-column container (miaskiewicz/turbo-html2pdf#52):
+    // 6 blocks of 80px tall on 2-page body of 320px — 3 blocks per column,
+    // 3 columns per page, 1 block left over → 2 pages.
+    id: "r3-multicol-3cols",
+    html: DOC(
+      "body{margin:0}",
+      `<div style="columns:3;column-gap:0">${blocks(["red", "green", "blue", "yellow", "magenta", "cyan", "orange"], 110)}</div>`,
+    ),
+    colors: ["red", "green", "blue", "yellow", "magenta", "cyan", "orange"],
+  },
+  {
+    // Two-column multi-column with a visible solid `column-rule` painted in the
+    // (16px) gap. The rule is an in-flow artifact that paints alongside each
+    // page's columns; the painter must not drop the rules when pagination
+    // re-flows the children (miaskiewicz/turbo-html2pdf#52).
+    id: "r3-multicol-with-rule",
+    html: DOC(
+      "body{margin:0}",
+      `<div style="columns:2;column-gap:16px;column-rule:4px solid #ff8000">${blocks(["red", "green", "blue", "yellow"], 180)}</div>`,
+    ),
+    colors: ["red", "green", "blue", "yellow", "orange"],
+  },
+  {
+    // `break-before: page` inside a multicol: Chrome breaks the page there
+    // (pagination's concern — multicol passes through the computed break-rule
+    // unhonoured, miaskiewicz/turbo-dom#398 PR-E). Page 1: red + green in two
+    // columns (both blocks 140px). Page 2: blue alone at its multicol's column 0.
+    id: "r3-multicol-break-before-page",
+    html: DOC(
+      "body{margin:0}",
+      `<div style="columns:2;column-gap:0">${block(C.red[0], 140)}${block(C.green[0], 140)}${block(C.blue[0], 140, "break-before:page")}</div>`,
+    ),
+    colors: ["red", "green", "blue"],
+  },
 ];
 
 /** Parse a binary PPM (P6, maxval 255) into { width, height, px(x, y) -> [r,g,b] }. */
