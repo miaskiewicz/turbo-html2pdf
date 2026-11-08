@@ -68,7 +68,7 @@ fn content_band_kind(frag: &Fragment) -> WrapKind {
         FragmentContent::Box {
             background, border, ..
         } => box_wrap(*background, border),
-        FragmentContent::Tiles(_) => artifact_or_none(frag),
+        FragmentContent::Tiles(_) | FragmentContent::ColumnRule { .. } => artifact_or_none(frag),
         FragmentContent::Marker(_) => WrapKind::None,
     }
 }
@@ -107,6 +107,11 @@ fn content_paints(content: &FragmentContent) -> bool {
             background, border, ..
         } => background.is_some() || border.any_visible(),
         FragmentContent::Tiles(pattern) => content_paints(&pattern.tile),
+        // A multi-column `column-rule-*` fragment paints a filled band / dot /
+        // dash pattern in `color` when the rule is visible — a non-`none` style
+        // with a positive width and a non-transparent colour (the multicol
+        // layout emits one only then; miaskiewicz/turbo-dom#398 PR-D).
+        FragmentContent::ColumnRule { color, .. } => color.a > 0,
         FragmentContent::Marker(_) => false,
     }
 }

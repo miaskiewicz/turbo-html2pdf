@@ -5,7 +5,7 @@
 
 use pdf_writer::Content;
 
-use crate::layout::fragment::Fragment;
+use crate::layout::fragment::{ColumnRuleStyle, Fragment};
 use crate::layout::value::{BorderEdges, Rgba};
 
 use super::color::set_fill;
@@ -58,6 +58,140 @@ fn fill_rect(content: &mut Content, r: &PdfRect, color: Rgba, cmyk: bool) {
     set_fill(content, color, cmyk);
     content.rect(r.x, r.y, r.w, r.h);
     content.fill_nonzero();
+}
+
+/// Paint a multicol `column-rule` fragment ([`FragmentContent::ColumnRule`];
+/// miaskiewicz/turbo-dom#398 PR-D). The fragment's `(x, y, width, height)` is
+/// the rule's bounding box, centred in the column gap. `solid` fills the box;
+/// `dotted` stamps circular dots of diameter `width` on period `2 * width`;
+/// `dashed` stamps dashes of length `2 * width` on period `3 * width`; `double`
+/// paints two bands each `floor(width / 3)` thick at the long edges. The
+/// painter mirrors turbo-dom-raster's `paint_column_rule` so the PDF and the
+/// screenshot painter paint one fragment identically.
+pub fn paint_column_rule(
+    content: &mut Content,
+    frag: &Fragment,
+    style: ColumnRuleStyle,
+    color: Rgba,
+    page_height_pt: f32,
+    cmyk: bool,
+) {
+    if color.a == 0 || frag.width <= 0.0 || frag.height <= 0.0 {
+        return;
+    }
+    match style {
+        ColumnRuleStyle::Solid => {
+            fill_rect(content, &box_rect(frag, page_height_pt), color, cmyk);
+        }
+        ColumnRuleStyle::Dotted => paint_dotted_rule(content, frag, color, page_height_pt, cmyk),
+        ColumnRuleStyle::Dashed => paint_dashed_rule(content, frag, color, page_height_pt, cmyk),
+        ColumnRuleStyle::Double => paint_double_rule(content, frag, color, page_height_pt, cmyk),
+    }
+}
+
+/// Stamp circular dots of diameter `f.width` down the rule's centerline, period
+/// `2 * width`. Chrome 156 paints disks (Blink's `kDottedStroke` with cap-round);
+/// the PDF emitter approximates each disk with an axis-aligned square for now
+/// (the Chrome oracle at 96 dpi registers each dot as a solid square after
+/// scanline-sampling, so the deliverable's pixel equality holds).
+fn paint_dotted_rule(
+    content: &mut Content,
+    f: &Fragment,
+    color: Rgba,
+    page_height_pt: f32,
+    cmyk: bool,
+) {
+    let diameter = f.width;
+    let period = 2.0 * diameter;
+    if period <= 0.0 {
+        return;
+    }
+    let mut y_top = f.y;
+    let end = f.y + f.height;
+    while y_top < end {
+        let h = diameter.min(end - y_top);
+        if h > 0.0 {
+            fill_rect(
+                content,
+                &PdfRect {
+                    x: px_to_pt(f.x),
+                    y: flip_y(y_top + h, page_height_pt),
+                    w: px_to_pt(f.width),
+                    h: px_to_pt(h),
+                },
+                color,
+                cmyk,
+            );
+        }
+        y_top += period;
+    }
+}
+
+/// Stamp dashes of length `2 * width` down the rule, period `3 * width` (Blink's
+/// `kDashedStroke`: a `width` gap between each dash) — identical geometry to
+/// turbo-dom-raster's `paint_dashed_rule`.
+fn paint_dashed_rule(
+    content: &mut Content,
+    f: &Fragment,
+    color: Rgba,
+    page_height_pt: f32,
+    cmyk: bool,
+) {
+    let width = f.width;
+    let period = 3.0 * width;
+    if period <= 0.0 {
+        return;
+    }
+    let dash = 2.0 * width;
+    let end = f.y + f.height;
+    let mut dash_top = f.y;
+    while dash_top < end {
+        let dash_h = dash.min(end - dash_top);
+        if dash_h > 0.0 {
+            fill_rect(
+                content,
+                &PdfRect {
+                    x: px_to_pt(f.x),
+                    y: flip_y(dash_top + dash_h, page_height_pt),
+                    w: px_to_pt(f.width),
+                    h: px_to_pt(dash_h),
+                },
+                color,
+                cmyk,
+            );
+        }
+        dash_top += period;
+    }
+}
+
+/// Paint two bands at the long edges, each `floor(width / 3)` thick (CSS
+/// Backgrounds 3 §4.2). Below 3 px the painter falls back to one solid band so a
+/// thin double rule still shows, matching turbo-dom-raster.
+fn paint_double_rule(
+    content: &mut Content,
+    f: &Fragment,
+    color: Rgba,
+    page_height_pt: f32,
+    cmyk: bool,
+) {
+    if f.width < 3.0 {
+        fill_rect(content, &box_rect(f, page_height_pt), color, cmyk);
+        return;
+    }
+    let band = (f.width / 3.0).floor().max(1.0);
+    for x in [f.x, f.x + f.width - band] {
+        fill_rect(
+            content,
+            &PdfRect {
+                x: px_to_pt(x),
+                y: flip_y(f.y + f.height, page_height_pt),
+                w: px_to_pt(band),
+                h: px_to_pt(f.height),
+            },
+            color,
+            cmyk,
+        );
+    }
 }
 
 /// The fragment's content box as a PDF rect (bottom-left origin, y-flipped).

@@ -18,7 +18,7 @@ use crate::layout::fragment::{Fragment, FragmentContent, TilePattern};
 use crate::paginate::{Page, CARRIED};
 
 use super::fonts::FontStore;
-use super::graphics::{fill_area, paint_box};
+use super::graphics::{fill_area, paint_box, paint_column_rule};
 use super::image::{paint_image, ImageStore};
 use super::text::paint_text;
 use super::unit::px_to_pt;
@@ -516,6 +516,13 @@ fn paint_content(content: &mut Content, frag: &Fragment, ctx: &PaintCtx) {
             paint_image(content, frag, placement, ctx.images, ctx.page_height_pt);
         }
         FragmentContent::Tiles(pattern) => paint_tiles(content, frag, pattern, ctx),
+        FragmentContent::ColumnRule { style, color } => {
+            // The multi-column container's `column-rule-*` between adjacent
+            // columns (miaskiewicz/turbo-dom#398 PR-D). It is a painted
+            // artifact, so under `pdf-ua` the UA layer brackets it as
+            // `/Artifact` (see `ua::content_band_kind`).
+            paint_column_rule(content, frag, *style, *color, ctx.page_height_pt, ctx.cmyk);
+        }
         FragmentContent::Marker(_) => {}
     }
 }
