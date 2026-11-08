@@ -327,6 +327,34 @@ pages the header is **re-emitted atop every continued page** (`layout/table.rs`,
 </table>
 ```
 
+### Multi-column pagination
+
+A `<div style="columns: N">` (or `column-count` / `column-width` directly)
+establishes a multi-column formatting context whose children flow through the
+container's used column strips. turbo-dom-layout 0.8.1 lays them out ONCE,
+balanced over the columns (CSS Multicol 1 §3). turbo-html2pdf-core's paginator
+then **re-flows** that balance across pages (miaskiewicz/turbo-html2pdf#52):
+
+1. Compute the used track geometry (`used_count`, `used_width`, `gap`) from
+   the container's computed style and content width.
+2. Walk the layout's balanced children in source order, placing each into the
+   current page's column strip top-to-bottom, left-to-right. A child that
+   overruns the column gets pushed to the next column (CSS Fragmentation 3
+   §5.2 `break-inside: avoid`); a run that saturates `used_count` columns
+   opens a fresh page.
+3. On every page but the last the column rules (`column-rule-*`) fill the
+   page body height; the last page balances to the tallest filled column, so
+   the rule shrinks to that content — matching Chrome 156's
+   `column-fill: auto` for non-last pages and `balance` on the last.
+4. Each page gets a per-page copy of the container box (background / border)
+   plus the children on that page plus any column-rule fragments, all
+   routed through the walker's shared `put` so page translation, anchoring
+   and `z-index` stay identical to the rest of pagination.
+
+Examples oracled against Chrome 156 in
+`crates/turbo-html2pdf-core/tests/fixtures/pagination_chrome156.json` under
+the `r3-multicol*` case ids.
+
 ### Documented pagination limitations
 
 From `paginate/walk.rs`:
@@ -341,5 +369,9 @@ From `paginate/walk.rs`:
   stays.
 - Orphans/widows are enforced at each single break, but a paragraph tail spanning
   more than two pages is greedy.
+- On a paginated multicol's last (balanced) page, Chrome 156 paints each
+  `column-rule` starting one device-pixel row above the content; the engine
+  (and the raster painter) paints the rule at the content top. Pinned in
+  `paginated_boxes_match_chrome_156`'s `KNOWN` list.
 
 Both are refined alongside the emitter in a later phase.

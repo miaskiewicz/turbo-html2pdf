@@ -149,13 +149,35 @@ ignored.
 
 | Property | Accepted values |
 |---|---|
-| `break-before` | `auto` (default), `avoid`, `page` (`column` is treated as `page`) |
+| `break-before` | `auto` (default), `avoid`, `page`, `column` (inside a multicol container; outside, treated as `page`) |
 | `break-after` | same |
-| `break-inside` | `avoid` is the only meaningful value |
+| `break-inside` | `avoid` (and `avoid-column` inside a multicol) is the only meaningful value |
 | `orphans` | integer (default `2`) |
 | `widows` | integer (default `2`) |
 
 See [paged-media.md](paged-media.md#break-rules) for how these drive pagination.
+
+### Multi-column (since 0.8.1)
+
+| Property | Accepted values |
+|---|---|
+| `column-count` | integer ≥ 1, or `auto` |
+| `column-width` | `<length>`, or `auto` |
+| `columns` (shorthand) | `<width> <count>` in either order |
+| `column-gap` | `<length>`, `normal` (`1em`) |
+| `column-rule-width` | `<length>`, `thin` / `medium` / `thick` / `none` |
+| `column-rule-style` | `none` (default), `solid`, `dotted`, `dashed`, `double` (`groove` / `ridge` / `inset` / `outset` deferred — miaskiewicz/turbo-dom#419) |
+| `column-rule-color` | any supported colour, or `currentcolor` |
+| `column-rule` (shorthand) | `<width> <style> <color>` |
+| `column-span` | `none` (default), `all` |
+
+A box with a non-`auto` `column-count` or `column-width` establishes an
+independent multi-column formatting context. turbo-dom-layout 0.8.1 lays its
+children out balanced over the used columns; turbo-html2pdf-core then re-flows
+that balance across pages — up to `used_count` columns per page, saturating one
+before opening a fresh page (CSS `column-fill: auto` for every page but the
+last, which balances to the tallest filled column), matching Chrome 156. See
+[paged-media.md](paged-media.md#multi-column-pagination).
 
 ---
 

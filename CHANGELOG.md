@@ -4,6 +4,31 @@ All notable changes to turbo-html2pdf are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/); versions follow SemVer. The npm,
 PyPI, and crates.io packages release in lockstep from a `v*` tag (PyPI on `pyv*`).
 
+## [0.8.1] — turbo-dom 0.8.1
+
+Rebuilt on turbo-dom 0.8.1 (`turbo-dom-layout` + `turbo-dom` 0.8.1, from crates.io). The npm,
+PyPI and crates.io packages move to 0.8.1 with turbo-dom, turbo-test and turbo-surf.
+
+- **Added (pagination, #52)**: paginate CSS multi-column (`columns:` /
+  `column-count` / `column-width`) layouts. turbo-dom 0.8.1 lays each multicol
+  container out once, balanced over its columns; the paginator now re-flows
+  those children across pages — top-to-bottom, left-to-right, saturating
+  `used_count` columns before opening a fresh page (CSS `column-fill: auto`
+  for every page but the last, which balances to the tallest filled column,
+  matching Chrome 156). `<div style="columns:2">` with six 200px blocks on a
+  600×400 page body now produces Chrome's three pages (two columns per page),
+  not six. Every per-page container slice carries its background, border and
+  column-rule fragments ([`FragmentContent::ColumnRule`], miaskiewicz/turbo-dom#398
+  PR-D), painted under `pdf-ua` as `/Artifact` marked content.
+- **Added (emit)**: paint `FragmentContent::ColumnRule` into the PDF content
+  stream (the four [`ColumnRuleStyle`] variants that turbo-dom 0.8.1 PR-D
+  emits — `Solid` / `Dotted` / `Dashed` / `Double`), mirroring
+  turbo-dom-raster's `paint_column_rule` so a rule paints identically in the
+  PDF and the raster fallback.
+- **Changed (render, turbo-dom 0.8.1)**: parity fixes carried over from
+  turbo-dom's 0.8.1 release — see turbo-dom's 0.8.1 CHANGELOG for the upstream
+  engine changes this release carries.
+
 ## [0.8.0] — 2026-11-05 — turbo-dom 0.8.0
 
 Rebuilt on turbo-dom 0.8.0 (`turbo-dom-layout` + `turbo-dom` 0.8.0, from crates.io). The npm,
