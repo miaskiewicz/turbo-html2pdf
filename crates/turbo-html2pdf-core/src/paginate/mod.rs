@@ -28,7 +28,7 @@ use crate::error::{Diagnostics, RenderError};
 use crate::layout::fragment::Fragment;
 use crate::style::AtRule;
 
-pub use boxes::{BoxFacts, FlowBoxes};
+pub use boxes::{BoxFacts, FlowBoxes, MulticolFacts};
 pub use footnotes::{FootnoteBand, Note};
 pub use geometry::{resolve_geometry, PageGeometry};
 pub use shifted::CARRIED;

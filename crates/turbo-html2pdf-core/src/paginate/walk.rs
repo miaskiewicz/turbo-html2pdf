@@ -1554,6 +1554,7 @@ mod tests {
                 inset_bottom: crate::layout::value::LengthPct::Auto,
                 shift: 0.0,
                 definite_height: true,
+                multicol: None,
             },
         );
         let galley = Galley {

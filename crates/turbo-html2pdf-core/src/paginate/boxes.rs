@@ -28,6 +28,28 @@ pub struct BoxFacts {
     /// Whether `height` is not `auto`: a split box then lays that height out through the
     /// pages it spans (miaskiewicz/turbo-html2pdf#43).
     pub definite_height: bool,
+    /// A multi-column container's resolved track geometry when its computed style
+    /// opens a multicol formatting context (`column-count` or `column-width` not
+    /// `auto`; miaskiewicz/turbo-html2pdf#52). The paginator re-flows its in-flow
+    /// children across pages through the paginator's capacity, overriding the
+    /// pre-layout balance so each page's columns hold up to a page body height of
+    /// content. `None` = not a multicol container.
+    pub multicol: Option<MulticolFacts>,
+}
+
+/// Resolved multi-column track geometry for one container (CSS Multicol 1 §7.1
+/// "Pseudo-algorithm"; miaskiewicz/turbo-dom#398 PR-C1). The paginator re-flows the
+/// container's children against these.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct MulticolFacts {
+    /// Used column count (`floor((cw + gap) / (width + gap))` when the style
+    /// picks the count from `column-width`; else the given `column-count`).
+    pub used_count: u32,
+    /// Used column width in px (the content box's inline size minus gaps,
+    /// divided equally over `used_count`).
+    pub used_width: f32,
+    /// Used `column-gap` in px.
+    pub gap: f32,
 }
 
 impl BoxFacts {
@@ -208,6 +230,7 @@ mod tests {
                 inset_bottom: LengthPct::Auto,
                 shift: 0.0,
                 definite_height: false,
+                multicol: None,
             };
             boxes.insert(NodeId(id), facts);
         }
