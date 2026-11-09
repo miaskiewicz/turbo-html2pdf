@@ -318,21 +318,9 @@ const KNOWN: &[(&str, usize, &str)] = &[
     ("r3-multicol-column-span-all", 1, "yellow"),
     ("r3-multicol-column-span-all", 1, "blue"),
     ("r3-multicol-column-span-all", 1, "magenta"),
-    // R1 HIGH-1 deferred (layout-side): abspos descendants of a multicol are
-    // now routed through `place_out_of_flow` and sit at their anchored position
-    // instead of consuming column space, but turbo-dom-layout 0.8.1 sizes the
-    // abspos fragment at the multicol's full content inline size rather than at
-    // its CSS `width` (and the height is over-measured similarly). The
-    // paginator-side fix (this PR) stops abspos from being flowed as an in-flow
-    // block; the layout-side fix for abspos width/height inside a multicol is a
-    // follow-up turbo-dom issue — the Y we place matches the container anchor,
-    // and the X/W/H will match Chrome once the layout emits the correct box.
-    // The in-flow kids' balance is the same HIGH-3 last-page work above; `red`
-    // is hidden on this page by the oversized abspos band paint until the
-    // layout fix lands.
-    ("r3-multicol-abspos-child", 1, "red"),
-    ("r3-multicol-abspos-child", 1, "green"),
-    ("r3-multicol-abspos-child", 1, "blue"),
+    // R1 HIGH-1 (fixed in turbo-dom 0.8.2 #444): abspos-in-multicol now sizes
+    // to its CSS width/height instead of the container's full content inline
+    // size, so red/green/blue all match Chrome.
 ];
 
 /// Cases whose page count does not match Chrome 156 yet (each must still differ; their

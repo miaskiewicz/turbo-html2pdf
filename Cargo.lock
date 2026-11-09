@@ -1897,9 +1897,8 @@ dependencies = [
 
 [[package]]
 name = "turbo-dom"
-version = "0.8.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f3a85b07a24b0fc737d71f3222b2a44142633a2f8f4e496247fc86f20600e91b"
+version = "0.8.2"
+source = "git+https://github.com/miaskiewicz/turbo-dom?branch=release%2F0.8.2#77b56ea68dd39608371c1cfce6d427b29a690858"
 dependencies = [
  "cssparser",
  "html5ever",
@@ -1913,9 +1912,8 @@ dependencies = [
 
 [[package]]
 name = "turbo-dom-layout"
-version = "0.8.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4d385b1084483136b82b326a9e687ff984c454ab45267d49b431903c64a7ea52"
+version = "0.8.2"
+source = "git+https://github.com/miaskiewicz/turbo-dom?branch=release%2F0.8.2#77b56ea68dd39608371c1cfce6d427b29a690858"
 dependencies = [
  "core-foundation",
  "core-text",
