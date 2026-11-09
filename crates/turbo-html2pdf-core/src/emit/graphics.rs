@@ -8,6 +8,14 @@
 //! (`paint_png.rs`) one fragment at a time, under a `q`/`Q` save/restore so a
 //! future graphics-state change (dash pattern, CTM) cannot leak to the next
 //! fragment.
+//!
+//! **Alpha note**: this painter drops the fill colour's alpha channel on the
+//! PDF side (see [`super::color::set_fill`]). A `column-rule-color: rgba(..)`
+//! with partial alpha paints alpha-blended on the raster path but solid in
+//! the PDF; a GState-based `/ca` pathway for partial alpha is a separate
+//! follow-up (R1 emit LOW-1). The width/height/colour-visibility short-circuit
+//! at the top of [`paint_column_rule`] still rejects fully transparent rules
+//! (alpha 0) on both paths.
 
 use pdf_writer::Content;
 
