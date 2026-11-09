@@ -19,7 +19,11 @@
 // `render_pages` fragments by crates/turbo-html2pdf-core/tests/pagination_chrome.rs.
 //
 // Usage: node scripts/pagination-chrome-control.mjs [--chrome PATH] [--out PATH]
-//   --chrome  defaults to the Playwright-cached Chrome for Testing 156;
+//   --chrome  defaults to the frozen Chrome for Testing 156 oracle in
+//             ~/.cache/turbo-consolidation/chrome156 (same binary turbo-dom's
+//             capture scripts use). Playwright's own chromium-NNNN cache drifts
+//             when Playwright is re-installed, which broke this script's Chrome
+//             version pin; the frozen oracle stays at 156.0.8078.47.
 //   --out     defaults to crates/turbo-html2pdf-core/tests/fixtures/pagination_chrome156.json.
 // Needs playwright-core (PLAYWRIGHT_CORE, default ../turbo-surf/node_modules/playwright-core)
 // and poppler's `pdftoppm` on PATH.
@@ -38,7 +42,7 @@ const chromePath =
   values.chrome ||
   join(
     homedir(),
-    "Library/Caches/ms-playwright/chromium-1248/chrome-mac-arm64/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing",
+    ".cache/turbo-consolidation/chrome156/chrome-mac-arm64/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing",
   );
 const out = resolve(
   values.out || join(repo, "crates/turbo-html2pdf-core/tests/fixtures/pagination_chrome156.json"),
@@ -1158,7 +1162,12 @@ const fixture = {
   raster: "pdftoppm -r 96",
   cases,
 };
-writeFileSync(out, `${JSON.stringify(fixture, null, 1)}\n`);
+// Keep arrays of primitives inline (`[600, 400]`, `[48, 70, 551, 169]`) so the
+// fixture stays readable row-by-row; `JSON.stringify` would expand them.
+const inlinePrimArrays = (s) =>
+  s.replace(/\[\n\s+((?:-?\d+(?:\.\d+)?)(?:,\n\s+-?\d+(?:\.\d+)?)*)\n\s+\]/g, (_, inner) =>
+    `[${inner.replace(/,\n\s+/g, ", ")}]`);
+writeFileSync(out, `${inlinePrimArrays(JSON.stringify(fixture, null, 2))}\n`);
 console.log(`Chrome ${version}: ${cases.length} cases -> ${out}`);
 for (const c of cases) {
   console.log(c.id);
