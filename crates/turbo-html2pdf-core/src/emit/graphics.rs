@@ -457,7 +457,11 @@ mod tests {
             let f = rule_fragment(100.0, 50.0, 4.0, 180.0, style);
             let stream = paint(&f, style);
             assert_eq!(count_ops(&stream, b"q"), 1, "{style:?} missing save_state");
-            assert_eq!(count_ops(&stream, b"Q"), 1, "{style:?} missing restore_state");
+            assert_eq!(
+                count_ops(&stream, b"Q"),
+                1,
+                "{style:?} missing restore_state"
+            );
             assert_eq!(count_ops(&stream, b"re"), 1, "{style:?} paints one rect");
             assert_eq!(count_ops(&stream, b"f"), 1, "{style:?} fills once");
             assert_eq!(count_ops(&stream, b"c"), 0, "{style:?} uses no curves");
