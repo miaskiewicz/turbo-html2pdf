@@ -1072,6 +1072,55 @@ mod tests {
     }
 
     #[test]
+    fn force_column_break_at_start_of_a_later_column_is_also_suppressed() {
+        // CSS Fragmentation 3 §3.5 "class A breaks": a column break is
+        // suppressed at the *start* of a fragmentainer, meaning column 0
+        // only — a `break-before: column` on a kid whose predecessor just
+        // closed a column (so cur == 0 but col > 0) is NOT at the
+        // fragmentainer start and MUST advance. This test pins the
+        // `col == 0` half of the suppression condition.
+        let mut kids = vec![
+            block(1, 0.0, 50.0),
+            block(2, 0.0, 50.0),
+            block(3, 0.0, 50.0),
+        ];
+        // kid 1 closes column 0, kid 2 opens column 1 with break-before:
+        // column so it should still advance (end up in column 2 or spill),
+        // not stay in column 1 at y=0 like a start-of-fragmentainer
+        // suppression would predict.
+        kids[0].break_meta.break_after = BreakRule::Column;
+        kids[1].break_meta.break_before = BreakRule::Column;
+        let three = MulticolFacts {
+            used_count: 3,
+            used_width: 100.0,
+            gap: 0.0,
+        };
+        let flow = flow_children(&kids, three, (320.0, 320.0), &no_oof());
+        assert_eq!(flow.slots[0].unwrap().col, 0);
+        assert_eq!(flow.slots[1].unwrap().col, 2, "break-before kicks col 2");
+        // Without the `col == 0` guard the suppression would fire at
+        // col=1/cur=0 and kid 2 would stay at col 1.
+    }
+
+    #[test]
+    fn balance_col_h_scales_with_total_over_used_count_not_modulo() {
+        // Six 100px kids on 2 columns: smallest balanced col_h is 300
+        // (three per column). Pinning this against a naive
+        // `total % used_count` mutation would collapse the lower bound
+        // to 0 and the binary search would still converge upward, but
+        // the sum-based arithmetic is the one Chrome 156 relies on.
+        let kids: Vec<Fragment> = (0..6).map(|i| block(i as u32 + 1, 0.0, 100.0)).collect();
+        let flow = flow_children(&kids, facts2(300.0, 0.0), (600.0, 600.0), &no_oof());
+        assert_eq!(flow.fill_heights, vec![300.0]);
+        // Column 0 holds kids 0..=2 (y 0/100/200), column 1 kids 3..=5.
+        assert_eq!(flow.slots[0].unwrap().col, 0);
+        assert_eq!(flow.slots[2].unwrap().col, 0);
+        assert_eq!(flow.slots[3].unwrap().col, 1);
+        assert_eq!(flow.slots[5].unwrap().col, 1);
+        assert_eq!(flow.slots[5].unwrap().y_in_col, 200.0);
+    }
+
+    #[test]
     fn rule_style_reads_the_first_column_rule_fragment() {
         let kids = vec![
             block(1, 0.0, 180.0),
