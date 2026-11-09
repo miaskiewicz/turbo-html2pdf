@@ -46,6 +46,27 @@ PyPI and crates.io packages move to 0.8.1 with turbo-dom, turbo-test and turbo-s
   page body is placed anyway and flagged with
   [`LintCode::RegionOverflow`] — matching the generic walker's
   `overflow_leaf` behaviour — instead of silently bleeding past the page.
+- **Fixed (pagination, multicol, #52 R1)**: last-page `column-fill: balance`
+  shrinks the balanced column height on the final page to the smallest value
+  at which the kids fit in `used_count` columns (CSS Multicol 1 §3). Our
+  paginator previously ran `column-fill: auto` on every page, stacking the
+  last page's content in column 0 when it under-filled the cap; the balanced
+  flow now matches Chrome 156 (nested multicol cases included). The pass
+  honours `BreakRule::Column` in both its fitness check and placement so a
+  forced column break keeps its forced position under balance too.
+- **Fixed (pagination, multicol, #52 R1)**: an out-of-flow descendant
+  (`position: absolute` / `fixed`) of a multicol container is no longer
+  flowed as an in-flow column kid — it is routed through
+  `Walker::place_out_of_flow`, so an anchored abspos lands at its specified
+  inset relative to its containing block and a static abspos sits at its
+  galley position. `flow_boxes` descends into multicol containers (skipping
+  the shared-node-id `ColumnRule` fragments) to record each OOF kid's facts
+  for the paginator to read.
+- **Fixed (pagination, multicol, #52 R1 HIGH-2)**: `break-before: column`
+  and `break-after: column` on a multicol child force a column break
+  around the kid (CSS Fragmentation 3 §3.2). A break at the fragmentainer
+  start is suppressed per §3.5 "class A breaks"; a break that exhausts the
+  last column opens a new page.
 - **Changed (render, turbo-dom 0.8.1)**: parity fixes carried over from
   turbo-dom's 0.8.1 release — see turbo-dom's 0.8.1 CHANGELOG for the upstream
   engine changes this release carries.

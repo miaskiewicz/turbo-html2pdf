@@ -12,21 +12,28 @@
 //! `<div style="columns:2">` whose balance height exceeds the page body
 //! produces multiple pages, each with up to `used_count` columns of content.
 //!
-//! The flow currently implements `column-fill: auto` on every page, including
-//! the last (CSS Multicol 1 §3 "The multi-column model") — Chrome 156
-//! paginates multicol this way for the pages that saturate the body, while
-//! `column-fill: balance` on the last page balances content to the tallest
-//! filled column. This paginator does NOT re-balance the last page; the only
-//! balancing it applies is clipping the column *rule* to the tallest filled
-//! column so the rule shrinks on a short last page, matching the raster
-//! painter. A child with `break-inside: avoid` that would overrun the current
-//! column is pushed to a fresh one (CSS Fragmentation 3 §5.2). A child whose
+//! The flow implements Chrome 156's `column-fill: auto` for every page BUT
+//! the last (saturating `used_count` columns at the page body cap) and
+//! `column-fill: balance` on the last (CSS Multicol 1 §3 "The multi-column
+//! model") — after the forward pass assigns kids to pages,
+//! [`rebalance_last_page`] binary-searches the smallest `col_h` at which the
+//! last page's kids fit in `used_count` columns and replaces their slots
+//! accordingly, shrinking the column rule and the paginator's cursor
+//! advance alike on a short last page. A child with `break-inside: avoid`
+//! that would overrun the current column is pushed to a fresh one (CSS
+//! Fragmentation 3 §5.2); a child with `break-before: column` or
+//! `break-after: column` forces a column break around it (§3.2), honoured
+//! by both the forward pass and the balance pass's fitness check so the
+//! balanced `col_h` always fits with the break constraints. A child whose
 //! height exceeds the page body's capacity is flagged with
 //! [`LintCode::RegionOverflow`] and placed anyway (matching the generic
 //! walker's `overflow_leaf` behaviour); pre-layout column-rule fragments are
 //! dropped here (their geometry belongs to the one-shot balanced tree, not
 //! the paginated one) and the paginator re-emits them per page from the
-//! container's `MulticolFacts`.
+//! container's `MulticolFacts`. Out-of-flow descendants (`position:
+//! absolute` / `fixed`) are filtered from the column flow by [`is_flowable`]
+//! so the paginator can route them through
+//! [`super::walk::Walker::place_out_of_flow`] (R1 HIGH-1).
 //!
 //! An empty multicol container (no in-flow children, only dropped column-rule
 //! fragments) still paints its own box: [`Flow::single_empty_page`] emits one
@@ -39,19 +46,30 @@
 //! reservations, repeated headers, out-of-flow placement around the
 //! container).
 //!
+//! **Supported in 0.8.1** (R1 landed): `break-before: column`,
+//! `break-after: column` (R1 HIGH-2 via turbo-dom 0.8.1's new
+//! [`BreakRule::Column`] variant), last-page `column-fill: balance`
+//! (R1 HIGH-3) and OOF descendants (R1 HIGH-1) are all honoured.
+//!
 //! **Known limitations** (R1 review, deferred follow-ups):
-//! * `break-before: column` / `break-after: column` / `break-inside:
-//!   avoid-column` / `column-span: all` are honoured by turbo-dom-layout's
-//!   balancer but not re-honoured here when re-flowing across pages — the
-//!   paginator reads only the child's `height`. Separating these from
-//!   `break-{before,after}: page` would require either a new
-//!   `BreakRule::Column` variant in turbo-dom-layout (a turbo-dom change) or
-//!   per-child `ComputedStyle` lookup in `flow_boxes.rs`.
-//! * `position: absolute` / `position: fixed` descendants inside a multicol
-//!   container are placed as in-flow blocks (the `flow_boxes.rs::visit` early
-//!   return skips their `BoxFacts`).
-//! * Nested multicol: the inner container flows as a plain block instead of
-//!   re-entering `place_multicol`.
+//! * `column-span: all`: turbo-dom-layout 0.8.1 emits the band at the
+//!   container's full inline size, but the paginator flows it as one column
+//!   kid — closing the current sub-flow and opening a fresh one below needs
+//!   a per-slot "is span-all" flag the paginator does not read yet.
+//! * `break-inside: avoid-column`: a tall kid is flagged via
+//!   `break_inside_avoid` (collapsed with plain `avoid`) in `BreakMeta`; the
+//!   paginator wraps it to a fresh column via geometry overflow, but the
+//!   layout stripe size for an over-tall kid stays at the pre-paginator
+//!   balanced width instead of being resized to the paginator's `col_h`.
+//! * Nested multicol: the inner container flows as a plain block inside the
+//!   outer's column (its layout-side balanced placement is preserved, which
+//!   matches Chrome 156 for the simple cases); a split of the inner across
+//!   outer pages is not re-entered through `place_multicol`.
+//! * `turbo-html2pdf-core`'s own `multicol_facts` resolves `used_count`
+//!   differently from turbo-dom-layout's shared `resolve_tracks` for the
+//!   `columns: <count> <width>` shorthand: our count beats a narrower
+//!   content box, Chrome drops to 1 column. A follow-up routes
+//!   `multicol_facts` through the shared resolver.
 
 use crate::layout::fragment::{ColumnRuleStyle, Fragment, FragmentContent, NodeId};
 use crate::layout::value::{BreakRule, Rgba};
@@ -1042,8 +1060,7 @@ mod tests {
         // fit the resulting sub-flows. Kids [50, 50, 50] with break-before:
         // column on kid 2: balance col_h must allow kid 1 alone in col 0,
         // kids 2+3 in col 1 → smallest col_h is 100.
-        let mut kids: Vec<Fragment> =
-            (0..3).map(|i| block(i as u32 + 1, 0.0, 50.0)).collect();
+        let mut kids: Vec<Fragment> = (0..3).map(|i| block(i as u32 + 1, 0.0, 50.0)).collect();
         kids[1].break_meta.break_before = BreakRule::Column;
         let flow = flow_children(&kids, facts2(300.0, 0.0), (320.0, 320.0), &no_oof());
         // The balanced flow preserves the break: kid 2 opens col 1 regardless.

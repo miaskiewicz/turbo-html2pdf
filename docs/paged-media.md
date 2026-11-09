@@ -341,15 +341,25 @@ then **re-flows** that balance across pages (miaskiewicz/turbo-html2pdf#52):
    current page's column strip top-to-bottom, left-to-right. A child that
    overruns the column gets pushed to the next column (CSS Fragmentation 3
    §5.2 `break-inside: avoid`); a run that saturates `used_count` columns
-   opens a fresh page.
+   opens a fresh page. A child with `break-before: column` or
+   `break-after: column` forces a column break around it (§3.2); a column
+   break at the fragmentainer start is suppressed by §3.5 "class A breaks".
 3. On every page but the last the column rules (`column-rule-*`) fill the
-   page body height; the last page balances to the tallest filled column, so
-   the rule shrinks to that content — matching Chrome 156's
-   `column-fill: auto` for non-last pages and `balance` on the last.
+   page body height. On the last page the paginator **re-balances** the
+   placed kids by binary-searching the smallest `col_h` at which they fit
+   in `used_count` columns under the paginator's atomic-kid flow
+   (R1 HIGH-3) — matching Chrome 156's `column-fill: auto` for non-last
+   pages and `balance` on the last. The balance pass also honours
+   `BreakRule::Column` so a forced column break keeps its position.
 4. Each page gets a per-page copy of the container box (background / border)
    plus the children on that page plus any column-rule fragments, all
    routed through the walker's shared `put` so page translation, anchoring
    and `z-index` stay identical to the rest of pagination.
+5. Out-of-flow descendants (`position: absolute` / `fixed`) are filtered
+   from the column flow and routed through `Walker::place_out_of_flow`
+   (R1 HIGH-1): the multicol container, if itself positioned, is their
+   containing block, and its anchored descendants land at the anchor +
+   inset computed through the paginator's shared OOF pass.
 
 Examples oracled against Chrome 156 in
 `crates/turbo-html2pdf-core/tests/fixtures/pagination_chrome156.json` under
