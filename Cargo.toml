@@ -35,6 +35,6 @@ codegen-units = 1
 # Pre-publish patch: validate turbo-dom release/0.8.2 branch before it ships to
 # crates.io. Drop this block before tagging a release (release-guard enforces).
 [patch.crates-io]
-turbo-dom = { git = "https://github.com/miaskiewicz/turbo-dom", rev = "b5ae42f0" }
-turbo-dom-layout = { git = "https://github.com/miaskiewicz/turbo-dom", rev = "b5ae42f0" }
+turbo-dom = { git = "https://github.com/miaskiewicz/turbo-dom", rev = "88d6f433" }
+turbo-dom-layout = { git = "https://github.com/miaskiewicz/turbo-dom", rev = "88d6f433" }
 

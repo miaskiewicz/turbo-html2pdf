@@ -104,6 +104,17 @@ pub fn paint_column_rule(
         ColumnRuleStyle::Dotted => paint_dotted_rule(content, frag, color, page_height_pt, cmyk),
         ColumnRuleStyle::Dashed => paint_dashed_rule(content, frag, color, page_height_pt, cmyk),
         ColumnRuleStyle::Double => paint_double_rule(content, frag, color, page_height_pt, cmyk),
+        // turbo-dom 0.8.2 (#457) added the split-half 3D styles. Chrome 156
+        // paints groove/outset as dark|light and ridge/inset as light|dark
+        // across the rule's inline axis; until the PDF painter learns the
+        // per-side shade, degrade to a solid band so the fragment still
+        // paints as its author color.
+        ColumnRuleStyle::Groove
+        | ColumnRuleStyle::Ridge
+        | ColumnRuleStyle::Inset
+        | ColumnRuleStyle::Outset => {
+            fill_rect(content, &box_rect(frag, page_height_pt), color, cmyk);
+        }
     }
     content.restore_state();
 }
