@@ -1,0 +1,5576 @@
+{
+  "outcomes": [
+    {
+      "scenario": "Baseline",
+      "summary": "Success",
+      "log_path": "log/baseline.log",
+      "diff_path": null,
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 16.234826875,
+          "process_status": "Success",
+          "argv": [
+            "/Users/grzegorz/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=turbo-html2pdf-core@0.8.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 0.4177205,
+          "process_status": "Success",
+          "argv": [
+            "/Users/grzegorz/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=turbo-html2pdf-core@0.8.0",
+            "--lib",
+            "paginate::multicol"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/turbo-html2pdf-core/src/paginate/multicol.rs:135:5: replace is_flowable -> bool with true",
+          "package": "turbo-html2pdf-core",
+          "file": "crates/turbo-html2pdf-core/src/paginate/multicol.rs",
+          "function": {
+            "function_name": "is_flowable",
+            "return_type": "-> bool",
+            "span": {
+              "start": {
+                "line": 124,
+                "column": 1
+              },
+              "end": {
+                "line": 141,
+                "column": 2
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 135,
+              "column": 5
+            },
+            "end": {
+              "line": 140,
+              "column": 54
+            }
+          },
+          "replacement": "true",
+          "genre": "FnValue"
+        }
+      },
+      "summary": "CaughtMutant",
+      "log_path": "log/crates__turbo-html2pdf-core__src__paginate__multicol.rs_line_135_col_5.log",
+      "diff_path": "diff/crates__turbo-html2pdf-core__src__paginate__multicol.rs_line_135_col_5.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 2.716764542,
+          "process_status": "Success",
+          "argv": [
+            "/Users/grzegorz/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=turbo-html2pdf-core@0.8.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 0.477469125,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/grzegorz/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=turbo-html2pdf-core@0.8.0",
+            "--lib",
+            "paginate::multicol"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/turbo-html2pdf-core/src/paginate/multicol.rs:135:5: replace is_flowable -> bool with false",
+          "package": "turbo-html2pdf-core",
+          "file": "crates/turbo-html2pdf-core/src/paginate/multicol.rs",
+          "function": {
+            "function_name": "is_flowable",
+            "return_type": "-> bool",
+            "span": {
+              "start": {
+                "line": 124,
+                "column": 1
+              },
+              "end": {
+                "line": 141,
+                "column": 2
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 135,
+              "column": 5
+            },
+            "end": {
+              "line": 140,
+              "column": 54
+            }
+          },
+          "replacement": "false",
+          "genre": "FnValue"
+        }
+      },
+      "summary": "CaughtMutant",
+      "log_path": "log/crates__turbo-html2pdf-core__src__paginate__multicol.rs_line_135_col_5_001.log",
+      "diff_path": "diff/crates__turbo-html2pdf-core__src__paginate__multicol.rs_line_135_col_5_001.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 2.761395792,
+          "process_status": "Success",
+          "argv": [
+            "/Users/grzegorz/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=turbo-html2pdf-core@0.8.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 0.430033833,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/grzegorz/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=turbo-html2pdf-core@0.8.0",
+            "--lib",
+            "paginate::multicol"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/turbo-html2pdf-core/src/paginate/multicol.rs:138:5: delete ! in is_flowable",
+          "package": "turbo-html2pdf-core",
+          "file": "crates/turbo-html2pdf-core/src/paginate/multicol.rs",
+          "function": {
+            "function_name": "is_flowable",
+            "return_type": "-> bool",
+            "span": {
+              "start": {
+                "line": 124,
+                "column": 1
+              },
+              "end": {
+                "line": 141,
+                "column": 2
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 138,
+              "column": 5
+            },
+            "end": {
+              "line": 138,
+              "column": 6
+            }
+          },
+          "replacement": "",
+          "genre": "UnaryOperator"
+        }
+      },
+      "summary": "CaughtMutant",
+      "log_path": "log/crates__turbo-html2pdf-core__src__paginate__multicol.rs_line_138_col_5.log",
+      "diff_path": "diff/crates__turbo-html2pdf-core__src__paginate__multicol.rs_line_138_col_5.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 2.760434708,
+          "process_status": "Success",
+          "argv": [
+            "/Users/grzegorz/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=turbo-html2pdf-core@0.8.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 0.475774208,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/grzegorz/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=turbo-html2pdf-core@0.8.0",
+            "--lib",
+            "paginate::multicol"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/turbo-html2pdf-core/src/paginate/multicol.rs:163:5: replace flow_children -> Flow with Default::default()",
+          "package": "turbo-html2pdf-core",
+          "file": "crates/turbo-html2pdf-core/src/paginate/multicol.rs",
+          "function": {
+            "function_name": "flow_children",
+            "return_type": "-> Flow",
+            "span": {
+              "start": {
+                "line": 143,
+                "column": 1
+              },
+              "end": {
+                "line": 168,
+                "column": 2
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 163,
+              "column": 5
+            },
+            "end": {
+              "line": 167,
+              "column": 57
+            }
+          },
+          "replacement": "Default::default()",
+          "genre": "FnValue"
+        }
+      },
+      "summary": "CaughtMutant",
+      "log_path": "log/crates__turbo-html2pdf-core__src__paginate__multicol.rs_line_163_col_5.log",
+      "diff_path": "diff/crates__turbo-html2pdf-core__src__paginate__multicol.rs_line_163_col_5.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 3.3815308330000002,
+          "process_status": "Success",
+          "argv": [
+            "/Users/grzegorz/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=turbo-html2pdf-core@0.8.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 0.486962625,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/grzegorz/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=turbo-html2pdf-core@0.8.0",
+            "--lib",
+            "paginate::multicol"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/turbo-html2pdf-core/src/paginate/multicol.rs:187:9: replace FlowState::start -> FlowState with Default::default()",
+          "package": "turbo-html2pdf-core",
+          "file": "crates/turbo-html2pdf-core/src/paginate/multicol.rs",
+          "function": {
+            "function_name": "FlowState::start",
+            "return_type": "-> FlowState",
+            "span": {
+              "start": {
+                "line": 186,
+                "column": 5
+              },
+              "end": {
+                "line": 199,
+                "column": 6
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 187,
+              "column": 9
+            },
+            "end": {
+              "line": 198,
+              "column": 10
+            }
+          },
+          "replacement": "Default::default()",
+          "genre": "FnValue"
+        }
+      },
+      "summary": "Unviable",
+      "log_path": "log/crates__turbo-html2pdf-core__src__paginate__multicol.rs_line_187_col_9.log",
+      "diff_path": "diff/crates__turbo-html2pdf-core__src__paginate__multicol.rs_line_187_col_9.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 0.706680875,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/grzegorz/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=turbo-html2pdf-core@0.8.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/turbo-html2pdf-core/src/paginate/multicol.rs:202:9: replace FlowState::step with ()",
+          "package": "turbo-html2pdf-core",
+          "file": "crates/turbo-html2pdf-core/src/paginate/multicol.rs",
+          "function": {
+            "function_name": "FlowState::step",
+            "return_type": "",
+            "span": {
+              "start": {
+                "line": 201,
+                "column": 5
+              },
+              "end": {
+                "line": 227,
+                "column": 6
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 202,
+              "column": 9
+            },
+            "end": {
+              "line": 226,
+              "column": 10
+            }
+          },
+          "replacement": "()",
+          "genre": "FnValue"
+        }
+      },
+      "summary": "CaughtMutant",
+      "log_path": "log/crates__turbo-html2pdf-core__src__paginate__multicol.rs_line_202_col_9.log",
+      "diff_path": "diff/crates__turbo-html2pdf-core__src__paginate__multicol.rs_line_202_col_9.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 3.398527917,
+          "process_status": "Success",
+          "argv": [
+            "/Users/grzegorz/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=turbo-html2pdf-core@0.8.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 0.48058225,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/grzegorz/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=turbo-html2pdf-core@0.8.0",
+            "--lib",
+            "paginate::multicol"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/turbo-html2pdf-core/src/paginate/multicol.rs:202:12: delete ! in FlowState::step",
+          "package": "turbo-html2pdf-core",
+          "file": "crates/turbo-html2pdf-core/src/paginate/multicol.rs",
+          "function": {
+            "function_name": "FlowState::step",
+            "return_type": "",
+            "span": {
+              "start": {
+                "line": 201,
+                "column": 5
+              },
+              "end": {
+                "line": 227,
+                "column": 6
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 202,
+              "column": 12
+            },
+            "end": {
+              "line": 202,
+              "column": 13
+            }
+          },
+          "replacement": "",
+          "genre": "UnaryOperator"
+        }
+      },
+      "summary": "CaughtMutant",
+      "log_path": "log/crates__turbo-html2pdf-core__src__paginate__multicol.rs_line_202_col_12.log",
+      "diff_path": "diff/crates__turbo-html2pdf-core__src__paginate__multicol.rs_line_202_col_12.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 3.302604166,
+          "process_status": "Success",
+          "argv": [
+            "/Users/grzegorz/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=turbo-html2pdf-core@0.8.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 0.492497167,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/grzegorz/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=turbo-html2pdf-core@0.8.0",
+            "--lib",
+            "paginate::multicol"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/turbo-html2pdf-core/src/paginate/multicol.rs:220:23: replace += with -= in FlowState::step",
+          "package": "turbo-html2pdf-core",
+          "file": "crates/turbo-html2pdf-core/src/paginate/multicol.rs",
+          "function": {
+            "function_name": "FlowState::step",
+            "return_type": "",
+            "span": {
+              "start": {
+                "line": 201,
+                "column": 5
+              },
+              "end": {
+                "line": 227,
+                "column": 6
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 220,
+              "column": 23
+            },
+            "end": {
+              "line": 220,
+              "column": 25
+            }
+          },
+          "replacement": "-=",
+          "genre": "BinaryOperator"
+        }
+      },
+      "summary": "CaughtMutant",
+      "log_path": "log/crates__turbo-html2pdf-core__src__paginate__multicol.rs_line_220_col_23.log",
+      "diff_path": "diff/crates__turbo-html2pdf-core__src__paginate__multicol.rs_line_220_col_23.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 2.783686333,
+          "process_status": "Success",
+          "argv": [
+            "/Users/grzegorz/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=turbo-html2pdf-core@0.8.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 0.4893055,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/grzegorz/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=turbo-html2pdf-core@0.8.0",
+            "--lib",
+            "paginate::multicol"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/turbo-html2pdf-core/src/paginate/multicol.rs:220:23: replace += with *= in FlowState::step",
+          "package": "turbo-html2pdf-core",
+          "file": "crates/turbo-html2pdf-core/src/paginate/multicol.rs",
+          "function": {
+            "function_name": "FlowState::step",
+            "return_type": "",
+            "span": {
+              "start": {
+                "line": 201,
+                "column": 5
+              },
+              "end": {
+                "line": 227,
+                "column": 6
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 220,
+              "column": 23
+            },
+            "end": {
+              "line": 220,
+              "column": 25
+            }
+          },
+          "replacement": "*=",
+          "genre": "BinaryOperator"
+        }
+      },
+      "summary": "CaughtMutant",
+      "log_path": "log/crates__turbo-html2pdf-core__src__paginate__multicol.rs_line_220_col_23_001.log",
+      "diff_path": "diff/crates__turbo-html2pdf-core__src__paginate__multicol.rs_line_220_col_23_001.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 2.764650208,
+          "process_status": "Success",
+          "argv": [
+            "/Users/grzegorz/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=turbo-html2pdf-core@0.8.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 0.481960583,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/grzegorz/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=turbo-html2pdf-core@0.8.0",
+            "--lib",
+            "paginate::multicol"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/turbo-html2pdf-core/src/paginate/multicol.rs:234:9: replace FlowState::maybe_wrap with ()",
+          "package": "turbo-html2pdf-core",
+          "file": "crates/turbo-html2pdf-core/src/paginate/multicol.rs",
+          "function": {
+            "function_name": "FlowState::maybe_wrap",
+            "return_type": "",
+            "span": {
+              "start": {
+                "line": 229,
+                "column": 5
+              },
+              "end": {
+                "line": 238,
+                "column": 6
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 234,
+              "column": 9
+            },
+            "end": {
+              "line": 237,
+              "column": 36
+            }
+          },
+          "replacement": "()",
+          "genre": "FnValue"
+        }
+      },
+      "summary": "CaughtMutant",
+      "log_path": "log/crates__turbo-html2pdf-core__src__paginate__multicol.rs_line_234_col_9.log",
+      "diff_path": "diff/crates__turbo-html2pdf-core__src__paginate__multicol.rs_line_234_col_9.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 2.871405917,
+          "process_status": "Success",
+          "argv": [
+            "/Users/grzegorz/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=turbo-html2pdf-core@0.8.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 0.481173,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/grzegorz/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=turbo-html2pdf-core@0.8.0",
+            "--lib",
+            "paginate::multicol"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/turbo-html2pdf-core/src/paginate/multicol.rs:234:33: replace || with && in FlowState::maybe_wrap",
+          "package": "turbo-html2pdf-core",
+          "file": "crates/turbo-html2pdf-core/src/paginate/multicol.rs",
+          "function": {
+            "function_name": "FlowState::maybe_wrap",
+            "return_type": "",
+            "span": {
+              "start": {
+                "line": 229,
+                "column": 5
+              },
+              "end": {
+                "line": 238,
+                "column": 6
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 234,
+              "column": 33
+            },
+            "end": {
+              "line": 234,
+              "column": 35
+            }
+          },
+          "replacement": "&&",
+          "genre": "BinaryOperator"
+        }
+      },
+      "summary": "CaughtMutant",
+      "log_path": "log/crates__turbo-html2pdf-core__src__paginate__multicol.rs_line_234_col_33.log",
+      "diff_path": "diff/crates__turbo-html2pdf-core__src__paginate__multicol.rs_line_234_col_33.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 2.9713665000000002,
+          "process_status": "Success",
+          "argv": [
+            "/Users/grzegorz/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=turbo-html2pdf-core@0.8.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 0.479359542,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/grzegorz/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=turbo-html2pdf-core@0.8.0",
+            "--lib",
+            "paginate::multicol"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/turbo-html2pdf-core/src/paginate/multicol.rs:234:26: replace <= with > in FlowState::maybe_wrap",
+          "package": "turbo-html2pdf-core",
+          "file": "crates/turbo-html2pdf-core/src/paginate/multicol.rs",
+          "function": {
+            "function_name": "FlowState::maybe_wrap",
+            "return_type": "",
+            "span": {
+              "start": {
+                "line": 229,
+                "column": 5
+              },
+              "end": {
+                "line": 238,
+                "column": 6
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 234,
+              "column": 26
+            },
+            "end": {
+              "line": 234,
+              "column": 28
+            }
+          },
+          "replacement": ">",
+          "genre": "BinaryOperator"
+        }
+      },
+      "summary": "CaughtMutant",
+      "log_path": "log/crates__turbo-html2pdf-core__src__paginate__multicol.rs_line_234_col_26.log",
+      "diff_path": "diff/crates__turbo-html2pdf-core__src__paginate__multicol.rs_line_234_col_26.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 3.640105292,
+          "process_status": "Success",
+          "argv": [
+            "/Users/grzegorz/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=turbo-html2pdf-core@0.8.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 0.478937375,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/grzegorz/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=turbo-html2pdf-core@0.8.0",
+            "--lib",
+            "paginate::multicol"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/turbo-html2pdf-core/src/paginate/multicol.rs:234:54: replace <= with > in FlowState::maybe_wrap",
+          "package": "turbo-html2pdf-core",
+          "file": "crates/turbo-html2pdf-core/src/paginate/multicol.rs",
+          "function": {
+            "function_name": "FlowState::maybe_wrap",
+            "return_type": "",
+            "span": {
+              "start": {
+                "line": 229,
+                "column": 5
+              },
+              "end": {
+                "line": 238,
+                "column": 6
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 234,
+              "column": 54
+            },
+            "end": {
+              "line": 234,
+              "column": 56
+            }
+          },
+          "replacement": ">",
+          "genre": "BinaryOperator"
+        }
+      },
+      "summary": "CaughtMutant",
+      "log_path": "log/crates__turbo-html2pdf-core__src__paginate__multicol.rs_line_234_col_54.log",
+      "diff_path": "diff/crates__turbo-html2pdf-core__src__paginate__multicol.rs_line_234_col_54.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 2.96435425,
+          "process_status": "Success",
+          "argv": [
+            "/Users/grzegorz/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=turbo-html2pdf-core@0.8.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 0.584130958,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/grzegorz/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=turbo-html2pdf-core@0.8.0",
+            "--lib",
+            "paginate::multicol"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/turbo-html2pdf-core/src/paginate/multicol.rs:234:50: replace + with - in FlowState::maybe_wrap",
+          "package": "turbo-html2pdf-core",
+          "file": "crates/turbo-html2pdf-core/src/paginate/multicol.rs",
+          "function": {
+            "function_name": "FlowState::maybe_wrap",
+            "return_type": "",
+            "span": {
+              "start": {
+                "line": 229,
+                "column": 5
+              },
+              "end": {
+                "line": 238,
+                "column": 6
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 234,
+              "column": 50
+            },
+            "end": {
+              "line": 234,
+              "column": 51
+            }
+          },
+          "replacement": "-",
+          "genre": "BinaryOperator"
+        }
+      },
+      "summary": "CaughtMutant",
+      "log_path": "log/crates__turbo-html2pdf-core__src__paginate__multicol.rs_line_234_col_50.log",
+      "diff_path": "diff/crates__turbo-html2pdf-core__src__paginate__multicol.rs_line_234_col_50.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 3.114317041,
+          "process_status": "Success",
+          "argv": [
+            "/Users/grzegorz/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=turbo-html2pdf-core@0.8.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 0.489125875,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/grzegorz/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=turbo-html2pdf-core@0.8.0",
+            "--lib",
+            "paginate::multicol"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/turbo-html2pdf-core/src/paginate/multicol.rs:234:50: replace + with * in FlowState::maybe_wrap",
+          "package": "turbo-html2pdf-core",
+          "file": "crates/turbo-html2pdf-core/src/paginate/multicol.rs",
+          "function": {
+            "function_name": "FlowState::maybe_wrap",
+            "return_type": "",
+            "span": {
+              "start": {
+                "line": 229,
+                "column": 5
+              },
+              "end": {
+                "line": 238,
+                "column": 6
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 234,
+              "column": 50
+            },
+            "end": {
+              "line": 234,
+              "column": 51
+            }
+          },
+          "replacement": "*",
+          "genre": "BinaryOperator"
+        }
+      },
+      "summary": "CaughtMutant",
+      "log_path": "log/crates__turbo-html2pdf-core__src__paginate__multicol.rs_line_234_col_50_001.log",
+      "diff_path": "diff/crates__turbo-html2pdf-core__src__paginate__multicol.rs_line_234_col_50_001.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 3.5394345830000002,
+          "process_status": "Success",
+          "argv": [
+            "/Users/grzegorz/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=turbo-html2pdf-core@0.8.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 0.647262875,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/grzegorz/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=turbo-html2pdf-core@0.8.0",
+            "--lib",
+            "paginate::multicol"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/turbo-html2pdf-core/src/paginate/multicol.rs:234:66: replace + with - in FlowState::maybe_wrap",
+          "package": "turbo-html2pdf-core",
+          "file": "crates/turbo-html2pdf-core/src/paginate/multicol.rs",
+          "function": {
+            "function_name": "FlowState::maybe_wrap",
+            "return_type": "",
+            "span": {
+              "start": {
+                "line": 229,
+                "column": 5
+              },
+              "end": {
+                "line": 238,
+                "column": 6
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 234,
+              "column": 66
+            },
+            "end": {
+              "line": 234,
+              "column": 67
+            }
+          },
+          "replacement": "-",
+          "genre": "BinaryOperator"
+        }
+      },
+      "summary": "MissedMutant",
+      "log_path": "log/crates__turbo-html2pdf-core__src__paginate__multicol.rs_line_234_col_66.log",
+      "diff_path": "diff/crates__turbo-html2pdf-core__src__paginate__multicol.rs_line_234_col_66.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 3.955109667,
+          "process_status": "Success",
+          "argv": [
+            "/Users/grzegorz/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=turbo-html2pdf-core@0.8.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 0.638205334,
+          "process_status": "Success",
+          "argv": [
+            "/Users/grzegorz/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=turbo-html2pdf-core@0.8.0",
+            "--lib",
+            "paginate::multicol"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/turbo-html2pdf-core/src/paginate/multicol.rs:234:66: replace + with * in FlowState::maybe_wrap",
+          "package": "turbo-html2pdf-core",
+          "file": "crates/turbo-html2pdf-core/src/paginate/multicol.rs",
+          "function": {
+            "function_name": "FlowState::maybe_wrap",
+            "return_type": "",
+            "span": {
+              "start": {
+                "line": 229,
+                "column": 5
+              },
+              "end": {
+                "line": 238,
+                "column": 6
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 234,
+              "column": 66
+            },
+            "end": {
+              "line": 234,
+              "column": 67
+            }
+          },
+          "replacement": "*",
+          "genre": "BinaryOperator"
+        }
+      },
+      "summary": "CaughtMutant",
+      "log_path": "log/crates__turbo-html2pdf-core__src__paginate__multicol.rs_line_234_col_66_001.log",
+      "diff_path": "diff/crates__turbo-html2pdf-core__src__paginate__multicol.rs_line_234_col_66_001.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 3.890695416,
+          "process_status": "Success",
+          "argv": [
+            "/Users/grzegorz/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=turbo-html2pdf-core@0.8.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 0.639864125,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/grzegorz/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=turbo-html2pdf-core@0.8.0",
+            "--lib",
+            "paginate::multicol"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/turbo-html2pdf-core/src/paginate/multicol.rs:246:9: replace FlowState::force_column_break with ()",
+          "package": "turbo-html2pdf-core",
+          "file": "crates/turbo-html2pdf-core/src/paginate/multicol.rs",
+          "function": {
+            "function_name": "FlowState::force_column_break",
+            "return_type": "",
+            "span": {
+              "start": {
+                "line": 240,
+                "column": 5
+              },
+              "end": {
+                "line": 250,
+                "column": 6
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 246,
+              "column": 9
+            },
+            "end": {
+              "line": 249,
+              "column": 36
+            }
+          },
+          "replacement": "()",
+          "genre": "FnValue"
+        }
+      },
+      "summary": "CaughtMutant",
+      "log_path": "log/crates__turbo-html2pdf-core__src__paginate__multicol.rs_line_246_col_9.log",
+      "diff_path": "diff/crates__turbo-html2pdf-core__src__paginate__multicol.rs_line_246_col_9.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 3.875986792,
+          "process_status": "Success",
+          "argv": [
+            "/Users/grzegorz/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=turbo-html2pdf-core@0.8.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 0.588278334,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/grzegorz/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=turbo-html2pdf-core@0.8.0",
+            "--lib",
+            "paginate::multicol"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/turbo-html2pdf-core/src/paginate/multicol.rs:246:33: replace && with || in FlowState::force_column_break",
+          "package": "turbo-html2pdf-core",
+          "file": "crates/turbo-html2pdf-core/src/paginate/multicol.rs",
+          "function": {
+            "function_name": "FlowState::force_column_break",
+            "return_type": "",
+            "span": {
+              "start": {
+                "line": 240,
+                "column": 5
+              },
+              "end": {
+                "line": 250,
+                "column": 6
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 246,
+              "column": 33
+            },
+            "end": {
+              "line": 246,
+              "column": 35
+            }
+          },
+          "replacement": "||",
+          "genre": "BinaryOperator"
+        }
+      },
+      "summary": "CaughtMutant",
+      "log_path": "log/crates__turbo-html2pdf-core__src__paginate__multicol.rs_line_246_col_33.log",
+      "diff_path": "diff/crates__turbo-html2pdf-core__src__paginate__multicol.rs_line_246_col_33.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 3.253578917,
+          "process_status": "Success",
+          "argv": [
+            "/Users/grzegorz/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=turbo-html2pdf-core@0.8.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 0.588012791,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/grzegorz/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=turbo-html2pdf-core@0.8.0",
+            "--lib",
+            "paginate::multicol"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/turbo-html2pdf-core/src/paginate/multicol.rs:246:26: replace <= with > in FlowState::force_column_break",
+          "package": "turbo-html2pdf-core",
+          "file": "crates/turbo-html2pdf-core/src/paginate/multicol.rs",
+          "function": {
+            "function_name": "FlowState::force_column_break",
+            "return_type": "",
+            "span": {
+              "start": {
+                "line": 240,
+                "column": 5
+              },
+              "end": {
+                "line": 250,
+                "column": 6
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 246,
+              "column": 26
+            },
+            "end": {
+              "line": 246,
+              "column": 28
+            }
+          },
+          "replacement": ">",
+          "genre": "BinaryOperator"
+        }
+      },
+      "summary": "CaughtMutant",
+      "log_path": "log/crates__turbo-html2pdf-core__src__paginate__multicol.rs_line_246_col_26.log",
+      "diff_path": "diff/crates__turbo-html2pdf-core__src__paginate__multicol.rs_line_246_col_26.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 3.4076785,
+          "process_status": "Success",
+          "argv": [
+            "/Users/grzegorz/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=turbo-html2pdf-core@0.8.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 0.586794875,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/grzegorz/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=turbo-html2pdf-core@0.8.0",
+            "--lib",
+            "paginate::multicol"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/turbo-html2pdf-core/src/paginate/multicol.rs:246:45: replace == with != in FlowState::force_column_break",
+          "package": "turbo-html2pdf-core",
+          "file": "crates/turbo-html2pdf-core/src/paginate/multicol.rs",
+          "function": {
+            "function_name": "FlowState::force_column_break",
+            "return_type": "",
+            "span": {
+              "start": {
+                "line": 240,
+                "column": 5
+              },
+              "end": {
+                "line": 250,
+                "column": 6
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 246,
+              "column": 45
+            },
+            "end": {
+              "line": 246,
+              "column": 47
+            }
+          },
+          "replacement": "!=",
+          "genre": "BinaryOperator"
+        }
+      },
+      "summary": "MissedMutant",
+      "log_path": "log/crates__turbo-html2pdf-core__src__paginate__multicol.rs_line_246_col_45.log",
+      "diff_path": "diff/crates__turbo-html2pdf-core__src__paginate__multicol.rs_line_246_col_45.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 3.415869458,
+          "process_status": "Success",
+          "argv": [
+            "/Users/grzegorz/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=turbo-html2pdf-core@0.8.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 0.640459375,
+          "process_status": "Success",
+          "argv": [
+            "/Users/grzegorz/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=turbo-html2pdf-core@0.8.0",
+            "--lib",
+            "paginate::multicol"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/turbo-html2pdf-core/src/paginate/multicol.rs:255:9: replace FlowState::advance_column with ()",
+          "package": "turbo-html2pdf-core",
+          "file": "crates/turbo-html2pdf-core/src/paginate/multicol.rs",
+          "function": {
+            "function_name": "FlowState::advance_column",
+            "return_type": "",
+            "span": {
+              "start": {
+                "line": 252,
+                "column": 5
+              },
+              "end": {
+                "line": 266,
+                "column": 6
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 255,
+              "column": 9
+            },
+            "end": {
+              "line": 265,
+              "column": 34
+            }
+          },
+          "replacement": "()",
+          "genre": "FnValue"
+        }
+      },
+      "summary": "CaughtMutant",
+      "log_path": "log/crates__turbo-html2pdf-core__src__paginate__multicol.rs_line_255_col_9.log",
+      "diff_path": "diff/crates__turbo-html2pdf-core__src__paginate__multicol.rs_line_255_col_9.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 3.5512462080000002,
+          "process_status": "Success",
+          "argv": [
+            "/Users/grzegorz/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=turbo-html2pdf-core@0.8.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 0.635709416,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/grzegorz/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=turbo-html2pdf-core@0.8.0",
+            "--lib",
+            "paginate::multicol"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/turbo-html2pdf-core/src/paginate/multicol.rs:255:18: replace += with -= in FlowState::advance_column",
+          "package": "turbo-html2pdf-core",
+          "file": "crates/turbo-html2pdf-core/src/paginate/multicol.rs",
+          "function": {
+            "function_name": "FlowState::advance_column",
+            "return_type": "",
+            "span": {
+              "start": {
+                "line": 252,
+                "column": 5
+              },
+              "end": {
+                "line": 266,
+                "column": 6
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 255,
+              "column": 18
+            },
+            "end": {
+              "line": 255,
+              "column": 20
+            }
+          },
+          "replacement": "-=",
+          "genre": "BinaryOperator"
+        }
+      },
+      "summary": "CaughtMutant",
+      "log_path": "log/crates__turbo-html2pdf-core__src__paginate__multicol.rs_line_255_col_18.log",
+      "diff_path": "diff/crates__turbo-html2pdf-core__src__paginate__multicol.rs_line_255_col_18.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 3.638248542,
+          "process_status": "Success",
+          "argv": [
+            "/Users/grzegorz/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=turbo-html2pdf-core@0.8.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 0.639000417,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/grzegorz/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=turbo-html2pdf-core@0.8.0",
+            "--lib",
+            "paginate::multicol"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/turbo-html2pdf-core/src/paginate/multicol.rs:255:18: replace += with *= in FlowState::advance_column",
+          "package": "turbo-html2pdf-core",
+          "file": "crates/turbo-html2pdf-core/src/paginate/multicol.rs",
+          "function": {
+            "function_name": "FlowState::advance_column",
+            "return_type": "",
+            "span": {
+              "start": {
+                "line": 252,
+                "column": 5
+              },
+              "end": {
+                "line": 266,
+                "column": 6
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 255,
+              "column": 18
+            },
+            "end": {
+              "line": 255,
+              "column": 20
+            }
+          },
+          "replacement": "*=",
+          "genre": "BinaryOperator"
+        }
+      },
+      "summary": "CaughtMutant",
+      "log_path": "log/crates__turbo-html2pdf-core__src__paginate__multicol.rs_line_255_col_18_001.log",
+      "diff_path": "diff/crates__turbo-html2pdf-core__src__paginate__multicol.rs_line_255_col_18_001.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 3.744072417,
+          "process_status": "Success",
+          "argv": [
+            "/Users/grzegorz/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=turbo-html2pdf-core@0.8.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 0.642907209,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/grzegorz/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=turbo-html2pdf-core@0.8.0",
+            "--lib",
+            "paginate::multicol"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/turbo-html2pdf-core/src/paginate/multicol.rs:257:21: replace < with == in FlowState::advance_column",
+          "package": "turbo-html2pdf-core",
+          "file": "crates/turbo-html2pdf-core/src/paginate/multicol.rs",
+          "function": {
+            "function_name": "FlowState::advance_column",
+            "return_type": "",
+            "span": {
+              "start": {
+                "line": 252,
+                "column": 5
+              },
+              "end": {
+                "line": 266,
+                "column": 6
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 257,
+              "column": 21
+            },
+            "end": {
+              "line": 257,
+              "column": 22
+            }
+          },
+          "replacement": "==",
+          "genre": "BinaryOperator"
+        }
+      },
+      "summary": "CaughtMutant",
+      "log_path": "log/crates__turbo-html2pdf-core__src__paginate__multicol.rs_line_257_col_21.log",
+      "diff_path": "diff/crates__turbo-html2pdf-core__src__paginate__multicol.rs_line_257_col_21.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 4.401976083,
+          "process_status": "Success",
+          "argv": [
+            "/Users/grzegorz/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=turbo-html2pdf-core@0.8.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 0.936990042,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/grzegorz/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=turbo-html2pdf-core@0.8.0",
+            "--lib",
+            "paginate::multicol"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/turbo-html2pdf-core/src/paginate/multicol.rs:257:21: replace < with > in FlowState::advance_column",
+          "package": "turbo-html2pdf-core",
+          "file": "crates/turbo-html2pdf-core/src/paginate/multicol.rs",
+          "function": {
+            "function_name": "FlowState::advance_column",
+            "return_type": "",
+            "span": {
+              "start": {
+                "line": 252,
+                "column": 5
+              },
+              "end": {
+                "line": 266,
+                "column": 6
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 257,
+              "column": 21
+            },
+            "end": {
+              "line": 257,
+              "column": 22
+            }
+          },
+          "replacement": ">",
+          "genre": "BinaryOperator"
+        }
+      },
+      "summary": "CaughtMutant",
+      "log_path": "log/crates__turbo-html2pdf-core__src__paginate__multicol.rs_line_257_col_21_001.log",
+      "diff_path": "diff/crates__turbo-html2pdf-core__src__paginate__multicol.rs_line_257_col_21_001.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 4.8860322499999995,
+          "process_status": "Success",
+          "argv": [
+            "/Users/grzegorz/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=turbo-html2pdf-core@0.8.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 0.784417625,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/grzegorz/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=turbo-html2pdf-core@0.8.0",
+            "--lib",
+            "paginate::multicol"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/turbo-html2pdf-core/src/paginate/multicol.rs:257:21: replace < with <= in FlowState::advance_column",
+          "package": "turbo-html2pdf-core",
+          "file": "crates/turbo-html2pdf-core/src/paginate/multicol.rs",
+          "function": {
+            "function_name": "FlowState::advance_column",
+            "return_type": "",
+            "span": {
+              "start": {
+                "line": 252,
+                "column": 5
+              },
+              "end": {
+                "line": 266,
+                "column": 6
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 257,
+              "column": 21
+            },
+            "end": {
+              "line": 257,
+              "column": 22
+            }
+          },
+          "replacement": "<=",
+          "genre": "BinaryOperator"
+        }
+      },
+      "summary": "CaughtMutant",
+      "log_path": "log/crates__turbo-html2pdf-core__src__paginate__multicol.rs_line_257_col_21_002.log",
+      "diff_path": "diff/crates__turbo-html2pdf-core__src__paginate__multicol.rs_line_257_col_21_002.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 4.782433,
+          "process_status": "Success",
+          "argv": [
+            "/Users/grzegorz/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=turbo-html2pdf-core@0.8.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 0.833760833,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/grzegorz/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=turbo-html2pdf-core@0.8.0",
+            "--lib",
+            "paginate::multicol"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/turbo-html2pdf-core/src/paginate/multicol.rs:262:19: replace += with -= in FlowState::advance_column",
+          "package": "turbo-html2pdf-core",
+          "file": "crates/turbo-html2pdf-core/src/paginate/multicol.rs",
+          "function": {
+            "function_name": "FlowState::advance_column",
+            "return_type": "",
+            "span": {
+              "start": {
+                "line": 252,
+                "column": 5
+              },
+              "end": {
+                "line": 266,
+                "column": 6
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 262,
+              "column": 19
+            },
+            "end": {
+              "line": 262,
+              "column": 21
+            }
+          },
+          "replacement": "-=",
+          "genre": "BinaryOperator"
+        }
+      },
+      "summary": "CaughtMutant",
+      "log_path": "log/crates__turbo-html2pdf-core__src__paginate__multicol.rs_line_262_col_19.log",
+      "diff_path": "diff/crates__turbo-html2pdf-core__src__paginate__multicol.rs_line_262_col_19.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 4.6427256660000005,
+          "process_status": "Success",
+          "argv": [
+            "/Users/grzegorz/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=turbo-html2pdf-core@0.8.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 0.806785209,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/grzegorz/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=turbo-html2pdf-core@0.8.0",
+            "--lib",
+            "paginate::multicol"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/turbo-html2pdf-core/src/paginate/multicol.rs:262:19: replace += with *= in FlowState::advance_column",
+          "package": "turbo-html2pdf-core",
+          "file": "crates/turbo-html2pdf-core/src/paginate/multicol.rs",
+          "function": {
+            "function_name": "FlowState::advance_column",
+            "return_type": "",
+            "span": {
+              "start": {
+                "line": 252,
+                "column": 5
+              },
+              "end": {
+                "line": 266,
+                "column": 6
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 262,
+              "column": 19
+            },
+            "end": {
+              "line": 262,
+              "column": 21
+            }
+          },
+          "replacement": "*=",
+          "genre": "BinaryOperator"
+        }
+      },
+      "summary": "CaughtMutant",
+      "log_path": "log/crates__turbo-html2pdf-core__src__paginate__multicol.rs_line_262_col_19_001.log",
+      "diff_path": "diff/crates__turbo-html2pdf-core__src__paginate__multicol.rs_line_262_col_19_001.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 5.273064875,
+          "process_status": "Success",
+          "argv": [
+            "/Users/grzegorz/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=turbo-html2pdf-core@0.8.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 0.751306458,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/grzegorz/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=turbo-html2pdf-core@0.8.0",
+            "--lib",
+            "paginate::multicol"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/turbo-html2pdf-core/src/paginate/multicol.rs:275:9: replace FlowState::finish -> Flow with Default::default()",
+          "package": "turbo-html2pdf-core",
+          "file": "crates/turbo-html2pdf-core/src/paginate/multicol.rs",
+          "function": {
+            "function_name": "FlowState::finish",
+            "return_type": "-> Flow",
+            "span": {
+              "start": {
+                "line": 268,
+                "column": 5
+              },
+              "end": {
+                "line": 296,
+                "column": 6
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 275,
+              "column": 9
+            },
+            "end": {
+              "line": 295,
+              "column": 10
+            }
+          },
+          "replacement": "Default::default()",
+          "genre": "FnValue"
+        }
+      },
+      "summary": "CaughtMutant",
+      "log_path": "log/crates__turbo-html2pdf-core__src__paginate__multicol.rs_line_275_col_9.log",
+      "diff_path": "diff/crates__turbo-html2pdf-core__src__paginate__multicol.rs_line_275_col_9.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 4.339323167,
+          "process_status": "Success",
+          "argv": [
+            "/Users/grzegorz/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=turbo-html2pdf-core@0.8.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 0.744272333,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/grzegorz/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=turbo-html2pdf-core@0.8.0",
+            "--lib",
+            "paginate::multicol"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/turbo-html2pdf-core/src/paginate/multicol.rs:276:23: replace || with && in FlowState::finish",
+          "package": "turbo-html2pdf-core",
+          "file": "crates/turbo-html2pdf-core/src/paginate/multicol.rs",
+          "function": {
+            "function_name": "FlowState::finish",
+            "return_type": "-> Flow",
+            "span": {
+              "start": {
+                "line": 268,
+                "column": 5
+              },
+              "end": {
+                "line": 296,
+                "column": 6
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 276,
+              "column": 23
+            },
+            "end": {
+              "line": 276,
+              "column": 25
+            }
+          },
+          "replacement": "&&",
+          "genre": "BinaryOperator"
+        }
+      },
+      "summary": "MissedMutant",
+      "log_path": "log/crates__turbo-html2pdf-core__src__paginate__multicol.rs_line_276_col_23.log",
+      "diff_path": "diff/crates__turbo-html2pdf-core__src__paginate__multicol.rs_line_276_col_23.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 4.325009208,
+          "process_status": "Success",
+          "argv": [
+            "/Users/grzegorz/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=turbo-html2pdf-core@0.8.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 0.746445042,
+          "process_status": "Success",
+          "argv": [
+            "/Users/grzegorz/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=turbo-html2pdf-core@0.8.0",
+            "--lib",
+            "paginate::multicol"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/turbo-html2pdf-core/src/paginate/multicol.rs:310:5: replace rebalance_last_page -> Flow with Default::default()",
+          "package": "turbo-html2pdf-core",
+          "file": "crates/turbo-html2pdf-core/src/paginate/multicol.rs",
+          "function": {
+            "function_name": "rebalance_last_page",
+            "return_type": "-> Flow",
+            "span": {
+              "start": {
+                "line": 299,
+                "column": 1
+              },
+              "end": {
+                "line": 346,
+                "column": 2
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 310,
+              "column": 5
+            },
+            "end": {
+              "line": 345,
+              "column": 6
+            }
+          },
+          "replacement": "Default::default()",
+          "genre": "FnValue"
+        }
+      },
+      "summary": "CaughtMutant",
+      "log_path": "log/crates__turbo-html2pdf-core__src__paginate__multicol.rs_line_310_col_5.log",
+      "diff_path": "diff/crates__turbo-html2pdf-core__src__paginate__multicol.rs_line_310_col_5.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 4.433392916,
+          "process_status": "Success",
+          "argv": [
+            "/Users/grzegorz/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=turbo-html2pdf-core@0.8.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 0.908472959,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/grzegorz/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=turbo-html2pdf-core@0.8.0",
+            "--lib",
+            "paginate::multicol"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/turbo-html2pdf-core/src/paginate/multicol.rs:326:27: replace || with && in rebalance_last_page",
+          "package": "turbo-html2pdf-core",
+          "file": "crates/turbo-html2pdf-core/src/paginate/multicol.rs",
+          "function": {
+            "function_name": "rebalance_last_page",
+            "return_type": "-> Flow",
+            "span": {
+              "start": {
+                "line": 299,
+                "column": 1
+              },
+              "end": {
+                "line": 346,
+                "column": 2
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 326,
+              "column": 27
+            },
+            "end": {
+              "line": 326,
+              "column": 29
+            }
+          },
+          "replacement": "&&",
+          "genre": "BinaryOperator"
+        }
+      },
+      "summary": "MissedMutant",
+      "log_path": "log/crates__turbo-html2pdf-core__src__paginate__multicol.rs_line_326_col_27.log",
+      "diff_path": "diff/crates__turbo-html2pdf-core__src__paginate__multicol.rs_line_326_col_27.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 5.530383583,
+          "process_status": "Success",
+          "argv": [
+            "/Users/grzegorz/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=turbo-html2pdf-core@0.8.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 0.96566875,
+          "process_status": "Success",
+          "argv": [
+            "/Users/grzegorz/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=turbo-html2pdf-core@0.8.0",
+            "--lib",
+            "paginate::multicol"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/turbo-html2pdf-core/src/paginate/multicol.rs:326:47: replace <= with > in rebalance_last_page",
+          "package": "turbo-html2pdf-core",
+          "file": "crates/turbo-html2pdf-core/src/paginate/multicol.rs",
+          "function": {
+            "function_name": "rebalance_last_page",
+            "return_type": "-> Flow",
+            "span": {
+              "start": {
+                "line": 299,
+                "column": 1
+              },
+              "end": {
+                "line": 346,
+                "column": 2
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 326,
+              "column": 47
+            },
+            "end": {
+              "line": 326,
+              "column": 49
+            }
+          },
+          "replacement": ">",
+          "genre": "BinaryOperator"
+        }
+      },
+      "summary": "CaughtMutant",
+      "log_path": "log/crates__turbo-html2pdf-core__src__paginate__multicol.rs_line_326_col_47.log",
+      "diff_path": "diff/crates__turbo-html2pdf-core__src__paginate__multicol.rs_line_326_col_47.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 5.519332334,
+          "process_status": "Success",
+          "argv": [
+            "/Users/grzegorz/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=turbo-html2pdf-core@0.8.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 0.8984235,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/grzegorz/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=turbo-html2pdf-core@0.8.0",
+            "--lib",
+            "paginate::multicol"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/turbo-html2pdf-core/src/paginate/multicol.rs:352:5: replace last_page_indices -> Vec<usize> with vec![]",
+          "package": "turbo-html2pdf-core",
+          "file": "crates/turbo-html2pdf-core/src/paginate/multicol.rs",
+          "function": {
+            "function_name": "last_page_indices",
+            "return_type": "-> Vec<usize>",
+            "span": {
+              "start": {
+                "line": 348,
+                "column": 1
+              },
+              "end": {
+                "line": 357,
+                "column": 2
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 352,
+              "column": 5
+            },
+            "end": {
+              "line": 356,
+              "column": 19
+            }
+          },
+          "replacement": "vec![]",
+          "genre": "FnValue"
+        }
+      },
+      "summary": "CaughtMutant",
+      "log_path": "log/crates__turbo-html2pdf-core__src__paginate__multicol.rs_line_352_col_5.log",
+      "diff_path": "diff/crates__turbo-html2pdf-core__src__paginate__multicol.rs_line_352_col_5.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 4.869964667,
+          "process_status": "Success",
+          "argv": [
+            "/Users/grzegorz/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=turbo-html2pdf-core@0.8.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 0.850093,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/grzegorz/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=turbo-html2pdf-core@0.8.0",
+            "--lib",
+            "paginate::multicol"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/turbo-html2pdf-core/src/paginate/multicol.rs:352:5: replace last_page_indices -> Vec<usize> with vec![0]",
+          "package": "turbo-html2pdf-core",
+          "file": "crates/turbo-html2pdf-core/src/paginate/multicol.rs",
+          "function": {
+            "function_name": "last_page_indices",
+            "return_type": "-> Vec<usize>",
+            "span": {
+              "start": {
+                "line": 348,
+                "column": 1
+              },
+              "end": {
+                "line": 357,
+                "column": 2
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 352,
+              "column": 5
+            },
+            "end": {
+              "line": 356,
+              "column": 19
+            }
+          },
+          "replacement": "vec![0]",
+          "genre": "FnValue"
+        }
+      },
+      "summary": "CaughtMutant",
+      "log_path": "log/crates__turbo-html2pdf-core__src__paginate__multicol.rs_line_352_col_5_001.log",
+      "diff_path": "diff/crates__turbo-html2pdf-core__src__paginate__multicol.rs_line_352_col_5_001.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 4.994391334,
+          "process_status": "Success",
+          "argv": [
+            "/Users/grzegorz/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=turbo-html2pdf-core@0.8.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 0.895701208,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/grzegorz/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=turbo-html2pdf-core@0.8.0",
+            "--lib",
+            "paginate::multicol"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/turbo-html2pdf-core/src/paginate/multicol.rs:352:5: replace last_page_indices -> Vec<usize> with vec![1]",
+          "package": "turbo-html2pdf-core",
+          "file": "crates/turbo-html2pdf-core/src/paginate/multicol.rs",
+          "function": {
+            "function_name": "last_page_indices",
+            "return_type": "-> Vec<usize>",
+            "span": {
+              "start": {
+                "line": 348,
+                "column": 1
+              },
+              "end": {
+                "line": 357,
+                "column": 2
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 352,
+              "column": 5
+            },
+            "end": {
+              "line": 356,
+              "column": 19
+            }
+          },
+          "replacement": "vec![1]",
+          "genre": "FnValue"
+        }
+      },
+      "summary": "CaughtMutant",
+      "log_path": "log/crates__turbo-html2pdf-core__src__paginate__multicol.rs_line_352_col_5_002.log",
+      "diff_path": "diff/crates__turbo-html2pdf-core__src__paginate__multicol.rs_line_352_col_5_002.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 5.192963583,
+          "process_status": "Success",
+          "argv": [
+            "/Users/grzegorz/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=turbo-html2pdf-core@0.8.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 1.206466042,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/grzegorz/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=turbo-html2pdf-core@0.8.0",
+            "--lib",
+            "paginate::multicol"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/turbo-html2pdf-core/src/paginate/multicol.rs:355:59: replace == with != in last_page_indices",
+          "package": "turbo-html2pdf-core",
+          "file": "crates/turbo-html2pdf-core/src/paginate/multicol.rs",
+          "function": {
+            "function_name": "last_page_indices",
+            "return_type": "-> Vec<usize>",
+            "span": {
+              "start": {
+                "line": 348,
+                "column": 1
+              },
+              "end": {
+                "line": 357,
+                "column": 2
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 355,
+              "column": 59
+            },
+            "end": {
+              "line": 355,
+              "column": 61
+            }
+          },
+          "replacement": "!=",
+          "genre": "BinaryOperator"
+        }
+      },
+      "summary": "CaughtMutant",
+      "log_path": "log/crates__turbo-html2pdf-core__src__paginate__multicol.rs_line_355_col_59.log",
+      "diff_path": "diff/crates__turbo-html2pdf-core__src__paginate__multicol.rs_line_355_col_59.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 6.207945125,
+          "process_status": "Success",
+          "argv": [
+            "/Users/grzegorz/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=turbo-html2pdf-core@0.8.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 1.02567625,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/grzegorz/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=turbo-html2pdf-core@0.8.0",
+            "--lib",
+            "paginate::multicol"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/turbo-html2pdf-core/src/paginate/multicol.rs:365:5: replace balance_col_h -> f32 with 0.0",
+          "package": "turbo-html2pdf-core",
+          "file": "crates/turbo-html2pdf-core/src/paginate/multicol.rs",
+          "function": {
+            "function_name": "balance_col_h",
+            "return_type": "-> f32",
+            "span": {
+              "start": {
+                "line": 359,
+                "column": 1
+              },
+              "end": {
+                "line": 387,
+                "column": 2
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 365,
+              "column": 5
+            },
+            "end": {
+              "line": 386,
+              "column": 7
+            }
+          },
+          "replacement": "0.0",
+          "genre": "FnValue"
+        }
+      },
+      "summary": "CaughtMutant",
+      "log_path": "log/crates__turbo-html2pdf-core__src__paginate__multicol.rs_line_365_col_5.log",
+      "diff_path": "diff/crates__turbo-html2pdf-core__src__paginate__multicol.rs_line_365_col_5.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 5.72610775,
+          "process_status": "Success",
+          "argv": [
+            "/Users/grzegorz/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=turbo-html2pdf-core@0.8.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 0.973087375,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/grzegorz/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=turbo-html2pdf-core@0.8.0",
+            "--lib",
+            "paginate::multicol"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/turbo-html2pdf-core/src/paginate/multicol.rs:365:5: replace balance_col_h -> f32 with 1.0",
+          "package": "turbo-html2pdf-core",
+          "file": "crates/turbo-html2pdf-core/src/paginate/multicol.rs",
+          "function": {
+            "function_name": "balance_col_h",
+            "return_type": "-> f32",
+            "span": {
+              "start": {
+                "line": 359,
+                "column": 1
+              },
+              "end": {
+                "line": 387,
+                "column": 2
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 365,
+              "column": 5
+            },
+            "end": {
+              "line": 386,
+              "column": 7
+            }
+          },
+          "replacement": "1.0",
+          "genre": "FnValue"
+        }
+      },
+      "summary": "CaughtMutant",
+      "log_path": "log/crates__turbo-html2pdf-core__src__paginate__multicol.rs_line_365_col_5_001.log",
+      "diff_path": "diff/crates__turbo-html2pdf-core__src__paginate__multicol.rs_line_365_col_5_001.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 6.641103875,
+          "process_status": "Success",
+          "argv": [
+            "/Users/grzegorz/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=turbo-html2pdf-core@0.8.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 0.903633209,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/grzegorz/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=turbo-html2pdf-core@0.8.0",
+            "--lib",
+            "paginate::multicol"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/turbo-html2pdf-core/src/paginate/multicol.rs:365:5: replace balance_col_h -> f32 with -1.0",
+          "package": "turbo-html2pdf-core",
+          "file": "crates/turbo-html2pdf-core/src/paginate/multicol.rs",
+          "function": {
+            "function_name": "balance_col_h",
+            "return_type": "-> f32",
+            "span": {
+              "start": {
+                "line": 359,
+                "column": 1
+              },
+              "end": {
+                "line": 387,
+                "column": 2
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 365,
+              "column": 5
+            },
+            "end": {
+              "line": 386,
+              "column": 7
+            }
+          },
+          "replacement": "-1.0",
+          "genre": "FnValue"
+        }
+      },
+      "summary": "CaughtMutant",
+      "log_path": "log/crates__turbo-html2pdf-core__src__paginate__multicol.rs_line_365_col_5_002.log",
+      "diff_path": "diff/crates__turbo-html2pdf-core__src__paginate__multicol.rs_line_365_col_5_002.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 4.975570708,
+          "process_status": "Success",
+          "argv": [
+            "/Users/grzegorz/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=turbo-html2pdf-core@0.8.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 0.913906375,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/grzegorz/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=turbo-html2pdf-core@0.8.0",
+            "--lib",
+            "paginate::multicol"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/turbo-html2pdf-core/src/paginate/multicol.rs:369:35: replace / with % in balance_col_h",
+          "package": "turbo-html2pdf-core",
+          "file": "crates/turbo-html2pdf-core/src/paginate/multicol.rs",
+          "function": {
+            "function_name": "balance_col_h",
+            "return_type": "-> f32",
+            "span": {
+              "start": {
+                "line": 359,
+                "column": 1
+              },
+              "end": {
+                "line": 387,
+                "column": 2
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 369,
+              "column": 35
+            },
+            "end": {
+              "line": 369,
+              "column": 36
+            }
+          },
+          "replacement": "%",
+          "genre": "BinaryOperator"
+        }
+      },
+      "summary": "MissedMutant",
+      "log_path": "log/crates__turbo-html2pdf-core__src__paginate__multicol.rs_line_369_col_35.log",
+      "diff_path": "diff/crates__turbo-html2pdf-core__src__paginate__multicol.rs_line_369_col_35.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 5.129070709,
+          "process_status": "Success",
+          "argv": [
+            "/Users/grzegorz/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=turbo-html2pdf-core@0.8.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 0.908108459,
+          "process_status": "Success",
+          "argv": [
+            "/Users/grzegorz/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=turbo-html2pdf-core@0.8.0",
+            "--lib",
+            "paginate::multicol"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/turbo-html2pdf-core/src/paginate/multicol.rs:369:35: replace / with * in balance_col_h",
+          "package": "turbo-html2pdf-core",
+          "file": "crates/turbo-html2pdf-core/src/paginate/multicol.rs",
+          "function": {
+            "function_name": "balance_col_h",
+            "return_type": "-> f32",
+            "span": {
+              "start": {
+                "line": 359,
+                "column": 1
+              },
+              "end": {
+                "line": 387,
+                "column": 2
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 369,
+              "column": 35
+            },
+            "end": {
+              "line": 369,
+              "column": 36
+            }
+          },
+          "replacement": "*",
+          "genre": "BinaryOperator"
+        }
+      },
+      "summary": "CaughtMutant",
+      "log_path": "log/crates__turbo-html2pdf-core__src__paginate__multicol.rs_line_369_col_35_001.log",
+      "diff_path": "diff/crates__turbo-html2pdf-core__src__paginate__multicol.rs_line_369_col_35_001.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 5.057213459,
+          "process_status": "Success",
+          "argv": [
+            "/Users/grzegorz/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=turbo-html2pdf-core@0.8.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 1.002619583,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/grzegorz/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=turbo-html2pdf-core@0.8.0",
+            "--lib",
+            "paginate::multicol"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/turbo-html2pdf-core/src/paginate/multicol.rs:374:8: delete ! in balance_col_h",
+          "package": "turbo-html2pdf-core",
+          "file": "crates/turbo-html2pdf-core/src/paginate/multicol.rs",
+          "function": {
+            "function_name": "balance_col_h",
+            "return_type": "-> f32",
+            "span": {
+              "start": {
+                "line": 359,
+                "column": 1
+              },
+              "end": {
+                "line": 387,
+                "column": 2
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 374,
+              "column": 8
+            },
+            "end": {
+              "line": 374,
+              "column": 9
+            }
+          },
+          "replacement": "",
+          "genre": "UnaryOperator"
+        }
+      },
+      "summary": "CaughtMutant",
+      "log_path": "log/crates__turbo-html2pdf-core__src__paginate__multicol.rs_line_374_col_8.log",
+      "diff_path": "diff/crates__turbo-html2pdf-core__src__paginate__multicol.rs_line_374_col_8.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 5.24327825,
+          "process_status": "Success",
+          "argv": [
+            "/Users/grzegorz/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=turbo-html2pdf-core@0.8.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 1.022764,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/grzegorz/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=turbo-html2pdf-core@0.8.0",
+            "--lib",
+            "paginate::multicol"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/turbo-html2pdf-core/src/paginate/multicol.rs:379:23: replace * with + in balance_col_h",
+          "package": "turbo-html2pdf-core",
+          "file": "crates/turbo-html2pdf-core/src/paginate/multicol.rs",
+          "function": {
+            "function_name": "balance_col_h",
+            "return_type": "-> f32",
+            "span": {
+              "start": {
+                "line": 359,
+                "column": 1
+              },
+              "end": {
+                "line": 387,
+                "column": 2
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 379,
+              "column": 23
+            },
+            "end": {
+              "line": 379,
+              "column": 24
+            }
+          },
+          "replacement": "+",
+          "genre": "BinaryOperator"
+        }
+      },
+      "summary": "CaughtMutant",
+      "log_path": "log/crates__turbo-html2pdf-core__src__paginate__multicol.rs_line_379_col_23.log",
+      "diff_path": "diff/crates__turbo-html2pdf-core__src__paginate__multicol.rs_line_379_col_23.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 5.196104417,
+          "process_status": "Success",
+          "argv": [
+            "/Users/grzegorz/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=turbo-html2pdf-core@0.8.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 1.054085084,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/grzegorz/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=turbo-html2pdf-core@0.8.0",
+            "--lib",
+            "paginate::multicol"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/turbo-html2pdf-core/src/paginate/multicol.rs:379:23: replace * with / in balance_col_h",
+          "package": "turbo-html2pdf-core",
+          "file": "crates/turbo-html2pdf-core/src/paginate/multicol.rs",
+          "function": {
+            "function_name": "balance_col_h",
+            "return_type": "-> f32",
+            "span": {
+              "start": {
+                "line": 359,
+                "column": 1
+              },
+              "end": {
+                "line": 387,
+                "column": 2
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 379,
+              "column": 23
+            },
+            "end": {
+              "line": 379,
+              "column": 24
+            }
+          },
+          "replacement": "/",
+          "genre": "BinaryOperator"
+        }
+      },
+      "summary": "CaughtMutant",
+      "log_path": "log/crates__turbo-html2pdf-core__src__paginate__multicol.rs_line_379_col_23_001.log",
+      "diff_path": "diff/crates__turbo-html2pdf-core__src__paginate__multicol.rs_line_379_col_23_001.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 5.281945792,
+          "process_status": "Success",
+          "argv": [
+            "/Users/grzegorz/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=turbo-html2pdf-core@0.8.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 0.996812584,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/grzegorz/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=turbo-html2pdf-core@0.8.0",
+            "--lib",
+            "paginate::multicol"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/turbo-html2pdf-core/src/paginate/multicol.rs:379:29: replace + with - in balance_col_h",
+          "package": "turbo-html2pdf-core",
+          "file": "crates/turbo-html2pdf-core/src/paginate/multicol.rs",
+          "function": {
+            "function_name": "balance_col_h",
+            "return_type": "-> f32",
+            "span": {
+              "start": {
+                "line": 359,
+                "column": 1
+              },
+              "end": {
+                "line": 387,
+                "column": 2
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 379,
+              "column": 29
+            },
+            "end": {
+              "line": 379,
+              "column": 30
+            }
+          },
+          "replacement": "-",
+          "genre": "BinaryOperator"
+        }
+      },
+      "summary": "CaughtMutant",
+      "log_path": "log/crates__turbo-html2pdf-core__src__paginate__multicol.rs_line_379_col_29.log",
+      "diff_path": "diff/crates__turbo-html2pdf-core__src__paginate__multicol.rs_line_379_col_29.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 5.379066959,
+          "process_status": "Success",
+          "argv": [
+            "/Users/grzegorz/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=turbo-html2pdf-core@0.8.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 0.956805042,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/grzegorz/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=turbo-html2pdf-core@0.8.0",
+            "--lib",
+            "paginate::multicol"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/turbo-html2pdf-core/src/paginate/multicol.rs:379:29: replace + with * in balance_col_h",
+          "package": "turbo-html2pdf-core",
+          "file": "crates/turbo-html2pdf-core/src/paginate/multicol.rs",
+          "function": {
+            "function_name": "balance_col_h",
+            "return_type": "-> f32",
+            "span": {
+              "start": {
+                "line": 359,
+                "column": 1
+              },
+              "end": {
+                "line": 387,
+                "column": 2
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 379,
+              "column": 29
+            },
+            "end": {
+              "line": 379,
+              "column": 30
+            }
+          },
+          "replacement": "*",
+          "genre": "BinaryOperator"
+        }
+      },
+      "summary": "CaughtMutant",
+      "log_path": "log/crates__turbo-html2pdf-core__src__paginate__multicol.rs_line_379_col_29_001.log",
+      "diff_path": "diff/crates__turbo-html2pdf-core__src__paginate__multicol.rs_line_379_col_29_001.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 5.3680665,
+          "process_status": "Success",
+          "argv": [
+            "/Users/grzegorz/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=turbo-html2pdf-core@0.8.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 0.9631185,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/grzegorz/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=turbo-html2pdf-core@0.8.0",
+            "--lib",
+            "paginate::multicol"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/turbo-html2pdf-core/src/paginate/multicol.rs:411:9: replace ColCursor::pre_break with ()",
+          "package": "turbo-html2pdf-core",
+          "file": "crates/turbo-html2pdf-core/src/paginate/multicol.rs",
+          "function": {
+            "function_name": "ColCursor::pre_break",
+            "return_type": "",
+            "span": {
+              "start": {
+                "line": 407,
+                "column": 5
+              },
+              "end": {
+                "line": 417,
+                "column": 6
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 411,
+              "column": 9
+            },
+            "end": {
+              "line": 416,
+              "column": 10
+            }
+          },
+          "replacement": "()",
+          "genre": "FnValue"
+        }
+      },
+      "summary": "CaughtMutant",
+      "log_path": "log/crates__turbo-html2pdf-core__src__paginate__multicol.rs_line_411_col_9.log",
+      "diff_path": "diff/crates__turbo-html2pdf-core__src__paginate__multicol.rs_line_411_col_9.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 5.475703125,
+          "process_status": "Success",
+          "argv": [
+            "/Users/grzegorz/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=turbo-html2pdf-core@0.8.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 1.005708583,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/grzegorz/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=turbo-html2pdf-core@0.8.0",
+            "--lib",
+            "paginate::multicol"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/turbo-html2pdf-core/src/paginate/multicol.rs:412:13: replace && with || in ColCursor::pre_break",
+          "package": "turbo-html2pdf-core",
+          "file": "crates/turbo-html2pdf-core/src/paginate/multicol.rs",
+          "function": {
+            "function_name": "ColCursor::pre_break",
+            "return_type": "",
+            "span": {
+              "start": {
+                "line": 407,
+                "column": 5
+              },
+              "end": {
+                "line": 417,
+                "column": 6
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 412,
+              "column": 13
+            },
+            "end": {
+              "line": 412,
+              "column": 15
+            }
+          },
+          "replacement": "||",
+          "genre": "BinaryOperator"
+        }
+      },
+      "summary": "CaughtMutant",
+      "log_path": "log/crates__turbo-html2pdf-core__src__paginate__multicol.rs_line_412_col_13.log",
+      "diff_path": "diff/crates__turbo-html2pdf-core__src__paginate__multicol.rs_line_412_col_13.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 5.667905708,
+          "process_status": "Success",
+          "argv": [
+            "/Users/grzegorz/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=turbo-html2pdf-core@0.8.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 1.014785125,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/grzegorz/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=turbo-html2pdf-core@0.8.0",
+            "--lib",
+            "paginate::multicol"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/turbo-html2pdf-core/src/paginate/multicol.rs:412:16: delete ! in ColCursor::pre_break",
+          "package": "turbo-html2pdf-core",
+          "file": "crates/turbo-html2pdf-core/src/paginate/multicol.rs",
+          "function": {
+            "function_name": "ColCursor::pre_break",
+            "return_type": "",
+            "span": {
+              "start": {
+                "line": 407,
+                "column": 5
+              },
+              "end": {
+                "line": 417,
+                "column": 6
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 412,
+              "column": 16
+            },
+            "end": {
+              "line": 412,
+              "column": 17
+            }
+          },
+          "replacement": "",
+          "genre": "UnaryOperator"
+        }
+      },
+      "summary": "CaughtMutant",
+      "log_path": "log/crates__turbo-html2pdf-core__src__paginate__multicol.rs_line_412_col_16.log",
+      "diff_path": "diff/crates__turbo-html2pdf-core__src__paginate__multicol.rs_line_412_col_16.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 5.616913916,
+          "process_status": "Success",
+          "argv": [
+            "/Users/grzegorz/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=turbo-html2pdf-core@0.8.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 1.119916875,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/grzegorz/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=turbo-html2pdf-core@0.8.0",
+            "--lib",
+            "paginate::multicol"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/turbo-html2pdf-core/src/paginate/multicol.rs:412:34: replace && with || in ColCursor::pre_break",
+          "package": "turbo-html2pdf-core",
+          "file": "crates/turbo-html2pdf-core/src/paginate/multicol.rs",
+          "function": {
+            "function_name": "ColCursor::pre_break",
+            "return_type": "",
+            "span": {
+              "start": {
+                "line": 407,
+                "column": 5
+              },
+              "end": {
+                "line": 417,
+                "column": 6
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 412,
+              "column": 34
+            },
+            "end": {
+              "line": 412,
+              "column": 36
+            }
+          },
+          "replacement": "||",
+          "genre": "BinaryOperator"
+        }
+      },
+      "summary": "CaughtMutant",
+      "log_path": "log/crates__turbo-html2pdf-core__src__paginate__multicol.rs_line_412_col_34.log",
+      "diff_path": "diff/crates__turbo-html2pdf-core__src__paginate__multicol.rs_line_412_col_34.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 5.541184375,
+          "process_status": "Success",
+          "argv": [
+            "/Users/grzegorz/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=turbo-html2pdf-core@0.8.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 1.060328291,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/grzegorz/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=turbo-html2pdf-core@0.8.0",
+            "--lib",
+            "paginate::multicol"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/turbo-html2pdf-core/src/paginate/multicol.rs:412:27: replace <= with > in ColCursor::pre_break",
+          "package": "turbo-html2pdf-core",
+          "file": "crates/turbo-html2pdf-core/src/paginate/multicol.rs",
+          "function": {
+            "function_name": "ColCursor::pre_break",
+            "return_type": "",
+            "span": {
+              "start": {
+                "line": 407,
+                "column": 5
+              },
+              "end": {
+                "line": 417,
+                "column": 6
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 412,
+              "column": 27
+            },
+            "end": {
+              "line": 412,
+              "column": 29
+            }
+          },
+          "replacement": ">",
+          "genre": "BinaryOperator"
+        }
+      },
+      "summary": "CaughtMutant",
+      "log_path": "log/crates__turbo-html2pdf-core__src__paginate__multicol.rs_line_412_col_27.log",
+      "diff_path": "diff/crates__turbo-html2pdf-core__src__paginate__multicol.rs_line_412_col_27.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 10.02473425,
+          "process_status": "Success",
+          "argv": [
+            "/Users/grzegorz/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=turbo-html2pdf-core@0.8.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 1.075831333,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/grzegorz/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=turbo-html2pdf-core@0.8.0",
+            "--lib",
+            "paginate::multicol"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/turbo-html2pdf-core/src/paginate/multicol.rs:412:46: replace == with != in ColCursor::pre_break",
+          "package": "turbo-html2pdf-core",
+          "file": "crates/turbo-html2pdf-core/src/paginate/multicol.rs",
+          "function": {
+            "function_name": "ColCursor::pre_break",
+            "return_type": "",
+            "span": {
+              "start": {
+                "line": 407,
+                "column": 5
+              },
+              "end": {
+                "line": 417,
+                "column": 6
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 412,
+              "column": 46
+            },
+            "end": {
+              "line": 412,
+              "column": 48
+            }
+          },
+          "replacement": "!=",
+          "genre": "BinaryOperator"
+        }
+      },
+      "summary": "CaughtMutant",
+      "log_path": "log/crates__turbo-html2pdf-core__src__paginate__multicol.rs_line_412_col_46.log",
+      "diff_path": "diff/crates__turbo-html2pdf-core__src__paginate__multicol.rs_line_412_col_46.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 6.136879625,
+          "process_status": "Success",
+          "argv": [
+            "/Users/grzegorz/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=turbo-html2pdf-core@0.8.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 1.1829555840000001,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/grzegorz/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=turbo-html2pdf-core@0.8.0",
+            "--lib",
+            "paginate::multicol"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/turbo-html2pdf-core/src/paginate/multicol.rs:414:22: replace += with -= in ColCursor::pre_break",
+          "package": "turbo-html2pdf-core",
+          "file": "crates/turbo-html2pdf-core/src/paginate/multicol.rs",
+          "function": {
+            "function_name": "ColCursor::pre_break",
+            "return_type": "",
+            "span": {
+              "start": {
+                "line": 407,
+                "column": 5
+              },
+              "end": {
+                "line": 417,
+                "column": 6
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 414,
+              "column": 22
+            },
+            "end": {
+              "line": 414,
+              "column": 24
+            }
+          },
+          "replacement": "-=",
+          "genre": "BinaryOperator"
+        }
+      },
+      "summary": "CaughtMutant",
+      "log_path": "log/crates__turbo-html2pdf-core__src__paginate__multicol.rs_line_414_col_22.log",
+      "diff_path": "diff/crates__turbo-html2pdf-core__src__paginate__multicol.rs_line_414_col_22.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 6.194854833,
+          "process_status": "Success",
+          "argv": [
+            "/Users/grzegorz/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=turbo-html2pdf-core@0.8.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 1.1698685420000001,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/grzegorz/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=turbo-html2pdf-core@0.8.0",
+            "--lib",
+            "paginate::multicol"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/turbo-html2pdf-core/src/paginate/multicol.rs:414:22: replace += with *= in ColCursor::pre_break",
+          "package": "turbo-html2pdf-core",
+          "file": "crates/turbo-html2pdf-core/src/paginate/multicol.rs",
+          "function": {
+            "function_name": "ColCursor::pre_break",
+            "return_type": "",
+            "span": {
+              "start": {
+                "line": 407,
+                "column": 5
+              },
+              "end": {
+                "line": 417,
+                "column": 6
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 414,
+              "column": 22
+            },
+            "end": {
+              "line": 414,
+              "column": 24
+            }
+          },
+          "replacement": "*=",
+          "genre": "BinaryOperator"
+        }
+      },
+      "summary": "CaughtMutant",
+      "log_path": "log/crates__turbo-html2pdf-core__src__paginate__multicol.rs_line_414_col_22_001.log",
+      "diff_path": "diff/crates__turbo-html2pdf-core__src__paginate__multicol.rs_line_414_col_22_001.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 6.243154291,
+          "process_status": "Success",
+          "argv": [
+            "/Users/grzegorz/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=turbo-html2pdf-core@0.8.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 1.185481875,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/grzegorz/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=turbo-html2pdf-core@0.8.0",
+            "--lib",
+            "paginate::multicol"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/turbo-html2pdf-core/src/paginate/multicol.rs:421:9: replace ColCursor::wrap_if_overflows with ()",
+          "package": "turbo-html2pdf-core",
+          "file": "crates/turbo-html2pdf-core/src/paginate/multicol.rs",
+          "function": {
+            "function_name": "ColCursor::wrap_if_overflows",
+            "return_type": "",
+            "span": {
+              "start": {
+                "line": 419,
+                "column": 5
+              },
+              "end": {
+                "line": 425,
+                "column": 6
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 421,
+              "column": 9
+            },
+            "end": {
+              "line": 424,
+              "column": 10
+            }
+          },
+          "replacement": "()",
+          "genre": "FnValue"
+        }
+      },
+      "summary": "CaughtMutant",
+      "log_path": "log/crates__turbo-html2pdf-core__src__paginate__multicol.rs_line_421_col_9.log",
+      "diff_path": "diff/crates__turbo-html2pdf-core__src__paginate__multicol.rs_line_421_col_9.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 7.265154583,
+          "process_status": "Success",
+          "argv": [
+            "/Users/grzegorz/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=turbo-html2pdf-core@0.8.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 0.95515425,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/grzegorz/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=turbo-html2pdf-core@0.8.0",
+            "--lib",
+            "paginate::multicol"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/turbo-html2pdf-core/src/paginate/multicol.rs:421:27: replace && with || in ColCursor::wrap_if_overflows",
+          "package": "turbo-html2pdf-core",
+          "file": "crates/turbo-html2pdf-core/src/paginate/multicol.rs",
+          "function": {
+            "function_name": "ColCursor::wrap_if_overflows",
+            "return_type": "",
+            "span": {
+              "start": {
+                "line": 419,
+                "column": 5
+              },
+              "end": {
+                "line": 425,
+                "column": 6
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 421,
+              "column": 27
+            },
+            "end": {
+              "line": 421,
+              "column": 29
+            }
+          },
+          "replacement": "||",
+          "genre": "BinaryOperator"
+        }
+      },
+      "summary": "CaughtMutant",
+      "log_path": "log/crates__turbo-html2pdf-core__src__paginate__multicol.rs_line_421_col_27.log",
+      "diff_path": "diff/crates__turbo-html2pdf-core__src__paginate__multicol.rs_line_421_col_27.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 9.440183625,
+          "process_status": "Success",
+          "argv": [
+            "/Users/grzegorz/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=turbo-html2pdf-core@0.8.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 0.995400125,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/grzegorz/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=turbo-html2pdf-core@0.8.0",
+            "--lib",
+            "paginate::multicol"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/turbo-html2pdf-core/src/paginate/multicol.rs:421:21: replace > with == in ColCursor::wrap_if_overflows",
+          "package": "turbo-html2pdf-core",
+          "file": "crates/turbo-html2pdf-core/src/paginate/multicol.rs",
+          "function": {
+            "function_name": "ColCursor::wrap_if_overflows",
+            "return_type": "",
+            "span": {
+              "start": {
+                "line": 419,
+                "column": 5
+              },
+              "end": {
+                "line": 425,
+                "column": 6
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 421,
+              "column": 21
+            },
+            "end": {
+              "line": 421,
+              "column": 22
+            }
+          },
+          "replacement": "==",
+          "genre": "BinaryOperator"
+        }
+      },
+      "summary": "CaughtMutant",
+      "log_path": "log/crates__turbo-html2pdf-core__src__paginate__multicol.rs_line_421_col_21.log",
+      "diff_path": "diff/crates__turbo-html2pdf-core__src__paginate__multicol.rs_line_421_col_21.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 9.583473083,
+          "process_status": "Success",
+          "argv": [
+            "/Users/grzegorz/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=turbo-html2pdf-core@0.8.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 1.346070375,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/grzegorz/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=turbo-html2pdf-core@0.8.0",
+            "--lib",
+            "paginate::multicol"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/turbo-html2pdf-core/src/paginate/multicol.rs:421:21: replace > with < in ColCursor::wrap_if_overflows",
+          "package": "turbo-html2pdf-core",
+          "file": "crates/turbo-html2pdf-core/src/paginate/multicol.rs",
+          "function": {
+            "function_name": "ColCursor::wrap_if_overflows",
+            "return_type": "",
+            "span": {
+              "start": {
+                "line": 419,
+                "column": 5
+              },
+              "end": {
+                "line": 425,
+                "column": 6
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 421,
+              "column": 21
+            },
+            "end": {
+              "line": 421,
+              "column": 22
+            }
+          },
+          "replacement": "<",
+          "genre": "BinaryOperator"
+        }
+      },
+      "summary": "CaughtMutant",
+      "log_path": "log/crates__turbo-html2pdf-core__src__paginate__multicol.rs_line_421_col_21_001.log",
+      "diff_path": "diff/crates__turbo-html2pdf-core__src__paginate__multicol.rs_line_421_col_21_001.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 7.972167958,
+          "process_status": "Success",
+          "argv": [
+            "/Users/grzegorz/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=turbo-html2pdf-core@0.8.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 1.290803416,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/grzegorz/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=turbo-html2pdf-core@0.8.0",
+            "--lib",
+            "paginate::multicol"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/turbo-html2pdf-core/src/paginate/multicol.rs:421:21: replace > with >= in ColCursor::wrap_if_overflows",
+          "package": "turbo-html2pdf-core",
+          "file": "crates/turbo-html2pdf-core/src/paginate/multicol.rs",
+          "function": {
+            "function_name": "ColCursor::wrap_if_overflows",
+            "return_type": "",
+            "span": {
+              "start": {
+                "line": 419,
+                "column": 5
+              },
+              "end": {
+                "line": 425,
+                "column": 6
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 421,
+              "column": 21
+            },
+            "end": {
+              "line": 421,
+              "column": 22
+            }
+          },
+          "replacement": ">=",
+          "genre": "BinaryOperator"
+        }
+      },
+      "summary": "MissedMutant",
+      "log_path": "log/crates__turbo-html2pdf-core__src__paginate__multicol.rs_line_421_col_21_002.log",
+      "diff_path": "diff/crates__turbo-html2pdf-core__src__paginate__multicol.rs_line_421_col_21_002.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 6.925539875,
+          "process_status": "Success",
+          "argv": [
+            "/Users/grzegorz/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=turbo-html2pdf-core@0.8.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 1.26625075,
+          "process_status": "Success",
+          "argv": [
+            "/Users/grzegorz/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=turbo-html2pdf-core@0.8.0",
+            "--lib",
+            "paginate::multicol"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/turbo-html2pdf-core/src/paginate/multicol.rs:421:43: replace > with == in ColCursor::wrap_if_overflows",
+          "package": "turbo-html2pdf-core",
+          "file": "crates/turbo-html2pdf-core/src/paginate/multicol.rs",
+          "function": {
+            "function_name": "ColCursor::wrap_if_overflows",
+            "return_type": "",
+            "span": {
+              "start": {
+                "line": 419,
+                "column": 5
+              },
+              "end": {
+                "line": 425,
+                "column": 6
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 421,
+              "column": 43
+            },
+            "end": {
+              "line": 421,
+              "column": 44
+            }
+          },
+          "replacement": "==",
+          "genre": "BinaryOperator"
+        }
+      },
+      "summary": "CaughtMutant",
+      "log_path": "log/crates__turbo-html2pdf-core__src__paginate__multicol.rs_line_421_col_43.log",
+      "diff_path": "diff/crates__turbo-html2pdf-core__src__paginate__multicol.rs_line_421_col_43.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 6.825051083,
+          "process_status": "Success",
+          "argv": [
+            "/Users/grzegorz/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=turbo-html2pdf-core@0.8.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 1.253825916,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/grzegorz/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=turbo-html2pdf-core@0.8.0",
+            "--lib",
+            "paginate::multicol"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/turbo-html2pdf-core/src/paginate/multicol.rs:421:43: replace > with < in ColCursor::wrap_if_overflows",
+          "package": "turbo-html2pdf-core",
+          "file": "crates/turbo-html2pdf-core/src/paginate/multicol.rs",
+          "function": {
+            "function_name": "ColCursor::wrap_if_overflows",
+            "return_type": "",
+            "span": {
+              "start": {
+                "line": 419,
+                "column": 5
+              },
+              "end": {
+                "line": 425,
+                "column": 6
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 421,
+              "column": 43
+            },
+            "end": {
+              "line": 421,
+              "column": 44
+            }
+          },
+          "replacement": "<",
+          "genre": "BinaryOperator"
+        }
+      },
+      "summary": "CaughtMutant",
+      "log_path": "log/crates__turbo-html2pdf-core__src__paginate__multicol.rs_line_421_col_43_001.log",
+      "diff_path": "diff/crates__turbo-html2pdf-core__src__paginate__multicol.rs_line_421_col_43_001.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 6.722075125,
+          "process_status": "Success",
+          "argv": [
+            "/Users/grzegorz/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=turbo-html2pdf-core@0.8.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 1.250779333,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/grzegorz/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=turbo-html2pdf-core@0.8.0",
+            "--lib",
+            "paginate::multicol"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/turbo-html2pdf-core/src/paginate/multicol.rs:421:43: replace > with >= in ColCursor::wrap_if_overflows",
+          "package": "turbo-html2pdf-core",
+          "file": "crates/turbo-html2pdf-core/src/paginate/multicol.rs",
+          "function": {
+            "function_name": "ColCursor::wrap_if_overflows",
+            "return_type": "",
+            "span": {
+              "start": {
+                "line": 419,
+                "column": 5
+              },
+              "end": {
+                "line": 425,
+                "column": 6
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 421,
+              "column": 43
+            },
+            "end": {
+              "line": 421,
+              "column": 44
+            }
+          },
+          "replacement": ">=",
+          "genre": "BinaryOperator"
+        }
+      },
+      "summary": "MissedMutant",
+      "log_path": "log/crates__turbo-html2pdf-core__src__paginate__multicol.rs_line_421_col_43_002.log",
+      "diff_path": "diff/crates__turbo-html2pdf-core__src__paginate__multicol.rs_line_421_col_43_002.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 6.744155,
+          "process_status": "Success",
+          "argv": [
+            "/Users/grzegorz/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=turbo-html2pdf-core@0.8.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 1.339132583,
+          "process_status": "Success",
+          "argv": [
+            "/Users/grzegorz/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=turbo-html2pdf-core@0.8.0",
+            "--lib",
+            "paginate::multicol"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/turbo-html2pdf-core/src/paginate/multicol.rs:421:39: replace + with - in ColCursor::wrap_if_overflows",
+          "package": "turbo-html2pdf-core",
+          "file": "crates/turbo-html2pdf-core/src/paginate/multicol.rs",
+          "function": {
+            "function_name": "ColCursor::wrap_if_overflows",
+            "return_type": "",
+            "span": {
+              "start": {
+                "line": 419,
+                "column": 5
+              },
+              "end": {
+                "line": 425,
+                "column": 6
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 421,
+              "column": 39
+            },
+            "end": {
+              "line": 421,
+              "column": 40
+            }
+          },
+          "replacement": "-",
+          "genre": "BinaryOperator"
+        }
+      },
+      "summary": "CaughtMutant",
+      "log_path": "log/crates__turbo-html2pdf-core__src__paginate__multicol.rs_line_421_col_39.log",
+      "diff_path": "diff/crates__turbo-html2pdf-core__src__paginate__multicol.rs_line_421_col_39.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 6.587912917,
+          "process_status": "Success",
+          "argv": [
+            "/Users/grzegorz/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=turbo-html2pdf-core@0.8.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 1.270726833,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/grzegorz/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=turbo-html2pdf-core@0.8.0",
+            "--lib",
+            "paginate::multicol"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/turbo-html2pdf-core/src/paginate/multicol.rs:421:39: replace + with * in ColCursor::wrap_if_overflows",
+          "package": "turbo-html2pdf-core",
+          "file": "crates/turbo-html2pdf-core/src/paginate/multicol.rs",
+          "function": {
+            "function_name": "ColCursor::wrap_if_overflows",
+            "return_type": "",
+            "span": {
+              "start": {
+                "line": 419,
+                "column": 5
+              },
+              "end": {
+                "line": 425,
+                "column": 6
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 421,
+              "column": 39
+            },
+            "end": {
+              "line": 421,
+              "column": 40
+            }
+          },
+          "replacement": "*",
+          "genre": "BinaryOperator"
+        }
+      },
+      "summary": "CaughtMutant",
+      "log_path": "log/crates__turbo-html2pdf-core__src__paginate__multicol.rs_line_421_col_39_001.log",
+      "diff_path": "diff/crates__turbo-html2pdf-core__src__paginate__multicol.rs_line_421_col_39_001.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 8.1406875,
+          "process_status": "Success",
+          "argv": [
+            "/Users/grzegorz/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=turbo-html2pdf-core@0.8.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 1.562179542,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/grzegorz/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=turbo-html2pdf-core@0.8.0",
+            "--lib",
+            "paginate::multicol"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/turbo-html2pdf-core/src/paginate/multicol.rs:421:51: replace + with - in ColCursor::wrap_if_overflows",
+          "package": "turbo-html2pdf-core",
+          "file": "crates/turbo-html2pdf-core/src/paginate/multicol.rs",
+          "function": {
+            "function_name": "ColCursor::wrap_if_overflows",
+            "return_type": "",
+            "span": {
+              "start": {
+                "line": 419,
+                "column": 5
+              },
+              "end": {
+                "line": 425,
+                "column": 6
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 421,
+              "column": 51
+            },
+            "end": {
+              "line": 421,
+              "column": 52
+            }
+          },
+          "replacement": "-",
+          "genre": "BinaryOperator"
+        }
+      },
+      "summary": "MissedMutant",
+      "log_path": "log/crates__turbo-html2pdf-core__src__paginate__multicol.rs_line_421_col_51.log",
+      "diff_path": "diff/crates__turbo-html2pdf-core__src__paginate__multicol.rs_line_421_col_51.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 8.409924833,
+          "process_status": "Success",
+          "argv": [
+            "/Users/grzegorz/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=turbo-html2pdf-core@0.8.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 1.289619666,
+          "process_status": "Success",
+          "argv": [
+            "/Users/grzegorz/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=turbo-html2pdf-core@0.8.0",
+            "--lib",
+            "paginate::multicol"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/turbo-html2pdf-core/src/paginate/multicol.rs:421:51: replace + with * in ColCursor::wrap_if_overflows",
+          "package": "turbo-html2pdf-core",
+          "file": "crates/turbo-html2pdf-core/src/paginate/multicol.rs",
+          "function": {
+            "function_name": "ColCursor::wrap_if_overflows",
+            "return_type": "",
+            "span": {
+              "start": {
+                "line": 419,
+                "column": 5
+              },
+              "end": {
+                "line": 425,
+                "column": 6
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 421,
+              "column": 51
+            },
+            "end": {
+              "line": 421,
+              "column": 52
+            }
+          },
+          "replacement": "*",
+          "genre": "BinaryOperator"
+        }
+      },
+      "summary": "CaughtMutant",
+      "log_path": "log/crates__turbo-html2pdf-core__src__paginate__multicol.rs_line_421_col_51_001.log",
+      "diff_path": "diff/crates__turbo-html2pdf-core__src__paginate__multicol.rs_line_421_col_51_001.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 7.037666833,
+          "process_status": "Success",
+          "argv": [
+            "/Users/grzegorz/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=turbo-html2pdf-core@0.8.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 1.324821958,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/grzegorz/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=turbo-html2pdf-core@0.8.0",
+            "--lib",
+            "paginate::multicol"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/turbo-html2pdf-core/src/paginate/multicol.rs:422:22: replace += with -= in ColCursor::wrap_if_overflows",
+          "package": "turbo-html2pdf-core",
+          "file": "crates/turbo-html2pdf-core/src/paginate/multicol.rs",
+          "function": {
+            "function_name": "ColCursor::wrap_if_overflows",
+            "return_type": "",
+            "span": {
+              "start": {
+                "line": 419,
+                "column": 5
+              },
+              "end": {
+                "line": 425,
+                "column": 6
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 422,
+              "column": 22
+            },
+            "end": {
+              "line": 422,
+              "column": 24
+            }
+          },
+          "replacement": "-=",
+          "genre": "BinaryOperator"
+        }
+      },
+      "summary": "CaughtMutant",
+      "log_path": "log/crates__turbo-html2pdf-core__src__paginate__multicol.rs_line_422_col_22.log",
+      "diff_path": "diff/crates__turbo-html2pdf-core__src__paginate__multicol.rs_line_422_col_22.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 6.874318958,
+          "process_status": "Success",
+          "argv": [
+            "/Users/grzegorz/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=turbo-html2pdf-core@0.8.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 1.238172125,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/grzegorz/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=turbo-html2pdf-core@0.8.0",
+            "--lib",
+            "paginate::multicol"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/turbo-html2pdf-core/src/paginate/multicol.rs:422:22: replace += with *= in ColCursor::wrap_if_overflows",
+          "package": "turbo-html2pdf-core",
+          "file": "crates/turbo-html2pdf-core/src/paginate/multicol.rs",
+          "function": {
+            "function_name": "ColCursor::wrap_if_overflows",
+            "return_type": "",
+            "span": {
+              "start": {
+                "line": 419,
+                "column": 5
+              },
+              "end": {
+                "line": 425,
+                "column": 6
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 422,
+              "column": 22
+            },
+            "end": {
+              "line": 422,
+              "column": 24
+            }
+          },
+          "replacement": "*=",
+          "genre": "BinaryOperator"
+        }
+      },
+      "summary": "CaughtMutant",
+      "log_path": "log/crates__turbo-html2pdf-core__src__paginate__multicol.rs_line_422_col_22_001.log",
+      "diff_path": "diff/crates__turbo-html2pdf-core__src__paginate__multicol.rs_line_422_col_22_001.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 7.010008334,
+          "process_status": "Success",
+          "argv": [
+            "/Users/grzegorz/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=turbo-html2pdf-core@0.8.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 1.551725083,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/grzegorz/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=turbo-html2pdf-core@0.8.0",
+            "--lib",
+            "paginate::multicol"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/turbo-html2pdf-core/src/paginate/multicol.rs:429:9: replace ColCursor::place with ()",
+          "package": "turbo-html2pdf-core",
+          "file": "crates/turbo-html2pdf-core/src/paginate/multicol.rs",
+          "function": {
+            "function_name": "ColCursor::place",
+            "return_type": "",
+            "span": {
+              "start": {
+                "line": 427,
+                "column": 5
+              },
+              "end": {
+                "line": 431,
+                "column": 6
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 429,
+              "column": 9
+            },
+            "end": {
+              "line": 430,
+              "column": 53
+            }
+          },
+          "replacement": "()",
+          "genre": "FnValue"
+        }
+      },
+      "summary": "CaughtMutant",
+      "log_path": "log/crates__turbo-html2pdf-core__src__paginate__multicol.rs_line_429_col_9.log",
+      "diff_path": "diff/crates__turbo-html2pdf-core__src__paginate__multicol.rs_line_429_col_9.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 7.0241395,
+          "process_status": "Success",
+          "argv": [
+            "/Users/grzegorz/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=turbo-html2pdf-core@0.8.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 1.422638584,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/grzegorz/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=turbo-html2pdf-core@0.8.0",
+            "--lib",
+            "paginate::multicol"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/turbo-html2pdf-core/src/paginate/multicol.rs:429:18: replace += with -= in ColCursor::place",
+          "package": "turbo-html2pdf-core",
+          "file": "crates/turbo-html2pdf-core/src/paginate/multicol.rs",
+          "function": {
+            "function_name": "ColCursor::place",
+            "return_type": "",
+            "span": {
+              "start": {
+                "line": 427,
+                "column": 5
+              },
+              "end": {
+                "line": 431,
+                "column": 6
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 429,
+              "column": 18
+            },
+            "end": {
+              "line": 429,
+              "column": 20
+            }
+          },
+          "replacement": "-=",
+          "genre": "BinaryOperator"
+        }
+      },
+      "summary": "CaughtMutant",
+      "log_path": "log/crates__turbo-html2pdf-core__src__paginate__multicol.rs_line_429_col_18.log",
+      "diff_path": "diff/crates__turbo-html2pdf-core__src__paginate__multicol.rs_line_429_col_18.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 10.084451292,
+          "process_status": "Success",
+          "argv": [
+            "/Users/grzegorz/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=turbo-html2pdf-core@0.8.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 1.663547041,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/grzegorz/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=turbo-html2pdf-core@0.8.0",
+            "--lib",
+            "paginate::multicol"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/turbo-html2pdf-core/src/paginate/multicol.rs:429:18: replace += with *= in ColCursor::place",
+          "package": "turbo-html2pdf-core",
+          "file": "crates/turbo-html2pdf-core/src/paginate/multicol.rs",
+          "function": {
+            "function_name": "ColCursor::place",
+            "return_type": "",
+            "span": {
+              "start": {
+                "line": 427,
+                "column": 5
+              },
+              "end": {
+                "line": 431,
+                "column": 6
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 429,
+              "column": 18
+            },
+            "end": {
+              "line": 429,
+              "column": 20
+            }
+          },
+          "replacement": "*=",
+          "genre": "BinaryOperator"
+        }
+      },
+      "summary": "CaughtMutant",
+      "log_path": "log/crates__turbo-html2pdf-core__src__paginate__multicol.rs_line_429_col_18_001.log",
+      "diff_path": "diff/crates__turbo-html2pdf-core__src__paginate__multicol.rs_line_429_col_18_001.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 9.055379541,
+          "process_status": "Success",
+          "argv": [
+            "/Users/grzegorz/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=turbo-html2pdf-core@0.8.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 1.267563791,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/grzegorz/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=turbo-html2pdf-core@0.8.0",
+            "--lib",
+            "paginate::multicol"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/turbo-html2pdf-core/src/paginate/multicol.rs:435:9: replace ColCursor::post_break with ()",
+          "package": "turbo-html2pdf-core",
+          "file": "crates/turbo-html2pdf-core/src/paginate/multicol.rs",
+          "function": {
+            "function_name": "ColCursor::post_break",
+            "return_type": "",
+            "span": {
+              "start": {
+                "line": 433,
+                "column": 5
+              },
+              "end": {
+                "line": 439,
+                "column": 6
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 435,
+              "column": 9
+            },
+            "end": {
+              "line": 438,
+              "column": 10
+            }
+          },
+          "replacement": "()",
+          "genre": "FnValue"
+        }
+      },
+      "summary": "MissedMutant",
+      "log_path": "log/crates__turbo-html2pdf-core__src__paginate__multicol.rs_line_435_col_9.log",
+      "diff_path": "diff/crates__turbo-html2pdf-core__src__paginate__multicol.rs_line_435_col_9.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 11.27167875,
+          "process_status": "Success",
+          "argv": [
+            "/Users/grzegorz/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=turbo-html2pdf-core@0.8.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 1.312416042,
+          "process_status": "Success",
+          "argv": [
+            "/Users/grzegorz/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=turbo-html2pdf-core@0.8.0",
+            "--lib",
+            "paginate::multicol"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/turbo-html2pdf-core/src/paginate/multicol.rs:436:22: replace += with -= in ColCursor::post_break",
+          "package": "turbo-html2pdf-core",
+          "file": "crates/turbo-html2pdf-core/src/paginate/multicol.rs",
+          "function": {
+            "function_name": "ColCursor::post_break",
+            "return_type": "",
+            "span": {
+              "start": {
+                "line": 433,
+                "column": 5
+              },
+              "end": {
+                "line": 439,
+                "column": 6
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 436,
+              "column": 22
+            },
+            "end": {
+              "line": 436,
+              "column": 24
+            }
+          },
+          "replacement": "-=",
+          "genre": "BinaryOperator"
+        }
+      },
+      "summary": "CaughtMutant",
+      "log_path": "log/crates__turbo-html2pdf-core__src__paginate__multicol.rs_line_436_col_22.log",
+      "diff_path": "diff/crates__turbo-html2pdf-core__src__paginate__multicol.rs_line_436_col_22.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 13.014606125,
+          "process_status": "Success",
+          "argv": [
+            "/Users/grzegorz/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=turbo-html2pdf-core@0.8.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 1.771313958,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/grzegorz/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=turbo-html2pdf-core@0.8.0",
+            "--lib",
+            "paginate::multicol"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/turbo-html2pdf-core/src/paginate/multicol.rs:436:22: replace += with *= in ColCursor::post_break",
+          "package": "turbo-html2pdf-core",
+          "file": "crates/turbo-html2pdf-core/src/paginate/multicol.rs",
+          "function": {
+            "function_name": "ColCursor::post_break",
+            "return_type": "",
+            "span": {
+              "start": {
+                "line": 433,
+                "column": 5
+              },
+              "end": {
+                "line": 439,
+                "column": 6
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 436,
+              "column": 22
+            },
+            "end": {
+              "line": 436,
+              "column": 24
+            }
+          },
+          "replacement": "*=",
+          "genre": "BinaryOperator"
+        }
+      },
+      "summary": "CaughtMutant",
+      "log_path": "log/crates__turbo-html2pdf-core__src__paginate__multicol.rs_line_436_col_22_001.log",
+      "diff_path": "diff/crates__turbo-html2pdf-core__src__paginate__multicol.rs_line_436_col_22_001.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 16.695021208,
+          "process_status": "Success",
+          "argv": [
+            "/Users/grzegorz/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=turbo-html2pdf-core@0.8.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 2.938119166,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/grzegorz/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=turbo-html2pdf-core@0.8.0",
+            "--lib",
+            "paginate::multicol"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/turbo-html2pdf-core/src/paginate/multicol.rs:447:5: replace fits_in_cols -> bool with true",
+          "package": "turbo-html2pdf-core",
+          "file": "crates/turbo-html2pdf-core/src/paginate/multicol.rs",
+          "function": {
+            "function_name": "fits_in_cols",
+            "return_type": "-> bool",
+            "span": {
+              "start": {
+                "line": 442,
+                "column": 1
+              },
+              "end": {
+                "line": 462,
+                "column": 2
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 447,
+              "column": 5
+            },
+            "end": {
+              "line": 461,
+              "column": 9
+            }
+          },
+          "replacement": "true",
+          "genre": "FnValue"
+        }
+      },
+      "summary": "CaughtMutant",
+      "log_path": "log/crates__turbo-html2pdf-core__src__paginate__multicol.rs_line_447_col_5.log",
+      "diff_path": "diff/crates__turbo-html2pdf-core__src__paginate__multicol.rs_line_447_col_5.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 15.27019775,
+          "process_status": "Success",
+          "argv": [
+            "/Users/grzegorz/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=turbo-html2pdf-core@0.8.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 1.505622875,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/grzegorz/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=turbo-html2pdf-core@0.8.0",
+            "--lib",
+            "paginate::multicol"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/turbo-html2pdf-core/src/paginate/multicol.rs:447:5: replace fits_in_cols -> bool with false",
+          "package": "turbo-html2pdf-core",
+          "file": "crates/turbo-html2pdf-core/src/paginate/multicol.rs",
+          "function": {
+            "function_name": "fits_in_cols",
+            "return_type": "-> bool",
+            "span": {
+              "start": {
+                "line": 442,
+                "column": 1
+              },
+              "end": {
+                "line": 462,
+                "column": 2
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 447,
+              "column": 5
+            },
+            "end": {
+              "line": 461,
+              "column": 9
+            }
+          },
+          "replacement": "false",
+          "genre": "FnValue"
+        }
+      },
+      "summary": "CaughtMutant",
+      "log_path": "log/crates__turbo-html2pdf-core__src__paginate__multicol.rs_line_447_col_5_001.log",
+      "diff_path": "diff/crates__turbo-html2pdf-core__src__paginate__multicol.rs_line_447_col_5_001.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 7.69057675,
+          "process_status": "Success",
+          "argv": [
+            "/Users/grzegorz/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=turbo-html2pdf-core@0.8.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 1.5006675839999999,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/grzegorz/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=turbo-html2pdf-core@0.8.0",
+            "--lib",
+            "paginate::multicol"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/turbo-html2pdf-core/src/paginate/multicol.rs:447:14: replace <= with > in fits_in_cols",
+          "package": "turbo-html2pdf-core",
+          "file": "crates/turbo-html2pdf-core/src/paginate/multicol.rs",
+          "function": {
+            "function_name": "fits_in_cols",
+            "return_type": "-> bool",
+            "span": {
+              "start": {
+                "line": 442,
+                "column": 1
+              },
+              "end": {
+                "line": 462,
+                "column": 2
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 447,
+              "column": 14
+            },
+            "end": {
+              "line": 447,
+              "column": 16
+            }
+          },
+          "replacement": ">",
+          "genre": "BinaryOperator"
+        }
+      },
+      "summary": "CaughtMutant",
+      "log_path": "log/crates__turbo-html2pdf-core__src__paginate__multicol.rs_line_447_col_14.log",
+      "diff_path": "diff/crates__turbo-html2pdf-core__src__paginate__multicol.rs_line_447_col_14.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 8.8510215,
+          "process_status": "Success",
+          "argv": [
+            "/Users/grzegorz/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=turbo-html2pdf-core@0.8.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 1.511669167,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/grzegorz/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=turbo-html2pdf-core@0.8.0",
+            "--lib",
+            "paginate::multicol"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/turbo-html2pdf-core/src/paginate/multicol.rs:455:23: replace >= with < in fits_in_cols",
+          "package": "turbo-html2pdf-core",
+          "file": "crates/turbo-html2pdf-core/src/paginate/multicol.rs",
+          "function": {
+            "function_name": "fits_in_cols",
+            "return_type": "-> bool",
+            "span": {
+              "start": {
+                "line": 442,
+                "column": 1
+              },
+              "end": {
+                "line": 462,
+                "column": 2
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 455,
+              "column": 23
+            },
+            "end": {
+              "line": 455,
+              "column": 25
+            }
+          },
+          "replacement": "<",
+          "genre": "BinaryOperator"
+        }
+      },
+      "summary": "CaughtMutant",
+      "log_path": "log/crates__turbo-html2pdf-core__src__paginate__multicol.rs_line_455_col_23.log",
+      "diff_path": "diff/crates__turbo-html2pdf-core__src__paginate__multicol.rs_line_455_col_23.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 8.858413708,
+          "process_status": "Success",
+          "argv": [
+            "/Users/grzegorz/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=turbo-html2pdf-core@0.8.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 1.565667959,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/grzegorz/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=turbo-html2pdf-core@0.8.0",
+            "--lib",
+            "paginate::multicol"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/turbo-html2pdf-core/src/paginate/multicol.rs:477:5: replace reflow_last_page -> f32 with 0.0",
+          "package": "turbo-html2pdf-core",
+          "file": "crates/turbo-html2pdf-core/src/paginate/multicol.rs",
+          "function": {
+            "function_name": "reflow_last_page",
+            "return_type": "-> f32",
+            "span": {
+              "start": {
+                "line": 464,
+                "column": 1
+              },
+              "end": {
+                "line": 495,
+                "column": 2
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 477,
+              "column": 5
+            },
+            "end": {
+              "line": 494,
+              "column": 20
+            }
+          },
+          "replacement": "0.0",
+          "genre": "FnValue"
+        }
+      },
+      "summary": "CaughtMutant",
+      "log_path": "log/crates__turbo-html2pdf-core__src__paginate__multicol.rs_line_477_col_5.log",
+      "diff_path": "diff/crates__turbo-html2pdf-core__src__paginate__multicol.rs_line_477_col_5.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 7.917665583,
+          "process_status": "Success",
+          "argv": [
+            "/Users/grzegorz/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=turbo-html2pdf-core@0.8.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 1.529102333,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/grzegorz/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=turbo-html2pdf-core@0.8.0",
+            "--lib",
+            "paginate::multicol"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/turbo-html2pdf-core/src/paginate/multicol.rs:477:5: replace reflow_last_page -> f32 with 1.0",
+          "package": "turbo-html2pdf-core",
+          "file": "crates/turbo-html2pdf-core/src/paginate/multicol.rs",
+          "function": {
+            "function_name": "reflow_last_page",
+            "return_type": "-> f32",
+            "span": {
+              "start": {
+                "line": 464,
+                "column": 1
+              },
+              "end": {
+                "line": 495,
+                "column": 2
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 477,
+              "column": 5
+            },
+            "end": {
+              "line": 494,
+              "column": 20
+            }
+          },
+          "replacement": "1.0",
+          "genre": "FnValue"
+        }
+      },
+      "summary": "CaughtMutant",
+      "log_path": "log/crates__turbo-html2pdf-core__src__paginate__multicol.rs_line_477_col_5_001.log",
+      "diff_path": "diff/crates__turbo-html2pdf-core__src__paginate__multicol.rs_line_477_col_5_001.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 7.93247775,
+          "process_status": "Success",
+          "argv": [
+            "/Users/grzegorz/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=turbo-html2pdf-core@0.8.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 1.509714667,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/grzegorz/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=turbo-html2pdf-core@0.8.0",
+            "--lib",
+            "paginate::multicol"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/turbo-html2pdf-core/src/paginate/multicol.rs:477:5: replace reflow_last_page -> f32 with -1.0",
+          "package": "turbo-html2pdf-core",
+          "file": "crates/turbo-html2pdf-core/src/paginate/multicol.rs",
+          "function": {
+            "function_name": "reflow_last_page",
+            "return_type": "-> f32",
+            "span": {
+              "start": {
+                "line": 464,
+                "column": 1
+              },
+              "end": {
+                "line": 495,
+                "column": 2
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 477,
+              "column": 5
+            },
+            "end": {
+              "line": 494,
+              "column": 20
+            }
+          },
+          "replacement": "-1.0",
+          "genre": "FnValue"
+        }
+      },
+      "summary": "CaughtMutant",
+      "log_path": "log/crates__turbo-html2pdf-core__src__paginate__multicol.rs_line_477_col_5_002.log",
+      "diff_path": "diff/crates__turbo-html2pdf-core__src__paginate__multicol.rs_line_477_col_5_002.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 8.202109625,
+          "process_status": "Success",
+          "argv": [
+            "/Users/grzegorz/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=turbo-html2pdf-core@0.8.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 1.5566894169999999,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/grzegorz/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=turbo-html2pdf-core@0.8.0",
+            "--lib",
+            "paginate::multicol"
+          ]
+        }
+      ]
+    }
+  ],
+  "total_mutants": 83,
+  "missed": 9,
+  "caught": 73,
+  "timeout": 0,
+  "unviable": 1,
+  "success": 0,
+  "start_time": "2026-11-09T09:57:26.369339Z",
+  "end_time": null,
+  "cargo_mutants_version": "27.1.0"
+}

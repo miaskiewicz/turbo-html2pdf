@@ -1,0 +1,11 @@
+crates/turbo-html2pdf-core/src/paginate/multicol.rs:86:5: replace is_flowable -> bool with true
+crates/turbo-html2pdf-core/src/paginate/multicol.rs:86:5: replace is_flowable -> bool with false
+crates/turbo-html2pdf-core/src/paginate/multicol.rs:86:5: delete ! in is_flowable
+crates/turbo-html2pdf-core/src/paginate/multicol.rs:98:5: replace flow_children -> Flow with Default::default()
+crates/turbo-html2pdf-core/src/paginate/multicol.rs:137:9: replace FlowState::step with ()
+crates/turbo-html2pdf-core/src/paginate/multicol.rs:137:12: delete ! in FlowState::step
+crates/turbo-html2pdf-core/src/paginate/multicol.rs:149:23: replace += with -= in FlowState::step
+crates/turbo-html2pdf-core/src/paginate/multicol.rs:149:23: replace += with *= in FlowState::step
+crates/turbo-html2pdf-core/src/paginate/multicol.rs:158:9: replace FlowState::maybe_wrap with ()
+crates/turbo-html2pdf-core/src/paginate/multicol.rs:158:33: replace || with && in FlowState::maybe_wrap
+crates/turbo-html2pdf-core/src/paginate/multicol.rs:158:26: replace <= with > in FlowState::maybe_wrap

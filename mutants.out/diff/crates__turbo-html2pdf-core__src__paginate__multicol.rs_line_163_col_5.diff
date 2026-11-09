@@ -1,0 +1,25 @@
+--- crates/turbo-html2pdf-core/src/paginate/multicol.rs
++++ replace flow_children -> Flow with Default::default()
+@@ -155,21 +155,17 @@
+ /// column cursor like any other block.
+ #[must_use]
+ pub fn flow_children(
+     children: &[Fragment],
+     facts: MulticolFacts,
+     caps: (f32, f32),
+     boxes: &FlowBoxes,
+ ) -> Flow {
+-    let mut state = FlowState::start(children.len(), caps);
+-    for child in children {
+-        state.step(child, facts, boxes);
+-    }
+-    rebalance_last_page(state.finish(), facts, children)
++    Default::default() /* ~ changed by cargo-mutants ~ */
+ }
+ 
+ /// Mutable walker state for [`flow_children`]: tracks the current page's
+ /// column cursor and the per-page records the final `Flow` reads from.
+ /// Split out so the step helpers stay under the complexity gate.
+ struct FlowState {
+     slots: Vec<Option<Slot>>,
+     fill_heights: Vec<f32>,

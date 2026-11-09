@@ -1,0 +1,42 @@
+--- crates/turbo-html2pdf-core/src/paginate/multicol.rs
++++ replace balance_col_h -> f32 with 1.0
+@@ -357,38 +357,17 @@
+ }
+ 
+ /// Smallest `col_h` at which `kids[indices]` fits in `used_count` columns
+ /// under the paginator's atomic-kid flow (honouring `BreakRule::Column`
+ /// before and after a kid). Lower bound is `max(max_h, total / used_count)`;
+ /// upper bound is `total` (every kid in column 0). Thirty bisections give
+ /// 1 part in a billion, well under [`FIT_EPS`].
+ fn balance_col_h(indices: &[usize], kids: &[Fragment], used_count: u32) -> f32 {
+-    let heights: Vec<f32> = indices.iter().map(|&i| kids[i].height.max(0.0)).collect();
+-    let total: f32 = heights.iter().sum();
+-    let max_h = heights.iter().copied().fold(0.0_f32, f32::max);
+-    let n = used_count.max(1) as f32;
+-    let lo_init = max_h.max(total / n).max(0.0);
+-    let hi_init = total.max(lo_init);
+-    if fits_in_cols(indices, kids, lo_init, used_count) {
+-        return lo_init;
+-    }
+-    if !fits_in_cols(indices, kids, hi_init, used_count) {
+-        return hi_init;
+-    }
+-    let (mut lo, mut hi) = (lo_init, hi_init);
+-    for _ in 0..30 {
+-        let mid = 0.5 * (lo + hi);
+-        if fits_in_cols(indices, kids, mid, used_count) {
+-            hi = mid;
+-        } else {
+-            lo = mid;
+-        }
+-    }
+-    hi
++    1.0 /* ~ changed by cargo-mutants ~ */
+ }
+ 
+ /// Mutable column cursor shared by [`fits_in_cols`] and
+ /// [`reflow_last_page`] so the fitness check and the placement run exactly
+ /// the same step logic.
+ struct ColCursor {
+     col: u32,
+     cur: f32,

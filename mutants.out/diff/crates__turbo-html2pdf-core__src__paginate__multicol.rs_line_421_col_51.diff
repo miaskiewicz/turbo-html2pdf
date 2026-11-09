@@ -1,0 +1,21 @@
+--- crates/turbo-html2pdf-core/src/paginate/multicol.rs
++++ replace + with - in ColCursor::wrap_if_overflows
+@@ -413,17 +413,17 @@
+         {
+             self.col += 1;
+             self.cur = 0.0;
+         }
+     }
+ 
+     /// Wrap to the next column when the kid would overrun the current one.
+     fn wrap_if_overflows(&mut self, h: f32, col_h: f32) {
+-        if self.cur > 0.0 && self.cur + h > col_h + FIT_EPS {
++        if self.cur > 0.0 && self.cur + h > col_h - /* ~ changed by cargo-mutants ~ */ FIT_EPS {
+             self.col += 1;
+             self.cur = 0.0;
+         }
+     }
+ 
+     /// Place a kid of height `h` at the cursor, updating `max_fill`.
+     fn place(&mut self, h: f32) {
+         self.cur += h;

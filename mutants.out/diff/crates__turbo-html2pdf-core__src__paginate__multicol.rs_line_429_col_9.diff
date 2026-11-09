@@ -1,0 +1,22 @@
+--- crates/turbo-html2pdf-core/src/paginate/multicol.rs
++++ replace ColCursor::place with ()
+@@ -421,18 +421,17 @@
+         if self.cur > 0.0 && self.cur + h > col_h + FIT_EPS {
+             self.col += 1;
+             self.cur = 0.0;
+         }
+     }
+ 
+     /// Place a kid of height `h` at the cursor, updating `max_fill`.
+     fn place(&mut self, h: f32) {
+-        self.cur += h;
+-        self.max_fill = self.max_fill.max(self.cur);
++        () /* ~ changed by cargo-mutants ~ */
+     }
+ 
+     /// Apply `break-after: column` after placing a kid.
+     fn post_break(&mut self, kid: &Fragment) {
+         if matches!(kid.break_meta.break_after, BreakRule::Column) {
+             self.col += 1;
+             self.cur = 0.0;
+         }

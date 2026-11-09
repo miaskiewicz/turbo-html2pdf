@@ -1,0 +1,21 @@
+--- crates/turbo-html2pdf-core/src/paginate/multicol.rs
++++ replace <= with > in FlowState::maybe_wrap
+@@ -226,17 +226,17 @@
+         }
+     }
+ 
+     /// Advance the cursor before placing a `h`-tall child: a child that
+     /// overruns the current column pushes to the next (CSS Fragmentation 3
+     /// §5.2 `break-inside: avoid`), and a run that saturates `used_count`
+     /// columns opens a fresh page.
+     fn maybe_wrap(&mut self, h: f32, facts: MulticolFacts) {
+-        if self.y_in_col <= 0.0 || self.y_in_col + h <= self.cap + FIT_EPS {
++        if self.y_in_col > /* ~ changed by cargo-mutants ~ */ 0.0 || self.y_in_col + h <= self.cap + FIT_EPS {
+             return;
+         }
+         self.advance_column(facts);
+     }
+ 
+     /// Force a column break at the current cursor: move to the next column,
+     /// or open a fresh page when all `used_count` columns are filled. A
+     /// no-op when the current column is still empty (no content yet to break

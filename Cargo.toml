@@ -9,7 +9,7 @@ members = [
 ]
 
 [workspace.package]
-version = "0.8.0"
+version = "0.8.1"
 edition = "2021"
 license = "MIT"
 repository = "https://github.com/miaskiewicz/turbo-html2pdf"
@@ -32,6 +32,3 @@ opt-level = 3
 lto = "thin"
 codegen-units = 1
 
-[patch.crates-io]
-turbo-dom-layout = { git = "https://github.com/miaskiewicz/turbo-dom", rev = "06c12eee" }
-turbo-dom = { git = "https://github.com/miaskiewicz/turbo-dom", rev = "06c12eee" }

@@ -1,0 +1,41 @@
+--- crates/turbo-html2pdf-core/src/paginate/multicol.rs
++++ replace FlowState::finish -> Flow with Default::default()
+@@ -267,37 +267,17 @@
+ 
+     fn finish(mut self) -> Flow {
+         // A multicol with ONLY non-flowable children (e.g. `<div
+         // style="columns:2"></div>` with no in-flow kids, or a container whose
+         // only emitted child was a `ColumnRule` fragment the paginator drops)
+         // still owns a container box to paint. Emit one zero-height page so
+         // `place_multicol` has somewhere to put the container's own frame and
+         // advance the cursor past it (MEDIUM-1).
+-        let any_placed = self.slots.iter().any(Option::is_some);
+-        if any_placed || self.slots.is_empty() {
+-            self.fill_heights.push(self.page_h);
+-            self.page_caps.push(self.cap);
+-        } else {
+-            // All slots are `None` (every child was a dropped column rule) —
+-            // still a container-paint opportunity.
+-            self.fill_heights.push(0.0);
+-            self.page_caps.push(self.cap);
+-        }
+-        debug_assert_eq!(
+-            self.fill_heights.len(),
+-            self.page_caps.len(),
+-            "fill_heights / page_caps lengths diverge; `rule_heights_from` zip would mis-pair pages",
+-        );
+-        let rule_heights = rule_heights_from(&self.fill_heights, &self.page_caps);
+-        Flow {
+-            slots: self.slots,
+-            fill_heights: self.fill_heights,
+-            rule_heights,
+-        }
++        Default::default() /* ~ changed by cargo-mutants ~ */
+     }
+ }
+ 
+ /// Re-balance the slots on `flow`'s last page (R1 HIGH-3, column-fill:
+ /// balance): the smallest `col_h` at which the page's in-flow kids fit in
+ /// `used_count` columns, re-assigned column by column. Non-last pages are
+ /// left alone — they already fill `column-fill: auto` to the page cap, which
+ /// is also what Chrome 156 does for every page but the last on a paginated

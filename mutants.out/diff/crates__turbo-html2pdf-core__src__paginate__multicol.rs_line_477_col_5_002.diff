@@ -1,0 +1,38 @@
+--- crates/turbo-html2pdf-core/src/paginate/multicol.rs
++++ replace reflow_last_page -> f32 with -1.0
+@@ -469,34 +469,17 @@
+ fn reflow_last_page(
+     slots: &mut [Option<Slot>],
+     indices: &[usize],
+     col_h: f32,
+     facts: MulticolFacts,
+     last_page: u32,
+     kids: &[Fragment],
+ ) -> f32 {
+-    let mut cursor = ColCursor::new();
+-    let last_col = facts.used_count.saturating_sub(1);
+-    for &i in indices {
+-        let kid = &kids[i];
+-        cursor.pre_break(kid);
+-        let h = kid.height.max(0.0);
+-        cursor.wrap_if_overflows(h, col_h);
+-        cursor.col = cursor.col.min(last_col);
+-        slots[i] = Some(Slot {
+-            page: last_page,
+-            col: cursor.col,
+-            y_in_col: cursor.cur,
+-            height: h,
+-        });
+-        cursor.place(h);
+-        cursor.post_break(kid);
+-    }
+-    cursor.max_fill
++    -1.0 /* ~ changed by cargo-mutants ~ */
+ }
+ 
+ /// Per-page rule height (CSS Multicol 1 §3, Chrome 156): every page but the
+ /// last fills its column strips to the page body height, so the rule runs
+ /// full-height — `page_caps[page]`. The last page balances to the tallest
+ /// filled column (`fill_heights[last]`), so the rule shrinks to that content.
+ fn rule_heights_from(fills: &[f32], caps: &[f32]) -> Vec<f32> {
+     let last = fills.len().saturating_sub(1);

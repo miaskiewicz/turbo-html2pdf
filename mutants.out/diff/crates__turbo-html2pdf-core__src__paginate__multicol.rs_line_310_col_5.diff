@@ -1,0 +1,56 @@
+--- crates/turbo-html2pdf-core/src/paginate/multicol.rs
++++ replace rebalance_last_page -> Flow with Default::default()
+@@ -302,52 +302,17 @@
+ /// left alone — they already fill `column-fill: auto` to the page cap, which
+ /// is also what Chrome 156 does for every page but the last on a paginated
+ /// multicol (CSS Multicol 1 §3 "The multi-column model"). The forward pass
+ /// already produced an auto-fill layout; this post-pass shrinks the last
+ /// page's filled column height to the balanced minimum and reshuffles its
+ /// kids into the resulting balanced columns.
+ #[must_use]
+ pub fn rebalance_last_page(flow: Flow, facts: MulticolFacts, kids: &[Fragment]) -> Flow {
+-    let Flow {
+-        mut slots,
+-        mut fill_heights,
+-        mut rule_heights,
+-    } = flow;
+-    let last_page = match fill_heights.len().checked_sub(1) {
+-        Some(p) => p as u32,
+-        None => {
+-            return Flow {
+-                slots,
+-                fill_heights,
+-                rule_heights,
+-            }
+-        }
+-    };
+-    let indices = last_page_indices(&slots, last_page);
+-    if indices.is_empty() || facts.used_count <= 1 {
+-        return Flow {
+-            slots,
+-            fill_heights,
+-            rule_heights,
+-        };
+-    }
+-    let col_h = balance_col_h(&indices, kids, facts.used_count);
+-    let fill_h = reflow_last_page(&mut slots, &indices, col_h, facts, last_page, kids);
+-    fill_heights[last_page as usize] = fill_h;
+-    // The rule on the last page always matches its filled column height
+-    // (CSS Multicol 1 §3). Non-last entries keep their auto-fill cap.
+-    if let Some(last_rule) = rule_heights.last_mut() {
+-        *last_rule = fill_h;
+-    }
+-    Flow {
+-        slots,
+-        fill_heights,
+-        rule_heights,
+-    }
++    Default::default() /* ~ changed by cargo-mutants ~ */
+ }
+ 
+ /// Collect the slot indices of the kids placed on `last_page`, in source
+ /// order. Non-last-page slots are left alone; `None` slots (OOF descendants,
+ /// dropped column rules) are skipped.
+ fn last_page_indices(slots: &[Option<Slot>], last_page: u32) -> Vec<usize> {
+     slots
+         .iter()

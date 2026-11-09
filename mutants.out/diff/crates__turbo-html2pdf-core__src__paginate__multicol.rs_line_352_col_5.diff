@@ -1,0 +1,25 @@
+--- crates/turbo-html2pdf-core/src/paginate/multicol.rs
++++ replace last_page_indices -> Vec<usize> with vec![]
+@@ -344,21 +344,17 @@
+         rule_heights,
+     }
+ }
+ 
+ /// Collect the slot indices of the kids placed on `last_page`, in source
+ /// order. Non-last-page slots are left alone; `None` slots (OOF descendants,
+ /// dropped column rules) are skipped.
+ fn last_page_indices(slots: &[Option<Slot>], last_page: u32) -> Vec<usize> {
+-    slots
+-        .iter()
+-        .enumerate()
+-        .filter_map(|(i, slot)| slot.and_then(|s| (s.page == last_page).then_some(i)))
+-        .collect()
++    vec![] /* ~ changed by cargo-mutants ~ */
+ }
+ 
+ /// Smallest `col_h` at which `kids[indices]` fits in `used_count` columns
+ /// under the paginator's atomic-kid flow (honouring `BreakRule::Column`
+ /// before and after a kid). Lower bound is `max(max_h, total / used_count)`;
+ /// upper bound is `total` (every kid in column 0). Thirty bisections give
+ /// 1 part in a billion, well under [`FIT_EPS`].
+ fn balance_col_h(indices: &[usize], kids: &[Fragment], used_count: u32) -> f32 {

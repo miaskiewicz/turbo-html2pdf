@@ -1,0 +1,21 @@
+--- crates/turbo-html2pdf-core/src/paginate/multicol.rs
++++ replace += with *= in FlowState::advance_column
+@@ -254,17 +254,17 @@
+     fn advance_column(&mut self, facts: MulticolFacts) {
+         self.col += 1;
+         self.y_in_col = 0.0;
+         if self.col < facts.used_count {
+             return;
+         }
+         self.fill_heights.push(self.page_h);
+         self.page_caps.push(self.cap);
+-        self.page += 1;
++        self.page *= /* ~ changed by cargo-mutants ~ */ 1;
+         self.col = 0;
+         self.page_h = 0.0;
+         self.cap = self.full_cap;
+     }
+ 
+     fn finish(mut self) -> Flow {
+         // A multicol with ONLY non-flowable children (e.g. `<div
+         // style="columns:2"></div>` with no in-flow kids, or a container whose

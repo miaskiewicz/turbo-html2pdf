@@ -1,0 +1,27 @@
+--- crates/turbo-html2pdf-core/src/paginate/multicol.rs
++++ replace rule_heights_from -> Vec<f32> with vec![]
+@@ -494,23 +494,17 @@
+     cursor.max_fill
+ }
+ 
+ /// Per-page rule height (CSS Multicol 1 §3, Chrome 156): every page but the
+ /// last fills its column strips to the page body height, so the rule runs
+ /// full-height — `page_caps[page]`. The last page balances to the tallest
+ /// filled column (`fill_heights[last]`), so the rule shrinks to that content.
+ fn rule_heights_from(fills: &[f32], caps: &[f32]) -> Vec<f32> {
+-    let last = fills.len().saturating_sub(1);
+-    fills
+-        .iter()
+-        .zip(caps)
+-        .enumerate()
+-        .map(|(i, (fill, cap))| if i == last { *fill } else { *cap })
+-        .collect()
++    vec![] /* ~ changed by cargo-mutants ~ */
+ }
+ 
+ /// Chrome's 1/64-px LayoutUnit slop — a column height that differs by at
+ /// most this from the capacity is treated as a WHOLE column, so a 1/64 px
+ /// rounding slop at balance does not spawn a zero-height tail piece.
+ const FIT_EPS: f32 = 0.5;
+ 
+ /// A multicol container's `column-rule-*` style resolved from the

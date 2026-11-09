@@ -1,0 +1,9 @@
+crates/turbo-html2pdf-core/src/paginate/multicol.rs:234:66: replace + with - in FlowState::maybe_wrap
+crates/turbo-html2pdf-core/src/paginate/multicol.rs:246:45: replace == with != in FlowState::force_column_break
+crates/turbo-html2pdf-core/src/paginate/multicol.rs:276:23: replace || with && in FlowState::finish
+crates/turbo-html2pdf-core/src/paginate/multicol.rs:326:27: replace || with && in rebalance_last_page
+crates/turbo-html2pdf-core/src/paginate/multicol.rs:369:35: replace / with % in balance_col_h
+crates/turbo-html2pdf-core/src/paginate/multicol.rs:421:21: replace > with >= in ColCursor::wrap_if_overflows
+crates/turbo-html2pdf-core/src/paginate/multicol.rs:421:43: replace > with >= in ColCursor::wrap_if_overflows
+crates/turbo-html2pdf-core/src/paginate/multicol.rs:421:51: replace + with - in ColCursor::wrap_if_overflows
+crates/turbo-html2pdf-core/src/paginate/multicol.rs:435:9: replace ColCursor::post_break with ()

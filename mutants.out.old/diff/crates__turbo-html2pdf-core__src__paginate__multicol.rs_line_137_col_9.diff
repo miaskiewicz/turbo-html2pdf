@@ -1,0 +1,34 @@
+--- crates/turbo-html2pdf-core/src/paginate/multicol.rs
++++ replace FlowState::step with ()
+@@ -129,30 +129,17 @@
+             page: 0,
+             col: 0,
+             y_in_col: 0.0,
+             page_h: 0.0,
+         }
+     }
+ 
+     fn step(&mut self, child: &Fragment, facts: MulticolFacts) {
+-        if !is_flowable(child) {
+-            self.slots.push(None);
+-            return;
+-        }
+-        let h = child.height.max(0.0);
+-        self.maybe_wrap(h, facts);
+-        self.slots.push(Some(Slot {
+-            page: self.page,
+-            col: self.col,
+-            y_in_col: self.y_in_col,
+-            height: h,
+-        }));
+-        self.y_in_col += h;
+-        self.page_h = self.page_h.max(self.y_in_col);
++        () /* ~ changed by cargo-mutants ~ */
+     }
+ 
+     /// Advance the cursor before placing a `h`-tall child: a child that
+     /// overruns the current column pushes to the next (CSS Fragmentation 3
+     /// §5.2 `break-inside: avoid`), and a run that saturates `used_count`
+     /// columns opens a fresh page.
+     fn maybe_wrap(&mut self, h: f32, facts: MulticolFacts) {
+         if self.y_in_col <= 0.0 || self.y_in_col + h <= self.cap + FIT_EPS {

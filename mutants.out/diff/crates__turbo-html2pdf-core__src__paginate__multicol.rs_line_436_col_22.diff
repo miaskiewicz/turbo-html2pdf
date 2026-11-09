@@ -1,0 +1,21 @@
+--- crates/turbo-html2pdf-core/src/paginate/multicol.rs
++++ replace += with -= in ColCursor::post_break
+@@ -428,17 +428,17 @@
+     fn place(&mut self, h: f32) {
+         self.cur += h;
+         self.max_fill = self.max_fill.max(self.cur);
+     }
+ 
+     /// Apply `break-after: column` after placing a kid.
+     fn post_break(&mut self, kid: &Fragment) {
+         if matches!(kid.break_meta.break_after, BreakRule::Column) {
+-            self.col += 1;
++            self.col -= /* ~ changed by cargo-mutants ~ */ 1;
+             self.cur = 0.0;
+         }
+     }
+ }
+ 
+ /// Whether `kids[indices]` fits in `used_count` columns at `col_h`: a kid
+ /// that overruns the current column wraps to the next (the paginator's
+ /// atomic flow), and `BreakRule::Column` forces a column break around a

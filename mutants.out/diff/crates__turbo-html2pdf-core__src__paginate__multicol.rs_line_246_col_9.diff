@@ -1,0 +1,24 @@
+--- crates/turbo-html2pdf-core/src/paginate/multicol.rs
++++ replace FlowState::force_column_break with ()
+@@ -238,20 +238,17 @@
+     }
+ 
+     /// Force a column break at the current cursor: move to the next column,
+     /// or open a fresh page when all `used_count` columns are filled. A
+     /// no-op when the current column is still empty (no content yet to break
+     /// away from; CSS Fragmentation 3 §3.5 "class A breaks: at the start of
+     /// a fragmentainer the break is suppressed").
+     fn force_column_break(&mut self, facts: MulticolFacts) {
+-        if self.y_in_col <= 0.0 && self.col == 0 {
+-            return;
+-        }
+-        self.advance_column(facts);
++        () /* ~ changed by cargo-mutants ~ */
+     }
+ 
+     /// Advance to the next column strip, opening a new page when `used_count`
+     /// is exhausted.
+     fn advance_column(&mut self, facts: MulticolFacts) {
+         self.col += 1;
+         self.y_in_col = 0.0;
+         if self.col < facts.used_count {

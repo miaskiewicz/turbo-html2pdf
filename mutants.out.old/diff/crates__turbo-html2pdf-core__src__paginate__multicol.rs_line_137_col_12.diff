@@ -1,0 +1,21 @@
+--- crates/turbo-html2pdf-core/src/paginate/multicol.rs
++++ delete ! in FlowState::step
+@@ -129,17 +129,17 @@
+             page: 0,
+             col: 0,
+             y_in_col: 0.0,
+             page_h: 0.0,
+         }
+     }
+ 
+     fn step(&mut self, child: &Fragment, facts: MulticolFacts) {
+-        if !is_flowable(child) {
++        if  /* ~ changed by cargo-mutants ~ */is_flowable(child) {
+             self.slots.push(None);
+             return;
+         }
+         let h = child.height.max(0.0);
+         self.maybe_wrap(h, facts);
+         self.slots.push(Some(Slot {
+             page: self.page,
+             col: self.col,

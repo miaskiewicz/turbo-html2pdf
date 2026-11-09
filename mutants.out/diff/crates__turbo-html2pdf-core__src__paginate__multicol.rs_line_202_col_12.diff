@@ -1,0 +1,21 @@
+--- crates/turbo-html2pdf-core/src/paginate/multicol.rs
++++ delete ! in FlowState::step
+@@ -194,17 +194,17 @@
+             page: 0,
+             col: 0,
+             y_in_col: 0.0,
+             page_h: 0.0,
+         }
+     }
+ 
+     fn step(&mut self, child: &Fragment, facts: MulticolFacts, boxes: &FlowBoxes) {
+-        if !is_flowable(child, boxes) {
++        if  /* ~ changed by cargo-mutants ~ */is_flowable(child, boxes) {
+             self.slots.push(None);
+             return;
+         }
+         // R1 HIGH-2: honour break-before: column by forcing a column break
+         // before the child when any content already sits in the current
+         // column. CSS Fragmentation 3 §3.2.
+         if matches!(child.break_meta.break_before, BreakRule::Column) {
+             self.force_column_break(facts);

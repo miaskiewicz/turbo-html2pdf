@@ -1,0 +1,21 @@
+--- crates/turbo-html2pdf-core/src/paginate/multicol.rs
++++ replace += with -= in FlowState::advance_column
+@@ -247,17 +247,17 @@
+             return;
+         }
+         self.advance_column(facts);
+     }
+ 
+     /// Advance to the next column strip, opening a new page when `used_count`
+     /// is exhausted.
+     fn advance_column(&mut self, facts: MulticolFacts) {
+-        self.col += 1;
++        self.col -= /* ~ changed by cargo-mutants ~ */ 1;
+         self.y_in_col = 0.0;
+         if self.col < facts.used_count {
+             return;
+         }
+         self.fill_heights.push(self.page_h);
+         self.page_caps.push(self.cap);
+         self.page += 1;
+         self.col = 0;

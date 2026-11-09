@@ -1,0 +1,21 @@
+--- crates/turbo-html2pdf-core/src/paginate/multicol.rs
++++ replace is_flowable -> bool with false
+@@ -78,17 +78,17 @@
+     pub rule_heights: Vec<f32>,
+ }
+ 
+ /// Classify a child by whether the paginator should flow it. A container's
+ /// pre-layout `FragmentContent::ColumnRule` is dropped because the paginator
+ /// re-emits rules per page ([`column_rule_fragments`]); every other child is
+ /// an in-flow block whose fragment feeds into the per-page column fill.
+ pub fn is_flowable(child: &Fragment) -> bool {
+-    !matches!(child.content, FragmentContent::ColumnRule { .. })
++    false /* ~ changed by cargo-mutants ~ */
+ }
+ 
+ /// Flow `children` of a multicol container into pages, filling each page's
+ /// `used_count` columns top-to-bottom, left-to-right (CSS `column-fill:
+ /// auto`). `first_cap` is the body height left on the current page (the page
+ /// the multicol starts on; may be less than a full page when prior content
+ /// sits above it); `full_cap` is the body height of a fresh page. Returns a
+ /// per-child [`Slot`] (None for a child dropped by [`is_flowable`]) and the
