@@ -3,7 +3,10 @@ name: CI
 on:
   push:
     branches: [main]
+  # Only PRs that target main run CI; stacked PRs into a release/integration
+  # branch do not (their PR into main runs the full gate).
   pull_request:
+    branches: [main]
   # Release workflows call this as their `gate`, so a tag can never publish code
   # that fails a gate PRs block on (fmt, clippy, tests, cc <= 5, coverage floor).
   workflow_call:
