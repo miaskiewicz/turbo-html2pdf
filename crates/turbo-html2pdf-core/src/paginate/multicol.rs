@@ -1146,4 +1146,36 @@ mod tests {
         assert_eq!(rule.2, 3.0);
         assert!(rule_style(&[block(1, 0.0, 10.0)]).is_none());
     }
+
+    #[test]
+    fn rebalance_last_page_on_an_empty_flow_returns_unchanged() {
+        // Guard the defensive early-out in `rebalance_last_page` for the
+        // never-happens-in-practice case where `fill_heights` is empty: the
+        // forward pass always emits at least one page (empty-multicol test
+        // above), but the function is `pub` and a caller could hand it a
+        // default `Flow`. Returning the input untouched keeps the invariant
+        // "a flow without pages has no last page to balance".
+        let empty = Flow::default();
+        let out = rebalance_last_page(empty, facts2(300.0, 0.0), &[]);
+        assert!(out.slots.is_empty());
+        assert!(out.fill_heights.is_empty());
+        assert!(out.rule_heights.is_empty());
+    }
+
+    #[test]
+    fn balance_col_h_returns_upper_bound_when_nothing_fits() {
+        // `balance_col_h` falls back to the upper bound when `fits_in_cols`
+        // rejects both the lower and upper trial heights. Kids of height 0
+        // give `lo_init = hi_init = 0`, and `fits_in_cols` rejects
+        // `col_h <= 0.0` (its first guard), so the function returns `hi_init`
+        // (0.0) without entering the 30-step bisection.
+        let kids = vec![block(1, 0.0, 0.0), block(2, 0.0, 0.0)];
+        let indices = vec![0, 1];
+        let col_h = balance_col_h(&indices, &kids, 2);
+        assert_eq!(col_h, 0.0);
+        // The `col_h <= 0.0` guard in `fits_in_cols` keeps the balancer from
+        // dividing by zero or running unbounded; assert it directly too.
+        assert!(!fits_in_cols(&indices, &kids, 0.0, 2));
+        assert!(!fits_in_cols(&indices, &kids, -1.0, 2));
+    }
 }

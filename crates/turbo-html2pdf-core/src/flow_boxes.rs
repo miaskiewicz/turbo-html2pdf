@@ -224,3 +224,114 @@ fn relative_shift(style: &BoxStyle, width: f32) -> f32 {
         .or_else(|| style.inset_bottom.resolve(width).map(|b| -b))
         .unwrap_or(0.0)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn style(pairs: &[(&str, &str)]) -> ComputedStyle {
+        ComputedStyle::from_pairs(pairs.iter().map(|&(k, v)| (k.to_string(), v.to_string())))
+    }
+
+    #[test]
+    fn parse_column_count_treats_auto_and_empty_as_none() {
+        // CSS Multicol 1 §4.1: `auto` means "not fixed", so the count is
+        // derived from `column-width`. An explicit `auto` keyword and a
+        // missing property both return None; `parse_column_count` picks the
+        // same early-out for both — line 169's `return None` fires when the
+        // property IS present but reads `auto` (or is an empty string).
+        assert_eq!(
+            parse_column_count(&style(&[("column-count", "auto")])),
+            None
+        );
+        assert_eq!(parse_column_count(&style(&[("column-count", "   ")])), None);
+        // Absent property: the `?` on the `.get("column-count")` returns None
+        // before line 169 is reached.
+        assert_eq!(parse_column_count(&style(&[])), None);
+        // A bare integer still parses, so the `auto` guard really is what
+        // separates covered vs. uncovered.
+        assert_eq!(
+            parse_column_count(&style(&[("column-count", "3")])),
+            Some(3)
+        );
+        // Zero / unparsable round-trips to None too (per the `>= 1` filter).
+        assert_eq!(parse_column_count(&style(&[("column-count", "0")])), None);
+        assert_eq!(
+            parse_column_count(&style(&[("column-count", "nope")])),
+            None
+        );
+    }
+
+    #[test]
+    fn multicol_facts_derives_count_from_column_width_when_count_is_auto() {
+        // CSS Multicol 1 §7.1 "Pseudo-algorithm": when only `column-width` is
+        // set, `used_count = floor((cw + gap) / (width + gap))`. A 320px
+        // content box with 100px columns and a 20px gap holds
+        // `floor(340 / 120) = 2` columns, and `used_width = (320 - 20) / 2 =
+        // 150`. This pins the `(None, Some(w))` arm of `multicol_facts`'s
+        // match (line 151) and the `widen_count` helper.
+        let s = style(&[("column-width", "100px"), ("column-gap", "20px")]);
+        let facts = multicol_facts(&s, 320.0, 16.0).expect("multicol facts");
+        assert_eq!(facts.used_count, 2);
+        assert_eq!(facts.gap, 20.0);
+        assert!((facts.used_width - 150.0).abs() < f32::EPSILON);
+    }
+
+    #[test]
+    fn multicol_facts_returns_none_when_both_hints_are_absent() {
+        // Both `column-count` and `column-width` default to auto: not a
+        // multicol container.
+        assert!(multicol_facts(&style(&[]), 320.0, 16.0).is_none());
+        // `auto` explicitly, same.
+        let s = style(&[("column-count", "auto"), ("column-width", "auto")]);
+        assert!(multicol_facts(&s, 320.0, 16.0).is_none());
+    }
+
+    #[test]
+    fn widen_count_covers_edge_cases() {
+        // CSS Multicol 1 §7.1: a non-positive column width yields one column
+        // (the content box owns the whole space). The clamp also protects
+        // callers from dividing by zero.
+        assert_eq!(widen_count(320.0, 0.0, 0.0), 1);
+        assert_eq!(widen_count(320.0, -5.0, 0.0), 1);
+        // A content box smaller than the column width still yields at least
+        // one column (Chrome allows an overflowing single column).
+        assert_eq!(widen_count(50.0, 100.0, 0.0), 1);
+        // Chrome's widen rule with a non-zero gap.
+        assert_eq!(widen_count(320.0, 100.0, 20.0), 2);
+        // Exactly one column fits when the content box equals the column
+        // width (the `+ gap` on both sides keeps the comparison true).
+        assert_eq!(widen_count(100.0, 100.0, 0.0), 1);
+    }
+
+    #[test]
+    fn parse_column_width_rejects_non_positive_and_auto() {
+        assert_eq!(parse_column_width(&style(&[]), 16.0), None);
+        assert_eq!(
+            parse_column_width(&style(&[("column-width", "auto")]), 16.0),
+            None,
+        );
+        assert_eq!(
+            parse_column_width(&style(&[("column-width", "0px")]), 16.0),
+            None,
+        );
+        assert_eq!(
+            parse_column_width(&style(&[("column-width", "100px")]), 16.0),
+            Some(100.0),
+        );
+    }
+
+    #[test]
+    fn parse_column_gap_defaults_to_one_em_when_normal_or_absent() {
+        // `normal` ≈ 1em (CSS Multicol 1 §5.1, Chrome 156's font-size basis).
+        assert_eq!(parse_column_gap(&style(&[]), 16.0), 16.0);
+        assert_eq!(
+            parse_column_gap(&style(&[("column-gap", "normal")]), 20.0),
+            20.0
+        );
+        assert_eq!(
+            parse_column_gap(&style(&[("column-gap", "12px")]), 16.0),
+            12.0
+        );
+    }
+}
