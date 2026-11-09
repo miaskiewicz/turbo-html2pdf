@@ -1898,7 +1898,7 @@ dependencies = [
 [[package]]
 name = "turbo-dom"
 version = "0.8.2"
-source = "git+https://github.com/miaskiewicz/turbo-dom?branch=release%2F0.8.2#77b56ea68dd39608371c1cfce6d427b29a690858"
+source = "git+https://github.com/miaskiewicz/turbo-dom?rev=b5ae42f0#b5ae42f0ea13fbe6f25bef320cf9c65a6f6d2214"
 dependencies = [
  "cssparser",
  "html5ever",
@@ -1913,7 +1913,7 @@ dependencies = [
 [[package]]
 name = "turbo-dom-layout"
 version = "0.8.2"
-source = "git+https://github.com/miaskiewicz/turbo-dom?branch=release%2F0.8.2#77b56ea68dd39608371c1cfce6d427b29a690858"
+source = "git+https://github.com/miaskiewicz/turbo-dom?rev=b5ae42f0#b5ae42f0ea13fbe6f25bef320cf9c65a6f6d2214"
 dependencies = [
  "core-foundation",
  "core-text",
