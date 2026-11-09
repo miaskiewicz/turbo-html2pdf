@@ -10,7 +10,7 @@
 use std::collections::HashMap;
 
 use turbo_dom::Handle;
-use turbo_dom_layout::layout::fragment::Fragment;
+use turbo_dom_layout::layout::fragment::{Fragment, FragmentContent};
 use turbo_dom_layout::layout::value::{
     parse_px, resolve_box_style, BoxStyle, LengthPct, Position, ResolveCtx, DEFAULT_FONT_SIZE,
 };
@@ -68,8 +68,32 @@ struct Lookup<'a, 's> {
 impl Lookup<'_, '_> {
     /// Record `f`'s facts against its containing block width `cb`, then its children's
     /// against `f`'s content width.
+    ///
+    /// A multicol container's in-flow children are column-strip fragments laid out by
+    /// `turbo-dom-layout::layout::multicol`; recursing into them with the pre-layout
+    /// widths would record facts against the wrong containing block (each column strip
+    /// is their CB, not the container's content box) and the paginator does not read
+    /// those facts. BUT the container may hold out-of-flow descendants
+    /// (`position: absolute` / `fixed`) whose CB is the multicol container itself
+    /// (CSS Positioned Layout 3 §4, the nearest positioned ancestor) — the paginator
+    /// needs their facts so [`crate::paginate::walk::Walker::place_one`] routes them
+    /// through [`crate::paginate::walk::Walker::place_out_of_flow`] rather than flowing
+    /// them as blocks (R1 HIGH-1, miaskiewicz/turbo-html2pdf#52). So under a multicol
+    /// we still descend into every kid, but the CB we pass down is the multicol's own
+    /// content width `inner` (the correct CB for OOF descendants), not any column
+    /// strip's `used_width`.
+    ///
+    /// A multicol container emits pre-layout [`FragmentContent::ColumnRule`] fragments
+    /// with the container's own `node_id` (they are not element boxes). Those must not
+    /// re-overwrite the container's [`BoxFacts`] during descent, or the rule's narrow
+    /// width (4 px) would re-resolve `multicol_facts` against a 4-px content box and
+    /// drive `used_width` to zero. Skip them before resolve — they carry no element of
+    /// their own.
     fn visit(&self, f: &Fragment, cb: f32, out: &mut FlowBoxes) {
-        let (inner, multicol) = match self.resolve(f, cb) {
+        if matches!(f.content, FragmentContent::ColumnRule { .. }) {
+            return;
+        }
+        let (inner, _multicol) = match self.resolve(f, cb) {
             Some((style, computed)) => {
                 let border = style.border.widths();
                 let inner = f.width - style.padding.horizontal() - border.horizontal();
@@ -81,15 +105,6 @@ impl Lookup<'_, '_> {
             }
             None => (f.width, None),
         };
-        // A multicol container's children are per-column fragments laid out by
-        // `turbo-dom-layout::layout::multicol`. The paginator re-flows them itself,
-        // so recursing into them with the pre-layout widths would record facts
-        // against the wrong containing block (each column strip is their CB, not
-        // the container's content box). Skip the descent — the paginator does not
-        // read BoxFacts under a multicol container.
-        if multicol.is_some() {
-            return;
-        }
         for child in &f.children {
             self.visit(child, inner.max(0.0), out);
         }

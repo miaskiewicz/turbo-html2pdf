@@ -566,24 +566,87 @@ impl<'a> Walker<'a> {
         let (gap, origin) = self.multicol_origin(f);
         let first_cap = (self.page_capacity() - origin).max(0.0);
         let full_cap = self.capacity - (self.reserve)(self.pages.len());
-        for _ in multicol::overflowing_children(&f.children, full_cap) {
+        self.lint_multicol_overflows(&f.children, full_cap, diags);
+        // R1 HIGH-1: when the multicol container is itself positioned, it is
+        // the containing block of its out-of-flow descendants. Push it to
+        // `positioned`/`open` before emitting so `put_on` drains `open` into
+        // `anchors` when the container's first fragment lands; abspos boxes
+        // inside then see the enclosing CB in [`Self::place_out_of_flow`] and
+        // land at their specified inset.
+        let was_positioned = f.is_positioned;
+        if was_positioned {
+            self.positioned.push((f.node_id, f.y));
+            self.open.push((f.node_id, f.y));
+        }
+        let flow = multicol::flow_children(&f.children, facts, (first_cap, full_cap), self.boxes);
+        self.walk_multicol_pages(f, facts, &flow, headers, gap);
+        // R1 HIGH-1: out-of-flow descendants (`position: absolute` / `fixed`)
+        // of the multicol container are filtered from the column flow. Place
+        // each one through the normal OOF path so an anchored abspos lands at
+        // its specified inset relative to the container, and a static abspos
+        // sits at its galley position on the page its static Y falls on.
+        self.place_multicol_out_of_flow(f);
+        if was_positioned {
+            self.positioned.pop();
+        }
+    }
+
+    /// Emit one [`LintCode::RegionOverflow`] diagnostic per over-tall multicol
+    /// child; split out so [`Self::place_multicol`] stays under the complexity
+    /// gate.
+    fn lint_multicol_overflows(
+        &self,
+        children: &[Fragment],
+        full_cap: f32,
+        diags: &mut Diagnostics,
+    ) {
+        for _ in multicol::overflowing_children(children, full_cap, self.boxes) {
             diags.push(
                 LintCode::RegionOverflow,
                 "multicol child taller than the page body was clipped",
                 Span::default(),
             );
         }
-        let flow = multicol::flow_children(&f.children, facts, (first_cap, full_cap));
+    }
+
+    /// Walk the pages a multicol container's flow spans, emitting the per-page
+    /// container + kids + rules and advancing the cursor after each page (fresh
+    /// column open on the next page for all but the last; cursor advance past
+    /// the container on the last).
+    fn walk_multicol_pages(
+        &mut self,
+        f: &Fragment,
+        facts: MulticolFacts,
+        flow: &multicol::Flow,
+        headers: &[Fragment],
+        gap: f32,
+    ) {
         let last = flow.fill_heights.len().saturating_sub(1);
         for (page, (&fill_h, &rule_h)) in
             flow.fill_heights.iter().zip(&flow.rule_heights).enumerate()
         {
             let page_top = self.open_multicol_page(page == 0, headers, gap);
-            self.emit_multicol_page(f, facts, &flow, page as u32, (fill_h, rule_h), page_top);
+            self.emit_multicol_page(f, facts, flow, page as u32, (fill_h, rule_h), page_top);
             if page < last {
                 self.close_multicol_page(f, page_top + fill_h);
             } else {
                 self.advance_after_multicol(f, page_top + fill_h);
+            }
+        }
+    }
+
+    /// Place each out-of-flow descendant of the multicol container `f` through
+    /// [`Self::place_out_of_flow`]. Called once the container's column pages
+    /// are done so the OOF boxes paint on top of their in-flow siblings
+    /// (positioned boxes paint above the flow, CSS Positioned Layout 3 §9.9).
+    fn place_multicol_out_of_flow(&mut self, f: &Fragment) {
+        for child in &f.children {
+            if self
+                .boxes
+                .get(child.node_id)
+                .is_some_and(|b| b.position.is_out_of_flow())
+            {
+                self.place_out_of_flow(child);
             }
         }
     }

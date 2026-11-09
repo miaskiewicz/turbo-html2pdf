@@ -294,13 +294,69 @@ const KNOWN: &[(&str, usize, &str)] = &[
     // y=content-top so a bare `column-rule` test against our own rendering stays
     // byte-identical, and this entry pins the one-row offset against Chrome.
     ("r3-multicol-with-rule", 2, "orange"),
+    // R1 HIGH-2 deferred: break-inside: avoid-column (column-fill: balance on the
+    // last page). Our paginator fills `column-fill: auto` on every page, including
+    // the last (`paginate::multicol::flow_children`'s module doc), so a tall kid
+    // with `break-inside: avoid-column` over-runs the column rather than pushing
+    // to the next one at a balanced col_h. Fixing it needs a last-page balance
+    // pass — the same mechanic HIGH-3 wants — so the two land together in a
+    // follow-up. Green's width also drifts (300 vs 260) because the layout stripe
+    // for that over-tall kid is sized from the pre-paginator balanced col_h, not
+    // our paginator's col_h; the paint reflects the layout stripe until balance
+    // is re-done paginator-side. Oracle captured for the fix.
+    ("r3-multicol-break-inside-avoid", 1, "green"),
+    // R1 HIGH-2 deferred: column-span: all. turbo-dom-layout 0.8.1 emits the
+    // span-all band at the container's full inline size, but the paginator still
+    // flows the band as a column kid (its height feeds the column fill, then the
+    // next kid follows in the same column instead of opening a fresh sub-flow).
+    // Needs a per-slot "is_span_all" flag the paginator reads to close the
+    // current sub-flow before placing the band, then open a fresh one below.
+    // Oracle captured; follow-up PR per the R2 remeasure notes. Red at col 0
+    // y 0 happens to match Chrome (first sub-flow's first kid), so only the
+    // kids downstream of the span-all band diverge here.
+    ("r3-multicol-column-span-all", 1, "green"),
+    ("r3-multicol-column-span-all", 1, "yellow"),
+    ("r3-multicol-column-span-all", 1, "blue"),
+    ("r3-multicol-column-span-all", 1, "magenta"),
+    // R1 MEDIUM-2 deferred: nested multicol. The outer paginator places the
+    // inner multicol container as one column kid, and the inner container's
+    // balanced layout (160 px tall) is what the outer sees for its column fill.
+    // Chrome's last-page balance puts magenta+cyan in col 1 while our auto-fill
+    // stacks them in col 0 below the inner container. Last-page balance (HIGH-3)
+    // will close this with a single pass; recording the diff until then.
+    ("r3-multicol-nested", 1, "magenta"),
+    ("r3-multicol-nested", 1, "cyan"),
+    // R1 HIGH-1 deferred (layout-side): abspos descendants of a multicol are
+    // now routed through `place_out_of_flow` and sit at their anchored position
+    // instead of consuming column space, but turbo-dom-layout 0.8.1 sizes the
+    // abspos fragment at the multicol's full content inline size rather than at
+    // its CSS `width` (and the height is over-measured similarly). The
+    // paginator-side fix (this PR) stops abspos from being flowed as an in-flow
+    // block; the layout-side fix for abspos width/height inside a multicol is a
+    // follow-up turbo-dom issue — the Y we place matches the container anchor,
+    // and the X/W/H will match Chrome once the layout emits the correct box.
+    // The in-flow kids' balance is the same HIGH-3 last-page work above; `red`
+    // is hidden on this page by the oversized abspos band paint until the
+    // layout fix lands.
+    ("r3-multicol-abspos-child", 1, "red"),
+    ("r3-multicol-abspos-child", 1, "green"),
+    ("r3-multicol-abspos-child", 1, "blue"),
 ];
 
 /// Cases whose page count does not match Chrome 156 yet (each must still differ; their
 /// pages are not compared). Empty: every oracle case matches.
 /// (Forced left/right/recto breaks match since miaskiewicz/turbo-dom#204;
 /// multi-column pagination since miaskiewicz/turbo-html2pdf#52.)
-const KNOWN_PAGE_COUNTS: &[&str] = &[];
+///
+/// R1 LOW deferred: the `columns: 2 <width>` shorthand. Chrome 156 counts
+/// columns from the shorthand's `<width>` hint even when `<count>` is set
+/// (so a narrow content box drops to 1 column); our `multicol_facts` honours
+/// the explicit count. The gap is a flow_boxes::multicol_facts behaviour, not
+/// a paginator one — the paginator does exactly what the facts tell it. The
+/// follow-up (turbo-dom-layout's `resolve_tracks` already agrees with
+/// Chrome's behaviour, so the fix is to route html2pdf-core's own
+/// `multicol_facts` through that shared resolver).
+const KNOWN_PAGE_COUNTS: &[&str] = &["r3-multicol-shorthand"];
 
 /// miaskiewicz/turbo-html2pdf#39: the print initial containing block (the page area).
 fn icb_case(id: &str) -> bool {

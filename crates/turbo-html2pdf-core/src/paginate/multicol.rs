@@ -54,9 +54,9 @@
 //!   re-entering `place_multicol`.
 
 use crate::layout::fragment::{ColumnRuleStyle, Fragment, FragmentContent, NodeId};
-use crate::layout::value::Rgba;
+use crate::layout::value::{BreakRule, Rgba};
 
-use super::boxes::MulticolFacts;
+use super::boxes::{FlowBoxes, MulticolFacts};
 
 /// What to paint for a multicol container on one paginated page: the per-page
 /// box (its own border-box, background and border), the children placed in
@@ -103,12 +103,23 @@ pub struct Flow {
     pub rule_heights: Vec<f32>,
 }
 
-/// Classify a child by whether the paginator should flow it. A container's
-/// pre-layout `FragmentContent::ColumnRule` is dropped because the paginator
-/// re-emits rules per page ([`column_rule_fragments`]); every other child is
-/// an in-flow block whose fragment feeds into the per-page column fill.
-pub fn is_flowable(child: &Fragment) -> bool {
-    !matches!(child.content, FragmentContent::ColumnRule { .. })
+/// Classify a child by whether the paginator should flow it as a multicol
+/// column kid. A container's pre-layout `FragmentContent::ColumnRule` is
+/// dropped because the paginator re-emits rules per page ([`column_rule_fragments`]).
+/// An out-of-flow descendant (`position: absolute` / `fixed`) whose [`super::boxes::BoxFacts`]
+/// flags it [`super::boxes::BoxFacts::position::is_out_of_flow`] (R1 HIGH-1,
+/// miaskiewicz/turbo-html2pdf#52) is skipped from the column flow too — the
+/// paginator places those through [`super::walk::Walker::place_out_of_flow`]
+/// so an abspos box with a top/left inset lands at its specified position,
+/// not as an in-flow block in the first available column. Every other child
+/// is an in-flow block whose fragment feeds into the per-page column fill.
+pub fn is_flowable(child: &Fragment, boxes: &FlowBoxes) -> bool {
+    if matches!(child.content, FragmentContent::ColumnRule { .. }) {
+        return false;
+    }
+    !boxes
+        .get(child.node_id)
+        .is_some_and(|b| b.position.is_out_of_flow())
 }
 
 /// Flow `children` of a multicol container into pages, filling each page's
@@ -118,13 +129,22 @@ pub fn is_flowable(child: &Fragment) -> bool {
 /// sits above it); `full_cap` is the body height of a fresh page. Returns a
 /// per-child [`Slot`] (None for a child dropped by [`is_flowable`]) and the
 /// filled column height of each page. An empty container (no in-flow
-/// children, only dropped column rules) produces one page with `fill_h = 0`
-/// so the walker can still emit the container's own box and advance past it.
+/// children, only dropped column rules or out-of-flow descendants) produces
+/// one page with `fill_h = 0` so the walker can still emit the container's
+/// own box and advance past it. R1 HIGH-2: a kid with `break-before: column`
+/// or `break-after: column` forces a column break around it; without a
+/// BreakRule::Column reader the paginator would place the kid at the current
+/// column cursor like any other block.
 #[must_use]
-pub fn flow_children(children: &[Fragment], facts: MulticolFacts, caps: (f32, f32)) -> Flow {
+pub fn flow_children(
+    children: &[Fragment],
+    facts: MulticolFacts,
+    caps: (f32, f32),
+    boxes: &FlowBoxes,
+) -> Flow {
     let mut state = FlowState::start(children.len(), caps);
     for child in children {
-        state.step(child, facts);
+        state.step(child, facts, boxes);
     }
     state.finish()
 }
@@ -160,10 +180,16 @@ impl FlowState {
         }
     }
 
-    fn step(&mut self, child: &Fragment, facts: MulticolFacts) {
-        if !is_flowable(child) {
+    fn step(&mut self, child: &Fragment, facts: MulticolFacts, boxes: &FlowBoxes) {
+        if !is_flowable(child, boxes) {
             self.slots.push(None);
             return;
+        }
+        // R1 HIGH-2: honour break-before: column by forcing a column break
+        // before the child when any content already sits in the current
+        // column. CSS Fragmentation 3 §3.2.
+        if matches!(child.break_meta.break_before, BreakRule::Column) {
+            self.force_column_break(facts);
         }
         let h = child.height.max(0.0);
         self.maybe_wrap(h, facts);
@@ -175,6 +201,11 @@ impl FlowState {
         }));
         self.y_in_col += h;
         self.page_h = self.page_h.max(self.y_in_col);
+        // R1 HIGH-2: honour break-after: column by forcing a column break
+        // after the child so the next sibling opens a fresh column.
+        if matches!(child.break_meta.break_after, BreakRule::Column) {
+            self.force_column_break(facts);
+        }
     }
 
     /// Advance the cursor before placing a `h`-tall child: a child that
@@ -185,6 +216,24 @@ impl FlowState {
         if self.y_in_col <= 0.0 || self.y_in_col + h <= self.cap + FIT_EPS {
             return;
         }
+        self.advance_column(facts);
+    }
+
+    /// Force a column break at the current cursor: move to the next column,
+    /// or open a fresh page when all `used_count` columns are filled. A
+    /// no-op when the current column is still empty (no content yet to break
+    /// away from; CSS Fragmentation 3 §3.5 "class A breaks: at the start of
+    /// a fragmentainer the break is suppressed").
+    fn force_column_break(&mut self, facts: MulticolFacts) {
+        if self.y_in_col <= 0.0 && self.col == 0 {
+            return;
+        }
+        self.advance_column(facts);
+    }
+
+    /// Advance to the next column strip, opening a new page when `used_count`
+    /// is exhausted.
+    fn advance_column(&mut self, facts: MulticolFacts) {
         self.col += 1;
         self.y_in_col = 0.0;
         if self.col < facts.used_count {
@@ -373,15 +422,21 @@ fn one_rule(
 /// alone exceeds `full_cap`). The caller lints each one as
 /// [`crate::error::LintCode::RegionOverflow`]: the paginator still places them
 /// (matching the generic walker's `overflow_leaf`), it just flags that the
-/// clipped content exists.
+/// clipped content exists. Out-of-flow kids (R1 HIGH-1) do not count — they
+/// are placed through [`super::walk::Walker::place_out_of_flow`] and do not
+/// feed the column fill.
 #[must_use]
-pub fn overflowing_children(children: &[Fragment], full_cap: f32) -> Vec<NodeId> {
+pub fn overflowing_children(
+    children: &[Fragment],
+    full_cap: f32,
+    boxes: &FlowBoxes,
+) -> Vec<NodeId> {
     if full_cap <= 0.0 {
         return Vec::new();
     }
     children
         .iter()
-        .filter(|c| is_flowable(c) && c.height > full_cap)
+        .filter(|c| is_flowable(c, boxes) && c.height > full_cap)
         .map(|c| c.node_id)
         .collect()
 }
@@ -389,7 +444,8 @@ pub fn overflowing_children(children: &[Fragment], full_cap: f32) -> Vec<NodeId>
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::layout::value::BorderEdges;
+    use crate::layout::value::{BorderEdges, LengthPct, Position};
+    use crate::paginate::BoxFacts;
     use turbo_dom_layout::BorderRadii;
 
     fn block(id: u32, y: f32, height: f32) -> Fragment {
@@ -412,11 +468,41 @@ mod tests {
         }
     }
 
+    /// Empty `FlowBoxes` — no OOF kids, every child is in-flow. The paginator
+    /// tests use this helper so the pre-R1-HIGH-1 invariants stay testable.
+    fn no_oof() -> FlowBoxes {
+        FlowBoxes::default()
+    }
+
+    /// `FlowBoxes` with `ids` marked as `position: absolute` so [`is_flowable`]
+    /// filters them from the column flow.
+    fn abspos(ids: &[u32]) -> FlowBoxes {
+        let mut boxes = FlowBoxes::default();
+        for &id in ids {
+            boxes.insert(
+                NodeId(id),
+                BoxFacts {
+                    position: Position::Absolute,
+                    margin_top: 0.0,
+                    margin_bottom: 0.0,
+                    padding_top: 0.0,
+                    padding_bottom: 0.0,
+                    inset_top: LengthPct::Auto,
+                    inset_bottom: LengthPct::Auto,
+                    shift: 0.0,
+                    definite_height: false,
+                    multicol: None,
+                },
+            );
+        }
+        boxes
+    }
+
     #[test]
     fn six_200px_blocks_in_two_columns_on_a_320px_body_fill_three_pages() {
         // r3-multicol: break-inside:avoid, used_count=2, page body 320.
         let kids: Vec<Fragment> = (0..6).map(|i| block(i as u32 + 1, 0.0, 200.0)).collect();
-        let flow = flow_children(&kids, facts2(300.0, 0.0), (320.0, 320.0));
+        let flow = flow_children(&kids, facts2(300.0, 0.0), (320.0, 320.0), &no_oof());
         let slot = |i: usize| flow.slots[i].unwrap();
         assert_eq!(
             slot(0),
@@ -487,7 +573,7 @@ mod tests {
             used_width: 173.0,
             gap: 0.0,
         };
-        let flow = flow_children(&kids, three, (320.0, 320.0));
+        let flow = flow_children(&kids, three, (320.0, 320.0), &no_oof());
         let placed_pages: Vec<u32> = flow.slots.iter().map(|s| s.unwrap().page).collect();
         assert_eq!(placed_pages, [0, 0, 0, 0, 0, 0, 1]);
         // Each col holds two blocks (220px) on page 1 (3 cols * 2 = 6 blocks); the 7th
@@ -507,7 +593,7 @@ mod tests {
         // 120 still overruns: push again), saturating used_count and spilling to a
         // fresh page at the full cap, where it fits whole in column 0.
         let kids = vec![block(1, 0.0, 100.0), block(2, 0.0, 200.0)];
-        let flow = flow_children(&kids, facts2(200.0, 0.0), (120.0, 320.0));
+        let flow = flow_children(&kids, facts2(200.0, 0.0), (120.0, 320.0), &no_oof());
         assert_eq!(
             flow.slots[0].unwrap(),
             Slot {
@@ -541,7 +627,7 @@ mod tests {
             block(3, 0.0, 180.0),
             block(4, 0.0, 180.0),
         ];
-        let flow = flow_children(&kids, facts2(260.0, 16.0), (320.0, 320.0));
+        let flow = flow_children(&kids, facts2(260.0, 16.0), (320.0, 320.0), &no_oof());
         assert!(flow.slots[1].is_none(), "rule not flowed");
         assert_eq!(flow.slots[0].unwrap().page, 0);
         assert_eq!(flow.slots[2].unwrap().page, 0);
@@ -584,7 +670,7 @@ mod tests {
     fn an_empty_multicol_still_emits_one_container_page() {
         // R1 MEDIUM-1: `<div style="columns:2"></div>` must produce one page so
         // the walker can paint the container's own box and advance past it.
-        let flow = flow_children(&[], facts2(300.0, 0.0), (320.0, 320.0));
+        let flow = flow_children(&[], facts2(300.0, 0.0), (320.0, 320.0), &no_oof());
         assert_eq!(flow.fill_heights, vec![0.0]);
         assert_eq!(flow.rule_heights, vec![0.0]);
         assert!(flow.slots.is_empty());
@@ -601,7 +687,7 @@ mod tests {
             color: Rgba::BLACK,
         };
         rule.width = 4.0;
-        let flow = flow_children(&[rule], facts2(260.0, 16.0), (320.0, 320.0));
+        let flow = flow_children(&[rule], facts2(260.0, 16.0), (320.0, 320.0), &no_oof());
         assert_eq!(flow.slots.len(), 1);
         assert!(flow.slots[0].is_none());
         assert_eq!(flow.fill_heights, vec![0.0]);
@@ -622,15 +708,108 @@ mod tests {
             rule.clone(),         // non-flowable, always skipped
             block(3, 0.0, 321.0), // exceeds 320 → listed
         ];
-        let flagged = overflowing_children(&kids, 320.0);
+        let flagged = overflowing_children(&kids, 320.0, &no_oof());
         assert_eq!(flagged, vec![NodeId(2), NodeId(3)]);
     }
 
     #[test]
     fn overflowing_children_short_circuits_on_a_non_positive_cap() {
         let kids = vec![block(1, 0.0, 10.0)];
-        assert!(overflowing_children(&kids, 0.0).is_empty());
-        assert!(overflowing_children(&kids, -5.0).is_empty());
+        assert!(overflowing_children(&kids, 0.0, &no_oof()).is_empty());
+        assert!(overflowing_children(&kids, -5.0, &no_oof()).is_empty());
+    }
+
+    #[test]
+    fn abspos_descendants_are_filtered_from_the_column_flow() {
+        // R1 HIGH-1: a `position: absolute` descendant of a multicol container
+        // is filtered from `flow_children` so the paginator places it through
+        // `place_out_of_flow` at its specified position, not as an in-flow
+        // block that consumes column space. Here kid 2 is abspos; the flow
+        // only sees kids 1 and 3 in the column fill.
+        let kids = vec![
+            block(1, 0.0, 100.0),
+            block(2, 0.0, 50.0),  // abspos — filtered
+            block(3, 0.0, 100.0), // in-flow, follows kid 1 in column 0
+        ];
+        let flow = flow_children(&kids, facts2(300.0, 0.0), (320.0, 320.0), &abspos(&[2]));
+        assert!(flow.slots[1].is_none(), "abspos kid must be filtered");
+        assert_eq!(flow.slots[0].unwrap().y_in_col, 0.0);
+        // Kid 3 sits BELOW kid 1 in col 0 (not pushed to col 1 by the abspos's
+        // phantom column consumption).
+        assert_eq!(flow.slots[2].unwrap().col, 0);
+        assert_eq!(flow.slots[2].unwrap().y_in_col, 100.0);
+        // Overflow listing treats the abspos kid the same way.
+        let mut tall = kids;
+        tall[1] = block(2, 0.0, 500.0); // would overflow if flowed
+        let over = overflowing_children(&tall, 320.0, &abspos(&[2]));
+        assert!(
+            !over.contains(&NodeId(2)),
+            "abspos kid not flow-overflowing"
+        );
+    }
+
+    #[test]
+    fn break_before_column_forces_a_new_column_before_the_kid() {
+        // R1 HIGH-2: `break-before: column` on a multicol child moves it to
+        // the next column (or opens a new page when the last column is
+        // already full). Three 50px kids where kid 2 has break-before:column
+        // — would naturally stack in col 0 (50+50+50=150 <= cap 320), but
+        // kid 2 forces a break so it lands at col 1 y=0; kid 3 follows it at
+        // col 1 y=50.
+        let mut kids = vec![
+            block(1, 0.0, 50.0),
+            block(2, 0.0, 50.0),
+            block(3, 0.0, 50.0),
+        ];
+        kids[1].break_meta.break_before = BreakRule::Column;
+        let flow = flow_children(&kids, facts2(300.0, 0.0), (320.0, 320.0), &no_oof());
+        assert_eq!(flow.slots[0].unwrap().col, 0);
+        assert_eq!(flow.slots[1].unwrap().col, 1);
+        assert_eq!(flow.slots[1].unwrap().y_in_col, 0.0);
+        assert_eq!(flow.slots[2].unwrap().col, 1);
+        assert_eq!(flow.slots[2].unwrap().y_in_col, 50.0);
+    }
+
+    #[test]
+    fn break_before_column_at_the_fragmentainer_start_is_suppressed() {
+        // CSS Fragmentation 3 §3.5 "class A breaks": a column break at the
+        // start of the fragmentainer (column 0, cursor 0) does nothing.
+        let mut kids = vec![block(1, 0.0, 50.0), block(2, 0.0, 50.0)];
+        kids[0].break_meta.break_before = BreakRule::Column;
+        let flow = flow_children(&kids, facts2(300.0, 0.0), (320.0, 320.0), &no_oof());
+        assert_eq!(flow.slots[0].unwrap().col, 0, "no break at fresh col 0");
+        assert_eq!(flow.slots[0].unwrap().y_in_col, 0.0);
+    }
+
+    #[test]
+    fn break_after_column_pushes_the_next_kid_to_a_fresh_column() {
+        // `break-after: column` on a kid closes its column; the next kid
+        // opens the next one. Kid 1 at col 0, kid 1 has break-after:column,
+        // so kid 2 starts col 1.
+        let mut kids = vec![block(1, 0.0, 50.0), block(2, 0.0, 50.0)];
+        kids[0].break_meta.break_after = BreakRule::Column;
+        let flow = flow_children(&kids, facts2(300.0, 0.0), (320.0, 320.0), &no_oof());
+        assert_eq!(flow.slots[0].unwrap().col, 0);
+        assert_eq!(flow.slots[1].unwrap().col, 1);
+        assert_eq!(flow.slots[1].unwrap().y_in_col, 0.0);
+    }
+
+    #[test]
+    fn break_before_column_that_exhausts_the_last_column_opens_a_new_page() {
+        // A kid with break-before:column when the cursor already sits in
+        // the last column of the current page spills to a fresh page.
+        let mut kids = vec![
+            block(1, 0.0, 50.0), // col 0
+            block(2, 0.0, 50.0), // col 1 (break-before:column from col 0)
+            block(3, 0.0, 50.0), // page 1 col 0 (break-before:column from col 1)
+        ];
+        kids[1].break_meta.break_before = BreakRule::Column;
+        kids[2].break_meta.break_before = BreakRule::Column;
+        let flow = flow_children(&kids, facts2(300.0, 0.0), (320.0, 320.0), &no_oof());
+        assert_eq!(flow.slots[1].unwrap().col, 1);
+        assert_eq!(flow.slots[1].unwrap().page, 0);
+        assert_eq!(flow.slots[2].unwrap().col, 0);
+        assert_eq!(flow.slots[2].unwrap().page, 1);
     }
 
     #[test]
