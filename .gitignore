@@ -15,7 +15,6 @@ build/
 pnpm-debug.log*
 npm-debug.log*
 yarn-error.log*
-
 # ---- N-API / native artifacts ----
 *.node
 artifacts/
@@ -25,13 +24,11 @@ index.generated.d.ts
 index.generated.js
 # Written at pack time from turbo-dom-layout's fonts (scripts/package-notices.mjs --pack).
 crates/turbo-pdf-napi/assets/fonts/Go-Regular.ttf
-
 # ---- WASM ----
 pkg/
 pkg-node/
 pkg-fonts/
 *.wasm
-
 # ---- Python / PyO3 (maturin) ----
 __pycache__/
 *.py[cod]
@@ -45,7 +42,6 @@ wheelhouse/
 crates/turbo-pdf-py/python/turbo_html2pdf/*.so
 crates/turbo-pdf-py/python/turbo_html2pdf/*.pyd
 crates/turbo-pdf-py/python/turbo_html2pdf/*.dylib
-
 # ---- Coverage / test output ----
 /coverage
 tarpaulin-report.html
@@ -54,11 +50,9 @@ lcov.info
 *.profraw
 test-results/
 playwright-report/
-
 # ---- Benchmark output ----
 /benches/**/results/
 *.bench.json
-
 # ---- Editors / OS ----
 .DS_Store
 Thumbs.db
@@ -67,15 +61,13 @@ Thumbs.db
 !.vscode/extensions.json
 *.swp
 *~
-
 # ---- Env / secrets ----
 .env
 .env.local
 .env.*.local
-
 # ---- Claude Code local state / agent worktrees ----
 .claude/
-
 # serena MCP workspace
 .serena/
 mutants.out/
+mutants.out*/
