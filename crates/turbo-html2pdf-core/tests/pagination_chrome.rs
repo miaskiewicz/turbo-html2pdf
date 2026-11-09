@@ -318,14 +318,6 @@ const KNOWN: &[(&str, usize, &str)] = &[
     ("r3-multicol-column-span-all", 1, "yellow"),
     ("r3-multicol-column-span-all", 1, "blue"),
     ("r3-multicol-column-span-all", 1, "magenta"),
-    // R1 MEDIUM-2 deferred: nested multicol. The outer paginator places the
-    // inner multicol container as one column kid, and the inner container's
-    // balanced layout (160 px tall) is what the outer sees for its column fill.
-    // Chrome's last-page balance puts magenta+cyan in col 1 while our auto-fill
-    // stacks them in col 0 below the inner container. Last-page balance (HIGH-3)
-    // will close this with a single pass; recording the diff until then.
-    ("r3-multicol-nested", 1, "magenta"),
-    ("r3-multicol-nested", 1, "cyan"),
     // R1 HIGH-1 deferred (layout-side): abspos descendants of a multicol are
     // now routed through `place_out_of_flow` and sit at their anchored position
     // instead of consuming column space, but turbo-dom-layout 0.8.1 sizes the

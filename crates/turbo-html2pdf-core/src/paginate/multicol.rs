@@ -146,7 +146,7 @@ pub fn flow_children(
     for child in children {
         state.step(child, facts, boxes);
     }
-    state.finish()
+    rebalance_last_page(state.finish(), facts, children)
 }
 
 /// Mutable walker state for [`flow_children`]: tracks the current page's
@@ -276,6 +276,204 @@ impl FlowState {
             rule_heights,
         }
     }
+}
+
+/// Re-balance the slots on `flow`'s last page (R1 HIGH-3, column-fill:
+/// balance): the smallest `col_h` at which the page's in-flow kids fit in
+/// `used_count` columns, re-assigned column by column. Non-last pages are
+/// left alone — they already fill `column-fill: auto` to the page cap, which
+/// is also what Chrome 156 does for every page but the last on a paginated
+/// multicol (CSS Multicol 1 §3 "The multi-column model"). The forward pass
+/// already produced an auto-fill layout; this post-pass shrinks the last
+/// page's filled column height to the balanced minimum and reshuffles its
+/// kids into the resulting balanced columns.
+#[must_use]
+pub fn rebalance_last_page(flow: Flow, facts: MulticolFacts, kids: &[Fragment]) -> Flow {
+    let Flow {
+        mut slots,
+        mut fill_heights,
+        mut rule_heights,
+    } = flow;
+    let last_page = match fill_heights.len().checked_sub(1) {
+        Some(p) => p as u32,
+        None => {
+            return Flow {
+                slots,
+                fill_heights,
+                rule_heights,
+            }
+        }
+    };
+    let indices = last_page_indices(&slots, last_page);
+    if indices.is_empty() || facts.used_count <= 1 {
+        return Flow {
+            slots,
+            fill_heights,
+            rule_heights,
+        };
+    }
+    let col_h = balance_col_h(&indices, kids, facts.used_count);
+    let fill_h = reflow_last_page(&mut slots, &indices, col_h, facts, last_page, kids);
+    fill_heights[last_page as usize] = fill_h;
+    // The rule on the last page always matches its filled column height
+    // (CSS Multicol 1 §3). Non-last entries keep their auto-fill cap.
+    if let Some(last_rule) = rule_heights.last_mut() {
+        *last_rule = fill_h;
+    }
+    Flow {
+        slots,
+        fill_heights,
+        rule_heights,
+    }
+}
+
+/// Collect the slot indices of the kids placed on `last_page`, in source
+/// order. Non-last-page slots are left alone; `None` slots (OOF descendants,
+/// dropped column rules) are skipped.
+fn last_page_indices(slots: &[Option<Slot>], last_page: u32) -> Vec<usize> {
+    slots
+        .iter()
+        .enumerate()
+        .filter_map(|(i, slot)| slot.and_then(|s| (s.page == last_page).then_some(i)))
+        .collect()
+}
+
+/// Smallest `col_h` at which `kids[indices]` fits in `used_count` columns
+/// under the paginator's atomic-kid flow (honouring `BreakRule::Column`
+/// before and after a kid). Lower bound is `max(max_h, total / used_count)`;
+/// upper bound is `total` (every kid in column 0). Thirty bisections give
+/// 1 part in a billion, well under [`FIT_EPS`].
+fn balance_col_h(indices: &[usize], kids: &[Fragment], used_count: u32) -> f32 {
+    let heights: Vec<f32> = indices.iter().map(|&i| kids[i].height.max(0.0)).collect();
+    let total: f32 = heights.iter().sum();
+    let max_h = heights.iter().copied().fold(0.0_f32, f32::max);
+    let n = used_count.max(1) as f32;
+    let lo_init = max_h.max(total / n).max(0.0);
+    let hi_init = total.max(lo_init);
+    if fits_in_cols(indices, kids, lo_init, used_count) {
+        return lo_init;
+    }
+    if !fits_in_cols(indices, kids, hi_init, used_count) {
+        return hi_init;
+    }
+    let (mut lo, mut hi) = (lo_init, hi_init);
+    for _ in 0..30 {
+        let mid = 0.5 * (lo + hi);
+        if fits_in_cols(indices, kids, mid, used_count) {
+            hi = mid;
+        } else {
+            lo = mid;
+        }
+    }
+    hi
+}
+
+/// Mutable column cursor shared by [`fits_in_cols`] and
+/// [`reflow_last_page`] so the fitness check and the placement run exactly
+/// the same step logic.
+struct ColCursor {
+    col: u32,
+    cur: f32,
+    max_fill: f32,
+}
+
+impl ColCursor {
+    fn new() -> ColCursor {
+        ColCursor {
+            col: 0,
+            cur: 0.0,
+            max_fill: 0.0,
+        }
+    }
+
+    /// Apply `break-before: column` before placing a kid: advance one column
+    /// unless we are at the fragmentainer start (col 0, cursor 0), where
+    /// CSS Fragmentation 3 §3.5 "class A breaks" suppresses the break.
+    fn pre_break(&mut self, kid: &Fragment) {
+        if matches!(kid.break_meta.break_before, BreakRule::Column)
+            && !(self.cur <= 0.0 && self.col == 0)
+        {
+            self.col += 1;
+            self.cur = 0.0;
+        }
+    }
+
+    /// Wrap to the next column when the kid would overrun the current one.
+    fn wrap_if_overflows(&mut self, h: f32, col_h: f32) {
+        if self.cur > 0.0 && self.cur + h > col_h + FIT_EPS {
+            self.col += 1;
+            self.cur = 0.0;
+        }
+    }
+
+    /// Place a kid of height `h` at the cursor, updating `max_fill`.
+    fn place(&mut self, h: f32) {
+        self.cur += h;
+        self.max_fill = self.max_fill.max(self.cur);
+    }
+
+    /// Apply `break-after: column` after placing a kid.
+    fn post_break(&mut self, kid: &Fragment) {
+        if matches!(kid.break_meta.break_after, BreakRule::Column) {
+            self.col += 1;
+            self.cur = 0.0;
+        }
+    }
+}
+
+/// Whether `kids[indices]` fits in `used_count` columns at `col_h`: a kid
+/// that overruns the current column wraps to the next (the paginator's
+/// atomic flow), and `BreakRule::Column` forces a column break around a
+/// kid (CSS Fragmentation 3 §3.2, §3.5).
+fn fits_in_cols(indices: &[usize], kids: &[Fragment], col_h: f32, used_count: u32) -> bool {
+    if col_h <= 0.0 {
+        return false;
+    }
+    let mut cursor = ColCursor::new();
+    for &i in indices {
+        let kid = &kids[i];
+        cursor.pre_break(kid);
+        cursor.wrap_if_overflows(kid.height.max(0.0), col_h);
+        if cursor.col >= used_count {
+            return false;
+        }
+        cursor.place(kid.height.max(0.0));
+        cursor.post_break(kid);
+    }
+    true
+}
+
+/// Re-place the kids `indices` on `last_page` at the balanced `col_h`.
+/// Mutates each slot's `col` and `y_in_col` in place. Returns the tallest
+/// filled column after the pass. Honours `BreakRule::Column` so a forced
+/// column break pins the paginator's column cursor even when balance would
+/// otherwise collapse the two kids into one column.
+fn reflow_last_page(
+    slots: &mut [Option<Slot>],
+    indices: &[usize],
+    col_h: f32,
+    facts: MulticolFacts,
+    last_page: u32,
+    kids: &[Fragment],
+) -> f32 {
+    let mut cursor = ColCursor::new();
+    let last_col = facts.used_count.saturating_sub(1);
+    for &i in indices {
+        let kid = &kids[i];
+        cursor.pre_break(kid);
+        let h = kid.height.max(0.0);
+        cursor.wrap_if_overflows(h, col_h);
+        cursor.col = cursor.col.min(last_col);
+        slots[i] = Some(Slot {
+            page: last_page,
+            col: cursor.col,
+            y_in_col: cursor.cur,
+            height: h,
+        });
+        cursor.place(h);
+        cursor.post_break(kid);
+    }
+    cursor.max_fill
 }
 
 /// Per-page rule height (CSS Multicol 1 §3, Chrome 156): every page but the
@@ -725,19 +923,22 @@ mod tests {
         // is filtered from `flow_children` so the paginator places it through
         // `place_out_of_flow` at its specified position, not as an in-flow
         // block that consumes column space. Here kid 2 is abspos; the flow
-        // only sees kids 1 and 3 in the column fill.
+        // only sees kids 1 and 3 in the column fill, and the last-page
+        // balance (R1 HIGH-3) places them side-by-side at col_h = 100.
         let kids = vec![
             block(1, 0.0, 100.0),
             block(2, 0.0, 50.0),  // abspos — filtered
-            block(3, 0.0, 100.0), // in-flow, follows kid 1 in column 0
+            block(3, 0.0, 100.0), // in-flow, lands in col 1 after balance
         ];
         let flow = flow_children(&kids, facts2(300.0, 0.0), (320.0, 320.0), &abspos(&[2]));
         assert!(flow.slots[1].is_none(), "abspos kid must be filtered");
         assert_eq!(flow.slots[0].unwrap().y_in_col, 0.0);
-        // Kid 3 sits BELOW kid 1 in col 0 (not pushed to col 1 by the abspos's
-        // phantom column consumption).
-        assert_eq!(flow.slots[2].unwrap().col, 0);
-        assert_eq!(flow.slots[2].unwrap().y_in_col, 100.0);
+        assert_eq!(flow.slots[0].unwrap().col, 0);
+        // Kid 3 lands in col 1 at y=0 after balance (col_h = max(100, 200/2) =
+        // 100 fits red col0 / blue col1); without the abspos filter kid 3
+        // would be pushed to col 2 by the abspos's phantom column consumption.
+        assert_eq!(flow.slots[2].unwrap().col, 1);
+        assert_eq!(flow.slots[2].unwrap().y_in_col, 0.0);
         // Overflow listing treats the abspos kid the same way.
         let mut tall = kids;
         tall[1] = block(2, 0.0, 500.0); // would overflow if flowed
@@ -810,6 +1011,47 @@ mod tests {
         assert_eq!(flow.slots[1].unwrap().page, 0);
         assert_eq!(flow.slots[2].unwrap().col, 0);
         assert_eq!(flow.slots[2].unwrap().page, 1);
+    }
+
+    #[test]
+    fn the_last_page_balances_its_filled_column_height() {
+        // R1 HIGH-3 (column-fill: balance on the last page, CSS Multicol 1
+        // §3): three kids of 100px on a 320px-cap 2-column body. The forward
+        // pass would stack all three in col 0 (300 <= 320); balance shrinks
+        // the col_h to the smallest value that fits them in 2 cols (200), so
+        // kid 1 lands col 0 y 0, kid 2 col 0 y 100, kid 3 col 1 y 0, and
+        // `fill_heights[last]` collapses from 300 to 200.
+        let kids: Vec<Fragment> = (0..3).map(|i| block(i as u32 + 1, 0.0, 100.0)).collect();
+        let flow = flow_children(&kids, facts2(300.0, 0.0), (320.0, 320.0), &no_oof());
+        assert_eq!(flow.slots[0].unwrap().col, 0);
+        assert_eq!(flow.slots[0].unwrap().y_in_col, 0.0);
+        assert_eq!(flow.slots[1].unwrap().col, 0);
+        assert_eq!(flow.slots[1].unwrap().y_in_col, 100.0);
+        assert_eq!(flow.slots[2].unwrap().col, 1);
+        assert_eq!(flow.slots[2].unwrap().y_in_col, 0.0);
+        assert_eq!(flow.fill_heights, vec![200.0]);
+        // The last page's rule tracks the filled column, not the cap (the
+        // rule shrinks on the balanced tail).
+        assert_eq!(flow.rule_heights, vec![200.0]);
+    }
+
+    #[test]
+    fn balance_honours_break_before_column_in_the_fitness_check() {
+        // A kid with `break-before: column` forces a column break at the
+        // balance col_h too; the balancer must pick a col_h large enough to
+        // fit the resulting sub-flows. Kids [50, 50, 50] with break-before:
+        // column on kid 2: balance col_h must allow kid 1 alone in col 0,
+        // kids 2+3 in col 1 → smallest col_h is 100.
+        let mut kids: Vec<Fragment> =
+            (0..3).map(|i| block(i as u32 + 1, 0.0, 50.0)).collect();
+        kids[1].break_meta.break_before = BreakRule::Column;
+        let flow = flow_children(&kids, facts2(300.0, 0.0), (320.0, 320.0), &no_oof());
+        // The balanced flow preserves the break: kid 2 opens col 1 regardless.
+        assert_eq!(flow.slots[1].unwrap().col, 1);
+        assert_eq!(flow.slots[1].unwrap().y_in_col, 0.0);
+        assert_eq!(flow.slots[2].unwrap().col, 1);
+        assert_eq!(flow.slots[2].unwrap().y_in_col, 50.0);
+        assert_eq!(flow.fill_heights, vec![100.0]);
     }
 
     #[test]
