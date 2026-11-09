@@ -4,6 +4,37 @@ All notable changes to turbo-html2pdf are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/); versions follow SemVer. The npm,
 PyPI, and crates.io packages release in lockstep from a `v*` tag (PyPI on `pyv*`).
 
+## [0.8.2] — turbo-dom 0.8.2
+
+Rebuilt on turbo-dom 0.8.2 (`turbo-dom-layout` + `turbo-dom` 0.8.2, from crates.io).
+The npm, PyPI and crates.io packages move to 0.8.2 with turbo-dom, turbo-test and
+turbo-surf.
+
+- **Added (emit, turbo-dom #457)**: handle the four new [`ColumnRuleStyle`]
+  variants (`Groove` / `Ridge` / `Inset` / `Outset`) in
+  `paint_column_rule`. Chrome 156 splits these 3D styles into two per-side
+  shades across the rule's inline axis; until the PDF painter learns the
+  shading, each degrades to a solid band of the author colour so a rule still
+  paints at its intended footprint. Unit coverage in
+  `crates/turbo-html2pdf-core/src/emit/graphics.rs` asserts the degrade
+  produces one `re`/`f` pair inside the save/restore for all four styles.
+- **Fixed (pagination, abspos-in-multicol)**: with turbo-dom #444,
+  turbo-dom-layout now sizes an abspos descendant of a multicol container to
+  its CSS `width`/`height` (not the container's full content inline size), so
+  `r3-multicol-abspos-child` red/green/blue now match Chrome 156 pixel-for-pixel
+  and are no longer on the `pagination_chrome` `KNOWN` list.
+- **Changed (render, turbo-dom 0.8.2)**: parity fixes carried over from
+  turbo-dom's 0.8.2 release — R1/R2/R3 adversarial-review follow-ups,
+  iframe inline-parent-realm (#478, surf#287 root cause), raster NaN guards
+  across every painter (column-rule, image, border, box-shadow, inset-shadow,
+  gradient, round-border, tiles), SVG `rect_r` NaN guard, raster 100% floor
+  restore, sweep behavioural call-count gate, worker_scope null-prototype
+  events (#438), structuredClone via V8 serializer (#428), `break-*` table
+  (#422), `sweep_collected` HashSet (#425), `-webkit-*` parity (#441), UA_CSS
+  drift (#445), webfont DPR-2 (#446), `fragment_pieces` sub-eps (#426),
+  trailing zero-height (#443), and the #481 coverage floor restore. See
+  turbo-dom's 0.8.2 CHANGELOG for the full upstream list.
+
 ## [0.8.1] — turbo-dom 0.8.1
 
 Rebuilt on turbo-dom 0.8.1 (`turbo-dom-layout` + `turbo-dom` 0.8.1, from crates.io). The npm,
