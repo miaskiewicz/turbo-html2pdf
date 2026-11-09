@@ -444,6 +444,27 @@ mod tests {
     }
 
     #[test]
+    fn three_d_rules_degrade_to_a_solid_band() {
+        // turbo-dom 0.8.2 (#457) added Groove/Ridge/Inset/Outset; until the PDF
+        // painter learns the Chrome split-half shading, each degrades to one
+        // filled rect — one `re`/`f` pair inside the save/restore.
+        for style in [
+            ColumnRuleStyle::Groove,
+            ColumnRuleStyle::Ridge,
+            ColumnRuleStyle::Inset,
+            ColumnRuleStyle::Outset,
+        ] {
+            let f = rule_fragment(100.0, 50.0, 4.0, 180.0, style);
+            let stream = paint(&f, style);
+            assert_eq!(count_ops(&stream, b"q"), 1, "{style:?} missing save_state");
+            assert_eq!(count_ops(&stream, b"Q"), 1, "{style:?} missing restore_state");
+            assert_eq!(count_ops(&stream, b"re"), 1, "{style:?} paints one rect");
+            assert_eq!(count_ops(&stream, b"f"), 1, "{style:?} fills once");
+            assert_eq!(count_ops(&stream, b"c"), 0, "{style:?} uses no curves");
+        }
+    }
+
+    #[test]
     fn double_rule_under_3px_falls_back_to_one_solid_band() {
         // Matches `paint_png.rs::paint_double_rule`: below 3 px one solid fill.
         let f = rule_fragment(100.0, 50.0, 2.0, 180.0, ColumnRuleStyle::Double);
