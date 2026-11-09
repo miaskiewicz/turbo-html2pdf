@@ -1297,8 +1297,10 @@ const fixture = {
 // Keep arrays of primitives inline (`[600, 400]`, `[48, 70, 551, 169]`) so the
 // fixture stays readable row-by-row; `JSON.stringify` would expand them.
 const inlinePrimArrays = (s) =>
-  s.replace(/\[\n\s+((?:-?\d+(?:\.\d+)?)(?:,\n\s+-?\d+(?:\.\d+)?)*)\n\s+\]/g, (_, inner) =>
-    `[${inner.replace(/,\n\s+/g, ", ")}]`);
+  s.replace(
+    /\[\n\s+((?:-?\d+(?:\.\d+)?)(?:,\n\s+-?\d+(?:\.\d+)?)*)\n\s+\]/g,
+    (_, inner) => `[${inner.replace(/,\n\s+/g, ", ")}]`,
+  );
 writeFileSync(out, `${inlinePrimArrays(JSON.stringify(fixture, null, 2))}\n`);
 console.log(`Chrome ${version}: ${cases.length} cases -> ${out}`);
 for (const c of cases) {
