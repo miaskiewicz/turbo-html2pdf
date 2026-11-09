@@ -4288,6 +4288,661 @@
           }
         }
       ]
+    },
+    {
+      "id": "r3-multicol-3cols",
+      "html": "<!DOCTYPE html><html><head><style>@page{size:600px 400px;margin:40px}body{margin:0}</style></head><body><div style=\"columns:3;column-gap:0\"><div style=\"height:110px;background:#ff0000;break-inside:avoid;\"></div><div style=\"height:110px;background:#00ff00;break-inside:avoid;\"></div><div style=\"height:110px;background:#0000ff;break-inside:avoid;\"></div><div style=\"height:110px;background:#ffff00;break-inside:avoid;\"></div><div style=\"height:110px;background:#ff00ff;break-inside:avoid;\"></div><div style=\"height:110px;background:#00ffff;break-inside:avoid;\"></div><div style=\"height:110px;background:#ff8000;break-inside:avoid;\"></div></div></body></html>",
+      "colors": {
+        "red": "#ff0000",
+        "green": "#00ff00",
+        "blue": "#0000ff",
+        "yellow": "#ffff00",
+        "magenta": "#ff00ff",
+        "cyan": "#00ffff",
+        "orange": "#ff8000"
+      },
+      "pages": [
+        {
+          "size": [600, 400],
+          "boxes": {
+            "red": {
+              "bbox": [40, 40, 212, 149],
+              "top": true,
+              "bottom": true
+            },
+            "green": {
+              "bbox": [40, 150, 212, 259],
+              "top": true,
+              "bottom": true
+            },
+            "blue": {
+              "bbox": [213, 40, 386, 149],
+              "top": true,
+              "bottom": true
+            },
+            "yellow": {
+              "bbox": [213, 150, 386, 259],
+              "top": true,
+              "bottom": true
+            },
+            "magenta": {
+              "bbox": [387, 40, 559, 149],
+              "top": true,
+              "bottom": true
+            },
+            "cyan": {
+              "bbox": [387, 150, 559, 259],
+              "top": true,
+              "bottom": true
+            },
+            "orange": null
+          }
+        },
+        {
+          "size": [600, 400],
+          "boxes": {
+            "red": null,
+            "green": null,
+            "blue": null,
+            "yellow": null,
+            "magenta": null,
+            "cyan": null,
+            "orange": {
+              "bbox": [40, 40, 212, 149],
+              "top": true,
+              "bottom": true
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "r3-multicol-with-rule",
+      "html": "<!DOCTYPE html><html><head><style>@page{size:600px 400px;margin:40px}body{margin:0}</style></head><body><div style=\"columns:2;column-gap:16px;column-rule:4px solid #ff8000\"><div style=\"height:180px;background:#ff0000;break-inside:avoid;\"></div><div style=\"height:180px;background:#00ff00;break-inside:avoid;\"></div><div style=\"height:180px;background:#0000ff;break-inside:avoid;\"></div><div style=\"height:180px;background:#ffff00;break-inside:avoid;\"></div></div></body></html>",
+      "colors": {
+        "red": "#ff0000",
+        "green": "#00ff00",
+        "blue": "#0000ff",
+        "yellow": "#ffff00",
+        "orange": "#ff8000"
+      },
+      "pages": [
+        {
+          "size": [600, 400],
+          "boxes": {
+            "red": {
+              "bbox": [40, 40, 291, 219],
+              "top": true,
+              "bottom": true
+            },
+            "green": {
+              "bbox": [308, 40, 559, 219],
+              "top": true,
+              "bottom": true
+            },
+            "blue": null,
+            "yellow": null,
+            "orange": {
+              "bbox": [298, 40, 301, 359],
+              "top": true,
+              "bottom": true
+            }
+          }
+        },
+        {
+          "size": [600, 400],
+          "boxes": {
+            "red": null,
+            "green": null,
+            "blue": {
+              "bbox": [40, 40, 291, 219],
+              "top": true,
+              "bottom": true
+            },
+            "yellow": {
+              "bbox": [308, 40, 559, 219],
+              "top": true,
+              "bottom": true
+            },
+            "orange": {
+              "bbox": [298, 39, 301, 219],
+              "top": true,
+              "bottom": true
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "r3-multicol-break-before-page",
+      "html": "<!DOCTYPE html><html><head><style>@page{size:600px 400px;margin:40px}body{margin:0}</style></head><body><div style=\"columns:2;column-gap:0\"><div style=\"height:140px;background:#ff0000;break-inside:avoid;\"></div><div style=\"height:140px;background:#00ff00;break-inside:avoid;\"></div><div style=\"height:140px;background:#0000ff;break-inside:avoid;break-before:page\"></div></div></body></html>",
+      "colors": {
+        "red": "#ff0000",
+        "green": "#00ff00",
+        "blue": "#0000ff"
+      },
+      "pages": [
+        {
+          "size": [600, 400],
+          "boxes": {
+            "red": {
+              "bbox": [40, 40, 299, 179],
+              "top": true,
+              "bottom": true
+            },
+            "green": {
+              "bbox": [40, 180, 299, 319],
+              "top": true,
+              "bottom": true
+            },
+            "blue": {
+              "bbox": [300, 40, 559, 179],
+              "top": true,
+              "bottom": true
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "r3-multicol-with-rule-dotted",
+      "html": "<!DOCTYPE html><html><head><style>@page{size:600px 400px;margin:40px}body{margin:0}</style></head><body><div style=\"columns:2;column-gap:16px;column-rule:4px dotted #ff8000\"><div style=\"height:180px;background:#ff0000;break-inside:avoid;\"></div><div style=\"height:180px;background:#00ff00;break-inside:avoid;\"></div><div style=\"height:180px;background:#0000ff;break-inside:avoid;\"></div><div style=\"height:180px;background:#ffff00;break-inside:avoid;\"></div></div></body></html>",
+      "colors": {
+        "red": "#ff0000",
+        "green": "#00ff00",
+        "blue": "#0000ff",
+        "yellow": "#ffff00"
+      },
+      "pages": [
+        {
+          "size": [600, 400],
+          "boxes": {
+            "red": {
+              "bbox": [40, 40, 291, 219],
+              "top": true,
+              "bottom": true
+            },
+            "green": {
+              "bbox": [308, 40, 559, 219],
+              "top": true,
+              "bottom": true
+            },
+            "blue": null,
+            "yellow": null
+          }
+        },
+        {
+          "size": [600, 400],
+          "boxes": {
+            "red": null,
+            "green": null,
+            "blue": {
+              "bbox": [40, 40, 291, 219],
+              "top": true,
+              "bottom": true
+            },
+            "yellow": {
+              "bbox": [308, 40, 559, 219],
+              "top": true,
+              "bottom": true
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "r3-multicol-with-rule-dashed",
+      "html": "<!DOCTYPE html><html><head><style>@page{size:600px 400px;margin:40px}body{margin:0}</style></head><body><div style=\"columns:2;column-gap:16px;column-rule:4px dashed #ff8000\"><div style=\"height:180px;background:#ff0000;break-inside:avoid;\"></div><div style=\"height:180px;background:#00ff00;break-inside:avoid;\"></div><div style=\"height:180px;background:#0000ff;break-inside:avoid;\"></div><div style=\"height:180px;background:#ffff00;break-inside:avoid;\"></div></div></body></html>",
+      "colors": {
+        "red": "#ff0000",
+        "green": "#00ff00",
+        "blue": "#0000ff",
+        "yellow": "#ffff00"
+      },
+      "pages": [
+        {
+          "size": [600, 400],
+          "boxes": {
+            "red": {
+              "bbox": [40, 40, 291, 219],
+              "top": true,
+              "bottom": true
+            },
+            "green": {
+              "bbox": [308, 40, 559, 219],
+              "top": true,
+              "bottom": true
+            },
+            "blue": null,
+            "yellow": null
+          }
+        },
+        {
+          "size": [600, 400],
+          "boxes": {
+            "red": null,
+            "green": null,
+            "blue": {
+              "bbox": [40, 40, 291, 219],
+              "top": true,
+              "bottom": true
+            },
+            "yellow": {
+              "bbox": [308, 40, 559, 219],
+              "top": true,
+              "bottom": true
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "r3-multicol-with-rule-double",
+      "html": "<!DOCTYPE html><html><head><style>@page{size:600px 400px;margin:40px}body{margin:0}</style></head><body><div style=\"columns:2;column-gap:16px;column-rule:6px double #ff8000\"><div style=\"height:180px;background:#ff0000;break-inside:avoid;\"></div><div style=\"height:180px;background:#00ff00;break-inside:avoid;\"></div><div style=\"height:180px;background:#0000ff;break-inside:avoid;\"></div><div style=\"height:180px;background:#ffff00;break-inside:avoid;\"></div></div></body></html>",
+      "colors": {
+        "red": "#ff0000",
+        "green": "#00ff00",
+        "blue": "#0000ff",
+        "yellow": "#ffff00"
+      },
+      "pages": [
+        {
+          "size": [600, 400],
+          "boxes": {
+            "red": {
+              "bbox": [40, 40, 291, 219],
+              "top": true,
+              "bottom": true
+            },
+            "green": {
+              "bbox": [308, 40, 559, 219],
+              "top": true,
+              "bottom": true
+            },
+            "blue": null,
+            "yellow": null
+          }
+        },
+        {
+          "size": [600, 400],
+          "boxes": {
+            "red": null,
+            "green": null,
+            "blue": {
+              "bbox": [40, 40, 291, 219],
+              "top": true,
+              "bottom": true
+            },
+            "yellow": {
+              "bbox": [308, 40, 559, 219],
+              "top": true,
+              "bottom": true
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "r3-multicol-shorthand",
+      "html": "<!DOCTYPE html><html><head><style>@page{size:600px 400px;margin:40px}body{margin:0}</style></head><body><div style=\"columns:2 300px;column-gap:16px\"><div style=\"height:180px;background:#ff0000;break-inside:avoid;\"></div><div style=\"height:180px;background:#00ff00;break-inside:avoid;\"></div><div style=\"height:180px;background:#0000ff;break-inside:avoid;\"></div><div style=\"height:180px;background:#ffff00;break-inside:avoid;\"></div></div></body></html>",
+      "colors": {
+        "red": "#ff0000",
+        "green": "#00ff00",
+        "blue": "#0000ff",
+        "yellow": "#ffff00"
+      },
+      "pages": [
+        {
+          "size": [600, 400],
+          "boxes": {
+            "red": {
+              "bbox": [40, 40, 559, 219],
+              "top": true,
+              "bottom": true
+            },
+            "green": null,
+            "blue": null,
+            "yellow": null
+          }
+        },
+        {
+          "size": [600, 400],
+          "boxes": {
+            "red": null,
+            "green": {
+              "bbox": [40, 40, 559, 219],
+              "top": true,
+              "bottom": true
+            },
+            "blue": null,
+            "yellow": null
+          }
+        },
+        {
+          "size": [600, 400],
+          "boxes": {
+            "red": null,
+            "green": null,
+            "blue": {
+              "bbox": [40, 40, 559, 219],
+              "top": true,
+              "bottom": true
+            },
+            "yellow": null
+          }
+        },
+        {
+          "size": [600, 400],
+          "boxes": {
+            "red": null,
+            "green": null,
+            "blue": null,
+            "yellow": {
+              "bbox": [40, 40, 559, 219],
+              "top": true,
+              "bottom": true
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "r3-multicol-break-before-column",
+      "html": "<!DOCTYPE html><html><head><style>@page{size:600px 400px;margin:40px}body{margin:0}</style></head><body><div style=\"columns:2;column-gap:0\"><div style=\"height:100px;background:#ff0000;break-inside:avoid;\"></div><div style=\"height:100px;background:#00ff00;break-inside:avoid;\"></div><div style=\"height:100px;background:#0000ff;break-inside:avoid;break-before:column\"></div></div></body></html>",
+      "colors": {
+        "red": "#ff0000",
+        "green": "#00ff00",
+        "blue": "#0000ff"
+      },
+      "pages": [
+        {
+          "size": [600, 400],
+          "boxes": {
+            "red": {
+              "bbox": [40, 40, 299, 139],
+              "top": true,
+              "bottom": true
+            },
+            "green": {
+              "bbox": [40, 140, 299, 239],
+              "top": true,
+              "bottom": true
+            },
+            "blue": {
+              "bbox": [300, 40, 559, 139],
+              "top": true,
+              "bottom": true
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "r3-multicol-break-after-column",
+      "html": "<!DOCTYPE html><html><head><style>@page{size:600px 400px;margin:40px}body{margin:0}</style></head><body><div style=\"columns:2;column-gap:0\"><div style=\"height:100px;background:#ff0000;break-inside:avoid;\"></div><div style=\"height:100px;background:#00ff00;break-inside:avoid;break-after:column\"></div><div style=\"height:100px;background:#0000ff;break-inside:avoid;\"></div></div></body></html>",
+      "colors": {
+        "red": "#ff0000",
+        "green": "#00ff00",
+        "blue": "#0000ff"
+      },
+      "pages": [
+        {
+          "size": [600, 400],
+          "boxes": {
+            "red": {
+              "bbox": [40, 40, 299, 139],
+              "top": true,
+              "bottom": true
+            },
+            "green": {
+              "bbox": [40, 140, 299, 239],
+              "top": true,
+              "bottom": true
+            },
+            "blue": {
+              "bbox": [300, 40, 559, 139],
+              "top": true,
+              "bottom": true
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "r3-multicol-break-inside-avoid",
+      "html": "<!DOCTYPE html><html><head><style>@page{size:600px 400px;margin:40px}body{margin:0}</style></head><body><div style=\"columns:2;column-gap:0\"><div style=\"height:100px;background:#ff0000;break-inside:avoid;\"></div><div style=\"height:250px;background:#00ff00;break-inside:avoid;break-inside:avoid-column\"></div><div style=\"height:100px;background:#0000ff;break-inside:avoid;\"></div></div></body></html>",
+      "colors": {
+        "red": "#ff0000",
+        "green": "#00ff00",
+        "blue": "#0000ff"
+      },
+      "pages": [
+        {
+          "size": [600, 400],
+          "boxes": {
+            "red": {
+              "bbox": [40, 40, 299, 139],
+              "top": true,
+              "bottom": true
+            },
+            "green": {
+              "bbox": [300, 40, 559, 289],
+              "top": true,
+              "bottom": true
+            },
+            "blue": null
+          }
+        },
+        {
+          "size": [600, 400],
+          "boxes": {
+            "red": null,
+            "green": null,
+            "blue": {
+              "bbox": [40, 40, 299, 139],
+              "top": true,
+              "bottom": true
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "r3-multicol-column-span-all",
+      "html": "<!DOCTYPE html><html><head><style>@page{size:600px 400px;margin:40px}body{margin:0}</style></head><body><div style=\"columns:2;column-gap:0\"><div style=\"height:80px;background:#ff0000;break-inside:avoid;\"></div><div style=\"height:80px;background:#00ff00;break-inside:avoid;\"></div><div style=\"height:60px;background:#ffff00;break-inside:avoid;column-span:all\"></div><div style=\"height:80px;background:#0000ff;break-inside:avoid;\"></div><div style=\"height:80px;background:#ff00ff;break-inside:avoid;\"></div></div></body></html>",
+      "colors": {
+        "red": "#ff0000",
+        "green": "#00ff00",
+        "yellow": "#ffff00",
+        "blue": "#0000ff",
+        "magenta": "#ff00ff"
+      },
+      "pages": [
+        {
+          "size": [600, 400],
+          "boxes": {
+            "red": {
+              "bbox": [40, 40, 299, 119],
+              "top": true,
+              "bottom": true
+            },
+            "green": {
+              "bbox": [300, 40, 559, 119],
+              "top": true,
+              "bottom": true
+            },
+            "yellow": {
+              "bbox": [40, 120, 559, 179],
+              "top": true,
+              "bottom": true
+            },
+            "blue": {
+              "bbox": [40, 180, 299, 259],
+              "top": true,
+              "bottom": true
+            },
+            "magenta": {
+              "bbox": [300, 180, 559, 259],
+              "top": true,
+              "bottom": true
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "r3-multicol-column-fill-auto",
+      "html": "<!DOCTYPE html><html><head><style>@page{size:600px 400px;margin:40px}body{margin:0}</style></head><body><div style=\"columns:2;column-gap:0;column-fill:auto;height:320px\"><div style=\"height:120px;background:#ff0000;break-inside:avoid;\"></div><div style=\"height:120px;background:#00ff00;break-inside:avoid;\"></div><div style=\"height:120px;background:#0000ff;break-inside:avoid;\"></div></div></body></html>",
+      "colors": {
+        "red": "#ff0000",
+        "green": "#00ff00",
+        "blue": "#0000ff"
+      },
+      "pages": [
+        {
+          "size": [600, 400],
+          "boxes": {
+            "red": {
+              "bbox": [40, 40, 299, 159],
+              "top": true,
+              "bottom": true
+            },
+            "green": {
+              "bbox": [40, 160, 299, 279],
+              "top": true,
+              "bottom": true
+            },
+            "blue": {
+              "bbox": [300, 40, 559, 159],
+              "top": true,
+              "bottom": true
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "r3-multicol-nested",
+      "html": "<!DOCTYPE html><html><head><style>@page{size:600px 400px;margin:40px}body{margin:0}</style></head><body><div style=\"columns:2;column-gap:0\"><div style=\"columns:2;column-gap:0\"><div style=\"height:80px;background:#ff0000;break-inside:avoid;\"></div><div style=\"height:80px;background:#00ff00;break-inside:avoid;\"></div><div style=\"height:80px;background:#0000ff;break-inside:avoid;\"></div><div style=\"height:80px;background:#ffff00;break-inside:avoid;\"></div></div><div style=\"height:80px;background:#ff00ff;break-inside:avoid;\"></div><div style=\"height:80px;background:#00ffff;break-inside:avoid;\"></div></div></body></html>",
+      "colors": {
+        "red": "#ff0000",
+        "green": "#00ff00",
+        "blue": "#0000ff",
+        "yellow": "#ffff00",
+        "magenta": "#ff00ff",
+        "cyan": "#00ffff"
+      },
+      "pages": [
+        {
+          "size": [600, 400],
+          "boxes": {
+            "red": {
+              "bbox": [40, 40, 169, 119],
+              "top": true,
+              "bottom": true
+            },
+            "green": {
+              "bbox": [40, 120, 169, 199],
+              "top": true,
+              "bottom": true
+            },
+            "blue": {
+              "bbox": [170, 40, 299, 119],
+              "top": true,
+              "bottom": true
+            },
+            "yellow": {
+              "bbox": [170, 120, 299, 199],
+              "top": true,
+              "bottom": true
+            },
+            "magenta": {
+              "bbox": [300, 40, 559, 119],
+              "top": true,
+              "bottom": true
+            },
+            "cyan": {
+              "bbox": [300, 120, 559, 199],
+              "top": true,
+              "bottom": true
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "r3-multicol-definite-height",
+      "html": "<!DOCTYPE html><html><head><style>@page{size:600px 400px;margin:40px}body{margin:0}</style></head><body><div style=\"columns:2;column-gap:0;height:240px\"><div style=\"height:120px;background:#ff0000;break-inside:avoid;\"></div><div style=\"height:120px;background:#00ff00;break-inside:avoid;\"></div><div style=\"height:120px;background:#0000ff;break-inside:avoid;\"></div><div style=\"height:120px;background:#ffff00;break-inside:avoid;\"></div></div><div style=\"height:50px;background:#ff8000;break-inside:avoid;\"></div></body></html>",
+      "colors": {
+        "red": "#ff0000",
+        "green": "#00ff00",
+        "blue": "#0000ff",
+        "yellow": "#ffff00",
+        "orange": "#ff8000"
+      },
+      "pages": [
+        {
+          "size": [600, 400],
+          "boxes": {
+            "red": {
+              "bbox": [40, 40, 299, 159],
+              "top": true,
+              "bottom": true
+            },
+            "green": {
+              "bbox": [40, 160, 299, 279],
+              "top": true,
+              "bottom": true
+            },
+            "blue": {
+              "bbox": [300, 40, 559, 159],
+              "top": true,
+              "bottom": true
+            },
+            "yellow": {
+              "bbox": [300, 160, 559, 279],
+              "top": true,
+              "bottom": true
+            },
+            "orange": {
+              "bbox": [40, 280, 559, 329],
+              "top": true,
+              "bottom": true
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "r3-multicol-abspos-child",
+      "html": "<!DOCTYPE html><html><head><style>@page{size:600px 400px;margin:40px}body{margin:0}</style></head><body><div style=\"columns:2;column-gap:0;position:relative\"><div style=\"height:100px;background:#ff0000;break-inside:avoid;\"></div><div style=\"position:absolute;top:10px;left:10px;width:50px;height:50px;background:#00ff00\"></div><div style=\"height:100px;background:#0000ff;break-inside:avoid;\"></div></div></body></html>",
+      "colors": {
+        "red": "#ff0000",
+        "green": "#00ff00",
+        "blue": "#0000ff"
+      },
+      "pages": [
+        {
+          "size": [600, 400],
+          "boxes": {
+            "red": {
+              "bbox": [40, 40, 299, 139],
+              "top": true,
+              "bottom": true
+            },
+            "green": {
+              "bbox": [50, 50, 99, 99],
+              "top": true,
+              "bottom": true
+            },
+            "blue": {
+              "bbox": [300, 40, 559, 139],
+              "top": true,
+              "bottom": true
+            }
+          }
+        }
+      ]
     }
   ]
 }

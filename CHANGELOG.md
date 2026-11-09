@@ -4,6 +4,73 @@ All notable changes to turbo-html2pdf are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/); versions follow SemVer. The npm,
 PyPI, and crates.io packages release in lockstep from a `v*` tag (PyPI on `pyv*`).
 
+## [0.8.1] — turbo-dom 0.8.1
+
+Rebuilt on turbo-dom 0.8.1 (`turbo-dom-layout` + `turbo-dom` 0.8.1, from crates.io). The npm,
+PyPI and crates.io packages move to 0.8.1 with turbo-dom, turbo-test and turbo-surf.
+
+- **Added (pagination, #52)**: paginate CSS multi-column (`columns:` /
+  `column-count` / `column-width`) layouts. turbo-dom 0.8.1 lays each multicol
+  container out once, balanced over its columns; the paginator now re-flows
+  those children across pages — top-to-bottom, left-to-right, saturating
+  `used_count` columns before opening a fresh page (CSS `column-fill: auto`
+  for every page but the last, which balances to the tallest filled column,
+  matching Chrome 156). `<div style="columns:2">` with six 200px blocks on a
+  600×400 page body now produces Chrome's three pages (two columns per page),
+  not six. Every per-page container slice carries its background, border and
+  column-rule fragments ([`FragmentContent::ColumnRule`], miaskiewicz/turbo-dom#398
+  PR-D), painted under `pdf-ua` as `/Artifact` marked content.
+- **Added (emit)**: paint `FragmentContent::ColumnRule` into the PDF content
+  stream (the four [`ColumnRuleStyle`] variants that turbo-dom 0.8.1 PR-D
+  emits — `Solid` / `Dotted` / `Dashed` / `Double`), mirroring
+  turbo-dom-raster's `paint_column_rule` so a rule paints identically in the
+  PDF and the raster fallback. The dotted rule stamps Bezier-approximated
+  disks (not axis-aligned squares) so a PDF-level view of a dotted rule
+  matches Chrome's Blink `kDottedStroke` with cap-round, same perimeter as
+  the raster painter. Each `paint_column_rule` call sits inside a `q`/`Q`
+  save/restore so a future graphics-state change (dash pattern, CTM) cannot
+  leak to the next fragment; unit tests at
+  `crates/turbo-html2pdf-core/src/emit/graphics.rs` cover the four styles'
+  operator streams (dotted → Bezier curves + `f`, dashed → `re`/`f`, solid
+  → one `re`/`f`, double → two `re`/`f` bands plus the sub-3px fallback).
+- **Fixed (emit, UA)**: `content_paints` no longer brackets a zero-width or
+  zero-height `ColumnRule` fragment in an `/Artifact BDC … EMC` pair — the
+  predicate now matches `paint_column_rule`'s geometry short-circuit, so a
+  stray zero-sized rule from a future layout bug cannot emit a vacuous
+  marked-content sequence into the PDF/UA stream.
+- **Fixed (pagination, multicol)**: an empty multicol container
+  (`<div style="columns:2"></div>` with no in-flow children, or one whose
+  only emitted child is a `ColumnRule` fragment the paginator drops) still
+  produces one page so the walker can paint the container's own box and
+  advance past it. An in-flow multicol child whose height alone exceeds the
+  page body is placed anyway and flagged with
+  [`LintCode::RegionOverflow`] — matching the generic walker's
+  `overflow_leaf` behaviour — instead of silently bleeding past the page.
+- **Fixed (pagination, multicol, #52 R1)**: last-page `column-fill: balance`
+  shrinks the balanced column height on the final page to the smallest value
+  at which the kids fit in `used_count` columns (CSS Multicol 1 §3). Our
+  paginator previously ran `column-fill: auto` on every page, stacking the
+  last page's content in column 0 when it under-filled the cap; the balanced
+  flow now matches Chrome 156 (nested multicol cases included). The pass
+  honours `BreakRule::Column` in both its fitness check and placement so a
+  forced column break keeps its forced position under balance too.
+- **Fixed (pagination, multicol, #52 R1)**: an out-of-flow descendant
+  (`position: absolute` / `fixed`) of a multicol container is no longer
+  flowed as an in-flow column kid — it is routed through
+  `Walker::place_out_of_flow`, so an anchored abspos lands at its specified
+  inset relative to its containing block and a static abspos sits at its
+  galley position. `flow_boxes` descends into multicol containers (skipping
+  the shared-node-id `ColumnRule` fragments) to record each OOF kid's facts
+  for the paginator to read.
+- **Fixed (pagination, multicol, #52 R1 HIGH-2)**: `break-before: column`
+  and `break-after: column` on a multicol child force a column break
+  around the kid (CSS Fragmentation 3 §3.2). A break at the fragmentainer
+  start is suppressed per §3.5 "class A breaks"; a break that exhausts the
+  last column opens a new page.
+- **Changed (render, turbo-dom 0.8.1)**: parity fixes carried over from
+  turbo-dom's 0.8.1 release — see turbo-dom's 0.8.1 CHANGELOG for the upstream
+  engine changes this release carries.
+
 ## [0.8.0] — 2026-11-05 — turbo-dom 0.8.0
 
 Rebuilt on turbo-dom 0.8.0 (`turbo-dom-layout` + `turbo-dom` 0.8.0, from crates.io). The npm,

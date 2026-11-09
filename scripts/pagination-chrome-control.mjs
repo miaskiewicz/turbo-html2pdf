@@ -19,7 +19,11 @@
 // `render_pages` fragments by crates/turbo-html2pdf-core/tests/pagination_chrome.rs.
 //
 // Usage: node scripts/pagination-chrome-control.mjs [--chrome PATH] [--out PATH]
-//   --chrome  defaults to the Playwright-cached Chrome for Testing 156;
+//   --chrome  defaults to the frozen Chrome for Testing 156 oracle in
+//             ~/.cache/turbo-consolidation/chrome156 (same binary turbo-dom's
+//             capture scripts use). Playwright's own chromium-NNNN cache drifts
+//             when Playwright is re-installed, which broke this script's Chrome
+//             version pin; the frozen oracle stays at 156.0.8078.47.
 //   --out     defaults to crates/turbo-html2pdf-core/tests/fixtures/pagination_chrome156.json.
 // Needs playwright-core (PLAYWRIGHT_CORE, default ../turbo-surf/node_modules/playwright-core)
 // and poppler's `pdftoppm` on PATH.
@@ -38,7 +42,7 @@ const chromePath =
   values.chrome ||
   join(
     homedir(),
-    "Library/Caches/ms-playwright/chromium-1248/chrome-mac-arm64/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing",
+    ".cache/turbo-consolidation/chrome156/chrome-mac-arm64/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing",
   );
 const out = resolve(
   values.out || join(repo, "crates/turbo-html2pdf-core/tests/fixtures/pagination_chrome156.json"),
@@ -1034,6 +1038,173 @@ const CASES = [
     ),
     colors: ["red", "green", "blue", "yellow", "magenta", "cyan"],
   },
+  {
+    // Three-column multi-column container (miaskiewicz/turbo-html2pdf#52):
+    // 6 blocks of 80px tall on 2-page body of 320px — 3 blocks per column,
+    // 3 columns per page, 1 block left over → 2 pages.
+    id: "r3-multicol-3cols",
+    html: DOC(
+      "body{margin:0}",
+      `<div style="columns:3;column-gap:0">${blocks(["red", "green", "blue", "yellow", "magenta", "cyan", "orange"], 110)}</div>`,
+    ),
+    colors: ["red", "green", "blue", "yellow", "magenta", "cyan", "orange"],
+  },
+  {
+    // Two-column multi-column with a visible solid `column-rule` painted in the
+    // (16px) gap. The rule is an in-flow artifact that paints alongside each
+    // page's columns; the painter must not drop the rules when pagination
+    // re-flows the children (miaskiewicz/turbo-html2pdf#52).
+    id: "r3-multicol-with-rule",
+    html: DOC(
+      "body{margin:0}",
+      `<div style="columns:2;column-gap:16px;column-rule:4px solid #ff8000">${blocks(["red", "green", "blue", "yellow"], 180)}</div>`,
+    ),
+    colors: ["red", "green", "blue", "yellow", "orange"],
+  },
+  {
+    // `break-before: page` inside a multicol: Chrome breaks the page there
+    // (pagination's concern — multicol passes through the computed break-rule
+    // unhonoured, miaskiewicz/turbo-dom#398 PR-E). Page 1: red + green in two
+    // columns (both blocks 140px). Page 2: blue alone at its multicol's column 0.
+    id: "r3-multicol-break-before-page",
+    html: DOC(
+      "body{margin:0}",
+      `<div style="columns:2;column-gap:0">${block(C.red[0], 140)}${block(C.green[0], 140)}${block(C.blue[0], 140, "break-before:page")}</div>`,
+    ),
+    colors: ["red", "green", "blue"],
+  },
+  {
+    // Column-rule variants: dotted, dashed, double. The painter is dialect-correct
+    // only for the solid case (see `column_rule_rect` in `pagination_chrome.rs`):
+    // dotted/dashed/double are compared through the raster oracle in
+    // turbo-dom-raster, not here. These oracles pin page counts and the painted
+    // rule's bounding rectangle (any rule colour pixels present on each page), so
+    // a regression that drops the rule entirely from a page gets caught.
+    id: "r3-multicol-with-rule-dotted",
+    html: DOC(
+      "body{margin:0}",
+      `<div style="columns:2;column-gap:16px;column-rule:4px dotted #ff8000">${blocks(["red", "green", "blue", "yellow"], 180)}</div>`,
+    ),
+    colors: ["red", "green", "blue", "yellow"],
+  },
+  {
+    id: "r3-multicol-with-rule-dashed",
+    html: DOC(
+      "body{margin:0}",
+      `<div style="columns:2;column-gap:16px;column-rule:4px dashed #ff8000">${blocks(["red", "green", "blue", "yellow"], 180)}</div>`,
+    ),
+    colors: ["red", "green", "blue", "yellow"],
+  },
+  {
+    id: "r3-multicol-with-rule-double",
+    html: DOC(
+      "body{margin:0}",
+      `<div style="columns:2;column-gap:16px;column-rule:6px double #ff8000">${blocks(["red", "green", "blue", "yellow"], 180)}</div>`,
+    ),
+    colors: ["red", "green", "blue", "yellow"],
+  },
+  {
+    // The `columns: <count> <width>` shorthand (CSS Multicol 1 §4.3). With a 300px
+    // column-width hint on a 520px content box with a 16px gap, floor((520+16) /
+    // (300+16)) = 1 column, but the explicit count of 2 wins (shorthand sets both).
+    id: "r3-multicol-shorthand",
+    html: DOC(
+      "body{margin:0}",
+      `<div style="columns:2 300px;column-gap:16px">${blocks(["red", "green", "blue", "yellow"], 180)}</div>`,
+    ),
+    colors: ["red", "green", "blue", "yellow"],
+  },
+  {
+    // `break-before: column` on a multicol child: Chrome breaks a column there.
+    // 2-column multicol, three 100px blocks: red at col0y0, green at col0y100.
+    // Blue has `break-before: column` — it forces a new column, landing at col1y0.
+    id: "r3-multicol-break-before-column",
+    html: DOC(
+      "body{margin:0}",
+      `<div style="columns:2;column-gap:0">${block(C.red[0], 100)}${block(C.green[0], 100)}${block(C.blue[0], 100, "break-before:column")}</div>`,
+    ),
+    colors: ["red", "green", "blue"],
+  },
+  {
+    // `break-after: column` on a multicol child: Chrome breaks a column after it.
+    // 2-column multicol, three 100px blocks: red at col0y0; green has
+    // `break-after: column` — it stays at col0y100 but the next (blue) jumps to col1y0.
+    id: "r3-multicol-break-after-column",
+    html: DOC(
+      "body{margin:0}",
+      `<div style="columns:2;column-gap:0">${block(C.red[0], 100)}${block(C.green[0], 100, "break-after:column")}${block(C.blue[0], 100)}</div>`,
+    ),
+    colors: ["red", "green", "blue"],
+  },
+  {
+    // `break-inside: avoid-column` pushes a block that would be fragmented to a
+    // fresh column, when it fits in one. 2-col page body 320px, blocks 200 + 200.
+    // Without avoid, column 0 would fit only one block; with avoid on both blocks,
+    // they land one per column (same as plain overflow); combine green with a tall
+    // 250px block to force Chrome to break only at a safe column boundary.
+    id: "r3-multicol-break-inside-avoid",
+    html: DOC(
+      "body{margin:0}",
+      `<div style="columns:2;column-gap:0">${block(C.red[0], 100)}${block(C.green[0], 250, "break-inside:avoid-column")}${block(C.blue[0], 100)}</div>`,
+    ),
+    colors: ["red", "green", "blue"],
+  },
+  {
+    // `column-span: all`: Chrome breaks the multicol into two sub-flows. The
+    // span-all child spans the container's full content width. 2-col page body
+    // 320px, two small blocks, one span-all block (yellow), two small blocks.
+    id: "r3-multicol-column-span-all",
+    html: DOC(
+      "body{margin:0}",
+      `<div style="columns:2;column-gap:0">${block(C.red[0], 80)}${block(C.green[0], 80)}${block(C.yellow[0], 60, "column-span:all")}${block(C.blue[0], 80)}${block(C.magenta[0], 80)}</div>`,
+    ),
+    colors: ["red", "green", "yellow", "blue", "magenta"],
+  },
+  {
+    // `column-fill: auto` filled every page (not balanced on the last). 2-col
+    // multicol with 3 blocks of 120px each — `column-fill: auto` keeps them stacked
+    // in column 0 up to the page cap (240px for two), then overflows to column 1.
+    id: "r3-multicol-column-fill-auto",
+    html: DOC(
+      "body{margin:0}",
+      `<div style="columns:2;column-gap:0;column-fill:auto;height:320px">${blocks(["red", "green", "blue"], 120)}</div>`,
+    ),
+    colors: ["red", "green", "blue"],
+  },
+  {
+    // Nested multicol: an outer 2-column container holds an inner 2-column
+    // container (as one child). Chrome places the inner multicol as a block
+    // within the outer's column 0, and the inner balances its own kids.
+    id: "r3-multicol-nested",
+    html: DOC(
+      "body{margin:0}",
+      `<div style="columns:2;column-gap:0"><div style="columns:2;column-gap:0">${blocks(["red", "green", "blue", "yellow"], 80)}</div>${block(C.magenta[0], 80)}${block(C.cyan[0], 80)}</div>`,
+    ),
+    colors: ["red", "green", "blue", "yellow", "magenta", "cyan"],
+  },
+  {
+    // Multicol with definite height: `columns:2; height: 240px` caps the balanced
+    // content to 240px, so the content area below the multicol starts at y=40+240.
+    // Trailing orange block sits below, measuring the paginator's cursor advance.
+    id: "r3-multicol-definite-height",
+    html: DOC(
+      "body{margin:0}",
+      `<div style="columns:2;column-gap:0;height:240px">${blocks(["red", "green", "blue", "yellow"], 120)}</div>${block(C.orange[0], 50)}`,
+    ),
+    colors: ["red", "green", "blue", "yellow", "orange"],
+  },
+  {
+    // Abspos child inside a multicol: `position: absolute` descendants are placed
+    // at their specified position, not flowed into a column. Red is in-flow at
+    // col0y0 (100px tall), green (abspos) is at container-relative (0, 10) 50x50,
+    // blue is in-flow at col0y100.
+    id: "r3-multicol-abspos-child",
+    html: DOC(
+      "body{margin:0}",
+      `<div style="columns:2;column-gap:0;position:relative">${block(C.red[0], 100)}<div style="position:absolute;top:10px;left:10px;width:50px;height:50px;background:${C.green[0]}"></div>${block(C.blue[0], 100)}</div>`,
+    ),
+    colors: ["red", "green", "blue"],
+  },
 ];
 
 /** Parse a binary PPM (P6, maxval 255) into { width, height, px(x, y) -> [r,g,b] }. */
@@ -1123,7 +1294,14 @@ const fixture = {
   raster: "pdftoppm -r 96",
   cases,
 };
-writeFileSync(out, `${JSON.stringify(fixture, null, 1)}\n`);
+// Keep arrays of primitives inline (`[600, 400]`, `[48, 70, 551, 169]`) so the
+// fixture stays readable row-by-row; `JSON.stringify` would expand them.
+const inlinePrimArrays = (s) =>
+  s.replace(
+    /\[\n\s+((?:-?\d+(?:\.\d+)?)(?:,\n\s+-?\d+(?:\.\d+)?)*)\n\s+\]/g,
+    (_, inner) => `[${inner.replace(/,\n\s+/g, ", ")}]`,
+  );
+writeFileSync(out, `${inlinePrimArrays(JSON.stringify(fixture, null, 2))}\n`);
 console.log(`Chrome ${version}: ${cases.length} cases -> ${out}`);
 for (const c of cases) {
   console.log(c.id);

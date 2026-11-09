@@ -25,7 +25,7 @@ This document is the build target. It is written for an implementing agent. Sect
 - N-API binding for Node; WASM build as a secondary target. Authoring-frontend packages (React first) shipped separately.
 
 ### 0.2 Non-goals (v1)
-- Arbitrary modern web layout (grid, floats, multi-column flow regions, position: absolute relative to viewport, transforms, filters, animations).
+- Arbitrary modern web layout (grid, floats, position: absolute relative to viewport, transforms, filters, animations). Multi-column flow is supported since 0.8.1 (turbo-dom-layout's balanced layout, paginated per page by turbo-html2pdf-core — miaskiewicz/turbo-html2pdf#52).
 - JavaScript execution inside templates. The DSL is intentionally not Turing-complete.
 - Bidi/complex-script shaping beyond what `rustybuzz` gives for free (RTL is a v2 line item, see §12).
 - Loading remote resources at render time. All assets (fonts, images) are provided by the caller or resolved through a caller-supplied loader. No network in the core.
@@ -590,7 +590,7 @@ A committed, reproducible benchmark suite comparing turbo-html2pdf against the i
 
 ## 12. Roadmap / explicit v2+ deferrals
 - RTL/bidi and complex-script shaping (Arabic, Indic) beyond rustybuzz defaults; `direction`/`unicode-bidi`.
-- CSS grid, floats, multi-column flow regions, `position: absolute/fixed`.
+- CSS grid, floats, `position: absolute/fixed`. (Multi-column pagination landed in 0.8.1; see miaskiewicz/turbo-html2pdf#52.)
 - Vector SVG emission (not rasterized).
 - Scoped/component-local stylesheets.
 - Incremental re-render using the reserved `track` key (re-paginate only changed regions).

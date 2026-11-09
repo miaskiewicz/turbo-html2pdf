@@ -471,6 +471,38 @@ fn layer(c: Rgba, z: Option<Option<i32>>) -> Fragment {
 }
 
 #[test]
+fn emits_a_column_rule_fragment() {
+    // miaskiewicz/turbo-html2pdf#52: a multicol's column-rule fragments are
+    // painted by the `FragmentContent::ColumnRule` arm in `emit::page::paint_content`,
+    // which dispatches to `emit::graphics::paint_column_rule`. Drive the arm
+    // directly so the dispatch gets emit coverage (pagination_chrome's own
+    // rasterizer never calls the PDF emitter).
+    use turbo_html2pdf_core::layout::fragment::ColumnRuleStyle;
+    let rule = |style: ColumnRuleStyle| {
+        Fragment::new(
+            NodeId(99),
+            120.0,
+            40.0,
+            6.0,
+            180.0,
+            FragmentContent::ColumnRule {
+                style,
+                color: Rgba::new(255, 128, 0, 255),
+            },
+        )
+    };
+    let body = vec![
+        rule(ColumnRuleStyle::Solid),
+        rule(ColumnRuleStyle::Dotted),
+        rule(ColumnRuleStyle::Dashed),
+        rule(ColumnRuleStyle::Double),
+    ];
+    let pdf = emit_pdf(&[page_with(body)], &EmitOptions::default());
+    assert!(pdf.starts_with(b"%PDF-1.7"));
+    assert!(contains(&pdf, b"%%EOF"));
+}
+
+#[test]
 fn fragments_paint_in_stacking_order() {
     // miaskiewicz/turbo-html2pdf#35: within a page's body and within a parent, a
     // positioned box paints over the in-flow boxes after it, a negative z-index under

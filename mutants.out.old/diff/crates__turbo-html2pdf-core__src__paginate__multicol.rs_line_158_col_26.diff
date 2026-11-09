@@ -1,0 +1,21 @@
+--- crates/turbo-html2pdf-core/src/paginate/multicol.rs
++++ replace <= with > in FlowState::maybe_wrap
+@@ -150,17 +150,17 @@
+         self.page_h = self.page_h.max(self.y_in_col);
+     }
+ 
+     /// Advance the cursor before placing a `h`-tall child: a child that
+     /// overruns the current column pushes to the next (CSS Fragmentation 3
+     /// §5.2 `break-inside: avoid`), and a run that saturates `used_count`
+     /// columns opens a fresh page.
+     fn maybe_wrap(&mut self, h: f32, facts: MulticolFacts) {
+-        if self.y_in_col <= 0.0 || self.y_in_col + h <= self.cap + FIT_EPS {
++        if self.y_in_col > /* ~ changed by cargo-mutants ~ */ 0.0 || self.y_in_col + h <= self.cap + FIT_EPS {
+             return;
+         }
+         self.col += 1;
+         self.y_in_col = 0.0;
+         if self.col < facts.used_count {
+             return;
+         }
+         self.fill_heights.push(self.page_h);

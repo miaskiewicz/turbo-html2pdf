@@ -1,0 +1,211 @@
+
+*** crates/turbo-html2pdf-core/src/paginate/multicol.rs:122:9: replace FlowState::start -> FlowState with Default::default()
+
+*** mutation diff:
+--- crates/turbo-html2pdf-core/src/paginate/multicol.rs
++++ replace FlowState::start -> FlowState with Default::default()
+@@ -114,28 +114,17 @@
+     page: u32,
+     col: u32,
+     y_in_col: f32,
+     page_h: f32,
+ }
+ 
+ impl FlowState {
+     fn start(count: usize, caps: (f32, f32)) -> FlowState {
+-        let (first_cap, full_cap) = caps;
+-        FlowState {
+-            slots: Vec::with_capacity(count),
+-            fill_heights: Vec::new(),
+-            page_caps: Vec::new(),
+-            full_cap,
+-            cap: first_cap,
+-            page: 0,
+-            col: 0,
+-            y_in_col: 0.0,
+-            page_h: 0.0,
+-        }
++        Default::default() /* ~ changed by cargo-mutants ~ */
+     }
+ 
+     fn step(&mut self, child: &Fragment, facts: MulticolFacts) {
+         if !is_flowable(child) {
+             self.slots.push(None);
+             return;
+         }
+         let h = child.height.max(0.0);
+
+
+*** /Users/grzegorz/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo test --no-run --verbose --package=turbo-html2pdf-core@0.8.0
+       Fresh unicode-ident v1.0.24
+       Fresh cfg-if v1.0.4
+       Fresh siphasher v1.0.3
+       Fresh fastrand v2.4.1
+       Fresh smallvec v1.15.2
+       Fresh version_check v0.9.5
+       Fresh scopeguard v1.2.0
+       Fresh log v0.4.32
+       Fresh new_debug_unreachable v1.0.6
+       Fresh precomputed-hash v0.1.1
+       Fresh core-foundation-sys v0.8.7
+       Fresh hashbrown v0.17.1
+       Fresh utf-8 v0.7.6
+       Fresh proc-macro2 v1.0.106
+       Fresh phf_shared v0.13.1
+       Fresh lock_api v0.4.14
+       Fresh equivalent v1.0.2
+       Fresh itoa v1.0.18
+       Fresh tendril v0.5.0
+       Fresh autocfg v1.5.1
+       Fresh arrayvec v0.7.6
+       Fresh simd-adler32 v0.3.9
+       Fresh quote v1.0.45
+       Fresh libc v0.2.186
+       Fresh serde_core v1.0.228
+       Fresh phf_generator v0.13.1
+       Fresh indexmap v2.14.0
+       Fresh typenum v1.20.1
+       Fresh foreign-types-shared v0.3.1
+       Fresh bitflags v1.3.2
+       Fresh adler2 v2.0.1
+       Fresh memchr v2.8.2
+       Fresh syn v2.0.117
+       Fresh phf_codegen v0.13.1
+       Fresh parking_lot_core v0.9.12
+       Fresh string_cache_codegen v0.6.1
+       Fresh syn v3.0.9
+       Fresh crossbeam-utils v0.8.21
+       Fresh libm v0.2.16
+       Fresh core-foundation v0.9.4
+       Fresh bitflags v2.13.0
+       Fresh dtoa v1.0.11
+       Fresh miniz_oxide v0.8.9
+       Fresh generic-array v0.14.7
+       Fresh zmij v1.0.21
+       Fresh polycool v0.4.0
+       Fresh rustc-hash v2.1.2
+       Fresh serde_derive v1.0.228
+       Fresh phf_macros v0.13.1
+       Fresh parking_lot v0.12.5
+       Fresh bytemuck_derive v1.10.2
+       Fresh zerocopy-derive v0.8.52
+       Fresh foreign-types-macros v0.2.4
+       Fresh crc32fast v1.5.0
+       Fresh cssparser-macros v0.7.1
+       Fresh core-graphics-types v0.1.3
+       Fresh crossbeam-epoch v0.9.18
+       Fresh core_maths v0.1.1
+       Fresh num-traits v0.2.19
+       Fresh dtoa-short v0.3.5
+       Fresh either v1.16.0
+       Fresh kurbo v0.13.1
+       Fresh thiserror-impl v2.0.18
+       Fresh serde v1.0.228
+       Fresh phf v0.13.1
+       Fresh bytemuck v1.25.0
+       Fresh foreign-types v0.5.0
+       Fresh zerocopy v0.8.52
+       Fresh crossbeam-deque v0.8.6
+       Fresh ttf-parser v0.25.1
+       Fresh flate2 v1.1.9
+       Fresh serde_json v1.0.150
+       Fresh slotmap v1.1.1
+       Fresh fdeflate v0.3.7
+       Fresh unicode-ccc v0.4.0
+       Fresh plotters-backend v0.3.7
+       Fresh unicode-bidi v0.3.18
+       Fresh unicode-bidi-mirroring v0.4.0
+       Fresh ciborium-io v0.2.2
+       Fresh string_cache v0.9.0
+       Fresh font-types v0.11.3
+       Fresh cssparser v0.37.0
+       Fresh half v2.7.1
+       Fresh core-graphics v0.23.2
+       Fresh regex-syntax v0.8.11
+       Fresh unicode-script v0.5.8
+       Fresh smol_str v0.3.7
+       Fresh clap_lex v1.1.0
+       Fresh grid v0.17.0
+       Fresh unicode-properties v0.1.4
+       Fresh anstyle v1.0.14
+       Fresh thiserror v2.0.18
+       Fresh png v0.18.1
+       Fresh plotters-svg v0.3.7
+       Fresh rayon-core v1.13.0
+       Fresh itertools v0.10.5
+       Fresh crypto-common v0.1.7
+       Fresh block-buffer v0.10.4
+       Fresh web_atoms v0.2.4
+       Fresh read-fonts v0.39.2
+       Fresh regex-automata v0.4.14
+       Fresh rustybuzz v0.20.1
+       Fresh clap_builder v4.6.0
+       Fresh taffy v0.8.3
+       Fresh core-text v20.1.0
+       Fresh ciborium-ll v0.2.2
+       Fresh encoding_rs v0.8.35
+       Fresh iana-time-zone v0.1.65
+       Fresh memo-map v0.3.3
+       Fresh same-file v1.0.6
+       Fresh unicode-linebreak v0.1.5
+       Fresh jpeg-decoder v0.3.2
+       Fresh aho-corasick v1.1.4
+       Fresh ryu v1.0.23
+       Fresh cast v0.3.0
+       Fresh self_cell v1.2.2
+       Fresh digest v0.10.7
+       Fresh markup5ever v0.39.0
+       Fresh write-fonts v0.48.1
+       Fresh skrifa v0.42.1
+       Fresh clap v4.6.1
+       Fresh ciborium v0.2.2
+       Fresh chrono v0.4.45
+       Fresh criterion-plot v0.5.0
+       Fresh pdf-writer v0.15.0
+       Fresh minijinja v2.20.0
+       Fresh walkdir v2.5.0
+       Fresh regex v1.12.4
+       Fresh plotters v0.3.7
+       Fresh rayon v1.12.0
+       Fresh tinytemplate v1.2.1
+       Fresh cpufeatures v0.2.17
+       Fresh is-terminal v0.4.17
+       Fresh oorandom v11.1.5
+       Fresh once_cell v1.21.4
+       Fresh anes v0.1.6
+       Fresh xml5ever v0.39.0
+       Fresh html5ever v0.39.0
+       Fresh subsetter v0.2.6
+       Fresh sha2 v0.10.9
+       Fresh criterion v0.5.1
+       Fresh markup5ever_rcdom v0.39.0+unofficial
+       Fresh turbo-dom v0.8.0 (https://github.com/miaskiewicz/turbo-dom?rev=42d23639#42d23639)
+       Fresh turbo-dom-layout v0.8.0 (https://github.com/miaskiewicz/turbo-dom?rev=42d23639#42d23639)
+       Dirty turbo-html2pdf-core v0.8.0 (/Users/grzegorz/github-flux/turbo-html2pdf-081-feat52/crates/turbo-html2pdf-core): the file `crates/turbo-html2pdf-core/src/paginate/multicol.rs` has changed (1794176440.486863679s, 11s after last build at 1794176429.504860804s)
+   Compiling turbo-html2pdf-core v0.8.0 (/Users/grzegorz/github-flux/turbo-html2pdf-081-feat52/crates/turbo-html2pdf-core)
+     Running `rustc --crate-name turbo_html2pdf_core --edition=2021 crates/turbo-html2pdf-core/src/lib.rs --error-format=json --json=diagnostic-rendered-ansi,artifacts,future-incompat --emit=dep-info,link -C embed-bitcode=no -C debuginfo=2 -C split-debuginfo=unpacked --test --cfg 'feature="bundled-fonts"' --cfg 'feature="default"' --check-cfg 'cfg(docsrs,test)' --check-cfg 'cfg(feature, values("append", "bundled-fonts", "default", "encrypt", "endnotes", "pdf-a", "pdf-ua", "perf", "print-color", "stamp", "svg", "xref"))' -C metadata=5009115e02bb6779 -C extra-filename=-2bd4354dccceabce --out-dir /Users/grzegorz/github-flux/turbo-html2pdf-081-feat52/target/debug/deps -C incremental=/Users/grzegorz/github-flux/turbo-html2pdf-081-feat52/target/debug/incremental -L dependency=/Users/grzegorz/github-flux/turbo-html2pdf-081-feat52/target/debug/deps --extern chrono=/Users/grzegorz/github-flux/turbo-html2pdf-081-feat52/target/debug/deps/libchrono-d1a4f7c51d4bcd9a.rlib --extern criterion=/Users/grzegorz/github-flux/turbo-html2pdf-081-feat52/target/debug/deps/libcriterion-67e4850d3a5be607.rlib --extern minijinja=/Users/grzegorz/github-flux/turbo-html2pdf-081-feat52/target/debug/deps/libminijinja-6d20dbe6c2f323b6.rlib --extern miniz_oxide=/Users/grzegorz/github-flux/turbo-html2pdf-081-feat52/target/debug/deps/libminiz_oxide-234e2c0016b5acdf.rlib --extern pdf_writer=/Users/grzegorz/github-flux/turbo-html2pdf-081-feat52/target/debug/deps/libpdf_writer-a2f807ca8557a853.rlib --extern png=/Users/grzegorz/github-flux/turbo-html2pdf-081-feat52/target/debug/deps/libpng-3370ac4ea3040497.rlib --extern rustybuzz=/Users/grzegorz/github-flux/turbo-html2pdf-081-feat52/target/debug/deps/librustybuzz-150e619c61685fdb.rlib --extern serde=/Users/grzegorz/github-flux/turbo-html2pdf-081-feat52/target/debug/deps/libserde-4ec022bff85be202.rlib --extern serde_json=/Users/grzegorz/github-flux/turbo-html2pdf-081-feat52/target/debug/deps/libserde_json-a72d58b519498659.rlib --extern sha2=/Users/grzegorz/github-flux/turbo-html2pdf-081-feat52/target/debug/deps/libsha2-b2267dc15d7d86cf.rlib --extern subsetter=/Users/grzegorz/github-flux/turbo-html2pdf-081-feat52/target/debug/deps/libsubsetter-1bab4594f9a29f67.rlib --extern thiserror=/Users/grzegorz/github-flux/turbo-html2pdf-081-feat52/target/debug/deps/libthiserror-a8f41614d112e51c.rlib --extern turbo_dom=/Users/grzegorz/github-flux/turbo-html2pdf-081-feat52/target/debug/deps/libturbo_dom-0d8d043931afa5a1.rlib --extern turbo_dom_layout=/Users/grzegorz/github-flux/turbo-html2pdf-081-feat52/target/debug/deps/libturbo_dom_layout-00c85195befeabd6.rlib`
+     Running `rustc --crate-name turbo_html2pdf_core --edition=2021 crates/turbo-html2pdf-core/src/lib.rs --error-format=json --json=diagnostic-rendered-ansi,artifacts,future-incompat --crate-type lib --emit=dep-info,metadata,link -C embed-bitcode=no -C debuginfo=2 -C split-debuginfo=unpacked --cfg 'feature="bundled-fonts"' --cfg 'feature="default"' --check-cfg 'cfg(docsrs,test)' --check-cfg 'cfg(feature, values("append", "bundled-fonts", "default", "encrypt", "endnotes", "pdf-a", "pdf-ua", "perf", "print-color", "stamp", "svg", "xref"))' -C metadata=a512c73c0011311d -C extra-filename=-e370abbc3f26b178 --out-dir /Users/grzegorz/github-flux/turbo-html2pdf-081-feat52/target/debug/deps -C incremental=/Users/grzegorz/github-flux/turbo-html2pdf-081-feat52/target/debug/incremental -L dependency=/Users/grzegorz/github-flux/turbo-html2pdf-081-feat52/target/debug/deps --extern chrono=/Users/grzegorz/github-flux/turbo-html2pdf-081-feat52/target/debug/deps/libchrono-d1a4f7c51d4bcd9a.rmeta --extern minijinja=/Users/grzegorz/github-flux/turbo-html2pdf-081-feat52/target/debug/deps/libminijinja-6d20dbe6c2f323b6.rmeta --extern miniz_oxide=/Users/grzegorz/github-flux/turbo-html2pdf-081-feat52/target/debug/deps/libminiz_oxide-234e2c0016b5acdf.rmeta --extern pdf_writer=/Users/grzegorz/github-flux/turbo-html2pdf-081-feat52/target/debug/deps/libpdf_writer-a2f807ca8557a853.rmeta --extern rustybuzz=/Users/grzegorz/github-flux/turbo-html2pdf-081-feat52/target/debug/deps/librustybuzz-150e619c61685fdb.rmeta --extern serde=/Users/grzegorz/github-flux/turbo-html2pdf-081-feat52/target/debug/deps/libserde-4ec022bff85be202.rmeta --extern serde_json=/Users/grzegorz/github-flux/turbo-html2pdf-081-feat52/target/debug/deps/libserde_json-a72d58b519498659.rmeta --extern subsetter=/Users/grzegorz/github-flux/turbo-html2pdf-081-feat52/target/debug/deps/libsubsetter-1bab4594f9a29f67.rmeta --extern thiserror=/Users/grzegorz/github-flux/turbo-html2pdf-081-feat52/target/debug/deps/libthiserror-a8f41614d112e51c.rmeta --extern turbo_dom=/Users/grzegorz/github-flux/turbo-html2pdf-081-feat52/target/debug/deps/libturbo_dom-0d8d043931afa5a1.rmeta --extern turbo_dom_layout=/Users/grzegorz/github-flux/turbo-html2pdf-081-feat52/target/debug/deps/libturbo_dom_layout-00c85195befeabd6.rmeta`
+error[E0277]: the trait bound `FlowState: std::default::Default` is not satisfied
+   --> crates/turbo-html2pdf-core/src/paginate/multicol.rs:122:9
+    |
+122 |         Default::default() /* ~ changed by cargo-mutants ~ */
+    |         ^^^^^^^^^^^^^^^^^^ the trait `std::default::Default` is not implemented for `FlowState`
+    |
+help: consider annotating `FlowState` with `#[derive(Default)]`
+    |
+108 + #[derive(Default)]
+109 | struct FlowState {
+    |
+
+For more information about this error, try `rustc --explain E0277`.
+error: could not compile `turbo-html2pdf-core` (lib) due to 1 previous error
+
+Caused by:
+  process didn't exit successfully: `rustc --crate-name turbo_html2pdf_core --edition=2021 crates/turbo-html2pdf-core/src/lib.rs --error-format=json --json=diagnostic-rendered-ansi,artifacts,future-incompat --crate-type lib --emit=dep-info,metadata,link -C embed-bitcode=no -C debuginfo=2 -C split-debuginfo=unpacked --cfg 'feature="bundled-fonts"' --cfg 'feature="default"' --check-cfg 'cfg(docsrs,test)' --check-cfg 'cfg(feature, values("append", "bundled-fonts", "default", "encrypt", "endnotes", "pdf-a", "pdf-ua", "perf", "print-color", "stamp", "svg", "xref"))' -C metadata=a512c73c0011311d -C extra-filename=-e370abbc3f26b178 --out-dir /Users/grzegorz/github-flux/turbo-html2pdf-081-feat52/target/debug/deps -C incremental=/Users/grzegorz/github-flux/turbo-html2pdf-081-feat52/target/debug/incremental -L dependency=/Users/grzegorz/github-flux/turbo-html2pdf-081-feat52/target/debug/deps --extern chrono=/Users/grzegorz/github-flux/turbo-html2pdf-081-feat52/target/debug/deps/libchrono-d1a4f7c51d4bcd9a.rmeta --extern minijinja=/Users/grzegorz/github-flux/turbo-html2pdf-081-feat52/target/debug/deps/libminijinja-6d20dbe6c2f323b6.rmeta --extern miniz_oxide=/Users/grzegorz/github-flux/turbo-html2pdf-081-feat52/target/debug/deps/libminiz_oxide-234e2c0016b5acdf.rmeta --extern pdf_writer=/Users/grzegorz/github-flux/turbo-html2pdf-081-feat52/target/debug/deps/libpdf_writer-a2f807ca8557a853.rmeta --extern rustybuzz=/Users/grzegorz/github-flux/turbo-html2pdf-081-feat52/target/debug/deps/librustybuzz-150e619c61685fdb.rmeta --extern serde=/Users/grzegorz/github-flux/turbo-html2pdf-081-feat52/target/debug/deps/libserde-4ec022bff85be202.rmeta --extern serde_json=/Users/grzegorz/github-flux/turbo-html2pdf-081-feat52/target/debug/deps/libserde_json-a72d58b519498659.rmeta --extern subsetter=/Users/grzegorz/github-flux/turbo-html2pdf-081-feat52/target/debug/deps/libsubsetter-1bab4594f9a29f67.rmeta --extern thiserror=/Users/grzegorz/github-flux/turbo-html2pdf-081-feat52/target/debug/deps/libthiserror-a8f41614d112e51c.rmeta --extern turbo_dom=/Users/grzegorz/github-flux/turbo-html2pdf-081-feat52/target/debug/deps/libturbo_dom-0d8d043931afa5a1.rmeta --extern turbo_dom_layout=/Users/grzegorz/github-flux/turbo-html2pdf-081-feat52/target/debug/deps/libturbo_dom_layout-00c85195befeabd6.rmeta` (exit status: 1)
+warning: build failed, waiting for other jobs to finish...
+error: could not compile `turbo-html2pdf-core` (lib test) due to 1 previous error
+
+Caused by:
+  process didn't exit successfully: `rustc --crate-name turbo_html2pdf_core --edition=2021 crates/turbo-html2pdf-core/src/lib.rs --error-format=json --json=diagnostic-rendered-ansi,artifacts,future-incompat --emit=dep-info,link -C embed-bitcode=no -C debuginfo=2 -C split-debuginfo=unpacked --test --cfg 'feature="bundled-fonts"' --cfg 'feature="default"' --check-cfg 'cfg(docsrs,test)' --check-cfg 'cfg(feature, values("append", "bundled-fonts", "default", "encrypt", "endnotes", "pdf-a", "pdf-ua", "perf", "print-color", "stamp", "svg", "xref"))' -C metadata=5009115e02bb6779 -C extra-filename=-2bd4354dccceabce --out-dir /Users/grzegorz/github-flux/turbo-html2pdf-081-feat52/target/debug/deps -C incremental=/Users/grzegorz/github-flux/turbo-html2pdf-081-feat52/target/debug/incremental -L dependency=/Users/grzegorz/github-flux/turbo-html2pdf-081-feat52/target/debug/deps --extern chrono=/Users/grzegorz/github-flux/turbo-html2pdf-081-feat52/target/debug/deps/libchrono-d1a4f7c51d4bcd9a.rlib --extern criterion=/Users/grzegorz/github-flux/turbo-html2pdf-081-feat52/target/debug/deps/libcriterion-67e4850d3a5be607.rlib --extern minijinja=/Users/grzegorz/github-flux/turbo-html2pdf-081-feat52/target/debug/deps/libminijinja-6d20dbe6c2f323b6.rlib --extern miniz_oxide=/Users/grzegorz/github-flux/turbo-html2pdf-081-feat52/target/debug/deps/libminiz_oxide-234e2c0016b5acdf.rlib --extern pdf_writer=/Users/grzegorz/github-flux/turbo-html2pdf-081-feat52/target/debug/deps/libpdf_writer-a2f807ca8557a853.rlib --extern png=/Users/grzegorz/github-flux/turbo-html2pdf-081-feat52/target/debug/deps/libpng-3370ac4ea3040497.rlib --extern rustybuzz=/Users/grzegorz/github-flux/turbo-html2pdf-081-feat52/target/debug/deps/librustybuzz-150e619c61685fdb.rlib --extern serde=/Users/grzegorz/github-flux/turbo-html2pdf-081-feat52/target/debug/deps/libserde-4ec022bff85be202.rlib --extern serde_json=/Users/grzegorz/github-flux/turbo-html2pdf-081-feat52/target/debug/deps/libserde_json-a72d58b519498659.rlib --extern sha2=/Users/grzegorz/github-flux/turbo-html2pdf-081-feat52/target/debug/deps/libsha2-b2267dc15d7d86cf.rlib --extern subsetter=/Users/grzegorz/github-flux/turbo-html2pdf-081-feat52/target/debug/deps/libsubsetter-1bab4594f9a29f67.rlib --extern thiserror=/Users/grzegorz/github-flux/turbo-html2pdf-081-feat52/target/debug/deps/libthiserror-a8f41614d112e51c.rlib --extern turbo_dom=/Users/grzegorz/github-flux/turbo-html2pdf-081-feat52/target/debug/deps/libturbo_dom-0d8d043931afa5a1.rlib --extern turbo_dom_layout=/Users/grzegorz/github-flux/turbo-html2pdf-081-feat52/target/debug/deps/libturbo_dom_layout-00c85195befeabd6.rlib` (exit status: 1)
+
+*** result: Failure(101)

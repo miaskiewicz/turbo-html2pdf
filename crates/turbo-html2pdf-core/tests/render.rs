@@ -272,6 +272,39 @@ fn ac_6_8_region_taller_than_band_is_clipped_and_linted() {
         .any(|l| l.code == LintCode::RegionOverflow));
 }
 
+#[test]
+fn ac_52_multicol_child_taller_than_body_lints_region_overflow() {
+    // R1 pagination MEDIUM-3: a multicol child whose own height exceeds the
+    // page body is placed anyway and flagged with `LintCode::RegionOverflow`,
+    // matching the generic walker's `overflow_leaf`.
+    let css = "@page { size: 600px 400px; margin: 40px }";
+    // Page body is 600-80 by 400-80 = 520 x 320. A 999px-tall child cannot fit
+    // either column, so pagination emits one `RegionOverflow` lint per such child.
+    let template = "<div style=\"columns:2;column-gap:0\">\
+                    <div style=\"height:999px;background:#ff0000\"></div>\
+                    </div>";
+    let (_pages, diags) = pages(template, css, serde_json::json!({}));
+    assert!(
+        diags
+            .lints
+            .iter()
+            .any(|l| l.code == LintCode::RegionOverflow),
+        "oversized multicol child should flag RegionOverflow, got {:?}",
+        diags.lints
+    );
+}
+
+#[test]
+fn ac_52_empty_multicol_still_renders_one_page() {
+    // R1 pagination MEDIUM-1: an empty multicol container (no in-flow
+    // children) still produces one page so the walker can paint the container
+    // box and advance past it.
+    let css = "@page { size: 600px 400px; margin: 40px }";
+    let template = "<div style=\"columns:2\"></div>";
+    let (out, _diags) = pages(template, css, serde_json::json!({}));
+    assert_eq!(out.len(), 1);
+}
+
 // --------------------------------------------------------------------------
 // determinism
 // --------------------------------------------------------------------------
