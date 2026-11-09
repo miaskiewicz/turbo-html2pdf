@@ -118,12 +118,13 @@ fn paint_dotted_rule(
     page_height_pt: f32,
     cmyk: bool,
 ) {
+    // `paint_column_rule`'s outer guard already rejects width <= 0 / height <= 0
+    // / alpha 0, so `diameter`, `radius` and `period` are all strictly positive
+    // whenever this is called — no defensive inner guard needed.
     let diameter = f.width;
     let radius = diameter / 2.0;
     let period = 2.0 * diameter;
-    if period <= 0.0 || radius <= 0.0 {
-        return;
-    }
+    debug_assert!(period > 0.0 && radius > 0.0, "guarded by paint_column_rule");
     set_fill(content, color, cmyk);
     let cx = f.x + radius;
     let mut cy = f.y + radius;
@@ -168,11 +169,11 @@ fn paint_dashed_rule(
     page_height_pt: f32,
     cmyk: bool,
 ) {
+    // `paint_column_rule`'s outer guard already rejects width <= 0, so `period`
+    // is strictly positive whenever this is called — no defensive inner guard.
     let width = f.width;
     let period = 3.0 * width;
-    if period <= 0.0 {
-        return;
-    }
+    debug_assert!(period > 0.0, "guarded by paint_column_rule");
     let dash = 2.0 * width;
     let end = f.y + f.height;
     let mut dash_top = f.y;
