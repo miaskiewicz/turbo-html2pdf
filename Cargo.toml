@@ -9,7 +9,7 @@ members = [
 ]
 
 [workspace.package]
-version = "0.8.1"
+version = "0.8.2"
 edition = "2021"
 license = "MIT"
 repository = "https://github.com/miaskiewicz/turbo-html2pdf"
@@ -31,10 +31,4 @@ wasm-bindgen = "0.2"
 opt-level = 3
 lto = "thin"
 codegen-units = 1
-
-# Pre-publish patch: validate turbo-dom release/0.8.2 branch before it ships to
-# crates.io. Drop this block before tagging a release (release-guard enforces).
-[patch.crates-io]
-turbo-dom = { git = "https://github.com/miaskiewicz/turbo-dom", rev = "88d6f433" }
-turbo-dom-layout = { git = "https://github.com/miaskiewicz/turbo-dom", rev = "88d6f433" }
 

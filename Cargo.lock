@@ -1898,7 +1898,8 @@ dependencies = [
 [[package]]
 name = "turbo-dom"
 version = "0.8.2"
-source = "git+https://github.com/miaskiewicz/turbo-dom?rev=88d6f433#88d6f4330d9f4e11fc3961bca0019a20f2ec218a"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "66ddf0a8ded7a8c669a3d63e7c6b728d577787b5f74b4df193f452b412fb6145"
 dependencies = [
  "cssparser",
  "html5ever",
@@ -1913,7 +1914,8 @@ dependencies = [
 [[package]]
 name = "turbo-dom-layout"
 version = "0.8.2"
-source = "git+https://github.com/miaskiewicz/turbo-dom?rev=88d6f433#88d6f4330d9f4e11fc3961bca0019a20f2ec218a"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6ccc39a592a082aabdbadb0d7b08e363ecda94d0c7c1ace51c15b9045d8ebb64"
 dependencies = [
  "core-foundation",
  "core-text",
@@ -1932,7 +1934,7 @@ dependencies = [
 
 [[package]]
 name = "turbo-html2pdf-core"
-version = "0.8.1"
+version = "0.8.2"
 dependencies = [
  "aes",
  "cbc",
@@ -1956,7 +1958,7 @@ dependencies = [
 
 [[package]]
 name = "turbo-html2pdf-mcp"
-version = "0.8.1"
+version = "0.8.2"
 dependencies = [
  "serde",
  "serde_json",
@@ -1965,7 +1967,7 @@ dependencies = [
 
 [[package]]
 name = "turbo-pdf-napi"
-version = "0.8.1"
+version = "0.8.2"
 dependencies = [
  "napi",
  "napi-build",
@@ -1977,7 +1979,7 @@ dependencies = [
 
 [[package]]
 name = "turbo-pdf-py"
-version = "0.8.1"
+version = "0.8.2"
 dependencies = [
  "pyo3",
  "pythonize",
@@ -1987,7 +1989,7 @@ dependencies = [
 
 [[package]]
 name = "turbo-pdf-wasm"
-version = "0.8.1"
+version = "0.8.2"
 dependencies = [
  "getrandom 0.2.17",
  "getrandom 0.3.4",
