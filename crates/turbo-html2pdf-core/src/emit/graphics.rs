@@ -104,6 +104,17 @@ pub fn paint_column_rule(
         ColumnRuleStyle::Dotted => paint_dotted_rule(content, frag, color, page_height_pt, cmyk),
         ColumnRuleStyle::Dashed => paint_dashed_rule(content, frag, color, page_height_pt, cmyk),
         ColumnRuleStyle::Double => paint_double_rule(content, frag, color, page_height_pt, cmyk),
+        // turbo-dom 0.8.2 (#457) added the split-half 3D styles. Chrome 156
+        // paints groove/outset as dark|light and ridge/inset as light|dark
+        // across the rule's inline axis; until the PDF painter learns the
+        // per-side shade, degrade to a solid band so the fragment still
+        // paints as its author color.
+        ColumnRuleStyle::Groove
+        | ColumnRuleStyle::Ridge
+        | ColumnRuleStyle::Inset
+        | ColumnRuleStyle::Outset => {
+            fill_rect(content, &box_rect(frag, page_height_pt), color, cmyk);
+        }
     }
     content.restore_state();
 }
@@ -430,6 +441,31 @@ mod tests {
         assert_eq!(count_ops(&stream, b"Q"), 1);
         assert_eq!(count_ops(&stream, b"re"), 2, "double paints two bands");
         assert_eq!(count_ops(&stream, b"f"), 2);
+    }
+
+    #[test]
+    fn three_d_rules_degrade_to_a_solid_band() {
+        // turbo-dom 0.8.2 (#457) added Groove/Ridge/Inset/Outset; until the PDF
+        // painter learns the Chrome split-half shading, each degrades to one
+        // filled rect — one `re`/`f` pair inside the save/restore.
+        for style in [
+            ColumnRuleStyle::Groove,
+            ColumnRuleStyle::Ridge,
+            ColumnRuleStyle::Inset,
+            ColumnRuleStyle::Outset,
+        ] {
+            let f = rule_fragment(100.0, 50.0, 4.0, 180.0, style);
+            let stream = paint(&f, style);
+            assert_eq!(count_ops(&stream, b"q"), 1, "{style:?} missing save_state");
+            assert_eq!(
+                count_ops(&stream, b"Q"),
+                1,
+                "{style:?} missing restore_state"
+            );
+            assert_eq!(count_ops(&stream, b"re"), 1, "{style:?} paints one rect");
+            assert_eq!(count_ops(&stream, b"f"), 1, "{style:?} fills once");
+            assert_eq!(count_ops(&stream, b"c"), 0, "{style:?} uses no curves");
+        }
     }
 
     #[test]
