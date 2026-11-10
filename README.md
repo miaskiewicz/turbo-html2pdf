@@ -137,14 +137,31 @@ a small memory footprint. turbo-html2pdf is a native layout + PDF engine — a l
 call, not an IPC round-trip to Chrome — so the common "render one document" path is
 **tens to hundreds of times faster** (last measured before 0.6.0; see below).
 
-### Benchmarks — pending re-run
+### Benchmarks — 0.8.2 (Apple M5 Max, 18 cores, Node 26)
 
-0.6.0 and 0.7.0 have not been re-benchmarked. The layout engine moved into the shared
-turbo-dom crates in 0.6.0, so the earlier numbers no longer describe the shipped code; a
-re-run of all four turbo-* repos together is planned after the release. The last
-measured (pre-consolidation, 0.1–0.2) numbers, with their machine and date, are kept in
-[`docs/BENCHMARKS-history.md`](docs/BENCHMARKS-history.md). Harness:
-[`benches/competitive/`](benches/competitive/) (`pnpm bench`).
+Measured against every mainstream HTML→PDF engine on the same fonts, geometry and
+content. Full matrix (per workload p50/p95 warm+cold, throughput, peak RSS, PDF size,
+PNG-equivalence) in [`benches/competitive/RESULTS.md`](benches/competitive/RESULTS.md).
+Rerun with `pnpm bench`; the pre-consolidation (0.1–0.2) baseline is kept in
+[`docs/BENCHMARKS-history.md`](docs/BENCHMARKS-history.md).
+
+**Warm render, `invoice` workload, median ms (lower is better):**
+
+| Engine                 | p50 (ms) | vs turbo-html2pdf |
+|------------------------|----------|-------------------|
+| **turbo-html2pdf 0.8.2** | **3.52** | **1×**            |
+| jsPDF                  | 2.23     | 0.63× (draw API, no HTML/CSS) |
+| PDFKit                 | 5.73     | 1.6× (draw API, no HTML/CSS)  |
+| react-pdf              | 15.77    | 4.5× (flexbox, no HTML/CSS)   |
+| Playwright (Chromium)  | 41.78    | 12×               |
+| Typst                  | 47.59    | 14×               |
+| Gotenberg (Chromium)   | 90.79    | 26×               |
+| WeasyPrint             | 646.20   | 184×              |
+
+turbo-html2pdf is the fastest *HTML/CSS* engine measured and within one order of
+magnitude of raw draw-API libraries (jsPDF/PDFKit) that don't lay out HTML at all.
+Larger workloads widen the gap: on `legal` (long flowing text + footnotes),
+turbo-html2pdf renders in 33.56 ms warm vs WeasyPrint's 729 ms (~22×).
 
 ### Why it's *that* fast
 

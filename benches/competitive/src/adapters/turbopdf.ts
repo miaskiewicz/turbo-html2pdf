@@ -10,7 +10,7 @@ import { createRequire } from "node:module";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { Availability, EngineAdapter, Footprint, RenderResult, Workload } from "../types.ts";
-import { FONTS } from "../workloads/fonts.ts";
+import { FONTS, FONT_FAMILY } from "../workloads/fonts.ts";
 import { bodyHtml, layoutCss } from "../workloads/html.ts";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -18,12 +18,18 @@ const HERE = dirname(fileURLToPath(import.meta.url));
 const NAPI_ENTRY = resolve(HERE, "../../../../crates/turbo-pdf-napi/index.js");
 const require = createRequire(import.meta.url);
 
+interface JsFont {
+  data: Buffer;
+  family: string;
+  weight?: number;
+  italic?: boolean;
+}
 interface Program {
   render(opts: Record<string, unknown>, fonts?: unknown): { pdf: Buffer; pageCount: number };
 }
 interface Napi {
   compile(html: string, opts?: unknown): Program;
-  Fonts: { load(fonts: Buffer[]): unknown };
+  Fonts: { load(fonts: JsFont[]): unknown };
 }
 
 export class TurboPdfAdapter implements EngineAdapter {
@@ -31,7 +37,7 @@ export class TurboPdfAdapter implements EngineAdapter {
   readonly kind = "typesetting" as const;
 
   private napi: Napi | null = null;
-  private fontBytes: Buffer[] | null = null;
+  private fontFaces: JsFont[] | null = null;
   private fontsHandle: unknown = null;
   private readonly programs = new Map<string, Program>();
 
@@ -40,9 +46,14 @@ export class TurboPdfAdapter implements EngineAdapter {
     return this.napi;
   }
 
-  private fonts(): Buffer[] {
-    if (!this.fontBytes) this.fontBytes = [readFileSync(FONTS.regular), readFileSync(FONTS.bold)];
-    return this.fontBytes;
+  private fonts(): JsFont[] {
+    if (!this.fontFaces) {
+      this.fontFaces = [
+        { data: readFileSync(FONTS.regular), family: FONT_FAMILY, weight: 400 },
+        { data: readFileSync(FONTS.bold), family: FONT_FAMILY, weight: 700 },
+      ];
+    }
+    return this.fontFaces;
   }
 
   detect(): Promise<Availability> {
