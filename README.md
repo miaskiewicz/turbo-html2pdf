@@ -144,7 +144,8 @@ below measures turbo-html2pdf against jsPDF's draw API.
 
 Measured **2026-11-13** on Apple M5 Max (18 cores), macOS arm64, Node 26.11.0:
 turbo-html2pdf **0.8.4**, pinned to turbo-dom **`8266b30a`**, versus jsPDF **2.5.2**
-with jspdf-autotable **3.8.4**. Three complete **Turbo → jsPDF → jsPDF → Turbo**
+with jspdf-autotable **3.8.4**. The [current dependency pin](docs/RELEASE-0.8.4.md)
+may be newer; these results retain their measured source. Three complete **Turbo → jsPDF → jsPDF → Turbo**
 cycles; each block has 10 warmups and 100 measured renders per mode/workload.
 The table reports medians of the six blocks' p50 values, in milliseconds.
 
