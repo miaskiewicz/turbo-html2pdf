@@ -85,7 +85,7 @@ scripts/agent/build-napi.sh
 ## Pinning turbo-dom pre-publish, and dropping the pin
 
 The v0.8.4 candidate requires `turbo-dom` and `turbo-dom-layout` `=0.8.4`,
-with a temporary git patch at `397dc639c2b60eed5824a3c72b6c4630ef1f9186`
+with a temporary git patch at `4238c125d922749cfc5ea3040ddc250447a45a70`
 until those versions are published. To update a reviewed pre-publish pin:
 
 ```sh
