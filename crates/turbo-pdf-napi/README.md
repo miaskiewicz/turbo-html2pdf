@@ -195,8 +195,9 @@ fs.writeFileSync('out.pdf', pdf)   // %PDF-1.7
 - Raster images (PNG/JPEG, alpha → SMask) with a sane max-size clamp.
 - Watermarks: out-of-the-box faded diagonal **DRAFT** text (word/colour/angle
   configurable) and background-image watermarks.
-- Optional, off-by-default capability gates: `endnotes`, `print-color` (CMYK).
-  Planned: `xref`, `svg`, `pdf-a`, `pdf-ua` — see [`TODO/`](https://github.com/miaskiewicz/turbo-html2pdf/blob/main/TODO/).
+- The Node package enables endnotes, internal cross-references, CMYK print colour,
+  PDF/A, PDF/UA, PDF append, AES-256 encryption and post-render stamping.
+  The separate `turbo-html2pdf-svg` package adds SVG image support.
 - Deterministic output; `Send + Sync`; no network / no system fonts.
 
 ## Status
@@ -204,7 +205,7 @@ fs.writeFileSync('out.pdf', pdf)   // %PDF-1.7
 `v0.8.3` is the release version for npm, PyPI and crates.io; registry
 verification follows the root `PUBLISHING.md`. The core engine is heavily tested (the `turbo-html2pdf-core`
 crate holds 100% line coverage with a cyclomatic-complexity ≤ 5 gate). Bindings:
-Node (napi) and WebAssembly. See [`docs/`](https://github.com/miaskiewicz/turbo-html2pdf/blob/main/docs/) for the full guide and
+Node (N-API), WebAssembly and Python (PyO3), plus the Rust MCP server. See [`docs/`](https://github.com/miaskiewicz/turbo-html2pdf/blob/main/docs/) for the full guide and
 [`benches/competitive/`](https://github.com/miaskiewicz/turbo-html2pdf/blob/main/benches/competitive/) for the benchmark harness.
 
 ## License

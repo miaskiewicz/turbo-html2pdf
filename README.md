@@ -468,7 +468,8 @@ npm i turbo-html2pdf-svg    # identical API, SVG support baked in (resvg)
 
 ```bash
 cargo test --workspace            # engine + bindings' Rust tests
-pnpm install && pnpm lint         # oxlint + biome for the JS/TS packages
+pnpm install && pnpm lint         # oxlint for the JS/TS packages
+pnpm format:check                 # biome formatting
 ```
 
 PR CI (`.github/workflows/ci.yml`) runs on ubuntu: rustfmt, clippy `-D warnings`, the
@@ -484,7 +485,9 @@ lint run as separate jobs. macOS and Windows builds run only in the release work
 
 **`v0.8.3`** is the release version for npm, PyPI and crates.io; the
 [release procedure](./PUBLISHING.md) records the tag triggers and registry checks.
-The turbo-dom crates are pinned to 0.8.3 (on crates.io). Bindings: Node (N-API), WebAssembly (lean + fonts), Python (PyO3),
+Both `turbo-dom` and `turbo-dom-layout` are pinned to exact `=0.8.3` registry
+requirements, with no git override. The `v0.8.3` tag releases npm/crates.io and
+MCP archives; `pyv0.8.3` releases PyPI from the same merge commit. Bindings: Node (N-API), WebAssembly (lean + fonts), Python (PyO3),
 MCP. See [`docs/`](docs/) for the full guide and [`CHANGELOG.md`](CHANGELOG.md) for
 what changed in 0.8.3.
 

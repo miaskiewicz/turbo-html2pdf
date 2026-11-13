@@ -84,8 +84,9 @@ scripts/agent/build-napi.sh
 
 ## Pinning turbo-dom pre-publish, and dropping the pin
 
-While a turbo-dom patch release is in flight, this workspace resolves
-`turbo-dom{,-layout}` from a git rev via `[patch.crates-io]`:
+The v0.8.3 release pins `turbo-dom` and `turbo-dom-layout` to exact `=0.8.3`
+registry requirements, without a patch. For a future unreleased turbo-dom
+candidate, temporarily resolve both from a git rev via `[patch.crates-io]`:
 
 ```sh
 scripts/agent/pin-turbo-dom.sh <rev-or-sha>
@@ -99,8 +100,8 @@ git sources for turbo-dom:
 scripts/agent/drop-turbo-dom-pin.sh
 ```
 
-This matches the 0.7.1 flow (CLAUDE.md "Pre-tag gate" and PUBLISHING.md
-"Pre-tag: drop the pre-publish patch").
+See CLAUDE.md "Pre-tag gate" and PUBLISHING.md "Pre-tag: drop the pre-publish
+patch" for release guards and registry verification.
 
 ## Comparing against Chrome
 
