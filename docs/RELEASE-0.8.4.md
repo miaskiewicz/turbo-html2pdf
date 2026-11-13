@@ -7,18 +7,20 @@ WASM package versions are stamped by the publishing workflow.
 ## Integrated changes
 
 `turbo-dom` and `turbo-dom-layout` require `=0.8.4` and temporarily resolve from
-`dac92864936c1ab90b333eda40a279836126be84`. This includes the validated ASCII
+`655404321e2ae05a93e25aad8752726800246944`. This includes the validated ASCII
 direction shortcut and shared preparation for paired intrinsic text widths.
 Both consumed crate trees are byte-identical to the benchmarked `8266b30a`
-revision. The ABBA report retains that measured revision; the dependency refresh
-has its own build, binding, workspace and PDF-parity checks. The separate Cow
+revision. The ABBA report retains that measured revision. The validation below
+identifies which revisions executed the broader checks; the current pin also
+passes its own workspace compile check. The separate Cow
 cascade experiment is excluded because measured latency did not improve reliably. See [CHANGELOG.md](../CHANGELOG.md) for the full release.
 
 ## Validation recorded on 2026-11-13
 
 - Workspace checked at `ed985b90`: **526 tests pass**, zero failures/ignores.
   Both consumed crate trees are verified unchanged at the current pin.
-- Actual final native addon: **29 binding tests pass**, zero skips.
+- Native addon checked at `dac92864`: **29 binding tests pass**, zero skips.
+  The current pin passes a workspace compile check with identical consumed sources.
 - Strict all-targets Clippy and formatting pass.
 - Upstream combined DOM layout suite: **1,198 tests pass**, with strict gates.
 - All 16 native preflight PDFs remain byte-identical to the frozen baseline
