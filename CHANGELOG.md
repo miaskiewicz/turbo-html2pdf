@@ -12,7 +12,9 @@ PyPI, and crates.io packages release in lockstep from a `v*` tag (PyPI on `pyv*`
   glyph placement when position-error bounds or vertical offsets prevent batching.
 - **Layout integration (#73, turbo-dom #508)**: resolve inherited font sizes through
   the shared layout helper without reconstructing a complete box style during
-  source collection; consume the local bounded shaping-cache retention fix.
+  source collection; consume bounded shaping-cache retention, reusable Rustybuzz
+  shaping plans and paired table intrinsic measurements from the pinned turbo-dom
+  v0.8.4 candidate.
 - **Native version (#73)**: report the compiled addon version to prevent stale
   binaries from being mislabeled by the benchmark harness.
 - **Benchmarks (#73)**: render jsPDF paragraphs and footnotes with pagination and
