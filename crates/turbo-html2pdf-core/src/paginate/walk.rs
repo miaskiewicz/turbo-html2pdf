@@ -622,9 +622,8 @@ impl<'a> Walker<'a> {
         gap: f32,
     ) {
         let last = flow.fill_heights.len().saturating_sub(1);
-        for (page, (&fill_h, &rule_h)) in
-            flow.fill_heights.iter().zip(&flow.rule_heights).enumerate()
-        {
+        let page_heights = flow.fill_heights.iter().zip(&flow.rule_heights);
+        for (page, (&fill_h, &rule_h)) in page_heights.enumerate() {
             let page_top = self.open_multicol_page(page == 0, headers, gap);
             self.emit_multicol_page(f, facts, flow, page as u32, (fill_h, rule_h), page_top);
             if page < last {

@@ -111,9 +111,9 @@ thiserror = { workspace = true }
 # and re-exported from this crate at its old paths. bundled-fonts/perf/svg are
 # forwarded; xref/pdf-ua/print-color are this crate's own (runtime layout options +
 # post-layout semantics).
-turbo-dom-layout = { version = "0.8.2", default-features = false }
+turbo-dom-layout = { version = "=0.8.3", default-features = false }
 # The DOM templates are parsed into and styled from (`Flow`).
-turbo-dom = "0.8"
+turbo-dom = "=0.8.3"
 rustybuzz = "0.20.1"
 pdf-writer = "0.15.0"
 subsetter = "0.2.6"
@@ -138,7 +138,7 @@ getrandom = { version = "0.2", optional = true }
 
 [dev-dependencies]
 # `test-support` exposes `FontFace::collection_fixture_faces` (emit/fonts.rs test).
-turbo-dom-layout = { version = "0.8.2", default-features = false, features = ["test-support"] }
+turbo-dom-layout = { version = "=0.8.3", default-features = false, features = ["test-support"] }
 # Tests build PNG fixtures (was a normal dependency before the layout half moved out).
 png = "0.18.1"
 sha2 = "0.10"

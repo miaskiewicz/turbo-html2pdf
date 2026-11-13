@@ -20,7 +20,8 @@ copy of `assets/fonts` — tests and benches read them through turbo-dom-layout'
 `t:`-directive / paged / PDF ones (tree-literal inputs come from turbo-dom-layout's
 `test_support::literal`; the S2 legacy-vs-Tree equivalence gate was retired at S5 with
 the legacy input).
-`turbo-dom-layout` and `turbo-dom` 0.7.0 come from crates.io (no `[patch.crates-io]`);
+`turbo-dom-layout` and `turbo-dom` are pinned to `=0.8.3` from crates.io
+(no `[patch.crates-io]`);
 `release-guard` fails a tag if a git pin comes back.
 
 ## Release runbook
@@ -39,7 +40,7 @@ Required GitHub repo secrets: **`NPM_TOKEN`** (npm token with public-package pub
 package, uploads nothing).
 
 The `turbo-html2pdf-mcp` crate depends on `turbo-html2pdf-core` with an explicit
-`version = "0.7"` (^0.7) alongside its `path` — crates.io requires a version on
+`version = "0.8"` (^0.8) alongside its `path` — crates.io requires a version on
 the dep. It only needs bumping on a **minor** (0.x) change, not every patch;
 keep it in sync with the workspace major.minor when you cross a minor boundary.
 
@@ -132,7 +133,7 @@ them — e.g. `src/semantics_derive.rs`).
 
 - `bundled-fonts` (default): embeds Inter/Roboto, Liberation Serif/PT Serif,
   Fira Code/IBM Plex Mono so docs render with no caller fonts (~6 MB).
-- `endnotes`, `xref`, `print-color`, `pdf-a`, `pdf-ua`, `append`, `encrypt`, `svg`.
+- `endnotes`, `xref`, `print-color`, `pdf-a`, `pdf-ua`, `append`, `encrypt`, `stamp`, `svg`.
   `bundled-fonts`, `perf`, `svg` forward to turbo-dom-layout's features of the same
   name; `xref` / `print-color` become turbo-dom-layout runtime options
   (`atomic_internal_links`, `accept_cmyk`) and `pdf-ua`/`xref` turn on the post-layout
@@ -140,15 +141,18 @@ them — e.g. `src/semantics_derive.rs`).
 - `pdf-a`/`pdf-ua`/`cmyk` are also **per-render** runtime toggles on
   `EmitOptions` (default off → byte-identical plain RGB/untagged output).
 
-Bindings (napi/py) compile the full feature set EXCEPT `svg`. The browser `-wasm`
+The Node binding enables `endnotes`, `xref`, `pdf-a`, `pdf-ua`, `print-color`,
+`append`, `encrypt` and `stamp`, plus the default bundled fonts. Python and MCP
+enable the same capabilities except `stamp`. The standard builds omit `svg`;
+the separate Node `-svg` package enables it. The browser `-wasm`
 crate pins core `default-features = false` (no fonts) + the capability features;
 `-wasm-fonts` adds `bundled-fonts`. The `.wasm` build needs
 `RUSTFLAGS='--cfg getrandom_backend="wasm_js"'` (encrypt/append pull getrandom 0.3).
 
 `crates/turbo-html2pdf-mcp` is a native **MCP server** (stdio JSON-RPC 2.0, no
 SDK) over the same core pipeline — a `bin` (`turbo-html2pdf-mcp`) over a testable
-protocol `lib`. It compiles the same full feature set EXCEPT `svg` and exposes
-`render` / `append_pdf` / `check_template` (the union of the napi + py surface).
+protocol `lib`. It compiles the Python capability set (without `stamp` or `svg`) and exposes
+`render` / `append_pdf` / `check_template` over that pipeline.
 It is a Rust binary, NOT an npm/PyPI package. The `publish-mcp` job ships
 per-platform GitHub Release archives; `release-crates.yml` also publishes the
 crate for `cargo install turbo-html2pdf-mcp`. Local builds use

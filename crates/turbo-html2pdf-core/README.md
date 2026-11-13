@@ -8,13 +8,15 @@ No headless browser, no Chromium, deterministic byte-for-byte output.
 This is the pure-Rust core crate, for in-process Rust consumers. The Node
 (N-API), Python (PyO3), browser (WASM), and MCP-server surfaces are thin shims
 over it — see the [repo](https://github.com/miaskiewicz/turbo-html2pdf) for those.
+Version 0.8.3 pins its shared DOM and layout dependencies to the published
+`turbo-dom = "=0.8.3"` and `turbo-dom-layout = "=0.8.3"` crates.
 
 ```rust
-use turbo_pdf_core::{
+use turbo_html2pdf_core::{
     build_cascade, compile, emit_pdf, render_pages, CompileOptions, Diagnostics,
     EmitOptions, RenderInputs, NoImages,
 };
-use turbo_pdf_core::style::{parse_stylesheet, TokenSet};
+use turbo_html2pdf_core::style::{parse_stylesheet, TokenSet};
 
 let (program, _) = compile("<h1>{{ title }}</h1>", &CompileOptions::default()).unwrap();
 let data = serde_json::json!({ "title": "Hello" });
@@ -29,7 +31,7 @@ let pages = render_pages(
         data: &data,
         cascade: &cascade,
         at_rules: &at_rules,
-        fonts: &turbo_pdf_core::FontRegistry::new(),
+        fonts: &turbo_html2pdf_core::FontRegistry::new(),
         images: &NoImages,
         now: None,
     },
@@ -114,7 +116,7 @@ These source-mapping rules apply only to native HTML, preserving PDF whitespace.
 provenance. The rendered first collapsed space can still have positive advance;
 native caret canonicalization follows only a zero-space source suffix ending at
 an actual same-line glyph edge. Preformatted glyph spaces keep ordinary provenance.
-In v0.3.8 these structs gain a field: callers constructing them with
+Since v0.3.8 these structs include this field: callers constructing them with
 Rust struct literals must initialize the new flag (false for ordinary glyphs).
 
 Native text Range and block/replaced Element quads preserve each flat transform
