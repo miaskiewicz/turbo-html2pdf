@@ -63,7 +63,7 @@ export class TurboPdfAdapter implements EngineAdapter {
       const ok = out.pdf.length > 0 && out.pdf.subarray(0, 5).toString() === "%PDF-";
       return Promise.resolve(
         ok
-          ? { available: true, version: "0.8.2", reason: null }
+          ? { available: true, version: "0.8.3", reason: null }
           : { available: false, version: null, reason: "napi produced no PDF" },
       );
     } catch (e) {
