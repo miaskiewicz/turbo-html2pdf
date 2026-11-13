@@ -18,11 +18,15 @@ PyPI, and crates.io packages release in lockstep from a `v*` tag (PyPI on `pyv*`
   source collection; consume bounded shaping-cache retention, reusable Rustybuzz
   shaping plans and paired table intrinsic measurements from the pinned turbo-dom
   v0.8.4 candidate. Intrinsic text-width queries now avoid unused glyph/line output,
-  and style resolution avoids temporary CSS property-name allocations.
+  and style resolution avoids temporary CSS property-name allocations. The pinned
+  candidate also skips Unicode direction buffers for ASCII text and prepares
+  table-cell text once for paired min/max intrinsic widths, preserving PDF output.
 - **Native version (#73)**: report the compiled addon version to prevent stale
   binaries from being mislabeled by the benchmark harness.
 - **Benchmarks (#73)**: render jsPDF paragraphs and footnotes with pagination and
   validate every page's source text in both warm and cold paths before timing.
+  Add the 0.8.4/jsPDF three-cycle ABBA report, raw timings and a reproducible
+  driver; README tables show the latest measured cold/warm render latencies.
   Historical benchmark results retain their original version and workload labels.
 
 ## [0.8.3] — 2026-11-13

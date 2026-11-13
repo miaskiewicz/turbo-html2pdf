@@ -10,8 +10,9 @@ The workflows are the executable procedure:
 | `vX.Y.Z` | `.github/workflows/release-crates.yml` | crates.io `turbo-html2pdf-core`, then `turbo-html2pdf-mcp` |
 | `pyvX.Y.Z` | `.github/workflows/release-py.yml` | PyPI `turbo-html2pdf`: four platform wheels and an sdist |
 
-For v0.8.3, `turbo-html2pdf-core` pins both `turbo-dom-layout` and `turbo-dom`
-to exact `=0.8.3` registry requirements. Their matching releases must be on crates.io before
+The current v0.8.4 candidate requires `turbo-dom-layout` and `turbo-dom`
+`=0.8.4`, temporarily resolved from the exact pre-publish git revision
+`8266b30a366758a591f4d9952823576a468637a3`. Their matching releases must be on crates.io before
 `release-crates.yml` publishes core (it waits, bounded, for the locked versions on the
 crates.io index: `scripts/wait-crates-index.sh`). For prerelease integration, a
 temporary `[patch.crates-io]` may pin a turbo-dom git revision; the
@@ -62,9 +63,9 @@ authorization. Merging an ordinary PR does not publish a version.
    hook; do not bypass its gates.
 4. Inspect `cargo package -p turbo-html2pdf-core --list` and package verification.
    While the turbo-dom crates are not yet on crates.io (patch present), only a
-   content check is possible: `cargo package -p turbo-html2pdf-core --no-verify
-   --exclude-lockfile` (no fonts, no layout sources; `turbo-dom-layout` / `turbo-dom`
-   are plain registry requirements in the packaged `Cargo.toml`).
+   content listing is possible: `cargo package -p turbo-html2pdf-core --list`
+   (no fonts, no layout sources). This does not verify the future registry package;
+   run full package verification after both dependency versions are published.
    The crates release workflow runs `cargo package` before uploading core. MCP
    can resolve its registry core dependency only after core is published. Review
    npm package contents; native binaries and WASM outputs are assembled by the
@@ -75,14 +76,14 @@ authorization. Merging an ordinary PR does not publish a version.
 
 ## Pre-tag: drop the pre-publish patch
 
-The v0.8.3 release already uses registry dependencies with no patch. For any
-release prepared with `[patch.crates-io]`, drop it on the release PR head after
-the matching turbo-dom publish finishes. For v0.8.3, the verification commands are:
+The v0.8.4 candidate still uses a pre-publish git patch. Drop it on the release
+PR head after the matching turbo-dom publish finishes. Keep the exact registry
+requirements; do not tag while the patch remains. The verification commands are:
 
 ```sh
-# 1. turbo-dom-layout 0.8.3 and turbo-dom 0.8.3 must be on crates.io.
+# 1. turbo-dom-layout 0.8.4 and turbo-dom 0.8.4 must be on crates.io.
 for c in turbo-dom turbo-dom-layout; do
-  curl -fsSL "https://index.crates.io/tu/rb/$c" | grep -q '"vers":"0.8.3"' && echo "$c 0.8.3 ok"
+  curl -fsSL "https://index.crates.io/tu/rb/$c" | grep -q '"vers":"0.8.4"' && echo "$c 0.8.4 ok"
 done
 # 2. Delete the `[patch.crates-io]` section (and its comment) from the root Cargo.toml.
 # 3. Re-lock ONLY those two crates from crates.io (no unrelated lockfile churn).
@@ -90,7 +91,7 @@ cargo update -p turbo-dom-layout -p turbo-dom
 git diff --stat Cargo.lock                    # only the two entries (source + checksum)
 ! grep -n 'source = "git+' Cargo.lock         # no git sources left
 # 4. Guards and gates against the registry crates.
-sh scripts/release-guard.sh v0.8.3 && sh scripts/release-guard.sh pyv0.8.3
+sh scripts/release-guard.sh v0.8.4 && sh scripts/release-guard.sh pyv0.8.4
 cargo test --workspace
 cargo package -p turbo-html2pdf-core --locked # full verify now that deps are published
 node scripts/package-notices.mjs --check      # notices built from the registry crate
@@ -99,9 +100,9 @@ node scripts/package-notices.mjs --pack && (cd crates/turbo-pdf-napi && npm pack
 ```
 
 Then merge with a merge commit and tag that merge SHA (next section):
-`git tag -a v0.8.3 "$RELEASE_SHA" -m "Release v0.8.3"` and
-`git tag -a pyv0.8.3 "$RELEASE_SHA" -m "Python release v0.8.3"`, then
-`git push origin v0.8.3 pyv0.8.3`.
+`git tag -a v0.8.4 "$RELEASE_SHA" -m "Release v0.8.4"` and
+`git tag -a pyv0.8.4 "$RELEASE_SHA" -m "Python release v0.8.4"`, then
+`git push origin v0.8.4 pyv0.8.4`.
 
 ## Tag, monitor and verify
 

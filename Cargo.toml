@@ -34,5 +34,5 @@ codegen-units = 1
 
 # Prerelease v0.8.4 integration; drop after the matching turbo-dom publication.
 [patch.crates-io]
-turbo-dom = { git = "https://github.com/miaskiewicz/turbo-dom", rev = "26272a83e8f8c1f335d9c615c942674b1de8ec1a" }
-turbo-dom-layout = { git = "https://github.com/miaskiewicz/turbo-dom", rev = "26272a83e8f8c1f335d9c615c942674b1de8ec1a" }
+turbo-dom = { git = "https://github.com/miaskiewicz/turbo-dom", rev = "8266b30a366758a591f4d9952823576a468637a3" }
+turbo-dom-layout = { git = "https://github.com/miaskiewicz/turbo-dom", rev = "8266b30a366758a591f4d9952823576a468637a3" }

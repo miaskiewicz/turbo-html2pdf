@@ -8,8 +8,9 @@ The incumbent way to make a PDF from HTML is to drive headless Chrome
 (Puppeteer/Playwright/Gotenberg) — ship ~200 MB of Chromium, spin up a process per
 render, host a service. **turbo-html2pdf is just a binary.** It *is* the layout +
 PDF engine, so generating a PDF is a single library call — no Chromium to download,
-no service to run, no 200 ms spin-up, deterministic output, and **tens to hundreds
-of times faster** in the last measured run ([benchmark history](docs/BENCHMARKS-history.md)). It renders with **zero caller
+no service to run, no browser spin-up, and deterministic output. See the
+[latest jsPDF comparison](#benchmarks--084-candidate) and
+[historical HTML-to-PDF comparisons](docs/BENCHMARKS-history.md). It renders with **zero caller
 fonts** too, because the default sans/serif/mono fonts ship in the build.
 
 **Then the kicker: the same engine also runs *inside* a web browser.** Because it
@@ -53,6 +54,7 @@ PDF. The Rust engine lives in
 [`crates/turbo-html2pdf-core`](https://github.com/miaskiewicz/turbo-html2pdf/tree/main/crates/turbo-html2pdf-core).
 
 > Local development candidate: **`v0.8.4`**. See [CHANGELOG.md](./CHANGELOG.md) and
+> [candidate validation](docs/RELEASE-0.8.4.md), plus
 > [publishing and registry verification](./PUBLISHING.md).
 
 ## 🌐 Bonus: the same engine runs *inside* a web browser
@@ -134,34 +136,37 @@ warning.
 
 No headless Chromium means no ~200 MB browser to ship, no per-process spin-up, and
 a small memory footprint. turbo-html2pdf is a native layout + PDF engine — a library
-call, not an IPC round-trip to Chrome — so the common "render one document" path is
-**tens to hundreds of times faster** (last measured before 0.6.0; see below).
+call, not an IPC round-trip to Chrome. Historical browser-engine comparisons are
+kept in the [benchmark history](docs/BENCHMARKS-history.md); the current comparison
+below measures turbo-html2pdf against jsPDF's draw API.
 
-### Benchmarks — 0.8.2 (Apple M5 Max, 18 cores, Node 26)
+### Benchmarks — 0.8.4 candidate
 
-Measured against every mainstream HTML→PDF engine on the same fonts, geometry and
-content. Full matrix (per workload p50/p95 warm+cold, throughput, peak RSS, PDF size,
-PNG-equivalence) in [`benches/competitive/RESULTS.md`](benches/competitive/RESULTS.md).
-Rerun with `pnpm bench`; the pre-consolidation (0.1–0.2) baseline is kept in
-[`docs/BENCHMARKS-history.md`](docs/BENCHMARKS-history.md).
+Measured **2026-11-13** on Apple M5 Max (18 cores), macOS arm64, Node 26.11.0:
+turbo-html2pdf **0.8.4**, pinned to turbo-dom **`8266b30a`**, versus jsPDF **2.5.2**
+with jspdf-autotable **3.8.4**. Three complete **Turbo → jsPDF → jsPDF → Turbo**
+cycles; each block has 10 warmups and 100 measured renders per mode/workload.
+The table reports medians of the six blocks' p50 values, in milliseconds.
 
-**Warm render, `invoice` workload, median ms (lower is better):**
+| Workload | Turbo warm | jsPDF warm | Turbo cold | jsPDF cold |
+|---|---:|---:|---:|---:|
+| Invoice | **1.39** | 2.57 | **1.85** | 2.44 |
+| 100-row report | 10.55 | **6.96** | 12.74 | **6.74** |
+| Legal + footnotes | 11.81 | **7.81** | 11.96 | **8.13** |
+| Mixed | 5.52 | **5.06** | 6.04 | **4.82** |
 
-| Engine                 | p50 (ms) | vs turbo-html2pdf |
-|------------------------|----------|-------------------|
-| **turbo-html2pdf 0.8.2** | **3.52** | **1×**            |
-| jsPDF                  | 2.23     | 0.63× (draw API, no HTML/CSS) |
-| PDFKit                 | 5.73     | 1.6× (draw API, no HTML/CSS)  |
-| react-pdf              | 15.77    | 4.5× (flexbox, no HTML/CSS)   |
-| Playwright (Chromium)  | 41.78    | 12×               |
-| Typst                  | 47.59    | 14×               |
-| Gotenberg (Chromium)   | 90.79    | 26×               |
-| WeasyPrint             | 646.20   | 184×              |
+Warm Turbo renders reuse compiled HTML and a font handle; cold renders compile
+HTML and prepare fonts per document. These are render latencies, not process
+startup times. Both engines use the same Evolventa fonts and complete logical
+content, validated across every PDF page before timing. jsPDF draws documents
+directly; the outputs are not pixel-identical HTML/CSS renderings.
 
-turbo-html2pdf is the fastest *HTML/CSS* engine measured and within one order of
-magnitude of raw draw-API libraries (jsPDF/PDFKit) that don't lay out HTML at all.
-Larger workloads widen the gap: on `legal` (long flowing text + footnotes),
-turbo-html2pdf renders in 33.56 ms warm vs WeasyPrint's 729 ms (~22×).
+Coordinated build/test jobs were paused; OS/VM/background-service activity still
+occurred and is recorded with the samples. Full p50/p95 tables, PDF sizes,
+methodology and reproduction commands are in the
+[0.8.4 ABBA report](benches/competitive/ABBA-0.8.4.md).
+The [older multi-engine matrix](benches/competitive/RESULTS.md) retains its
+original 0.8.2 labels and is not a fresh comparison with those engines.
 
 ### Why it's *that* fast
 
