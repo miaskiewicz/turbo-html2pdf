@@ -4,12 +4,9 @@ A reproducible matrix comparing **turbo-pdf** against the incumbent PDF engines 
 shared corpus of logical documents — same fonts, same A4 geometry, same text — so the
 numbers are honest and not cherry-picked (spec §10.2 harness rules, AC-10.8–10.13).
 
-> Status: external tooling is built now for every OTHER engine. The **turbo-pdf
-> adapter is a stub** (`src/adapters/turbopdf.ts`) until Phase 10 (N-API) lands, and
-> the `cargo xtask bench-competitive` Rust wiring is **deferred** — see
-> [Deferred work](#deferred-work). The harness runs end-to-end today with whatever
-> subset of engines is installed; missing engines are skipped gracefully, never
-> hard-failed.
+The turbo-html2pdf adapter runs the native N-API engine: cold calls compile the
+shared template, and warm calls reuse a compiled `Program`. Missing optional engines
+are skipped with an explicit reason.
 
 ## What it measures
 
@@ -18,13 +15,23 @@ Per `(engine × workload)`:
 - **Cold start / init** — process or engine spin-up (Chromium launch is the killer,
   measured explicitly, AC-10.9).
 - **Warm render latency** — p50 and p95 over ≥100 runs (configurable).
-- **Throughput** — documents/sec at concurrency = core count.
+- **Throughput** — documents/sec for concurrent requests up to core count. A
+  synchronous native adapter still runs serially on the Node thread; this is not
+  a multi-threaded native-engine throughput measurement.
 - **Peak RSS** — sampled process RSS during the measured runs.
 - **Output PDF size** — bytes of the produced PDF.
 - **Distribution footprint** — whether the engine ships a browser, dependency notes.
-- **PNG equivalence** — page-1 rasterized via poppler and `pixelmatch`-diffed against
-  a reference engine; a similarity score proves the renders are comparable and flags
-  "winning by doing less" (AC-10.10).
+- **Content admission** — before timing, Poppler extracts text from **all pages**
+  of separate cold-path and warm-path preflight renders.
+  Every source word occurrence in headings, table rows, paragraphs and footnotes
+  must appear. A missing tool, failed extraction or omitted content suppresses the
+  timing cell with an error; repetition and page wrapping do not hide missing prose.
+- **PNG similarity** — page 1 rasterized via Poppler and `pixelmatch`-diffed against
+  a reference engine. This is only a first-page visual diagnostic, not proof of
+  complete or equivalent layout. Content admission also does not certify CSS,
+  placement, accessibility or pixel parity. It compares token counts, not order
+  or row associations; repeated headers can contribute matching tokens. Review
+  layout fidelity separately rather than treating admission as visual proof.
 
 ## Workloads (claim-gating ids)
 
@@ -48,7 +55,7 @@ the layout engine crate's Evolventa faces under turbo-dom-layout's `assets/fonts
 
 | Engine                 | Approach            | Install needs                          |
 |------------------------|---------------------|----------------------------------------|
-| turbo-pdf **(stub)**   | native N-API        | pending Phase 10                       |
+| turbo-html2pdf        | native N-API        | build the addon in `crates/turbo-pdf-napi` |
 | Puppeteer              | headless Chromium   | npm + Chromium download                |
 | Playwright             | headless Chromium   | npm + `npx playwright install chromium`|
 | Gotenberg              | Chromium over HTTP  | docker container                       |
@@ -67,7 +74,8 @@ docker HTTP) and **skips gracefully** if absent.
 The harness itself only needs the monorepo install:
 
 ```bash
-pnpm install            # from repo root; this package is globbed via benches/*
+pnpm install            # from repo root
+(cd benches/competitive && npm install) # install this standalone harness
 ```
 
 The competitor engines are **optional** — install only the ones you want to measure.
@@ -106,8 +114,9 @@ docker run --rm -p 3000:3000 gotenberg/gotenberg:8
 
 ### PNG equivalence (poppler)
 
-`pdftoppm` rasterizes PDFs for the pixel diff. Without it, similarity is simply not
-scored (the rest of the harness still runs).
+`pdftotext` is required for all-page content admission. Without it, benchmark cells
+are rejected rather than reporting unverified speed claims. `pdftoppm` is optional:
+without it, only the first-page image similarity is omitted. Both ship with Poppler.
 
 - macOS: `brew install poppler`
 - Debian/Ubuntu: `apt-get install poppler-utils`
@@ -134,15 +143,11 @@ node --experimental-strip-types src/cli.ts \
   hardware/OS + per-engine versions (AC-10.11).
 
 `--reference <id>` selects the engine whose render is the PNG-equivalence baseline
-(default `pdfkit`, an always-available pure-JS engine). Once Phase 10 lands, the
-WeasyPrint or Puppeteer render is the more honest fidelity baseline.
+(default `pdfkit`, when installed). A browser or WeasyPrint render can be a more
+useful visual baseline, but manual drawing and HTML/CSS layout remain different work.
 
 ## Deferred work
 
-- **`TODO(phase14)` in `src/adapters/turbopdf.ts`** — wire the real turbo-pdf adapter
-  once Phase 10 (N-API) exposes `compile()` / `Program.render()`. Cold = include
-  compile; warm = reuse the cached `Program` (AC-10.4 amortization). Until then the
-  adapter reports itself unavailable so the matrix still runs end-to-end.
 - **`cargo xtask bench-competitive`** (AC-10.8) — a thin Rust wrapper that shells into
   this harness (`pnpm bench:full`) and copies the artifact into CI. Deferred: there is
   no `xtask` crate yet and Phase 14's brief is to **not** touch the root workspace
@@ -155,3 +160,20 @@ Every public performance claim ("Nx faster than Puppeteer") MUST cite a specific
 `(workload id, machine)` from `RESULTS.md` and link the reproducing command. No
 freestanding multipliers. The metrics table is keyed by engine + workload id precisely
 so claims map 1:1 to a workload.
+
+
+## Regression tests and interpreting old results
+
+```sh
+node --experimental-strip-types --test content.test.ts
+```
+
+The tests reject omitted/repeated prose and notes, exercise actual multi-page
+jsPDF output, and prove omitted content in either cold or warm output prevents
+entry into the timing loop. jsPDF and
+Poppler integration cases skip when those optional test prerequisites are absent.
+
+Historical `RESULTS.md` runs remain unchanged. In runs before the v0.8.4 fix,
+the jsPDF legal/mixed adapter omitted paragraphs and footnotes; those latency rows
+must not be used as content-equivalent comparisons. Current jsPDF draws that text
+with page wrapping, but it still does not implement the HTML/CSS engine's layout.

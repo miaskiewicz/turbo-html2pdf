@@ -4,6 +4,21 @@ All notable changes to turbo-html2pdf are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/); versions follow SemVer. The npm,
 PyPI, and crates.io packages release in lockstep from a `v*` tag (PyPI on `pyv*`).
 
+## [0.8.4] — Unreleased
+
+- **PDF emission (#73)**: reuse each face's deterministic glyph remapper across
+  embedding and painting, invalidating it when additional glyphs are collected.
+  Batch safe horizontal text with explicit advance corrections; retain absolute
+  glyph placement when position-error bounds or vertical offsets prevent batching.
+- **Layout integration (#73, turbo-dom #508)**: resolve inherited font sizes through
+  the shared layout helper without reconstructing a complete box style during
+  source collection; consume the local bounded shaping-cache retention fix.
+- **Native version (#73)**: report the compiled addon version to prevent stale
+  binaries from being mislabeled by the benchmark harness.
+- **Benchmarks (#73)**: render jsPDF paragraphs and footnotes with pagination and
+  validate every page's source text in both warm and cold paths before timing.
+  Historical benchmark results retain their original version and workload labels.
+
 ## [0.8.3] — 2026-11-13
 
 Rebuilt on the published turbo-dom 0.8.3 release. Both `turbo-dom` and

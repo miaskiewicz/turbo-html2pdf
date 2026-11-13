@@ -52,7 +52,7 @@ string* — they pair with a render package (`turbo-html2pdf` on Node, a
 PDF. The Rust engine lives in
 [`crates/turbo-html2pdf-core`](https://github.com/miaskiewicz/turbo-html2pdf/tree/main/crates/turbo-html2pdf-core).
 
-> Release version: **`v0.8.3`**. See [CHANGELOG.md](./CHANGELOG.md) and
+> Local development candidate: **`v0.8.4`**. See [CHANGELOG.md](./CHANGELOG.md) and
 > [publishing and registry verification](./PUBLISHING.md).
 
 ## 🌐 Bonus: the same engine runs *inside* a web browser
@@ -483,13 +483,14 @@ lint run as separate jobs. macOS and Windows builds run only in the release work
 
 ## Status
 
-**`v0.8.3`** is the release version for npm, PyPI and crates.io; the
+**`v0.8.4`** is a local, unreleased candidate for npm, PyPI and crates.io; the
 [release procedure](./PUBLISHING.md) records the tag triggers and registry checks.
-Both `turbo-dom` and `turbo-dom-layout` are pinned to exact `=0.8.3` registry
-requirements, with no git override. The `v0.8.3` tag releases npm/crates.io and
-MCP archives; `pyv0.8.3` releases PyPI from the same merge commit. Bindings: Node (N-API), WebAssembly (lean + fonts), Python (PyO3),
+Both `turbo-dom` and `turbo-dom-layout` target exact `=0.8.4` versions,
+currently resolved through an exact prerelease git revision for validation.
+Remove those overrides after turbo-dom is published, before tagging. The `v0.8.4`
+tag releases npm/crates.io and MCP archives; `pyv0.8.4` releases PyPI from the same merge commit. Bindings: Node (N-API), WebAssembly (lean + fonts), Python (PyO3),
 MCP. See [`docs/`](docs/) for the full guide and [`CHANGELOG.md`](CHANGELOG.md) for
-what changed in 0.8.3.
+what changed in 0.8.4.
 
 ## License
 

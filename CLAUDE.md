@@ -20,8 +20,9 @@ copy of `assets/fonts` — tests and benches read them through turbo-dom-layout'
 `t:`-directive / paged / PDF ones (tree-literal inputs come from turbo-dom-layout's
 `test_support::literal`; the S2 legacy-vs-Tree equivalence gate was retired at S5 with
 the legacy input).
-`turbo-dom-layout` and `turbo-dom` are pinned to `=0.8.3` from crates.io
-(no `[patch.crates-io]`);
+The local 0.8.4 candidate targets `turbo-dom-layout` and `turbo-dom` `=0.8.4`
+through an exact prerelease git override. Drop those overrides after the matching crates
+are published;
 `release-guard` fails a tag if a git pin comes back.
 
 ## Release runbook

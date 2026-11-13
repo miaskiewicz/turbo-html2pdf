@@ -28,6 +28,7 @@ interface Program {
   render(opts: Record<string, unknown>, fonts?: unknown): { pdf: Buffer; pageCount: number };
 }
 interface Napi {
+  version(): string;
   compile(html: string, opts?: unknown): Program;
   Fonts: { load(fonts: JsFont[]): unknown };
 }
@@ -59,11 +60,15 @@ export class TurboPdfAdapter implements EngineAdapter {
   detect(): Promise<Availability> {
     try {
       const napi = this.load();
+      if (typeof napi.version !== "function") {
+        throw new Error("native addon has no version() export; rebuild it");
+      }
+      const version = napi.version();
       const out = napi.compile("<p>ok</p>").render({ css: "", fonts: this.fonts(), now: 0 });
       const ok = out.pdf.length > 0 && out.pdf.subarray(0, 5).toString() === "%PDF-";
       return Promise.resolve(
         ok
-          ? { available: true, version: "0.8.3", reason: null }
+          ? { available: true, version, reason: null }
           : { available: false, version: null, reason: "napi produced no PDF" },
       );
     } catch (e) {

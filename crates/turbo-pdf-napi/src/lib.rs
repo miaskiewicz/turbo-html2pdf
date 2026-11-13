@@ -41,6 +41,12 @@ use turbo_html2pdf_core::{
 
 use convert::{build_registry, diagnostics_to_js, JsDiagnostic, JsFont, JsImage, MapResolver};
 
+/// Version of the compiled native engine, independent of JavaScript package metadata.
+#[napi]
+pub fn version() -> String {
+    env!("CARGO_PKG_VERSION").to_owned()
+}
+
 /// Options for a single render pass. All fields are optional; omit what you do
 /// not need. `data` defaults to `null`, `css` to empty, `fonts`/`images` to empty.
 #[napi(object)]

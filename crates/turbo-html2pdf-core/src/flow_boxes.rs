@@ -12,7 +12,8 @@ use std::collections::HashMap;
 use turbo_dom::Handle;
 use turbo_dom_layout::layout::fragment::{Fragment, FragmentContent};
 use turbo_dom_layout::layout::value::{
-    parse_px, resolve_box_style, BoxStyle, LengthPct, Position, ResolveCtx, DEFAULT_FONT_SIZE,
+    parse_px, resolve_box_style, resolve_font_size, BoxStyle, LengthPct, Position, ResolveCtx,
+    DEFAULT_FONT_SIZE,
 };
 use turbo_dom_layout::style::ComputedStyle;
 use turbo_dom_layout::{NodeSources, StyledNode};
@@ -47,11 +48,7 @@ pub(crate) fn flow_boxes(
 /// Record every styled element's style with the font size it inherits.
 fn collect<'s>(nodes: &'s [StyledNode], parent_font: f32, out: &mut Styles<'s>) {
     for element in nodes.iter().filter_map(StyledNode::as_element) {
-        let ctx = ResolveCtx {
-            parent_font_size: parent_font,
-            cb_width: 0.0,
-        };
-        let font = resolve_box_style(&element.style, ctx).font_size;
+        let font = resolve_font_size(&element.style, parent_font);
         if let Some(source) = element.source {
             out.insert(source, (&element.style, parent_font));
         }

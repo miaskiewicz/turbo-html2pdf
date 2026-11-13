@@ -57,6 +57,12 @@ function renderWith(opts) {
   });
 }
 
+test("compiled native version matches the published package metadata", { skip: !lib }, () => {
+  const metadata = JSON.parse(readFileSync(join(root, "package.json"), "utf8"));
+  assert.equal(lib.version(), metadata.version);
+  assert.equal(lib.default.version(), metadata.version);
+});
+
 test("pdfA:true emits an OutputIntent with the GTS_PDFA subtype", { skip: !lib }, () => {
   const { pdf } = renderWith({ pdfA: true });
   assert.equal(pdf.subarray(0, 5).toString("latin1"), "%PDF-", "PDF magic");

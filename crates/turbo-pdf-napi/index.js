@@ -144,6 +144,7 @@ const layoutBoxes = guard((html, css, width, height) =>
 const stamp = guard((pdf, opts) => native.stamp(pdf, opts));
 
 module.exports = {
+  version: native.version,
   compile,
   render,
   appendPdf,

@@ -6,6 +6,7 @@
   "description": "Competitive benchmark harness: turbo-pdf vs incumbent PDF engines (Phase 14, spec §10.2).",
   "license": "MIT",
   "scripts": {
+    "test": "node --experimental-strip-types --test content.test.ts",
     "bench": "node --experimental-strip-types src/cli.ts",
     "bench:smoke": "node --experimental-strip-types src/cli.ts --runs 5 --warmup 1",
     "bench:full": "node --experimental-strip-types src/cli.ts --runs 100 --warmup 10",

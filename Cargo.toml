@@ -9,7 +9,7 @@ members = [
 ]
 
 [workspace.package]
-version = "0.8.3"
+version = "0.8.4"
 edition = "2021"
 license = "MIT"
 repository = "https://github.com/miaskiewicz/turbo-html2pdf"
@@ -31,3 +31,8 @@ wasm-bindgen = "0.2"
 opt-level = 3
 lto = "thin"
 codegen-units = 1
+
+# Prerelease v0.8.4 integration; drop after the matching turbo-dom publication.
+[patch.crates-io]
+turbo-dom = { git = "https://github.com/miaskiewicz/turbo-dom", rev = "25eff769cc6a9804aee0450c6726b778cd43028c" }
+turbo-dom-layout = { git = "https://github.com/miaskiewicz/turbo-dom", rev = "25eff769cc6a9804aee0450c6726b778cd43028c" }
