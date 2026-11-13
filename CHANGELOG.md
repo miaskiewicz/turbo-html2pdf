@@ -12,6 +12,8 @@ patch is removed. npm, PyPI and crates.io package versions move together to 0.8.
 
 - **Changed (dependencies)**: adopt turbo-dom 0.8.3, including its collapsed-space
   bidi correction, without changing the PDF API or adding a browser dependency.
+- **Tests (pagination)**: verify A3 landscape and Legal portrait physical dimensions;
+  keep multicolumn loop coverage mapping explicit without changing layout behavior.
 - **Release**: retain the existing paged/PDF behavior and binding feature sets.
   Historical 0.8.2 benchmark results remain labeled with their measured version.
 

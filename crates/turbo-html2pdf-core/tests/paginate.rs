@@ -127,6 +127,20 @@ fn ac_6_1_named_letter() {
 }
 
 #[test]
+fn ac_6_1_named_a3_landscape_has_physical_dimensions() {
+    let g = run(&root(stack(&[10.0])), &page("size: A3 landscape")).0[0].geometry;
+    assert!(close(g.width, 420.0 * 96.0 / 25.4));
+    assert!(close(g.height, 297.0 * 96.0 / 25.4));
+}
+
+#[test]
+fn ac_6_1_named_legal_portrait_has_physical_dimensions() {
+    let g = run(&root(stack(&[10.0])), &page("size: Legal portrait")).0[0].geometry;
+    assert!(close(g.width, 8.5 * 96.0));
+    assert!(close(g.height, 14.0 * 96.0));
+}
+
+#[test]
 fn ac_6_1_content_width_excludes_margins() {
     // 200px wide, margin 0 -> full 200px of body width.
     let g = run(&root(stack(&[10.0])), &cap120()).0[0].geometry;
