@@ -6,6 +6,9 @@ PyPI, and crates.io packages release in lockstep from a `v*` tag (PyPI on `pyv*`
 
 ## [0.8.4] — Unreleased
 
+- **Pagination performance (#73)**: collect frame facts through turbo-dom's narrow
+  flow resolver instead of resolving unused text, background, shadow and transform
+  properties again. Existing pagination geometry and PDF output are preserved.
 - **PDF emission (#73)**: reuse each face's deterministic glyph remapper across
   embedding and painting, invalidating it when additional glyphs are collected.
   Batch safe horizontal text with explicit advance corrections; retain absolute

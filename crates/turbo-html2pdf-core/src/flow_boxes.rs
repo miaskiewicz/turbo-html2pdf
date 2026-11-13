@@ -1,7 +1,7 @@
 //! The fragmenter's per-box facts for the body flow ([`FlowBoxes`],
 //! miaskiewicz/turbo-html2pdf#32), recorded from the styled document: each element's
 //! used `position`, vertical margins, paddings and insets and its relative paint shift,
-//! resolved the way layout resolves them (`resolve_box_style`, the parent's font size).
+//! resolved the way layout resolves them (`resolve_box_flow_style`, the parent's font size).
 //! Percentages resolve against the box's containing block: the content width of its
 //! parent box in the laid-out galley (miaskiewicz/turbo-html2pdf#37 item 2; a box without
 //! a source — an anonymous box — passes its own width down). Keyed by the box ids of the
@@ -12,8 +12,8 @@ use std::collections::HashMap;
 use turbo_dom::Handle;
 use turbo_dom_layout::layout::fragment::{Fragment, FragmentContent};
 use turbo_dom_layout::layout::value::{
-    parse_px, resolve_box_style, resolve_font_size, BoxStyle, LengthPct, Position, ResolveCtx,
-    DEFAULT_FONT_SIZE,
+    parse_px, resolve_box_flow_style, resolve_font_size, BoxFlowStyle, LengthPct, Position,
+    ResolveCtx, DEFAULT_FONT_SIZE,
 };
 use turbo_dom_layout::style::ComputedStyle;
 use turbo_dom_layout::{NodeSources, StyledNode};
@@ -92,7 +92,7 @@ impl Lookup<'_, '_> {
         }
         let (inner, _multicol) = match self.resolve(f, cb) {
             Some((style, computed)) => {
-                let border = style.border.widths();
+                let border = style.border_widths;
                 let inner = f.width - style.padding.horizontal() - border.horizontal();
                 let multicol = multicol_facts(computed, inner.max(0.0), style.font_size);
                 let mut box_facts = facts(&style, cb);
@@ -108,19 +108,19 @@ impl Lookup<'_, '_> {
     }
 
     /// `f`'s resolved and raw computed style when it is an element box.
-    fn resolve(&self, f: &Fragment, cb: f32) -> Option<(BoxStyle, &ComputedStyle)> {
+    fn resolve(&self, f: &Fragment, cb: f32) -> Option<(BoxFlowStyle, &ComputedStyle)> {
         let handle = self.sources.elements.get(&f.node_id)?;
         let &(computed, parent_font) = self.styles.get(handle)?;
         let ctx = ResolveCtx {
             parent_font_size: parent_font,
             cb_width: cb,
         };
-        Some((resolve_box_style(computed, ctx), computed))
+        Some((resolve_box_flow_style(computed, ctx), computed))
     }
 }
 
 /// One box's facts from its resolved style.
-fn facts(style: &BoxStyle, width: f32) -> BoxFacts {
+fn facts(style: &BoxFlowStyle, width: f32) -> BoxFacts {
     BoxFacts {
         position: style.position,
         margin_top: style.margin.top,
@@ -211,7 +211,7 @@ fn used_column_width(cw: f32, gap: f32, count: u32) -> f32 {
 
 /// The vertical paint shift layout applies to a `relative`/`sticky` box: `top`, else
 /// minus `bottom` (both against the containing block's width, as layout resolves them).
-fn relative_shift(style: &BoxStyle, width: f32) -> f32 {
+fn relative_shift(style: &BoxFlowStyle, width: f32) -> f32 {
     if !matches!(style.position, Position::Relative | Position::Sticky) {
         return 0.0;
     }
