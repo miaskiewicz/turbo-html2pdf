@@ -21,7 +21,7 @@ PyPI, and crates.io packages release in lockstep from a `v*` tag (PyPI on `pyv*`
   and style resolution avoids temporary CSS property-name allocations. The pinned
   candidate also skips Unicode direction buffers for ASCII text and prepares
   table-cell text once for paired min/max intrinsic widths, preserving PDF output.
-- **Dependency refresh**: pin the shared DOM crates to `4238c125`; the consumed
+- **Dependency refresh**: pin the shared DOM crates to `628e3efe`; the consumed
   DOM/layout source trees are byte-identical to the benchmarked `8266b30a` pin.
   Popup and raster follow-ups remain in their upstream crates.
 - **Native version (#73)**: report the compiled addon version to prevent stale
