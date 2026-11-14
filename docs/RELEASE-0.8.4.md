@@ -7,7 +7,7 @@ WASM package versions are stamped by the publishing workflow.
 ## Integrated changes
 
 `turbo-dom` and `turbo-dom-layout` require `=0.8.4` and temporarily resolve from
-`5a76487c434533a400138059d3ccff5e92c77c98`. This includes the validated ASCII
+`6e687543ac6c02696bdebdf88d3726742a550ad3`. This includes the validated ASCII
 direction shortcut and shared preparation for paired intrinsic text widths.
 Both consumed crate trees are byte-identical to the benchmarked `8266b30a`
 revision. The ABBA report retains that measured revision. The validation below
@@ -15,7 +15,7 @@ identifies which revisions executed the broader checks; the current pin also
 passes its own workspace compile check. The separate Cow
 cascade experiment is excluded because measured latency did not improve reliably. See [CHANGELOG.md](../CHANGELOG.md) for the full release.
 
-## Validation recorded on 2026-11-13
+## Validation provenance
 
 - Workspace checked at `ed985b90`: **526 tests pass**, zero failures/ignores.
   Both consumed crate trees are verified unchanged at the current pin.
