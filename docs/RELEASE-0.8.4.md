@@ -7,12 +7,12 @@ WASM package versions are stamped by the publishing workflow.
 ## Integrated changes
 
 `turbo-dom` and `turbo-dom-layout` require `=0.8.4` and temporarily resolve from
-`af946ea0f8f8e0fe8d50b6470b33dbe2068393f6`. This includes the validated ASCII
+`2e195dac6e56eb94863b0c27421b5c7e2580277d`. This includes the validated ASCII
 direction shortcut and shared preparation for paired intrinsic text widths.
 Both consumed crate trees are byte-identical to the benchmarked `8266b30a`
 revision. The ABBA report retains that measured revision. The validation below
-identifies which revisions executed the broader checks; the current pin also
-passes its own workspace compile check. The separate Cow
+identifies which revisions executed the broader checks. The latest pin is
+verified by exact crate-tree identity and locked dependency resolution. The separate Cow
 cascade experiment is excluded because measured latency did not improve reliably. See [CHANGELOG.md](../CHANGELOG.md) for the full release.
 
 ## Validation provenance
@@ -20,7 +20,9 @@ cascade experiment is excluded because measured latency did not improve reliably
 - Workspace checked at `ed985b90`: **526 tests pass**, zero failures/ignores.
   Both consumed crate trees are verified unchanged at the current pin.
 - Native addon checked at `dac92864`: **29 binding tests pass**, zero skips.
-  The current pin passes a workspace compile check with identical consumed sources.
+  Workspace all-targets compilation passed at `af946ea0`; its consumed crate
+  trees are unchanged. The latest refresh reuses those checks with identity proof
+  and locked metadata validation; no build caches were recreated.
 - Strict all-targets Clippy and formatting pass.
 - Upstream combined DOM layout suite: **1,198 tests pass**, with strict gates.
 - All 16 native preflight PDFs remain byte-identical to the frozen baseline
