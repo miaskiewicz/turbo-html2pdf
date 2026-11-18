@@ -44,7 +44,7 @@ fn line(fragment: &Fragment) -> Line<'_> {
         ..
     } = &fragment.content
     else {
-        panic!("text fixture");
+        unreachable!("fragment() always constructs a text line");
     };
     Line {
         frag: fragment,
