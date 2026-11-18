@@ -54,7 +54,7 @@ PDF. The Rust engine lives in
 [`crates/turbo-html2pdf-core`](https://github.com/miaskiewicz/turbo-html2pdf/tree/main/crates/turbo-html2pdf-core).
 
 > Release version: **`v0.8.4`**. See [CHANGELOG.md](./CHANGELOG.md) and
-> [candidate validation](docs/RELEASE-0.8.4.md), plus
+> [release validation](docs/RELEASE-0.8.4.md), plus
 > [publishing and registry verification](./PUBLISHING.md).
 
 ## 🌐 Bonus: the same engine runs *inside* a web browser
