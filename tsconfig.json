@@ -25,6 +25,7 @@
     "packages/template/src",
     "packages/template/test",
     "benches/competitive/src",
+    "benches/competitive/scripts/abba",
     "benches/conformance/src"
   ]
 }

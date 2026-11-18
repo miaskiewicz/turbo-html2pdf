@@ -6,6 +6,7 @@
 //! stream are simply the *new* (remapped) glyph ids as 2-byte values.
 
 use std::collections::{BTreeMap, BTreeSet};
+use std::sync::OnceLock;
 
 use pdf_writer::types::{CidFontType, FontFlags, SystemInfo};
 use pdf_writer::{Chunk, Finish, Name, Rect, Ref, Str};
@@ -23,6 +24,8 @@ struct UsedFont {
     /// Each glyph's source text: the cluster it was first shaped from
     /// (miaskiewicz/turbo-dom#205), so a ligature maps to all its characters.
     texts: BTreeMap<u16, String>,
+    // Reused by embedding and every painted glyph; sorted ids stay deterministic.
+    remapper: OnceLock<GlyphRemapper>,
 }
 
 /// All faces used across the document, keyed by font-program identity. Built by
@@ -77,7 +80,7 @@ impl FontStore {
         let idx = self.face_index(face);
         let used = &mut self.fonts[idx];
         for g in glyphs {
-            used.glyphs.insert(g.glyph_id);
+            used.record_glyph(g.glyph_id);
             let cluster = g.text(text);
             if !cluster.is_empty() {
                 used.texts
@@ -94,7 +97,7 @@ impl FontStore {
         let idx = self.face_index(face);
         let used = &mut self.fonts[idx];
         for &gid in glyph_ids {
-            used.glyphs.insert(gid);
+            used.record_glyph(gid);
         }
     }
 
@@ -107,6 +110,7 @@ impl FontStore {
             face: face.clone(),
             glyphs: BTreeSet::new(),
             texts: BTreeMap::new(),
+            remapper: OnceLock::new(),
         });
         self.fonts.len() - 1
     }
@@ -159,9 +163,18 @@ impl FontStore {
 
 impl UsedFont {
     /// The remapper that assigns subset-local glyph ids, `.notdef` first.
-    fn remapper(&self) -> GlyphRemapper {
-        let gids: Vec<u16> = self.glyphs.iter().copied().collect();
-        GlyphRemapper::new_from_glyphs(&gids)
+    fn remapper(&self) -> &GlyphRemapper {
+        self.remapper.get_or_init(|| {
+            let gids: Vec<u16> = self.glyphs.iter().copied().collect();
+            GlyphRemapper::new_from_glyphs(&gids)
+        })
+    }
+
+    fn record_glyph(&mut self, glyph_id: u16) {
+        if self.glyphs.insert(glyph_id) {
+            // New glyphs can change sorted subset ids, even after an earlier lookup.
+            self.remapper.take();
+        }
     }
 }
 
@@ -187,13 +200,13 @@ impl RefAlloc {
 /// Subset and embed one face with its Unicode mapping (five PDF objects).
 fn write_font(font: &UsedFont, chunk: &mut Chunk, alloc: &mut RefAlloc) -> Ref {
     let remapper = font.remapper();
-    let subset = subset_bytes(&font.face, &remapper);
+    let subset = subset_bytes(&font.face, remapper);
     let refs = FontRefs::alloc(alloc);
     write_type0(chunk, &refs, font);
-    write_cid_font(chunk, &refs, font, &remapper);
+    write_cid_font(chunk, &refs, font, remapper);
     write_descriptor(chunk, &refs, &font.face);
     embed_program(chunk, &refs, &font.face, &subset);
-    write_to_unicode(chunk, refs.to_unicode, font, &remapper);
+    write_to_unicode(chunk, refs.to_unicode, font, remapper);
     refs.type0
 }
 
@@ -390,7 +403,7 @@ mod collection_identity_tests {
         assert_eq!(store.fonts[0].glyphs, BTreeSet::from([first_glyph]));
         assert_eq!(store.fonts[1].glyphs, BTreeSet::from([second_glyph]));
         for font in &store.fonts {
-            let subset = subset_bytes(&font.face, &font.remapper());
+            let subset = subset_bytes(&font.face, font.remapper());
             let parsed = rustybuzz::ttf_parser::Face::parse(&subset, 0).unwrap();
             let glyph = *font.glyphs.first().unwrap();
             let subset_glyph = font.remapper().get(glyph).unwrap();
@@ -399,5 +412,84 @@ mod collection_identity_tests {
                 Some(font.face.glyph_advance(glyph))
             );
         }
+    }
+}
+
+#[cfg(test)]
+mod remapper_cache_tests {
+    use super::*;
+
+    fn ordered_glyphs() -> (FontFace, u16, u16) {
+        let [face, _] = FontFace::collection_fixture_faces();
+        let mut gids: Vec<u16> = face.shape("AB").iter().map(|g| g.glyph_id).collect();
+        gids.sort_unstable();
+        assert_ne!(gids[0], gids[1]);
+        (face, gids[0], gids[1])
+    }
+
+    #[test]
+    fn repeated_glyph_lookups_reuse_one_remapper_per_face() {
+        let (face, low, high) = ordered_glyphs();
+        let mut store = FontStore::default();
+        store.record_glyphs(&face, &[high, low]);
+        assert_eq!(store.remap(0, low), 1);
+        let remapper = store.fonts[0].remapper();
+        for _ in 0..100 {
+            assert_eq!(store.remap(0, high), 2);
+            assert!(std::ptr::eq(remapper, store.fonts[0].remapper()));
+        }
+    }
+
+    #[test]
+    fn recording_an_existing_glyph_keeps_the_cached_mapping() {
+        let (face, _, high) = ordered_glyphs();
+        let mut store = FontStore::default();
+        store.record_glyphs(&face, &[high]);
+        assert_eq!(store.remap(0, high), 1);
+        store.record_glyphs(&face.with_family("alias"), &[high]);
+        assert!(store.fonts[0].remapper.get().is_some());
+        assert_eq!(store.len(), 1);
+        assert_eq!(store.remap(0, high), 1);
+    }
+
+    #[test]
+    fn new_watermark_glyphs_invalidate_sorted_subset_ids() {
+        let (face, low, high) = ordered_glyphs();
+        let mut store = FontStore::default();
+        store.record_glyphs(&face, &[high]);
+        assert_eq!(store.remap(0, high), 1);
+        store.record_glyphs(&face, &[low]);
+        assert!(store.fonts[0].remapper.get().is_none());
+        assert_eq!(store.remap(0, low), 1);
+        assert_eq!(store.remap(0, high), 2);
+    }
+
+    #[test]
+    fn new_fragment_glyphs_refresh_mapping_and_source_text() {
+        let (face, low, high) = ordered_glyphs();
+        let mut store = FontStore::default();
+        store.record_glyphs(&face, &[high]);
+        assert_eq!(store.remap(0, high), 1);
+        let glyph = PositionedGlyph {
+            glyph_id: low,
+            x: 0.0,
+            y: 0.0,
+            text_start: 0,
+            text_end: 2,
+        };
+        store.record(&face, &[glyph], "fi");
+        assert_eq!(store.remap(0, low), 1);
+        assert_eq!(store.remap(0, high), 2);
+        assert_eq!(store.fonts[0].texts.get(&low).unwrap(), "fi");
+        let mut chunk = Chunk::new();
+        store.write(
+            &mut chunk,
+            &mut RefAlloc::new(1),
+            &super::super::EmitOptions::default(),
+        );
+        let bytes = chunk.as_bytes();
+        assert!(bytes
+            .windows(b"<0001> <00660069>".len())
+            .any(|w| w == b"<0001> <00660069>"));
     }
 }

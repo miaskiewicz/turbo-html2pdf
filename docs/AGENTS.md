@@ -84,9 +84,9 @@ scripts/agent/build-napi.sh
 
 ## Pinning turbo-dom pre-publish, and dropping the pin
 
-The v0.8.3 release pins `turbo-dom` and `turbo-dom-layout` to exact `=0.8.3`
-registry requirements, without a patch. For a future unreleased turbo-dom
-candidate, temporarily resolve both from a git rev via `[patch.crates-io]`:
+The v0.8.4 release uses published `turbo-dom` and `turbo-dom-layout` `=0.8.4`
+registry dependencies with no git patch. For future pre-publish development,
+review a specific revision before temporarily adding a pin:
 
 ```sh
 scripts/agent/pin-turbo-dom.sh <rev-or-sha>

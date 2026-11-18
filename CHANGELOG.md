@@ -4,6 +4,36 @@ All notable changes to turbo-html2pdf are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/); versions follow SemVer. The npm,
 PyPI, and crates.io packages release in lockstep from a `v*` tag (PyPI on `pyv*`).
 
+## [0.8.4] — 2026-11-18
+
+- **Pagination performance (#73)**: collect frame facts through turbo-dom's narrow
+  flow resolver instead of resolving unused text, background, shadow and transform
+  properties again. Existing pagination geometry and PDF output are preserved.
+- **PDF emission (#73)**: reuse each face's deterministic glyph remapper across
+  embedding and painting, invalidating it when additional glyphs are collected.
+  Batch safe horizontal text with explicit advance corrections; retain absolute
+  glyph placement when position-error bounds or vertical offsets prevent batching.
+- **Layout integration (#73, turbo-dom #508)**: resolve inherited font sizes through
+  the shared layout helper without reconstructing a complete box style during
+  source collection; consume bounded shaping-cache retention, reusable Rustybuzz
+  shaping plans and paired table intrinsic measurements from the published turbo-dom
+  v0.8.4 crates. Intrinsic text-width queries now avoid unused glyph/line output,
+  and style resolution avoids temporary CSS property-name allocations. The dependency
+  also skips Unicode direction buffers for ASCII text and prepares
+  table-cell text once for paired min/max intrinsic widths, preserving PDF output.
+- **Release dependencies**: use published `turbo-dom` and `turbo-dom-layout`
+  exact `=0.8.4` registry dependencies; remove the development git patch.
+  This includes document viewport and UA paragraph-margin handling for quirks
+  mode, scoped to document formatting contexts. Historical benchmark results
+  retain their measured `8266b30a` source revision.
+- **Native version (#73)**: report the compiled addon version to prevent stale
+  binaries from being mislabeled by the benchmark harness.
+- **Benchmarks (#73)**: render jsPDF paragraphs and footnotes with pagination and
+  validate every page's source text in both warm and cold paths before timing.
+  Add the 0.8.4/jsPDF three-cycle ABBA report, raw timings and a reproducible
+  driver; README tables show the latest measured cold/warm render latencies.
+  Historical benchmark results retain their original version and workload labels.
+
 ## [0.8.3] — 2026-11-13
 
 Rebuilt on the published turbo-dom 0.8.3 release. Both `turbo-dom` and

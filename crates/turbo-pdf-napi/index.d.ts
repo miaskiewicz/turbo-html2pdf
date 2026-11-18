@@ -225,6 +225,9 @@ export interface Program {
   hasFooter(): boolean;
 }
 
+/** Version embedded in the compiled native engine (detects stale local addons). */
+export function version(): string;
+
 /** Compile a template into a reusable {@link Program}. Throws `TurboPdfError`. */
 export function compile(templateHtml: string, opts?: CompileOptions): Program;
 

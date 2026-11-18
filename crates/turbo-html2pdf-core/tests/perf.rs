@@ -104,3 +104,33 @@ fn invoice_stage_timing() {
         "STAGES(us): registry={t_reg:.1} render_nodes={t_render:.1} cascade={t_cascade:.1} style={t_style:.1} layout={t_layout:.1}"
     );
 }
+
+/// Pagination reads frame facts without resolving unused text and paint values again.
+#[test]
+fn pagination_uses_the_narrow_box_flow_projection() {
+    use turbo_html2pdf_core::style::TokenSet;
+    use turbo_html2pdf_core::{
+        build_cascade, compile, render_pages, CompileOptions, Diagnostics, NoImages, RenderInputs,
+    };
+    let (program, _) = compile("<div>Frame facts</div>", &CompileOptions::default()).unwrap();
+    let cascade = build_cascade(
+        "div { padding: 10%; border: 2px solid red }",
+        "",
+        TokenSet::default(),
+    );
+    let fonts = common::registry();
+    let data = serde_json::json!({});
+    let inputs = RenderInputs {
+        program: &program,
+        data: &data,
+        cascade: &cascade,
+        at_rules: &[],
+        fonts: &fonts,
+        images: &NoImages,
+        now: Some(0),
+    };
+    perf::reset();
+    let pages = render_pages(&inputs, &mut Diagnostics::default()).unwrap();
+    assert_eq!(pages.len(), 1);
+    assert!(perf::count("layout.resolve_box_flow_style") > 0);
+}

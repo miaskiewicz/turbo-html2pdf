@@ -4,6 +4,7 @@
 import { availableParallelism } from "node:os";
 import type { EngineAdapter, RenderResult, Workload } from "../types.ts";
 import { type Summary, summarize } from "./stats.ts";
+import { assertWorkloadPdf } from "../compare/content.ts";
 
 export interface MeasureOpts {
   readonly runs: number;
@@ -63,6 +64,9 @@ export async function measure(
   w: Workload,
   opts: MeasureOpts,
 ): Promise<MeasureResult> {
+  // Admit both paths outside every timer: they may render different documents.
+  await assertWorkloadPdf((await engine.renderWarm(w)).pdfBytes, w);
+  await assertWorkloadPdf((await engine.renderCold(w)).pdfBytes, w);
   const peak = { v: 0 };
   await warmUp((x) => engine.renderWarm(x), w, opts.warmup);
   const cold = await collect((x) => engine.renderCold(x), w, opts.runs, peak);
