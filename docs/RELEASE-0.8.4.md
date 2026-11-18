@@ -7,30 +7,28 @@ WASM package versions are stamped by the publishing workflow.
 ## Integrated changes
 
 `turbo-dom` and `turbo-dom-layout` require `=0.8.4` and temporarily resolve from
-`2e195dac6e56eb94863b0c27421b5c7e2580277d`. This includes the validated ASCII
+`fb6957adcb6597426e36ca0c740fcdab872f343c`. This includes the validated ASCII
 direction shortcut and shared preparation for paired intrinsic text widths.
-Both consumed crate trees are byte-identical to the benchmarked `8266b30a`
-revision. The ABBA report retains that measured revision. The validation below
-identifies which revisions executed the broader checks. The latest pin is
-verified by exact crate-tree identity and locked dependency resolution. The separate Cow
-cascade experiment is excluded because measured latency did not improve reliably. See [CHANGELOG.md](../CHANGELOG.md) for the full release.
+The current pin adds quirks viewport and paragraph-margin behavior; it is not
+source-identical to the historical benchmark pin. The ABBA report retains its
+measured `8266b30a` revision. The separate Cow cascade experiment is excluded
+because it did not improve latency reliably. See [CHANGELOG.md](../CHANGELOG.md).
 
 ## Validation provenance
 
-- Workspace checked at `ed985b90`: **526 tests pass**, zero failures/ignores.
-  Both consumed crate trees are verified unchanged at the current pin.
-- Native addon checked at `dac92864`: **29 binding tests pass**, zero skips.
-  Workspace all-targets compilation passed at `af946ea0`; its consumed crate
-  trees are unchanged. The latest refresh reuses those checks with identity proof
-  and locked metadata validation; no build caches were recreated.
-- Strict all-targets Clippy and formatting pass.
-- Upstream combined DOM layout suite: **1,198 tests pass**, with strict gates.
-- All 16 native preflight PDFs remain byte-identical to the frozen baseline
-  from before the two new layout optimizations.
-- Three complete ABBA cycles compare the final native addon with jsPDF, with
-  all-page content validation and recorded CPU-load snapshots. The
-  [report and raw samples](../benches/competitive/ABBA-0.8.4.md) retain cold/warm
-  results and background-load limitations.
+Fresh validation on 2026-11-18 for `fb6957ad`:
+
+- **526 workspace tests pass**, zero failures/ignores.
+- **29 native binding tests pass**, zero skips, using the optimized addon.
+- Strict all-targets Clippy, formatting and the release build pass.
+- All **16 native PDFs** (four workloads, tagged/plain, cold/warm) are byte-identical
+  to the saved `8266b30a` outputs. Full-page text and page counts are validated.
+- Dependency metadata and packaged notices pass. The disposable Cargo build cache
+  is removed after validation; the native addon and validation receipts remain.
+
+The historical ABBA comparison remains tied to its measured `8266b30a` source.
+The new layout/cascade source was tested for correctness, not rebenchmarked.
+This record does not claim that the latest producer CI or release gates passed.
 
 ## Before publishing
 

@@ -12,7 +12,7 @@ The workflows are the executable procedure:
 
 The current v0.8.4 candidate requires `turbo-dom-layout` and `turbo-dom`
 `=0.8.4`, temporarily resolved from the exact pre-publish git revision
-`2e195dac6e56eb94863b0c27421b5c7e2580277d`. Their matching releases must be on crates.io before
+`fb6957adcb6597426e36ca0c740fcdab872f343c`. Their matching releases must be on crates.io before
 `release-crates.yml` publishes core (it waits, bounded, for the locked versions on the
 crates.io index: `scripts/wait-crates-index.sh`). For prerelease integration, a
 temporary `[patch.crates-io]` may pin a turbo-dom git revision; the
