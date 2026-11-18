@@ -4,7 +4,7 @@ All notable changes to turbo-html2pdf are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/); versions follow SemVer. The npm,
 PyPI, and crates.io packages release in lockstep from a `v*` tag (PyPI on `pyv*`).
 
-## [0.8.4] — Unreleased
+## [0.8.4] — 2026-11-18
 
 - **Pagination performance (#73)**: collect frame facts through turbo-dom's narrow
   flow resolver instead of resolving unused text, background, shadow and transform
@@ -16,15 +16,16 @@ PyPI, and crates.io packages release in lockstep from a `v*` tag (PyPI on `pyv*`
 - **Layout integration (#73, turbo-dom #508)**: resolve inherited font sizes through
   the shared layout helper without reconstructing a complete box style during
   source collection; consume bounded shaping-cache retention, reusable Rustybuzz
-  shaping plans and paired table intrinsic measurements from the pinned turbo-dom
-  v0.8.4 candidate. Intrinsic text-width queries now avoid unused glyph/line output,
-  and style resolution avoids temporary CSS property-name allocations. The pinned
-  candidate also skips Unicode direction buffers for ASCII text and prepares
+  shaping plans and paired table intrinsic measurements from the published turbo-dom
+  v0.8.4 crates. Intrinsic text-width queries now avoid unused glyph/line output,
+  and style resolution avoids temporary CSS property-name allocations. The dependency
+  also skips Unicode direction buffers for ASCII text and prepares
   table-cell text once for paired min/max intrinsic widths, preserving PDF output.
-- **Dependency refresh**: pin the shared DOM crates to `688a1e3f`, including
-  document viewport and UA paragraph-margin handling for quirks mode, with
-  viewport filling scoped to document formatting contexts. Historical
-  benchmark results retain their measured `8266b30a` source revision.
+- **Release dependencies**: use published `turbo-dom` and `turbo-dom-layout`
+  exact `=0.8.4` registry dependencies; remove the development git patch.
+  This includes document viewport and UA paragraph-margin handling for quirks
+  mode, scoped to document formatting contexts. Historical benchmark results
+  retain their measured `8266b30a` source revision.
 - **Native version (#73)**: report the compiled addon version to prevent stale
   binaries from being mislabeled by the benchmark harness.
 - **Benchmarks (#73)**: render jsPDF paragraphs and footnotes with pagination and

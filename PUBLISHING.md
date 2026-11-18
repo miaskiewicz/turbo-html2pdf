@@ -10,12 +10,12 @@ The workflows are the executable procedure:
 | `vX.Y.Z` | `.github/workflows/release-crates.yml` | crates.io `turbo-html2pdf-core`, then `turbo-html2pdf-mcp` |
 | `pyvX.Y.Z` | `.github/workflows/release-py.yml` | PyPI `turbo-html2pdf`: four platform wheels and an sdist |
 
-The current v0.8.4 candidate requires `turbo-dom-layout` and `turbo-dom`
-`=0.8.4`, temporarily resolved from the exact pre-publish git revision
-`688a1e3f4197c4fdf5ec55f3ab1c98da642e4948`. Their matching releases must be on crates.io before
-`release-crates.yml` publishes core (it waits, bounded, for the locked versions on the
-crates.io index: `scripts/wait-crates-index.sh`). For prerelease integration, a
-temporary `[patch.crates-io]` may pin a turbo-dom git revision; the
+The v0.8.4 release uses published `turbo-dom-layout` and `turbo-dom` exact
+`=0.8.4` registry dependencies. The development git patch has been removed.
+The matching dependencies must remain available before `release-crates.yml`
+publishes core (it waits, bounded, for the locked registry versions using
+`scripts/wait-crates-index.sh`). For a future prerelease, a temporary
+`[patch.crates-io]` may pin a reviewed DOM revision; the
 [pre-tag steps](#pre-tag-drop-the-pre-publish-patch) remove it before release. All three tag
 workflows run a tag-only `release-guard` job (`scripts/release-guard.sh`) that fails
 while a `[patch]` section or a git source in `Cargo.lock` remains, or when the
@@ -76,9 +76,10 @@ authorization. Merging an ordinary PR does not publish a version.
 
 ## Pre-tag: drop the pre-publish patch
 
-The v0.8.4 candidate still uses a pre-publish git patch. Drop it on the release
-PR head after the matching turbo-dom publish finishes. Keep the exact registry
-requirements; do not tag while the patch remains. The verification commands are:
+The v0.8.4 git patch has been dropped after publication of both DOM crates.
+For future candidates that use a patch, drop it after matching dependencies
+are published. Keep the exact registry requirements; do not tag with a patch
+present. Verify the current release with:
 
 ```sh
 # 1. turbo-dom-layout 0.8.4 and turbo-dom 0.8.4 must be on crates.io.
