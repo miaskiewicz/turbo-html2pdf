@@ -21,8 +21,9 @@ PyPI, and crates.io packages release in lockstep from a `v*` tag (PyPI on `pyv*`
   and style resolution avoids temporary CSS property-name allocations. The pinned
   candidate also skips Unicode direction buffers for ASCII text and prepares
   table-cell text once for paired min/max intrinsic widths, preserving PDF output.
-- **Dependency refresh**: pin the shared DOM crates to `fb6957ad`, including
-  document viewport and UA paragraph-margin handling for quirks mode. Historical
+- **Dependency refresh**: pin the shared DOM crates to `688a1e3f`, including
+  document viewport and UA paragraph-margin handling for quirks mode, with
+  viewport filling scoped to document formatting contexts. Historical
   benchmark results retain their measured `8266b30a` source revision.
 - **Native version (#73)**: report the compiled addon version to prevent stale
   binaries from being mislabeled by the benchmark harness.

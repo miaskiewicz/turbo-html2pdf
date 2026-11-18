@@ -7,7 +7,7 @@ WASM package versions are stamped by the publishing workflow.
 ## Integrated changes
 
 `turbo-dom` and `turbo-dom-layout` require `=0.8.4` and temporarily resolve from
-`fb6957adcb6597426e36ca0c740fcdab872f343c`. This includes the validated ASCII
+`688a1e3f4197c4fdf5ec55f3ab1c98da642e4948`. This includes the validated ASCII
 direction shortcut and shared preparation for paired intrinsic text widths.
 The current pin adds quirks viewport and paragraph-margin behavior; it is not
 source-identical to the historical benchmark pin. The ABBA report retains its
@@ -16,7 +16,7 @@ because it did not improve latency reliably. See [CHANGELOG.md](../CHANGELOG.md)
 
 ## Validation provenance
 
-Fresh validation on 2026-11-18 for `fb6957ad`:
+Fresh validation on 2026-11-18 for `688a1e3f`:
 
 - **526 workspace tests pass**, zero failures/ignores.
 - **29 native binding tests pass**, zero skips, using the optimized addon.
