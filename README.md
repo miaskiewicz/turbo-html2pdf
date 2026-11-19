@@ -478,6 +478,19 @@ pnpm install && pnpm lint         # oxlint for the JS/TS packages
 pnpm format:check                 # biome formatting
 ```
 
+Branch CI runs automatically when a PR is opened, reopened, or updated, regardless
+of its target branch. Branch pushes without an open PR do not start CI. To run CI
+without a PR, use **Actions → CI → Run workflow** and select the branch, or run:
+
+```sh
+gh workflow run ci.yml --repo miaskiewicz/turbo-html2pdf --ref main
+gh run list --repo miaskiewicz/turbo-html2pdf --workflow ci.yml --branch main --event workflow_dispatch
+```
+
+Replace `main` with your branch. It must contain the `workflow_dispatch` trigger;
+merge the latest `main` into older branches first. Manual CI on a branch does not
+publish packages. Release tags still call the full CI gate before publishing.
+
 PR CI (`.github/workflows/ci.yml`) runs on ubuntu: rustfmt, clippy `-D warnings`, the
 workspace tests, the core under `--features svg`, `--all-features` (perf budgets) and
 `--no-default-features` (the font-less wasm build), a cyclomatic-complexity gate
