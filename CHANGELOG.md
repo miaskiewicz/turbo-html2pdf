@@ -4,6 +4,24 @@ All notable changes to turbo-html2pdf are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/); versions follow SemVer. The npm,
 PyPI, and crates.io packages release in lockstep from a `v*` tag (PyPI on `pyv*`).
 
+## [0.8.5] — 2026-11-19
+
+Rebuilt on the published turbo-dom 0.8.5 release. Both `turbo-dom` and
+`turbo-dom-layout` use exact `=0.8.5` registry requirements; no git patch or git
+source was used. npm, PyPI and crates.io package versions move together to 0.8.5.
+
+- **Changed (dependencies)**: adopt turbo-dom 0.8.5 without changing the PDF API.
+  Its public Rust API only adds items relative to 0.8.4. Layout fixes that reach
+  PDF output include flex row automatic minimums (turbo-dom #533), auto-fit grid
+  gutter collapse (#525), negative margins in flex column intrinsic heights (#526),
+  percentage flex/grid padding and margins against the real containing block (#527),
+  spaced functional colors in border shorthands (#528), ratio-sized absolute
+  overlays (#531), MUI-style typed `calc()` arithmetic (#518) and mixed
+  percentage/pixel flex lengths (#519).
+- **AVIF**: turbo-dom-raster's `avif` decoder moved to `turbo-dom-rav1d` 1.1.0
+  (turbo-dom #535). turbo-html2pdf does not depend on turbo-dom-raster, so its
+  dependency graph and packages are unaffected.
+
 ## [0.8.4] — 2026-11-18
 
 - **Pagination performance (#73)**: collect frame facts through turbo-dom's narrow

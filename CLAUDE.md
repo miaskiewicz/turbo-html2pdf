@@ -20,7 +20,7 @@ copy of `assets/fonts` — tests and benches read them through turbo-dom-layout'
 `t:`-directive / paged / PDF ones (tree-literal inputs come from turbo-dom-layout's
 `test_support::literal`; the S2 legacy-vs-Tree equivalence gate was retired at S5 with
 the legacy input).
-The 0.8.4 release uses published `turbo-dom-layout` and `turbo-dom` `=0.8.4`
+The 0.8.5 release uses published `turbo-dom-layout` and `turbo-dom` `=0.8.5`
 registry dependencies without git overrides;
 `release-guard` fails a tag if a git pin comes back.
 
