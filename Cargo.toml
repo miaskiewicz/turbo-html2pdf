@@ -31,7 +31,3 @@ wasm-bindgen = "0.2"
 opt-level = 3
 lto = "thin"
 codegen-units = 1
-
-[patch.crates-io]
-turbo-dom-layout = { git = "https://github.com/miaskiewicz/turbo-dom", rev = "2561ff2034e4de38ebc12058b671bf0d192fbe50" }
-turbo-dom = { git = "https://github.com/miaskiewicz/turbo-dom", rev = "2561ff2034e4de38ebc12058b671bf0d192fbe50" }

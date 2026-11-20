@@ -4,12 +4,11 @@ All notable changes to turbo-html2pdf are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/); versions follow SemVer. The npm,
 PyPI, and crates.io packages release in lockstep from a `v*` tag (PyPI on `pyv*`).
 
-## [0.8.6] — Unreleased (local candidate)
+## [0.8.6] — 2026-11-20
 
-Built against the unreleased turbo-dom 0.8.6 (`release/0.8.6` at `2561ff20`), pinned
-through a pre-publish `[patch.crates-io]` git rev. `turbo-dom` and `turbo-dom-layout`
-require exact `=0.8.6`. Before tagging, publish the DOM crates and drop the patch
-(see PUBLISHING.md).
+Rebuilt on the published turbo-dom 0.8.6 release. Both `turbo-dom` and
+`turbo-dom-layout` use exact `=0.8.6` registry requirements; no git patch or git
+source was used. npm, PyPI and crates.io package versions move together to 0.8.6.
 
 - **Fixed (layout, turbo-dom #537)**: a grid row with an `fr` track beside an `auto`
   track and `align-items: baseline` was laid out as if its text wrapped at min-content
