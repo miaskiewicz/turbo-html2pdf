@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # build-napi.sh — reproducible N-API build for turbo-html2pdf.
 #
-# Runs `npm ci` + `napi build --platform --release` inside crates/turbo-pdf-napi.
+# Runs `pnpm install --frozen-lockfile` + `napi build --platform --release` inside crates/turbo-pdf-napi.
 # Keeps the heavy cargo target directory out of the worktree (shared machine
 # hygiene) and points rusty_v8 at the cached archive so cold builds do not
 # redownload or rebuild V8.
@@ -45,8 +45,8 @@ fi
 [ -n "${RUSTY_V8_ARCHIVE:-}" ] && echo "RUSTY_V8_ARCHIVE=$RUSTY_V8_ARCHIVE"
 
 cd "$root"
-echo "• npm ci (root)"
-npm ci --no-audit --no-fund
+echo "• pnpm install --frozen-lockfile (root)"
+pnpm install --frozen-lockfile
 
 cd "$root/crates/turbo-pdf-napi"
 echo "• napi build ($profile${features:+ , --features $features})"

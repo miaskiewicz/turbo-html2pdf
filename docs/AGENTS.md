@@ -8,7 +8,7 @@ authoritative release runbook.
 
 | Script | What it does |
 | --- | --- |
-| `scripts/agent/build-napi.sh` | `npm ci` + `napi build --platform --release` with scratchpad `CARGO_TARGET_DIR` and the cached `RUSTY_V8_ARCHIVE`. |
+| `scripts/agent/build-napi.sh` | `pnpm install --frozen-lockfile` + `napi build --platform --release` with scratchpad `CARGO_TARGET_DIR` and the cached `RUSTY_V8_ARCHIVE`. |
 | `scripts/agent/test-all.sh [CRATE]` | fmt → clippy `-D warnings` → `cargo test` → cc-check (≤ 5) → tarpaulin (100%). |
 | `scripts/agent/verapdf-corpus.sh [DIR]` | veraPDF `--flavour ua1` over every PDF in the UA corpus. Pass/fail counts; non-zero on any failure. |
 | `scripts/agent/parity-compare.sh` | Run turbo-dom's `tools/parity/parity.py` against this repo's expected fixtures. |
@@ -128,7 +128,7 @@ sharp edges:
   addon; a clean checkout will fail until you run `scripts/agent/build-napi.sh`
   once.
 - **Formatter/linter use `pnpm exec` first, then `npx --no-install`.** If
-  neither resolves (fresh container), run `npm ci` at the repo root before
+  neither resolves (fresh container), run `pnpm install --frozen-lockfile` at the repo root before
   committing.
 - **Staged `.rs` files are checked, not the working tree.** If a stray
   unformatted hunk is unstaged, the hook still passes — CI's `cargo fmt
