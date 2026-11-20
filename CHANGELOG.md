@@ -4,6 +4,21 @@ All notable changes to turbo-html2pdf are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/); versions follow SemVer. The npm,
 PyPI, and crates.io packages release in lockstep from a `v*` tag (PyPI on `pyv*`).
 
+## [0.8.6] — Unreleased (local candidate)
+
+Built against the unreleased turbo-dom 0.8.6 (`release/0.8.6` at `2561ff20`), pinned
+through a pre-publish `[patch.crates-io]` git rev. `turbo-dom` and `turbo-dom-layout`
+require exact `=0.8.6`. Before tagging, publish the DOM crates and drop the patch
+(see PUBLISHING.md).
+
+- **Fixed (layout, turbo-dom #537)**: a grid row with an `fr` track beside an `auto`
+  track and `align-items: baseline` was laid out as if its text wrapped at min-content
+  width. Each label/value row grew by several lines, so a one-page payslip rendered on
+  two pages in 0.8.5. Rows are back on one line. Baseline offsets match Chrome 156,
+  including a larger value beside a smaller label.
+- **Changed (dependencies)**: turbo-dom 0.8.6's HTML parser builds its tree through an
+  index arena sink and scans `<selectedcontent>` with `memchr2`, so parsing is faster.
+
 ## [0.8.5] — 2026-11-19
 
 Rebuilt on the published turbo-dom 0.8.5 release. Both `turbo-dom` and
