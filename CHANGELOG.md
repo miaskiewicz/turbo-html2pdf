@@ -4,6 +4,18 @@ All notable changes to turbo-html2pdf are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/); versions follow SemVer. The npm,
 PyPI, and crates.io packages release in lockstep from a `v*` tag (PyPI on `pyv*`).
 
+## [0.8.7] — Unreleased (local candidate)
+
+Built against the unreleased turbo-dom 0.8.7 (`release/0.8.7` at `d00712fc`),
+pinned through a pre-publish `[patch.crates-io]` git rev. `turbo-dom` and
+`turbo-dom-layout` require exact `=0.8.7`. Before tagging, publish the DOM
+crates and drop the patch (see PUBLISHING.md).
+
+- **Fixed (text, turbo-dom #539)**: `@font-face` `unicode-range` descriptors are
+  now honored during face selection, so text that falls outside a face's declared
+  Unicode range falls through to the next matching face instead of being painted
+  with the wrong one.
+
 ## [0.8.6] — 2026-11-20
 
 Rebuilt on the published turbo-dom 0.8.6 release. Both `turbo-dom` and
