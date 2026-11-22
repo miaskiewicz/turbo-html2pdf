@@ -33,5 +33,5 @@ lto = "thin"
 codegen-units = 1
 
 [patch.crates-io]
-turbo-dom-layout = { git = "https://github.com/miaskiewicz/turbo-dom", rev = "d00712fc01c9cb1a2a81ed11df2cd338f76d3541" }
-turbo-dom = { git = "https://github.com/miaskiewicz/turbo-dom", rev = "d00712fc01c9cb1a2a81ed11df2cd338f76d3541" }
+turbo-dom-layout = { git = "https://github.com/miaskiewicz/turbo-dom", rev = "6f24c1488d596f72b49f6fec78fdd1bc1a97bd8c" }
+turbo-dom = { git = "https://github.com/miaskiewicz/turbo-dom", rev = "6f24c1488d596f72b49f6fec78fdd1bc1a97bd8c" }
