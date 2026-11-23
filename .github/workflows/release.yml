@@ -48,8 +48,8 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - { os: ubuntu-latest,  target: x86_64-unknown-linux-gnu }
-          - { os: ubuntu-24.04-arm, target: aarch64-unknown-linux-gnu }
+          - { os: ubuntu-latest,  target: x86_64-unknown-linux-gnu,  flags: "--zig --zig-abi-suffix 2.17" }
+          - { os: ubuntu-24.04-arm, target: aarch64-unknown-linux-gnu, flags: "--zig --zig-abi-suffix 2.17" }
           - { os: macos-latest,   target: aarch64-apple-darwin }
           - { os: windows-latest, target: x86_64-pc-windows-msvc }
     steps:
@@ -76,12 +76,14 @@ jobs:
       - name: Install JS deps (no postinstall build)
         run: pnpm install --frozen-lockfile --ignore-scripts
 
+      - uses: mlugg/setup-zig@v2
+        if: matrix.flags
       # `napi build --platform` emits `turbo-pdf-napi.<platform>.node` into the
       # napi package dir (its package.json carries the `napi` config). Run from
       # there so the suffixed file lands next to index.js.
       - name: Build native addon (turbo-html2pdf)
         working-directory: crates/turbo-pdf-napi
-        run: pnpm exec napi build --platform --release --target ${{ matrix.target }}
+        run: pnpm exec napi build --platform --release --target ${{ matrix.target }} ${{ matrix.flags }}
 
       - name: Upload prebuilt binary
         uses: actions/upload-artifact@v4
@@ -361,8 +363,8 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - { os: ubuntu-latest,  target: x86_64-unknown-linux-gnu }
-          - { os: ubuntu-24.04-arm, target: aarch64-unknown-linux-gnu }
+          - { os: ubuntu-latest,  target: x86_64-unknown-linux-gnu,  flags: "--zig --zig-abi-suffix 2.17" }
+          - { os: ubuntu-24.04-arm, target: aarch64-unknown-linux-gnu, flags: "--zig --zig-abi-suffix 2.17" }
           - { os: macos-latest,   target: aarch64-apple-darwin }
           - { os: windows-latest, target: x86_64-pc-windows-msvc }
     steps:
@@ -381,11 +383,13 @@ jobs:
           key: ${{ matrix.target }}-svg
       - name: Install JS deps (no postinstall build)
         run: pnpm install --frozen-lockfile --ignore-scripts
+      - uses: mlugg/setup-zig@v2
+        if: matrix.flags
       # `--features svg` forwards to cargo, turning on the napi crate's svg
       # passthrough (= turbo-html2pdf-core/svg). Same suffixed *.node filename.
       - name: Build native addon (turbo-html2pdf-svg)
         working-directory: crates/turbo-pdf-napi
-        run: pnpm exec napi build --platform --release --target ${{ matrix.target }} --features svg
+        run: pnpm exec napi build --platform --release --target ${{ matrix.target }} --features svg ${{ matrix.flags }}
       - name: Upload prebuilt binary
         uses: actions/upload-artifact@v4
         with:
