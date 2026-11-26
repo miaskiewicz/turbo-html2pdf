@@ -104,6 +104,16 @@ Then merge with a merge commit and tag that merge SHA (next section):
 `git tag -a pyv0.8.7 "$RELEASE_SHA" -m "Python release v0.8.7"`, then
 `git push origin v0.8.7 pyv0.8.7`.
 
+## Optional Amazon Linux 2023 artifacts
+
+The [Amazon Linux 2023 workflow](.github/workflows/al2023.yml) runs independently
+on version tags and can also be dispatched manually. It builds base and SVG
+addons with the native GNU linker in pinned AL2023 images on x64 and arm64.
+Each upload requires an ELF audit for glibc 2.34 and PDF rendering in the
+corresponding official Lambda Node.js 22 image. The workflow uploads separate
+Actions artifacts with version, source and checksum receipts. See the
+[deployment instructions](README.md#amazon-linux-2023-and-aws-lambda).
+
 ## Tag, monitor and verify
 
 After authorization and the green release merge, create annotated `vX.Y.Z` and
