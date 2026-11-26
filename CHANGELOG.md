@@ -4,17 +4,26 @@ All notable changes to turbo-html2pdf are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/); versions follow SemVer. The npm,
 PyPI, and crates.io packages release in lockstep from a `v*` tag (PyPI on `pyv*`).
 
-## [0.8.7] — Unreleased (local candidate)
+## [0.8.7] — Unreleased
 
-Built against the unreleased turbo-dom 0.8.7 (`release/0.8.7` at `d00712fc`),
-pinned through a pre-publish `[patch.crates-io]` git rev. `turbo-dom` and
-`turbo-dom-layout` require exact `=0.8.7`. Before tagging, publish the DOM
-crates and drop the patch (see PUBLISHING.md).
+The release branch pins turbo-dom and turbo-dom-layout to
+`dd2771f66da8670e22d6136c0ec13027e6c1a0e3` via `[patch.crates-io]`. Both
+dependencies keep exact `=0.8.7` requirements. Publication requires the
+corresponding registry crates (see PUBLISHING.md).
 
-- **Fixed (text, turbo-dom #539)**: `@font-face` `unicode-range` descriptors are
-  now honored during face selection, so text that falls outside a face's declared
-  Unicode range falls through to the next matching face instead of being painted
-  with the wrong one.
+### Fixed
+
+- Honor `@font-face unicode-range` in face selection so glyphs outside a
+  face's declared range fall back to the next matching face (turbo-dom #539).
+- Exclude text under `display:none` from layout glyph accounting.
+- Resolve percentage sizing for positioned flex children against the
+  finalized flex padding box, and preserve the height of centered checkbox
+  inputs (turbo-dom #546).
+- With SVG rendering enabled, resolve fills that use custom properties and
+  fallbacks, and paint bounded embedded raster images, including MIME aliases.
+
+See the [upstream 0.8.7 notes](https://github.com/miaskiewicz/turbo-dom/blob/dd2771f66da8670e22d6136c0ec13027e6c1a0e3/CHANGELOG.md)
+for the full dependency changes.
 
 ## [0.8.6] — 2026-11-20
 
