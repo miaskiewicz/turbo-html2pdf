@@ -53,9 +53,8 @@ string* — they pair with a render package (`turbo-html2pdf` on Node, a
 PDF. The Rust engine lives in
 [`crates/turbo-html2pdf-core`](https://github.com/miaskiewicz/turbo-html2pdf/tree/main/crates/turbo-html2pdf-core).
 
-> Release version: **`v0.8.6`**. See [CHANGELOG.md](./CHANGELOG.md) and
-> [release validation](docs/RELEASE-0.8.6.md), plus
-> [publishing and registry verification](./PUBLISHING.md).
+> Release candidate **`v0.8.7`**. See the [changelog](CHANGELOG.md) and
+> [publishing and registry verification](PUBLISHING.md).
 
 ## 🌐 Bonus: the same engine runs *inside* a web browser
 
@@ -137,37 +136,34 @@ warning.
 No headless Chromium means no ~200 MB browser to ship, no per-process spin-up, and
 a small memory footprint. turbo-html2pdf is a native layout + PDF engine — a library
 call, not an IPC round-trip to Chrome. Historical browser-engine comparisons are
-kept in the [benchmark history](docs/BENCHMARKS-history.md); the current comparison
+kept in the [benchmark history](docs/BENCHMARKS-history.md). The comparison
 below measures turbo-html2pdf against jsPDF's draw API.
 
-### Benchmarks — 0.8.6 candidate
+### Benchmarks — 0.8.7 candidate
 
-Measured **2026-11-13** on Apple M5 Max (18 cores), macOS arm64, Node 26.11.0:
-turbo-html2pdf **0.8.4**, pinned to turbo-dom **`8266b30a`**, versus jsPDF **2.5.2**
-with jspdf-autotable **3.8.4**. The [current dependency pin](docs/RELEASE-0.8.6.md)
-may be newer; these results retain their measured source. Three complete **Turbo → jsPDF → jsPDF → Turbo**
-cycles; each block has 10 warmups and 100 measured renders per mode/workload.
-The table reports medians of the six blocks' p50 values, in milliseconds.
+Measured **2026-11-26** on macOS arm64 with Node 26.11.0. The N-API addon comes
+from turbo-html2pdf commit `b41fb12892e5b0c03cb4949781c26215eff29567`, with
+turbo-dom pinned to `dd2771f6`. The comparison used jsPDF 2.5.2 and
+jspdf-autotable 3.8.4. Three Turbo → jsPDF → jsPDF → Turbo cycles had 10
+warmups and 20 measured renders per mode and workload in each block. The
+table gives the median of the six block p50 values per engine, in milliseconds.
 
 | Workload | Turbo warm | jsPDF warm | Turbo cold | jsPDF cold |
 |---|---:|---:|---:|---:|
-| Invoice | **1.39** | 2.57 | **1.85** | 2.44 |
-| 100-row report | 10.55 | **6.96** | 12.74 | **6.74** |
-| Legal + footnotes | 11.81 | **7.81** | 11.96 | **8.13** |
-| Mixed | 5.52 | **5.06** | 6.04 | **4.82** |
+| Invoice | **1.43** | 2.57 | **1.88** | 2.51 |
+| 100-row report | 10.54 | **7.41** | 11.09 | **6.99** |
+| Legal + footnotes | 10.43 | **8.00** | 10.91 | **8.18** |
+| Mixed | 5.61 | **4.97** | 6.17 | **4.63** |
 
-Warm Turbo renders reuse compiled HTML and a font handle; cold renders compile
-HTML and prepare fonts per document. These are render latencies, not process
-startup times. Both engines use the same Evolventa fonts and complete logical
-content, validated across every PDF page before timing. jsPDF draws documents
-directly; the outputs are not pixel-identical HTML/CSS renderings.
+Warm Turbo renders reuse compiled HTML and a font handle. Cold renders compile
+HTML and prepare fonts per document. The timings measure render latency with
+both engines already loaded. Both engines use the same Evolventa fonts. The
+harness validates the full document content across all pages before timing.
+jsPDF draws its own layout, so rasterized pages may differ.
 
-Coordinated build/test jobs were paused; OS/VM/background-service activity still
-occurred and is recorded with the samples. Full p50/p95 tables, PDF sizes,
-methodology and reproduction commands are in the
-[0.8.4 ABBA report](benches/competitive/ABBA-0.8.4.md).
-The [older multi-engine matrix](benches/competitive/RESULTS.md) retains its
-original 0.8.2 labels and is not a fresh comparison with those engines.
+See the [competitive harness](benches/competitive/README.md) for methodology
+and the [0.8.4 ABBA report](benches/competitive/ABBA-0.8.4.md) for earlier
+measurements on its original source revision.
 
 ### Why it's *that* fast
 
@@ -502,13 +498,13 @@ lint run as separate jobs. macOS and Windows builds run only in the release work
 
 ## Status
 
-**`v0.8.6`** is the lockstep release version for npm, PyPI and crates.io; the
-[release procedure](./PUBLISHING.md) records the tag triggers and registry checks.
-Both `turbo-dom` and `turbo-dom-layout` target exact `=0.8.6` versions,
-resolved from the published crates.io registry, without git overrides. The `v0.8.6`
-tag releases npm/crates.io and MCP archives; `pyv0.8.6` releases PyPI from the same merge commit. Bindings: Node (N-API), WebAssembly (lean + fonts), Python (PyO3),
-MCP. See [`docs/`](docs/) for the full guide and [`CHANGELOG.md`](CHANGELOG.md) for
-what changed in 0.8.6.
+The **`v0.8.7`** candidate uses exact `=0.8.7` requirements for
+`turbo-dom` and `turbo-dom-layout`, temporarily resolved from Git at
+`dd2771f66da8670e22d6136c0ec13027e6c1a0e3`. The [release procedure](PUBLISHING.md)
+covers switching to the registry crates. The `v0.8.7` tag publishes npm and
+crates.io packages and MCP archives. The `pyv0.8.7` tag publishes PyPI wheels
+and an sdist from the same merge commit. See the [guide](docs/guide.md) and the
+[changelog](CHANGELOG.md) for usage and release changes.
 
 ## License
 
