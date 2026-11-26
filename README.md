@@ -56,6 +56,31 @@ PDF. The Rust engine lives in
 > Release candidate **`v0.8.7`**. See the [changelog](CHANGELOG.md) and
 > [publishing and registry verification](PUBLISHING.md).
 
+### Amazon Linux 2023 and AWS Lambda
+
+The [Amazon Linux 2023 workflow](.github/workflows/al2023.yml) produces optional
+`al2023-napi-x64` and `al2023-napi-arm64` downloads. Each contains a `base` addon for
+`turbo-html2pdf` and an `svg` addon for `turbo-html2pdf-svg`. The workflow checks each
+ELF file's glibc requirements against 2.34 and loads and renders with it in the
+matching AWS Lambda Node.js 22 image.
+
+Download the artifact that matches your deployment architecture and the exact
+version of the npm package you install. Replace the matching native addon in
+your deployment before bundling it. For the base x64 package, run the following
+from your project's directory after extracting the artifact.
+
+```sh
+artifact=./al2023-napi-x64
+package_dir=$(dirname "$(node -p "require.resolve('turbo-html2pdf/package.json')")")
+test "$(cat "$artifact/VERSION")" = "$(node -p "require('turbo-html2pdf/package.json').version")" &&
+  (cd "$artifact/base" && sha256sum -c sha256.txt) &&
+  install -m 0644 "$artifact/base/turbo-pdf-napi.linux-x64-gnu.node" "$package_dir/"
+```
+
+For arm64, use the arm64 artifact and filename. For SVG, select the artifact's
+`svg` directory and the installed `turbo-html2pdf-svg` package. The workflow
+verifies AL2023 with glibc 2.34.
+
 ## 🌐 Bonus: the same engine runs *inside* a web browser
 
 Everything above is the server/CLI story — a binary that makes PDFs with no

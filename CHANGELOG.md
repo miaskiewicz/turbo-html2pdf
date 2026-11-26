@@ -11,6 +11,12 @@ The release branch pins turbo-dom and turbo-dom-layout to
 dependencies keep exact `=0.8.7` requirements. Publication requires the
 corresponding registry crates (see PUBLISHING.md).
 
+### Added
+
+- Separate Amazon Linux 2023 downloads for the base and SVG Node addons on
+  x64 and arm64. The build checks glibc 2.34 requirements and renders a PDF in
+  the matching AWS Lambda Node.js 22 runtime.
+
 ### Fixed
 
 - Honor `@font-face unicode-range` in face selection so glyphs outside a
