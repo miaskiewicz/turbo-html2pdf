@@ -10,11 +10,10 @@ The workflows are the executable procedure:
 | `vX.Y.Z` | `.github/workflows/release-crates.yml` | crates.io `turbo-html2pdf-core`, then `turbo-html2pdf-mcp` |
 | `pyvX.Y.Z` | `.github/workflows/release-py.yml` | PyPI `turbo-html2pdf`: four platform wheels and an sdist |
 
-The v0.8.7 candidate keeps exact `=0.8.7` requirements for `turbo-dom-layout`
-and `turbo-dom` and pins both to `dd2771f66da8670e22d6136c0ec13027e6c1a0e3`
-with a temporary `[patch.crates-io]`. The
-[pre-tag steps](#pre-tag-drop-the-pre-publish-patch) replace the Git sources
-with the matching registry crates. The crates release workflow waits for the
+The v0.8.7 release uses the published `turbo-dom-layout` and `turbo-dom` crates with
+exact `=0.8.7` requirements. Follow the
+[pre-tag steps](#pre-tag-drop-the-pre-publish-patch) when transitioning from a
+temporary Git pin to registry crates. The crates release workflow waits for the
 locked registry versions using `scripts/wait-crates-index.sh`. All three tag
 workflows run a tag-only `release-guard` job (`scripts/release-guard.sh`) that fails
 while a `[patch]` section or a git source in `Cargo.lock` remains, or when the

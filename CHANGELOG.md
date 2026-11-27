@@ -4,12 +4,10 @@ All notable changes to turbo-html2pdf are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/); versions follow SemVer. The npm,
 PyPI, and crates.io packages release in lockstep from a `v*` tag (PyPI on `pyv*`).
 
-## [0.8.7] — Unreleased
+## [0.8.7] — 2026-11-27
 
-The release branch pins turbo-dom and turbo-dom-layout to
-`dd2771f66da8670e22d6136c0ec13027e6c1a0e3` via `[patch.crates-io]`. Both
-dependencies keep exact `=0.8.7` requirements. Publication requires the
-corresponding registry crates (see PUBLISHING.md).
+This release uses the published `turbo-dom` and `turbo-dom-layout` 0.8.7
+crates with exact `=0.8.7` requirements.
 
 ### Added
 
@@ -28,7 +26,7 @@ corresponding registry crates (see PUBLISHING.md).
 - With SVG rendering enabled, resolve fills that use custom properties and
   fallbacks, and paint bounded embedded raster images, including MIME aliases.
 
-See the [upstream 0.8.7 notes](https://github.com/miaskiewicz/turbo-dom/blob/dd2771f66da8670e22d6136c0ec13027e6c1a0e3/CHANGELOG.md)
+See the [upstream 0.8.7 notes](https://github.com/miaskiewicz/turbo-dom/releases/tag/v0.8.7)
 for the full dependency changes.
 
 ## [0.8.6] — 2026-11-20
