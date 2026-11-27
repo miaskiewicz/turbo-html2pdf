@@ -1,0 +1,81 @@
+name: Amazon Linux 2023 native addons
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/al2023.yml'
+      - 'scripts/al2023/**'
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  LAMBDA_IMAGE: public.ecr.aws/lambda/nodejs:22@sha256:baa39af05383b0aaf8e14ae1806ed202293ab0c02933939a9159518d5effc919
+
+jobs:
+  build:
+    name: AL2023 addons (${{ matrix.arch }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: ubuntu-latest, arch: x64, platform: linux/amd64 }
+          - { os: ubuntu-24.04-arm, arch: arm64, platform: linux/arm64 }
+    env:
+      ADDON_ARCH: ${{ matrix.arch }}
+      DOCKER_PLATFORM: ${{ matrix.platform }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Build with the AL2023 GNU linker and audit ELF requirements
+        run: |
+          source_dir="$RUNNER_TEMP/al2023-source"
+          output_dir="$RUNNER_TEMP/al2023-output"
+          mkdir -p "$source_dir" "$output_dir"
+          git archive HEAD | tar -x -C "$source_dir"
+          git rev-parse HEAD > "$output_dir/SOURCE"
+          docker build --platform "$DOCKER_PLATFORM" --tag turbo-html2pdf-al2023 scripts/al2023
+          docker run --rm --platform "$DOCKER_PLATFORM" \
+            --volume "$source_dir:/source:ro" --volume "$output_dir:/output" \
+            turbo-html2pdf-al2023 bash /source/scripts/al2023/build.sh "$ADDON_ARCH"
+
+      - name: Install PDF inspection tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends qpdf poppler-utils
+
+      - name: Load and render in the matching Lambda runtime
+        run: |
+          output_dir="$RUNNER_TEMP/al2023-output"
+          docker pull --platform "$DOCKER_PLATFORM" "$LAMBDA_IMAGE"
+          for flavor in base svg; do
+            pdf="$RUNNER_TEMP/al2023-$flavor.pdf"
+            docker run --rm --platform "$DOCKER_PLATFORM" --network none \
+              --entrypoint /var/lang/bin/node \
+              --volume "$output_dir:/artifacts:ro" \
+              --volume "$PWD/scripts/al2023/smoke.cjs:/smoke.cjs:ro" \
+              "$LAMBDA_IMAGE" /smoke.cjs "$ADDON_ARCH" "$flavor" > "$pdf"
+            qpdf --check "$pdf"
+            pdftotext "$pdf" - | grep -F "Lambda PDF smoke $flavor"
+            if [[ "$flavor" == svg ]]; then
+              pdfimages -list "$pdf" | awk '$3 == "image" { found = 1 } END { exit !found }'
+            fi
+          done
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: al2023-napi-${{ matrix.arch }}
+          path: |
+            ${{ runner.temp }}/al2023-output/*/*.node
+            ${{ runner.temp }}/al2023-output/*/elf.txt
+            ${{ runner.temp }}/al2023-output/*/sha256.txt
+            ${{ runner.temp }}/al2023-output/VERSION
+            ${{ runner.temp }}/al2023-output/SOURCE
+          if-no-files-found: error

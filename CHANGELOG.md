@@ -4,6 +4,31 @@ All notable changes to turbo-html2pdf are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/); versions follow SemVer. The npm,
 PyPI, and crates.io packages release in lockstep from a `v*` tag (PyPI on `pyv*`).
 
+## [0.8.7] — 2026-11-27
+
+This release uses the published `turbo-dom` and `turbo-dom-layout` 0.8.7
+crates with exact `=0.8.7` requirements.
+
+### Added
+
+- Separate Amazon Linux 2023 downloads for the base and SVG Node addons on
+  x64 and arm64. The build checks glibc 2.34 requirements and renders a PDF in
+  the matching AWS Lambda Node.js 22 runtime.
+
+### Fixed
+
+- Honor `@font-face unicode-range` in face selection so glyphs outside a
+  face's declared range fall back to the next matching face (turbo-dom #539).
+- Exclude text under `display:none` from layout glyph accounting.
+- Resolve percentage sizing for positioned flex children against the
+  finalized flex padding box, and preserve the height of centered checkbox
+  inputs (turbo-dom #546).
+- With SVG rendering enabled, resolve fills that use custom properties and
+  fallbacks, and paint bounded embedded raster images, including MIME aliases.
+
+See the [upstream 0.8.7 notes](https://github.com/miaskiewicz/turbo-dom/releases/tag/v0.8.7)
+for the full dependency changes.
+
 ## [0.8.6] — 2026-11-20
 
 Rebuilt on the published turbo-dom 0.8.6 release. Both `turbo-dom` and

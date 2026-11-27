@@ -20,9 +20,10 @@ copy of `assets/fonts` — tests and benches read them through turbo-dom-layout'
 `t:`-directive / paged / PDF ones (tree-literal inputs come from turbo-dom-layout's
 `test_support::literal`; the S2 legacy-vs-Tree equivalence gate was retired at S5 with
 the legacy input).
-The 0.8.6 release uses published `turbo-dom-layout` and `turbo-dom` `=0.8.6`
-registry dependencies without git overrides;
-`release-guard` fails a tag if a git pin comes back.
+The 0.8.7 candidate temporarily pins `turbo-dom-layout` and `turbo-dom` by Git
+revision with exact `=0.8.7` requirements. Use [PUBLISHING.md](PUBLISHING.md)
+to verify the registry graph once the matching crates are published.
+`release-guard` rejects Git patches and Git sources on a release tag.
 
 ## Release runbook
 

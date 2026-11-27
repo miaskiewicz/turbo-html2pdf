@@ -1,8 +1,8 @@
 # turbo-html2pdf (Python)
 
 Native HTML/CSS-to-PDF engine with a Jinja-compatible templating DSL. PyO3
-binding over `turbo-html2pdf-core`. Version 0.8.6 uses the published turbo-dom
-0.8.6 DOM/layout registry crates. It shares the Node package's compile/render pipeline,
+binding over `turbo-html2pdf-core` and the same turbo-dom DOM/layout crates used
+by the Node package. It shares the Node package's compile/render pipeline,
 with bundled fonts, PDF/A, PDF/UA, CMYK, endnotes, internal links, append and
 encryption; Node's post-render `stamp` API is not exposed by this binding.
 

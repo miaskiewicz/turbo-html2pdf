@@ -10,13 +10,11 @@ The workflows are the executable procedure:
 | `vX.Y.Z` | `.github/workflows/release-crates.yml` | crates.io `turbo-html2pdf-core`, then `turbo-html2pdf-mcp` |
 | `pyvX.Y.Z` | `.github/workflows/release-py.yml` | PyPI `turbo-html2pdf`: four platform wheels and an sdist |
 
-The v0.8.6 release uses published `turbo-dom-layout` and `turbo-dom` exact
-`=0.8.6` registry dependencies. The development git patch has been removed.
-The matching dependencies must remain available before `release-crates.yml`
-publishes core (it waits, bounded, for the locked registry versions using
-`scripts/wait-crates-index.sh`). For a future prerelease, a temporary
-`[patch.crates-io]` may pin a reviewed DOM revision; the
-[pre-tag steps](#pre-tag-drop-the-pre-publish-patch) remove it before release. All three tag
+The v0.8.7 release uses the published `turbo-dom-layout` and `turbo-dom` crates with
+exact `=0.8.7` requirements. Follow the
+[pre-tag steps](#pre-tag-drop-the-pre-publish-patch) when transitioning from a
+temporary Git pin to registry crates. The crates release workflow waits for the
+locked registry versions using `scripts/wait-crates-index.sh`. All three tag
 workflows run a tag-only `release-guard` job (`scripts/release-guard.sh`) that fails
 while a `[patch]` section or a git source in `Cargo.lock` remains, or when the
 workspace, Cargo.lock, napi/react/template `package.json`, `pyproject.toml` or mcp's
@@ -76,15 +74,15 @@ authorization. Merging an ordinary PR does not publish a version.
 
 ## Pre-tag: drop the pre-publish patch
 
-The v0.8.6 release pins the published DOM crates directly; it never used a git patch.
-For future candidates that use a patch, drop it after matching dependencies
-are published. Keep the exact registry requirements; do not tag with a patch
-present. Verify the current release with:
+Once the matching dependencies are published, remove the temporary patch and
+keep the exact registry requirements. Verify the v0.8.7 candidate before tagging:
 
 ```sh
-# 1. turbo-dom-layout 0.8.6 and turbo-dom 0.8.6 must be on crates.io.
+# 1. turbo-dom-layout 0.8.7 and turbo-dom 0.8.7 must be on crates.io.
 for c in turbo-dom turbo-dom-layout; do
-  curl -fsSL "https://index.crates.io/tu/rb/$c" | grep -q '"vers":"0.8.6"' && echo "$c 0.8.6 ok"
+  curl -fsSL "https://index.crates.io/tu/rb/$c" |
+    jq -e -s 'any(.[]; .vers == "0.8.7" and .yanked == false)' >/dev/null || exit 1
+  echo "$c 0.8.7 ok"
 done
 # 2. Delete the `[patch.crates-io]` section (and its comment) from the root Cargo.toml.
 # 3. Re-lock ONLY those two crates from crates.io (no unrelated lockfile churn).
@@ -92,7 +90,7 @@ cargo update -p turbo-dom-layout -p turbo-dom
 git diff --stat Cargo.lock                    # only the two entries (source + checksum)
 ! grep -n 'source = "git+' Cargo.lock         # no git sources left
 # 4. Guards and gates against the registry crates.
-sh scripts/release-guard.sh v0.8.6 && sh scripts/release-guard.sh pyv0.8.6
+sh scripts/release-guard.sh v0.8.7 && sh scripts/release-guard.sh pyv0.8.7
 cargo test --workspace
 cargo package -p turbo-html2pdf-core --locked # full verify now that deps are published
 node scripts/package-notices.mjs --check      # notices built from the registry crate
@@ -101,9 +99,19 @@ node scripts/package-notices.mjs --pack && (cd crates/turbo-pdf-napi && npm pack
 ```
 
 Then merge with a merge commit and tag that merge SHA (next section):
-`git tag -a v0.8.6 "$RELEASE_SHA" -m "Release v0.8.6"` and
-`git tag -a pyv0.8.6 "$RELEASE_SHA" -m "Python release v0.8.6"`, then
-`git push origin v0.8.6 pyv0.8.6`.
+`git tag -a v0.8.7 "$RELEASE_SHA" -m "Release v0.8.7"` and
+`git tag -a pyv0.8.7 "$RELEASE_SHA" -m "Python release v0.8.7"`, then
+`git push origin v0.8.7 pyv0.8.7`.
+
+## Optional Amazon Linux 2023 artifacts
+
+The [Amazon Linux 2023 workflow](.github/workflows/al2023.yml) runs independently
+on version tags and can also be dispatched manually. It builds base and SVG
+addons with the native GNU linker in pinned AL2023 images on x64 and arm64.
+Each upload requires an ELF audit for glibc 2.34 and PDF rendering in the
+corresponding official Lambda Node.js 22 image. The workflow uploads separate
+Actions artifacts with version, source and checksum receipts. See the
+[deployment instructions](README.md#amazon-linux-2023-and-aws-lambda).
 
 ## Tag, monitor and verify
 
